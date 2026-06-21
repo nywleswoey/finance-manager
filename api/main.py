@@ -80,15 +80,22 @@ def positions(closed: bool = False):
 
 @app.get("/api/performance")
 def performance(by: str = Query("market", enum=["market", "bucket", "account"])):
-    r = rollup(perf(), by)
+    r = rollup(perf_all(), by)                          # perf_all -> include closed positions
     # fold in realized options P/L for the same dimension (computed directly from the
     # options book so orphan underlyings with no stock position are still counted)
     from portfolio.options import realized_by
     for k, v in realized_by(by).items():
-        r.setdefault(k, {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0})
+        r.setdefault(k, {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0,
+                         "capital_sgd": 0.0, "invested_sgd": 0.0,
+                         "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0})
         r[k]["options_pl_sgd"] = v
     for g in r.values():
         g.setdefault("options_pl_sgd", 0.0)
+        # net = unrealised + realised stock P/L + dividends + option premiums
+        g["net_pl_sgd"] = round(g["unrealised_pl_sgd"] + g["realised_pl_sgd"]
+                                + g["income_sgd"] + g["options_pl_sgd"], 2)
+        # ROI on total money ever deployed (incl. since-sold positions)
+        g["return_pct"] = round(g["net_pl_sgd"] / g["invested_sgd"], 4) if g.get("invested_sgd") else None
     return r
 
 

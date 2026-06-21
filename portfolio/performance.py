@@ -242,6 +242,9 @@ def compute(session=None):
         avg_cost = (p["buy_cost"] / p["buy_qty"]) if p["buy_qty"] > 1e-6 else None
         cost_basis = (avg_cost * p["units"]) if (avg_cost and p["units"] > 1e-6) else None
         unreal = (mv - cost_basis) if cost_basis is not None else None
+        # realised stock P/L = sell proceeds − cost of the shares sold (buy_cost minus the
+        # cost still tied up in the current holding). Closed positions: cost_basis None -> all sold.
+        realised = (p["proceeds"] - p["buy_cost"] + (cost_basis or 0.0)) if cost_known else None
         out.append({
             "bucket": k[0], "accounts": sorted(p["accounts"]), "ticker": m["canonical_ticker"],
             "name": m["name"], "market": m["market"], "asset_type": m["asset_type"], "currency": ccy,
@@ -250,6 +253,7 @@ def compute(session=None):
             "cost_basis_native": round(cost_basis, 2) if cost_basis is not None else None,
             "cost_basis_sgd": round(cost_basis * rate, 2) if cost_basis is not None else None,
             "unrealised_pl_sgd": round(unreal * rate, 2) if unreal is not None else None,
+            "realised_pl_sgd": round(realised * rate, 2) if realised is not None else None,
             "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
             "cost_known": cost_known,
             "total_pl_native": round(total_pl, 2) if cost_known else None,
@@ -291,9 +295,12 @@ def alloc_by_account(session=None):
 
 
 def rollup(rows, by):
-    agg = defaultdict(lambda: {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0})
+    agg = defaultdict(lambda: {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0,
+                               "capital_sgd": 0.0, "invested_sgd": 0.0,
+                               "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0})
     for r in rows:
-        if r["units"] <= 1e-6:
+        # include closed positions (units≈0): they still carry realised P/L + dividends.
+        if r["units"] <= 1e-6 and not r["cost_known"] and abs(r["income_sgd"]) < 1e-6:
             continue
         # positions are pooled per funding bucket, so a row can span accounts -> join them
         key = (", ".join(r["accounts"]) or "—") if by == "account" else r[by]
@@ -302,6 +309,12 @@ def rollup(rows, by):
         if r["cost_known"]:                              # only sum P/L where cost is real
             g["pl_sgd"] += r["pl_sgd"] or 0
             g["cost_sgd"] += r["invested_sgd"] or 0
+            # capital = cost basis of CURRENT holdings (so Capital + Unrealised = Current Value);
+            # invested_sgd = total ever deployed incl. since-sold (return denominator)
+            g["capital_sgd"] += r["cost_basis_sgd"] or 0
+            g["invested_sgd"] += r["invested_sgd"] or 0
+            g["realised_pl_sgd"] += r["realised_pl_sgd"] or 0
+            g["unrealised_pl_sgd"] += r["unrealised_pl_sgd"] or 0
     return {k: {kk: round(vv, 2) for kk, vv in v.items()} for k, v in agg.items()}
 
 
