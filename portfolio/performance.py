@@ -207,6 +207,21 @@ def compute(session=None):
         pos[k]["income"] += amt
         pos[k]["flows"].append((d["pay_date"] or today, amt))
 
+    # corporate-action cost carryover: a closed predecessor's cost follows to the surviving
+    # security (e.g. C31 -> 9CI on the 2021 CapitaLand restructuring; rename/split/consolidation)
+    ca = s.execute(text("SELECT from_ticker, to_ticker FROM corporate_action "
+                        "WHERE type IN ('rename','split','consolidation','merger')")).all()
+    tk_k = {m["canonical_ticker"]: (b, sid) for (b, sid), m in meta.items() if b == "cash"}
+    for frm, to in ca:
+        kf, kt = tk_k.get(frm), tk_k.get(to)
+        if kf and kt and pos[kf]["invested"] > 1e-6 and abs(pos[kf]["units"]) < 1e-6 \
+                and pos[kt]["invested"] < 1e-6:
+            for fld in ("flows",):
+                pos[kt][fld].extend(pos[kf][fld])
+            for fld in ("invested", "buy_cost", "buy_qty", "proceeds"):
+                pos[kt][fld] += pos[kf][fld]; pos[kf][fld] = 0.0
+            pos[kf]["flows"] = []
+
     out = []
     for k, p in pos.items():
         m = meta.get(k)
