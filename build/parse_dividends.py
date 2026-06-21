@@ -174,6 +174,17 @@ def moomoo():
                 rate=(round(amt / units, 6) if units else ""),
                 source="moomoo (cash dividend)")
 
+# ---------- CPF / SRS (backfilled into data/cpf-srs-dividends.csv by fetch_cpf_srs_dividends.py) ----------
+def cpf_srs():
+    p = os.path.join(DATA, "cpf-srs-dividends.csv")
+    if not os.path.exists(p):
+        return
+    for r in csv.DictReader(open(p)):
+        add(date=r["date"], account=r["account"], market=r["market"], ticker=r["ticker"],
+            name=r["name"], kind=r["kind"], gross=num(r["gross"]),
+            units=num(r["units"]), rate=num(r["rate"]), currency=r["currency"],
+            source=r["source"])
+
 # ---------- one-time external retrievals ----------
 # For dividends whose statement omits units/rate AND whose ledger holds no position at the
 # pay date, the per-share rate is fetched once from Yahoo Finance (finance-manager-v2's
@@ -191,7 +202,7 @@ def apply_corrections():
             d["units"], d["rate"] = CORRECTIONS[k]
 
 # ---------- run all sources ----------
-tiger(); fsm(); cdp(); moomoo(); apply_corrections()
+tiger(); fsm(); cdp(); moomoo(); cpf_srs(); apply_corrections()
 out = os.path.join(HERE, "dividends.csv")
 cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "units", "rate", "currency", "source"]
 with open(out, "w", newline="") as fh:
