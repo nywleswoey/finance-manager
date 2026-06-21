@@ -31,6 +31,24 @@ per security in the viewer header.
 | Moomoo | SGD 1,360 · USD 17 |
 | Tiger Cash Boost | HKD 1,040 · SGD 500 |
 
+## Per-dividend detail (qty held + declared rate)
+
+`GET /api/dividend-details` returns one row per payment with:
+- **declared rate** (`amount_per_unit`) — the per-share rate stated in the statement.
+  Captured where the PDF prints it: CDP (`… <qty> units @ SGD <rate>`) and Moomoo
+  (`… CASH DIVIDEND @ <CCY> <rate>` / US `<qty> SHARES DIVIDENDS`). Tiger / FSM / the
+  2017-18 CDP layout don't print a rate → left null.
+- **qty held** — units of the ticker held in the paying account at the pay date,
+  replayed from the ledger (`txn` summed where `trade_date ≤ pay_date`). Falls back to
+  the statement-stated units when present.
+- **implied rate** = `gross / qty_held`. Cross-checks the declared rate (they match where
+  both exist — e.g. 42R 0.005 declared = 0.005 implied).
+- **flags** — `"qty unknown — needs manual input"` when neither a declared rate nor a
+  ledger qty can be determined; `"no date"` (old CDP layout omits the pay date so qty
+  can't be replayed); `"unmapped ticker"`. The Dividends tab surfaces a flagged count
+  and a "flagged only" filter for manual entry. ~34 of 466 rows currently need input
+  (mostly the dateless 2017-18 CDP payments).
+
 ## Notes / caveats (for the DB Phase-2 cleanup)
 
 - **Currency**: Tiger has no dividend-currency column → inferred from market (HK→HKD,

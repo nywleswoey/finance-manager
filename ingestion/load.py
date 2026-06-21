@@ -117,9 +117,10 @@ def load_dividends(session, acct, alias):
         payload.append(dict(
             account_id=a.id, security_id=sid, pay_date=pdate(r["date"]), kind=r["kind"],
             gross=num(r["gross"]), net=num(r["gross"]), currency=r["currency"],
+            amount_per_unit=num(r.get("rate")), units=num(r.get("units")),
             source_file=r["source"], batch_id=b.id, dedup_hash=dh,
         ))
-    return upsert(session, Dividend, payload, ["gross", "net", "currency"])
+    return upsert(session, Dividend, payload, ["gross", "net", "currency", "amount_per_unit", "units"])
 
 
 def upsert(session, model, payload, update_cols):

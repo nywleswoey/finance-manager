@@ -97,8 +97,11 @@ def cdp():
                 key = (m.group(1), name, m.group(3))
                 if key in seen: continue
                 seen.add(key)
+                # "<qty> units @ SGD <rate>" — declared units + per-share rate stated in the PDF
+                ur = re.search(r"([\d,]+(?:\.\d+)?)\s*units?\s*@\s*(?:SGD|S\$)?\s*([\d.]+)", desc)
                 add(date=m.group(1), account="CDP", market="SG", ticker=cdp_code(name),
                     name=name.title(), kind="cash", gross=num(m.group(3)),
+                    units=(num(ur.group(1)) if ur else ""), rate=(num(ur.group(2)) if ur else ""),
                     currency="SGD", source="cdp (cash dividend)")
                 continue
             m = rx_old.match(ln)
@@ -114,8 +117,8 @@ def cdp():
 # ---------- Moomoo (PDF) ----------
 def moomoo():
     seen = set()
-    # "<TKR> CASH DIVIDEND @ <CCY> <rate>" — currency is stated explicitly
-    rx = re.compile(r"([A-Z0-9]{2,6})\s+CASH DIVIDEND\s+@\s+([A-Z]{3})")
+    # "<TKR> CASH DIVIDEND @ <CCY> <rate>" — currency + per-share rate stated explicitly
+    rx = re.compile(r"([A-Z0-9]{2,6})\s+CASH DIVIDEND\s+@\s+([A-Z]{3})\s*([\d.]+)?")
     for f in sorted(glob.glob(os.path.join(DATA, "moomoo/moomoo_*.pdf"))):
         mo = re.search(r"(\d{6})", f).group(1); ym = f"{mo[:4]}-{mo[4:]}"
         txt = subprocess.run(["pdftotext", "-layout", f, "-"], capture_output=True, text=True).stdout
@@ -124,6 +127,7 @@ def moomoo():
             m = rx.search(ln)
             if not m: continue
             tkr = canon(m.group(1)); ccy = m.group(2)
+            rate = num(m.group(3)) if m.group(3) else ""
             # amount: nearest "Corporate Action  +<amt>" in surrounding lines
             amt = 0.0
             for j in range(max(0, i - 3), min(len(lines), i + 3)):
@@ -135,14 +139,14 @@ def moomoo():
             seen.add(key)
             mkt = "SG" if ccy == "SGD" else ("HK" if ccy == "HKD" else "US")
             add(date=ym + "-15", account="Moomoo", market=mkt, ticker=tkr,
-                name=tkr, kind="cash", gross=amt, currency=ccy,
+                name=tkr, kind="cash", gross=amt, currency=ccy, rate=rate,
                 source="moomoo (cash dividend)")
         # US dividends use "<TKR> ... SHARES DIVIDENDS" + "US Dividend Paying +<gross>"
-        rxus = re.compile(r"([A-Z]{1,5})\s+[\d.]+\s+SHARES DIVIDENDS")
+        rxus = re.compile(r"([A-Z]{1,5})\s+([\d.]+)\s+SHARES DIVIDENDS")
         for i, ln in enumerate(lines):
             mu = rxus.search(ln)
             if not mu: continue
-            tkr = canon(mu.group(1)); amt = 0.0
+            tkr = canon(mu.group(1)); units = num(mu.group(2)); amt = 0.0
             for j in range(max(0, i - 2), min(len(lines), i + 4)):
                 a = re.search(r"US Dividend Paying\s+\+([\d,]+\.\d+)", lines[j])  # positive = gross
                 if a: amt = num(a.group(1)); break
@@ -151,13 +155,14 @@ def moomoo():
             if key in seen: continue
             seen.add(key)
             add(date=ym + "-15", account="Moomoo", market="US", ticker=tkr,
-                name=tkr, kind="cash", gross=amt, currency="USD",
+                name=tkr, kind="cash", gross=amt, currency="USD", units=units,
+                rate=(round(amt / units, 6) if units else ""),
                 source="moomoo (cash dividend)")
 
 # ---------- run all sources ----------
 tiger(); fsm(); cdp(); moomoo()
 out = os.path.join(HERE, "dividends.csv")
-cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "currency", "source"]
+cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "units", "rate", "currency", "source"]
 with open(out, "w", newline="") as fh:
     w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore"); w.writeheader()
     for d in DIV: w.writerow(d)

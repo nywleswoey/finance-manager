@@ -113,6 +113,58 @@ def dividends():
     return {"by_market": [dict(r) for r in by], "recent": [dict(r) for r in recent]}
 
 
+@app.get("/api/dividend-details")
+def dividend_details():
+    """Per-dividend detail: declared per-share rate + units held at pay date (replayed
+    from the ledger) + implied rate (gross/units). Flags rows where the rate can't be
+    determined (no position data, missing date, or unmapped ticker) for manual input."""
+    from collections import defaultdict
+    s = SessionLocal()
+    divs = [dict(r) for r in s.execute(text(
+        "SELECT d.id, d.pay_date, a.id account_id, a.name account, a.funding_bucket bucket, "
+        "d.security_id, COALESCE(sec.name, d.source_file) name, sec.canonical_ticker ticker, "
+        "d.gross, d.currency, d.amount_per_unit declared_rate, d.units stated_units "
+        "FROM dividend d JOIN account a ON a.id=d.account_id "
+        "LEFT JOIN security sec ON sec.id=d.security_id")).mappings().all()]
+    # txns grouped per (account, security) for point-in-time qty replay
+    by = defaultdict(list)
+    for aid, sid, td, q in s.execute(text(
+            "SELECT account_id, security_id, trade_date, qty_signed FROM txn "
+            "WHERE security_id IS NOT NULL")).all():
+        by[(aid, sid)].append((td, float(q)))
+    s.close()
+
+    out = []
+    for d in divs:
+        gross = float(d["gross"] or 0)
+        declared = float(d["declared_rate"]) if d["declared_rate"] is not None else None
+        stated = float(d["stated_units"]) if d["stated_units"] is not None else None
+        held = None
+        if d["pay_date"] is not None and d["security_id"] is not None:
+            held = round(sum(q for td, q in by.get((d["account_id"], d["security_id"]), [])
+                             if td is not None and td <= d["pay_date"]), 4)
+        qty = stated if stated else held              # prefer statement-stated qty
+        implied = round(gross / qty, 6) if qty and qty > 1e-6 else None
+        flags = []
+        if d["ticker"] is None:
+            flags.append("unmapped ticker")
+        if d["pay_date"] is None:
+            flags.append("no date")
+        if declared is None and implied is None:
+            flags.append("qty unknown — needs manual input")
+        out.append({
+            "id": d["id"], "pay_date": d["pay_date"], "account": d["account"],
+            "name": d["name"], "ticker": d["ticker"], "gross": gross, "currency": d["currency"],
+            "qty": qty, "qty_source": ("statement" if stated else ("ledger" if held else None)),
+            "declared_rate": declared, "implied_rate": implied,
+            "rate": declared if declared is not None else implied,
+            "rate_source": ("declared" if declared is not None else ("implied" if implied is not None else None)),
+            "flags": flags,
+        })
+    out.sort(key=lambda r: (r["pay_date"] is None, str(r["pay_date"] or "")), reverse=True)
+    return {"rows": out, "flagged": sum(1 for r in out if r["flags"]), "total": len(out)}
+
+
 @app.get("/api/transactions")
 def transactions(account: str | None = None, ticker: str | None = None, limit: int = 500):
     s = SessionLocal()
