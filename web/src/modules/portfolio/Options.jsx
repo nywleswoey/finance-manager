@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from "recharts";
-import { get, sgd, pct, fmt, cls } from "../../api.js";
+import { get, sgd, money, pct, fmt, cls } from "../../api.js";
 
 export default function Options() {
   const [d, setD] = useState(null);
@@ -99,7 +99,7 @@ export default function Options() {
                     <td>{t.premium_open == null ? "—" : fmt(t.premium_open, 2)}</td>
                     <td className="mut">{t.premium_close ? fmt(t.premium_close, 2) : "—"}</td>
                     <td className="l mut">{t.outcome}</td>
-                    <td className={cls(t.realized_native)}>{t.realized_native == null ? "—" : fmt(t.realized_native, 0) + " " + t.currency}</td>
+                    <td className={cls(t.realized_native)}>{money(t.realized_native, t.currency, 0)}</td>
                     <td className={cls(t.realized_sgd)}>{sgd(t.realized_sgd)}</td>
                   </tr>
                 ))}

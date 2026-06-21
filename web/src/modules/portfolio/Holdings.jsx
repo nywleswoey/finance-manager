@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { get, fmt, sgd, pct, cls } from "../../api.js";
+import { get, fmt, sgd, money, pct, cls } from "../../api.js";
 import SecurityDetail from "./SecurityDetail.jsx";
 
 const GROUPS = {                                   // group key -> label
@@ -26,13 +26,13 @@ function DataRow({ r, onClick }) {
       <td className="l"><span className="pill">{r.bucket}</span></td>
       <td className="l"><span className="pill">{r.market}</span></td>
       <td>{closed ? <span className="mut">—</span> : fmt(r.units, r.units < 10 ? 2 : 0)}</td>
-      <td className="mut">{r.avg_cost == null ? "—" : fmt(r.avg_cost, 4) + " " + r.currency}</td>
-      <td className="mut">{r.price == null ? "—" : fmt(r.price, 4) + " " + r.currency}</td>
+      <td className="mut">{money(r.avg_cost, r.currency, 4)}</td>
+      <td className="mut">{money(r.price, r.currency, 4)}</td>
       <td>{r.cost_basis_sgd == null ? <span className="mut">n/a</span> : sgd(r.cost_basis_sgd)}</td>
       <td>{closed ? <span className="mut">—</span> : sgd(r.mv_sgd)}</td>
       <td className={cls(pl)} title={closed ? "realised P/L" : "unrealised P/L"}>
         {pl == null ? <span className="mut">n/a</span> : sgd(pl)}</td>
-      <td className="pos">{r.income_native ? fmt(r.income_native, 0) + " " + r.currency : "—"}</td>
+      <td className="pos">{r.income_native ? money(r.income_native, r.currency, 0) : "—"}</td>
       <td className={cls(r.options_pl_sgd)} title="realised options (wheel) P/L">
         {r.options_pl_sgd ? sgd(r.options_pl_sgd) : "—"}</td>
       <td className={cls(r.xirr)}>{r.xirr == null ? "—" : pct(r.xirr)}</td>
