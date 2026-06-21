@@ -7,8 +7,10 @@ const COLORS = ["#388bfd", "#2ea043", "#d29922", "#8957e5", "#f85149", "#39c5cf"
 export default function Overview() {
   const [d, setD] = useState(null);
   const [ret, setRet] = useState(null);
+  const [opt, setOpt] = useState(null);
   useEffect(() => { get("/api/overview").then(setD).catch(() => setD({ error: true })); }, []);
   useEffect(() => { get("/api/return").then(setRet).catch(() => setRet({})); }, []);
+  useEffect(() => { get("/api/options").then(setOpt).catch(() => setOpt({})); }, []);
   if (!d) return <div className="loading">Loading…</div>;
   if (d.error) return <div className="loading">API not reachable. Start: uvicorn api.main:app</div>;
 
@@ -24,6 +26,9 @@ export default function Overview() {
               cls={ret && cls(ret.xirr_annualised)} />
         <Tile lbl="Total P/L (cost-known)" val={sgd(d.pl_sgd)} cls={cls(d.pl_sgd)} />
         <Tile lbl="Dividends (held)" val={sgd(d.dividends_sgd)} cls="pos" />
+        <Tile lbl="Options Realized P/L"
+              val={opt == null ? "…" : opt.total_pl_sgd == null ? "—" : sgd(opt.total_pl_sgd)}
+              cls={opt && cls(opt.total_pl_sgd)} />
         <Tile lbl="Positions" val={d.positions} />
       </div>
       <div className="grid2">
@@ -48,7 +53,7 @@ function Donut({ title, data }) {
           <Pie data={data} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>
             {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
           </Pie>
-          <Tooltip formatter={(v) => sgd(v)} contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }} />
+          <Tooltip formatter={(v) => sgd(v)} contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }} itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
         </PieChart>
       </ResponsiveContainer>
       <div>

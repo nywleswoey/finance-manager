@@ -1,48 +1,75 @@
 import React, { useEffect, useState } from "react";
-import { get, fmt } from "../../api.js";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
+import { get, fmt, sgd, money } from "../../api.js";
+
+const BUCKET_LABEL = { cash: "Cash", srs: "SRS", cpf: "CPF" };
 
 export default function Dividends() {
-  const [d, setD] = useState(null);
+  const [ann, setAnn] = useState(null);
   const [det, setDet] = useState(null);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   useEffect(() => {
-    get("/api/dividends").then(setD).catch(() => setD({ by_market: [], recent: [] }));
+    get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {} }));
     get("/api/dividend-details").then(setDet).catch(() => setDet({ rows: [], flagged: 0, total: 0 }));
   }, []);
-  if (!d) return <div className="loading">Loading…</div>;
+  if (!ann) return <div className="loading">Loading…</div>;
   const rows = det ? (onlyFlagged ? det.rows.filter((r) => r.flags.length) : det.rows) : [];
+  const years = ann.years;                                   // newest → oldest
+  // YoY % vs the next (older) year
+  const yoy = (y, i) => {
+    const prev = ann.totals[years[i + 1]];
+    if (prev == null || !prev) return null;
+    return ((ann.totals[y] - prev) / prev) * 100;
+  };
+  const chart = years.map((y) => ({ year: String(y), total: ann.totals[y] || 0 }));
   return (
     <>
-      <div className="grid2">
-        <div className="card">
-          <h3>Dividends by Market / Currency</h3>
+      <div className="card">
+        <h3>Annual Dividend Income&nbsp;<span className="pill">SGD · latest FX</span></h3>
+        <div style={{ overflowX: "auto" }}>
           <table>
-            <thead><tr><th className="l">Market</th><th className="l">Ccy</th><th>Gross</th><th>Payments</th></tr></thead>
+            <thead><tr>
+              <th className="l">Bucket</th>
+              {years.map((y) => <th key={y}>{y}</th>)}
+            </tr></thead>
             <tbody>
-              {d.by_market.map((r, i) => (
-                <tr key={i}>
-                  <td className="l">{r.market || "—"}</td><td className="l">{r.currency}</td>
-                  <td className="pos">{fmt(r.gross, 0)}</td><td className="mut">{r.n}</td>
+              {ann.buckets.map((b) => (
+                <tr key={b}>
+                  <td className="l">{BUCKET_LABEL[b] || b}</td>
+                  {years.map((y) => {
+                    const v = ann.matrix[b]?.[y];
+                    return <td key={y} className={v ? "pos" : "mut"}>{v ? sgd(v) : "—"}</td>;
+                  })}
                 </tr>
               ))}
+              <tr style={{ borderTop: "2px solid var(--line, #ccc)", fontWeight: 600 }}>
+                <td className="l">Total</td>
+                {years.map((y) => <td key={y} className="pos">{sgd(ann.totals[y] || 0)}</td>)}
+              </tr>
+              <tr>
+                <td className="l mut">YoY</td>
+                {years.map((y, i) => {
+                  const c = yoy(y, i);
+                  return <td key={y} className={c == null ? "mut" : c >= 0 ? "pos" : "neg"}>
+                    {c == null ? "—" : `${c >= 0 ? "+" : ""}${fmt(c, 0)}%`}
+                  </td>;
+                })}
+              </tr>
             </tbody>
           </table>
         </div>
-        <div className="card">
-          <h3>Recent Payments</h3>
-          <table>
-            <thead><tr><th className="l">Date</th><th className="l">Security</th><th className="l">Acct</th><th>Amount</th></tr></thead>
-            <tbody>
-              {d.recent.map((r, i) => (
-                <tr key={i}>
-                  <td className="l mut">{r.pay_date}</td>
-                  <td className="l">{r.name} <span className="pill">{r.ticker}</span></td>
-                  <td className="l mut">{r.account}</td>
-                  <td className="pos">{fmt(r.gross, 2)} {r.currency}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div style={{ height: 220, marginTop: 16 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chart} margin={{ top: 20, right: 8, bottom: 0, left: 8 }}>
+              <XAxis dataKey="year" fontSize={12} />
+              <YAxis fontSize={12} tickFormatter={(v) => fmt(v, 0)} width={56} />
+              <Tooltip formatter={(v) => [sgd(v), "Total"]} />
+              <Bar dataKey="total" fill="var(--pos, #2e9e5b)" radius={[3, 3, 0, 0]}>
+                <LabelList dataKey="total" position="top" fill="#c9d1d9" fontSize={11}
+                           formatter={(v) => sgd(v)} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
 
@@ -72,7 +99,7 @@ export default function Dividends() {
                     {r.qty_source === "ledger" && <span className="mut" style={{ fontSize: ".75em" }}> (led)</span>}</td>
                   <td className={r.declared_rate == null ? "mut" : "pos"}>{r.declared_rate == null ? "—" : fmt(r.declared_rate, 4)}</td>
                   <td className="mut">{r.implied_rate == null ? "—" : fmt(r.implied_rate, 4)}</td>
-                  <td>{fmt(r.gross, 2)} {r.currency}</td>
+                  <td>{money(r.gross, r.currency, 2)}</td>
                   <td className="l">
                     {r.flags.length
                       ? <span className="pill" style={{ color: "var(--neg)" }}>{r.flags.join("; ")}</span>

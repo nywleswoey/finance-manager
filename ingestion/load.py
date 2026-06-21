@@ -120,6 +120,13 @@ def load_dividends(session, acct, alias):
             amount_per_unit=num(r.get("rate")), units=num(r.get("units")),
             source_file=r["source"], batch_id=b.id, dedup_hash=dh,
         ))
+    # prune dividends that vanished from the CSV (e.g. dateless rows now reparsed with a date)
+    hashes = {p["dedup_hash"] for p in payload}
+    stale = session.scalars(select(Dividend).filter_by(batch_id=b.id)).all()
+    for d in stale:
+        if d.dedup_hash not in hashes:
+            session.delete(d)
+    session.flush()
     return upsert(session, Dividend, payload, ["gross", "net", "currency", "amount_per_unit", "units"])
 
 
@@ -144,9 +151,13 @@ def main():
     acct, alias = maps(s)
     nt = load_ledger(s, acct, alias)
     nd = load_dividends(s, acct, alias)
+    from ingestion.parse_options import load_options
+    no = load_options(s, acct, alias)
     s.commit()
     print(f"txn: +{nt} new (total {s.scalar(select(func.count()).select_from(Txn))})")
     print(f"dividend: +{nd} new (total {s.scalar(select(func.count()).select_from(Dividend))})")
+    from portfolio.models import OptionTrade
+    print(f"option_trade: +{no} new (total {s.scalar(select(func.count()).select_from(OptionTrade))})")
     s.close()
 
 

@@ -80,7 +80,23 @@ def positions(closed: bool = False):
 
 @app.get("/api/performance")
 def performance(by: str = Query("market", enum=["market", "bucket", "account"])):
-    return rollup(perf(), by)
+    r = rollup(perf_all(), by)                          # perf_all -> include closed positions
+    # fold in realized options P/L for the same dimension (computed directly from the
+    # options book so orphan underlyings with no stock position are still counted)
+    from portfolio.options import realized_by
+    for k, v in realized_by(by).items():
+        r.setdefault(k, {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0,
+                         "capital_sgd": 0.0, "invested_sgd": 0.0,
+                         "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0})
+        r[k]["options_pl_sgd"] = v
+    for g in r.values():
+        g.setdefault("options_pl_sgd", 0.0)
+        # net = unrealised + realised stock P/L + dividends + option premiums
+        g["net_pl_sgd"] = round(g["unrealised_pl_sgd"] + g["realised_pl_sgd"]
+                                + g["income_sgd"] + g["options_pl_sgd"], 2)
+        # ROI on total money ever deployed (incl. since-sold positions)
+        g["return_pct"] = round(g["net_pl_sgd"] / g["invested_sgd"], 4) if g.get("invested_sgd") else None
+    return r
 
 
 BUCKET_ACCTS = {"cash": ["Tiger Prime", "Tiger Cash Boost", "Moomoo", "FSM", "CDP"],
@@ -97,10 +113,14 @@ def holding(ticker: str, bucket: str = "cash"):
         "SELECT t.trade_date, a.name account, t.action, t.qty_signed, t.price, t.gross_amount, "
         "t.currency, t.source_file FROM txn t JOIN account a ON a.id=t.account_id "
         "JOIN security sec ON sec.id=t.security_id "
-        "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) AND a.name <> 'CDP'"),
+        "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) AND a.name <> 'CDP' "
+        # cash dividends are recorded as 0-qty 'stock dividend' txns — they belong in the
+        # dividend history, not the transaction ledger (they don't change the position)
+        "AND NOT (t.action ILIKE '%dividend%' AND t.qty_signed = 0)"),
         {"tk": ticker, "accts": accts}).mappings().all()]
     divs = [dict(r) for r in s.execute(text(
-        "SELECT d.pay_date, a.name account, d.gross, d.currency, d.kind FROM dividend d "
+        "SELECT d.pay_date, a.name account, d.gross, d.currency, d.kind, "
+        "d.units, d.amount_per_unit FROM dividend d "
         "JOIN account a ON a.id=d.account_id JOIN security sec ON sec.id=d.security_id "
         "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) ORDER BY d.pay_date"),
         {"tk": ticker, "accts": accts}).mappings().all()]
@@ -113,7 +133,25 @@ def holding(ticker: str, bucket: str = "cash"):
     for t in txns:
         bal += float(t["qty_signed"] or 0)
         t["balance"] = round(bal, 4)
-    return {"summary": summary, "transactions": txns, "dividends": divs}
+    # enrich each dividend with qty held at pay date + declared rate per unit.
+    # prefer statement-stated values; fall back to ledger replay / implied (gross/qty).
+    for x in divs:
+        units = float(x["units"]) if x["units"] is not None else None
+        if units is None and x["pay_date"] is not None:
+            units = round(sum(float(t["qty_signed"] or 0) for t in txns
+                              if t["account"] == x["account"] and t["trade_date"] is not None
+                              and str(t["trade_date"]) <= str(x["pay_date"])), 4)
+        rate = float(x["amount_per_unit"]) if x["amount_per_unit"] is not None else None
+        if rate is None and units and units > 1e-6:
+            rate = round(float(x["gross"] or 0) / units, 6)
+        x["units"] = units
+        x["rate"] = rate
+    # option trades on this underlying (wheel income), only for the cash bucket
+    options = []
+    if bucket == "cash":
+        from portfolio.options import trades_for
+        options = trades_for(ticker)
+    return {"summary": summary, "transactions": txns, "dividends": divs, "options": options}
 
 
 @app.get("/api/dividends")
@@ -185,6 +223,39 @@ def dividend_details():
     return {"rows": out, "flagged": sum(1 for r in out if r["flags"]), "total": len(out)}
 
 
+@app.get("/api/dividends-annual")
+def dividends_annual():
+    """Annual dividend income by funding bucket, converted to SGD at latest FX.
+    Historical FX is not stored, so prior years use today's rate (an approximation)."""
+    from collections import defaultdict
+    s = SessionLocal()
+    fx = {c: float(r) for c, r in s.execute(text(
+        "SELECT currency, rate_to_sgd FROM fx_rate")).all()}
+    rows = s.execute(text(
+        "SELECT EXTRACT(YEAR FROM d.pay_date)::int yr, "
+        "COALESCE(a.funding_bucket, 'cash') bucket, d.currency, sum(d.gross) gross "
+        "FROM dividend d JOIN account a ON a.id=d.account_id "
+        "WHERE d.pay_date IS NOT NULL "
+        "GROUP BY yr, bucket, d.currency")).mappings().all()
+    s.close()
+    matrix = defaultdict(lambda: defaultdict(float))   # bucket -> year -> sgd
+    totals = defaultdict(float)                         # year -> sgd
+    years, buckets = set(), set()
+    for r in rows:
+        sgd = float(r["gross"] or 0) * fx.get(r["currency"], 1.0)
+        matrix[r["bucket"]][r["yr"]] += sgd
+        totals[r["yr"]] += sgd
+        years.add(r["yr"]); buckets.add(r["bucket"])
+    order = {"cash": 0, "srs": 1, "cpf": 2}
+    return {
+        "currency": "SGD",
+        "years": sorted(years, reverse=True),
+        "buckets": sorted(buckets, key=lambda b: order.get(b, 9)),
+        "matrix": {b: {y: round(v, 2) for y, v in yr.items()} for b, yr in matrix.items()},
+        "totals": {y: round(v, 2) for y, v in totals.items()},
+    }
+
+
 @app.get("/api/transactions")
 def transactions(account: str | None = None, ticker: str | None = None, limit: int = 500):
     s = SessionLocal()
@@ -228,6 +299,20 @@ def reconciliation():
     rows = reconcile()
     from collections import Counter
     return {"summary": dict(Counter(r["status"] for r in rows)), "rows": rows}
+
+
+@app.get("/api/options")
+def options_summary():
+    if "opt" not in _cache:
+        from portfolio.options import compute
+        _cache["opt"] = compute()
+    return _cache["opt"]
+
+
+@app.get("/api/options-trades")
+def options_trades(limit: int = 500):
+    from portfolio.options import recent
+    return recent(limit)
 
 
 @app.get("/api/accounts")

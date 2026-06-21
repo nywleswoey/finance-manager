@@ -14,7 +14,10 @@ build/*.csv
 portfolio.html
 
 # raw personal statements (account numbers / addresses) — keep local, not in git
-data/
+# (data/* not data/ so the one tracked file below can be re-included)
+data/*
+# …except the consolidated dividend-event log (tickers/amounts/dates, no account numbers)
+!data/dividends-master.csv
 
 # misc
 .DS_Store

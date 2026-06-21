@@ -1,7 +1,7 @@
 # Dividend Income
 
 Cash dividends / distributions parsed from every statement source by
-`build/parse_dividends.py` → `build/dividends.csv` (485 records, 2017–2026). These were
+`build/parse_dividends.py` → `build/dividends.csv` (549 records, 2017–2026). These were
 **always in the statements** — the position parsers just didn't extract them. Now shown
 per security in the viewer header.
 
@@ -11,9 +11,28 @@ per security in the viewer header.
 |---|---|---|---|
 | Tiger flex | `Dividends` (status = `Paid` only; accruals skipped) | 113 | HK, SG, US |
 | FSM / iFast | `Stock Dividend` rows that are `Cash Dividend` / `Cash in Lieu` | 242 | SG (+ USD/EUR REITs) |
-| CDP | `Summary of Payments` / `Cash Transaction` (both PDF layouts) | 100 | SG |
-| Moomoo | `… CASH DIVIDEND` lines | 30 | SG, US |
+| CDP | `Summary of Payments` (2017-18 3-line block + 2019+ layout) | 102 | SG |
+| Moomoo | `… CASH DIVIDEND` lines | 11 | SG, US |
+| CPF / SRS | backfilled (no dividend lines in their transaction files) | 81 | SG (+ EUR REIT) |
 | Endowus | — (Amundi fund accumulates; no distributions) | 0 | — |
+
+### CPF / SRS backfill
+
+The CPF-IS and SRS holdings (`data/cpf-stocks/`, `data/srs-stocks/`) record only
+trades — no distributions — and are **distinct positions** from the iFast/Tiger/CDP lots
+of the same counters (e.g. AIMS: SRS 3,700u vs the iFast 34,090u lot), so their dividends
+appear in no statement. `build/fetch_cpf_srs_dividends.py` reconstructs them once into
+`data/cpf-srs-dividends.csv` (read back by `cpf_srs()` in the parser). A dividend's
+per-unit rate is account-independent, so it is sourced **locally first**, online only for
+gaps:
+
+1. **personal tracker** (`data/cdp-stocks/dividends.csv`) — hand-recorded declared rates, 2016–mid-2022.
+2. **implied** — existing `dividends.csv` gross ÷ the paying account's `ledger.csv` units (2022–2026).
+3. **SGX** corporate-actions API — official declared rate; also the ex/pay-date + currency spine.
+4. **Yahoo** — last resort (its amounts are split/bonus/rights-adjusted; currently unused).
+
+Units held at each ex-date are replayed from the CPF/SRS ledger; `gross = units × rate`.
+Totals: **CPF SGD 17,648**; **SRS SGD 8,620 + EUR 7,803**.
 
 ## Totals (native currency, not FX-converted)
 

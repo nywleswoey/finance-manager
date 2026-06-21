@@ -72,47 +72,77 @@ def fsm():
             name=name, kind="cash", gross=amt,
             currency=(r.get("Product Currency") or "SGD").strip(), source="fsm (stock dividend)")
 
-# ---------- CDP statements (PDF) ----------
-import importlib.util
-_spec = importlib.util.spec_from_file_location("parse_cdp", os.path.join(HERE, "parse_cdp.py"))
-_pcdp = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_pcdp)
-def cdp_code(name):
-    name = name.strip()
-    return _pcdp.NAME2CODE.get(name) or canon(re.sub(r"[^A-Z0-9]", "", name.upper())[:8])
+# ---------- CDP cash dividends (maintained spreadsheet export) ----------
+# data/cdp-stocks/dividends.csv is the authoritative CDP dividend ledger (the prior
+# PDF-statement parser missed whole years and every foreign-currency holding). Columns:
+#   Date, Year, Month, Stock Name, Dividends (native), Dividends (SGD), Quantity, Dividend (rate)
+# Dates are mixed "DD-Mon-YY" / Excel serials. Rows with a zero amount are declared-but-
+# unfilled and skipped. Native amount + currency are stored; SGD conversion happens downstream.
+import datetime as _dt
+_XL_EPOCH = _dt.date(1899, 12, 30)
+# CDP holding name -> canonical ticker (SGX codes; foreign trusts are SGX-listed in USD/EUR)
+CDP_NAME2TK = {
+    "AIMS APAC Reit": "O5RU", "Accordia Golf Tr": "ADQU", "Advancer Global": "43Q",
+    "Asian Pay Tv Tr": "S7OU", "CapitaLandInvest": "9CI", "Centurion": "OU8",
+    "Capitaland Integrated Commercial Trust": "C38U", "Comfort Delgro": "C52", "DBS": "D05",
+    "Eagle Htrust USD": "LIW", "GuocoLand": "F17", "HRnetGroup": "CHZ", "Hock Lian Seng": "J2T",
+    "Hongkong Land Holdings": "H78", "Hyphens Pharma": "1J5", "IREIT Global": "UD1U",
+    "Jumbo": "42R", "Keppel Pacific Oak US Reit": "CMOU", "Manulife US Reit": "BTOU",
+    "Mapletree PanAsia Com Tr": "N2IU", "Nordic": "MR7", "OCBC": "O39", "QAF": "Q01",
+    "SBS Transit": "S61", "Sasseur Reit": "CRPU", "Sembcorp Industries": "U96",
+    "Silverlake Axis": "5CP", "SingTel": "Z74", "Soibuild Biz Reit": "SV3U",
+    "Starhill Global Reit": "P40U", "Stoneweg European Trust EUR": "SET", "Top Glove": "BVA",
+    "UMS": "558", "Wilmar": "F34",
+}
+# foreign-currency CDP holdings (others are SGD); used when native != SGD column
+CDP_FCCY = {"LIW": "USD", "SET": "EUR", "BTOU": "USD", "CMOU": "USD", "H78": "USD", "UD1U": "EUR"}
+
+def _cdp_date(d):
+    d = (d or "").strip()
+    if re.fullmatch(r"\d{4,6}", d):                       # Excel serial
+        return (_XL_EPOCH + _dt.timedelta(days=int(d))).isoformat()
+    for f in ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d-%b-%Y", "%d/%m/%Y"):
+        try:
+            return _dt.datetime.strptime(d, f).date().isoformat()
+        except ValueError:
+            pass
+    return None
 
 def cdp():
-    seen = set()
-    # 2019+ format: "<date> <NAME> <Type> Cash Dividend - <qty> units @ SGD <rate>   <amount>"
-    rx_new = re.compile(r"(\d{2}/\d{2}/\d{4})\s+(.+?Cash Dividend.+?)\s+([\d,]+\.\d+)\s*$")
-    # 2017-18 format: "<NAME>  <holdings>  SGD<gross>  <fx>  SGD<amount paid>"
-    rx_old = re.compile(r"^\s*([A-Z][A-Z &.\-/]+?)\s+[\d,]+\s+SGD([\d,]+\.\d+)\s+\S+\s+SGD([\d,]+\.\d+)\s*$")
-    for f in sorted(glob.glob(os.path.join(DATA, "cdp-statements/*.pdf"))):
-        txt = subprocess.run(["pdftotext", "-layout", f, "-"], capture_output=True, text=True).stdout
-        for ln in txt.splitlines():
-            if "Payment Made" in ln: continue
-            m = rx_new.match(ln.strip())
-            if m:
-                desc = m.group(2)
-                name = re.split(r"\s+(?:Final|Interim|Special|Annual|1st|2nd|Cash Dividend)", desc)[0].strip()
-                key = (m.group(1), name, m.group(3))
-                if key in seen: continue
-                seen.add(key)
-                # "<qty> units @ SGD <rate>" — declared units + per-share rate stated in the PDF
-                ur = re.search(r"([\d,]+(?:\.\d+)?)\s*units?\s*@\s*(?:SGD|S\$)?\s*([\d.]+)", desc)
-                add(date=m.group(1), account="CDP", market="SG", ticker=cdp_code(name),
-                    name=name.title(), kind="cash", gross=num(m.group(3)),
-                    units=(num(ur.group(1)) if ur else ""), rate=(num(ur.group(2)) if ur else ""),
-                    currency="SGD", source="cdp (cash dividend)")
-                continue
-            m = rx_old.match(ln)
-            if m and m.group(1).strip() not in ("Security", "Payment Type", "Dividend Type"):
-                name = m.group(1).strip()
-                key = ("old", name, m.group(3))
-                if key in seen: continue
-                seen.add(key)
-                add(date="", account="CDP", market="SG", ticker=cdp_code(name),
-                    name=name.title(), kind="cash", gross=num(m.group(3)),
-                    currency="SGD", source="cdp (cash dividend)")
+    """CDP cash dividends from the maintained tracker. The sheet is broader than CDP —
+    it also lists holdings tracked by broker statements (Tiger/FSM/SRS), and keeps tracking
+    a holding after it's transferred to another custodian. To avoid double-counting, a row
+    is emitted only when NO broker-statement dividend exists for the same ticker within ±7
+    days (those are already ingested). Runs LAST so DIV holds the other sources to dedup against."""
+    p = os.path.join(DATA, "cdp-stocks", "dividends.csv")
+    if not os.path.exists(p):
+        return
+    elsewhere = defaultdict(list)                         # ticker -> [date] from broker statements
+    for x in DIV:
+        iso = _cdp_date(x.get("date", ""))
+        if iso:
+            elsewhere[x["ticker"]].append(_dt.date.fromisoformat(iso))
+    def tracked_elsewhere(tk, iso):
+        dx = _dt.date.fromisoformat(iso)
+        return any(abs((dx - e).days) <= 7 for e in elsewhere.get(tk, []))
+    for r in csv.reader(open(p)):
+        if len(r) < 8 or r[0].strip() in ("", "Date", "﻿Date"):
+            continue
+        d, _yr, _mo, name, nat, sgd, qty, rate = r[:8]
+        name = name.strip()
+        natg, sgdg = num(nat), num(sgd)
+        if natg == 0 and sgdg == 0:                       # declared but no amount -> skip
+            continue
+        tk = CDP_NAME2TK.get(name)
+        date = _cdp_date(d)
+        if tk is None or date is None:
+            continue
+        if tracked_elsewhere(tk, date):                   # already in a broker statement -> skip
+            continue
+        ccy = "SGD" if abs(natg - sgdg) < 0.01 else CDP_FCCY.get(tk, "SGD")
+        add(date=date, account="CDP", market="SG", ticker=tk, name=name, kind="cash",
+            gross=natg, units=num(qty), rate=num(rate), currency=ccy,
+            source="cdp (cash dividend)")
 
 # ---------- Moomoo (PDF) ----------
 def moomoo():
@@ -159,8 +189,35 @@ def moomoo():
                 rate=(round(amt / units, 6) if units else ""),
                 source="moomoo (cash dividend)")
 
+# ---------- CPF / SRS (backfilled into data/cpf-srs-dividends.csv by fetch_cpf_srs_dividends.py) ----------
+def cpf_srs():
+    p = os.path.join(DATA, "cpf-srs-dividends.csv")
+    if not os.path.exists(p):
+        return
+    for r in csv.DictReader(open(p)):
+        add(date=r["date"], account=r["account"], market=r["market"], ticker=r["ticker"],
+            name=r["name"], kind=r["kind"], gross=num(r["gross"]),
+            units=num(r["units"]), rate=num(r["rate"]), currency=r["currency"],
+            source=r["source"])
+
+# ---------- one-time external retrievals ----------
+# For dividends whose statement omits units/rate AND whose ledger holds no position at the
+# pay date, the per-share rate is fetched once from Yahoo Finance (finance-manager-v2's
+# approach: GET query1.finance.yahoo.com/v8/finance/chart/<ticker>.SI?events=div). units is
+# then gross / rate; each is cross-checked so gross == round(units * rate, 2).
+#   (account, ticker, date, gross): (units, rate)
+CORRECTIONS = {
+    # Sembcorp Ind U96 — no ledger position at pay date; Yahoo ex 2022-04-26 @ SGD0.03.
+    ("FSM", "U96", "10 May 2022", 90.0): (3000.0, 0.03),
+}
+def apply_corrections():
+    for d in DIV:
+        k = (d.get("account"), d.get("ticker"), d.get("date"), d.get("gross"))
+        if k in CORRECTIONS and not d.get("units") and not d.get("rate"):
+            d["units"], d["rate"] = CORRECTIONS[k]
+
 # ---------- run all sources ----------
-tiger(); fsm(); cdp(); moomoo()
+tiger(); fsm(); moomoo(); cpf_srs(); cdp(); apply_corrections()   # cdp() last: dedups vs the rest
 out = os.path.join(HERE, "dividends.csv")
 cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "units", "rate", "currency", "source"]
 with open(out, "w", newline="") as fh:

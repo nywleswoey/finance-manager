@@ -128,6 +128,42 @@ class Dividend(Base):
     __table_args__ = (UniqueConstraint("dedup_hash", name="uq_div_dedup"),)
 
 
+# ---------------- options ----------------
+class OptionTrade(Base):
+    """One sold-option contract line (wheel strategy: cash-secured puts + covered calls).
+
+    P&L is realized in the contract's native currency:
+        realized = (premium_open - premium_close) * contracts * multiplier - fees_open - fees_close
+    premium_open  = credit received per share when sold-to-open
+    premium_close = debit paid per share to buy-to-close (0 when expired worthless / assigned)
+    outcome       = expired | closed | assigned  (best-effort; assignment inferred elsewhere)
+    """
+    __tablename__ = "option_trade"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("account.id"))
+    security_id: Mapped[int | None] = mapped_column(ForeignKey("security.id"))  # underlying, if matched
+    underlying: Mapped[str] = mapped_column(String(24))                  # raw ticker from source (BABA, PLTR)
+    market: Mapped[str | None] = mapped_column(String(4))                # US | HK
+    option_type: Mapped[str] = mapped_column(String(4))                  # put | call
+    contracts: Mapped[Decimal] = mapped_column(QTY, default=0)
+    strike: Mapped[Decimal | None] = mapped_column(MONEY)
+    multiplier: Mapped[int] = mapped_column(Integer, default=100)
+    open_date: Mapped[dt.date | None] = mapped_column(Date, index=True)
+    expiry_date: Mapped[dt.date | None] = mapped_column(Date)
+    close_date: Mapped[dt.date | None] = mapped_column(Date)
+    premium_open: Mapped[Decimal | None] = mapped_column(MONEY)          # per share, credit
+    premium_close: Mapped[Decimal | None] = mapped_column(MONEY)         # per share, debit to close
+    fees_open: Mapped[Decimal | None] = mapped_column(MONEY)
+    fees_close: Mapped[Decimal | None] = mapped_column(MONEY)
+    realized_pl: Mapped[Decimal | None] = mapped_column(MONEY)           # native currency
+    currency: Mapped[str | None] = mapped_column(String(3))
+    outcome: Mapped[str | None] = mapped_column(String(12))              # expired | closed | assigned
+    source_file: Mapped[str | None] = mapped_column(String(256))
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("import_batch.id"))
+    dedup_hash: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (UniqueConstraint("dedup_hash", name="uq_opt_dedup"),)
+
+
 # ---------------- valuation / reconciliation ----------------
 class Price(Base):
     __tablename__ = "price"
