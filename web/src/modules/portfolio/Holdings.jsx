@@ -15,9 +15,38 @@ const groupKey = (r, by) =>
   by === "account" ? ((r.accounts || []).join(", ") || "—") : (r[by] || "—");
 const plOf = (r) => (r.status === "closed" ? r.pl_sgd : r.unrealised_pl_sgd);
 
-function DataRow({ r, onClick }) {
+// the verdict: total economic P/L (realised + unrealised + dividends) + option premiums.
+// cost-unknown names (CDP / transferred-in) can't give a true stock P/L → net shows only the
+// known cash streams (dividends + premiums) and is flagged partial.
+const netOf = (r) => {
+  const opt = r.options_pl_sgd || 0;
+  if (r.cost_known && r.pl_sgd != null) return { net: r.pl_sgd + opt, partial: false };
+  return { net: (r.income_sgd || 0) + opt, partial: true };
+};
+
+function NetCell({ net, partial, max }) {
+  const w = max > 0 ? Math.min(100, (Math.abs(net) / max) * 100) : 0;
+  const color = net >= 0 ? "16,185,129" : "239,68,68";   // green / red
+  return (
+    <td style={{ minWidth: 110 }}>
+      <div style={{ position: "relative", padding: "1px 4px" }}>
+        <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: w + "%",
+                      background: `rgba(${color},0.18)`, borderRadius: 3 }} />
+        <span className={cls(net)}
+              title={partial ? "dividends + premiums only (cost basis unknown)"
+                             : "total P/L incl dividends + option premiums"}
+              style={{ position: "relative", fontWeight: 700 }}>
+          {sgd(net)}{partial && <span className="mut" style={{ fontWeight: 400 }}> ~</span>}
+        </span>
+      </div>
+    </td>
+  );
+}
+
+function DataRow({ r, onClick, max }) {
   const closed = r.status === "closed";
   const pl = plOf(r);
+  const { net, partial } = netOf(r);
   return (
     <tr style={{ cursor: "pointer", opacity: closed ? 0.7 : 1 }} onClick={onClick}>
       <td className="l">{r.name} <span className="pill">{r.ticker}</span>
@@ -35,6 +64,7 @@ function DataRow({ r, onClick }) {
       <td className="pos">{r.income_native ? money(r.income_native, r.currency, 0) : "—"}</td>
       <td className={cls(r.options_pl_sgd)} title="realised options (wheel) P/L">
         {r.options_pl_sgd ? sgd(r.options_pl_sgd) : "—"}</td>
+      <NetCell net={net} partial={partial} max={max} />
       <td className={cls(r.xirr)}>{r.xirr == null ? "—" : pct(r.xirr)}</td>
     </tr>
   );
@@ -65,12 +95,17 @@ export default function Holdings() {
       a.mv += r.status === "closed" ? 0 : (r.mv_sgd || 0);
       a.pl += plOf(r) || 0;
       a.opt += r.options_pl_sgd || 0;
+      a.net += netOf(r).net;
       return a;
-    }, { mv: 0, pl: 0, opt: 0 });
+    }, { mv: 0, pl: 0, opt: 0, net: 0 });
     return [...m.entries()]
       .map(([key, rs]) => ({ key, label: key, rows: rs, ...subtotal(rs) }))
       .sort((a, b) => b.mv - a.mv);
   }, [rows, by]);
+
+  // bar scale: largest |net| across all rows, so bars are comparable everywhere
+  const maxNet = useMemo(
+    () => (rows ? rows.reduce((m, r) => Math.max(m, Math.abs(netOf(r).net)), 0) : 0), [rows]);
 
   if (sel) return <SecurityDetail ticker={sel.ticker} bucket={sel.bucket} onBack={() => setSel(null)} />;
   if (!rows) return <div className="loading">Loading…</div>;
@@ -99,11 +134,12 @@ export default function Holdings() {
         <thead><tr>
           <th className="l">Security</th><th className="l">Bucket</th><th className="l">Mkt</th>
           <th>Units</th><th>Avg Cost</th><th>Price</th>
-          <th>Cost (SGD)</th><th>MV (SGD)</th><th>P/L</th><th>Dividends</th><th>Options P/L</th><th>XIRR</th>
+          <th>Cost (SGD)</th><th>MV (SGD)</th><th>P/L</th><th>Dividends</th><th>Options P/L</th>
+          <th title="total P/L incl dividends + option premiums">Net</th><th>XIRR</th>
         </tr></thead>
         <tbody>
           {flat
-            ? rows.map((r, i) => <DataRow key={i} r={r} onClick={() => open(r)} />)
+            ? rows.map((r, i) => <DataRow key={i} r={r} max={maxNet} onClick={() => open(r)} />)
             : groups.map((g) => {
               const hidden = collapsed[g.key];
               return (
@@ -117,9 +153,10 @@ export default function Holdings() {
                     <td className={cls(g.pl)}>{sgd(g.pl)}</td>
                     <td></td>
                     <td className={cls(g.opt)}>{g.opt ? sgd(g.opt) : ""}</td>
+                    <td className={cls(g.net)} style={{ fontWeight: 700 }}>{sgd(g.net)}</td>
                     <td></td>
                   </tr>
-                  {!hidden && g.rows.map((r, i) => <DataRow key={i} r={r} onClick={() => open(r)} />)}
+                  {!hidden && g.rows.map((r, i) => <DataRow key={i} r={r} max={maxNet} onClick={() => open(r)} />)}
                 </React.Fragment>
               );
             })}
@@ -130,6 +167,8 @@ export default function Holdings() {
         P/L. Avg cost / cost basis / XIRR shown where transaction cost is known. CDP cost comes from
         cdp-stocks; positions transferred CDP→FSM keep their CDP purchase cost (pooled per funding bucket).
         XIRR is the money-weighted return incl. realised trades & dividends.
+        <b>Net</b> = total P/L (realised + unrealised + dividends) + option premiums — the bar shows its
+        size vs the biggest mover; <b>~</b> marks cost-unknown names where Net counts only dividends + premiums.
       </p>
     </div>
   );
