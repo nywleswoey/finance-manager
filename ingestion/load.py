@@ -120,6 +120,13 @@ def load_dividends(session, acct, alias):
             amount_per_unit=num(r.get("rate")), units=num(r.get("units")),
             source_file=r["source"], batch_id=b.id, dedup_hash=dh,
         ))
+    # prune dividends that vanished from the CSV (e.g. dateless rows now reparsed with a date)
+    hashes = {p["dedup_hash"] for p in payload}
+    stale = session.scalars(select(Dividend).filter_by(batch_id=b.id)).all()
+    for d in stale:
+        if d.dedup_hash not in hashes:
+            session.delete(d)
+    session.flush()
     return upsert(session, Dividend, payload, ["gross", "net", "currency", "amount_per_unit", "units"])
 
 

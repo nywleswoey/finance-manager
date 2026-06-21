@@ -84,11 +84,19 @@ def cdp():
     seen = set()
     # 2019+ format: "<date> <NAME> <Type> Cash Dividend - <qty> units @ SGD <rate>   <amount>"
     rx_new = re.compile(r"(\d{2}/\d{2}/\d{4})\s+(.+?Cash Dividend.+?)\s+([\d,]+\.\d+)\s*$")
-    # 2017-18 format: "<NAME>  <holdings>  SGD<gross>  <fx>  SGD<amount paid>"
-    rx_old = re.compile(r"^\s*([A-Z][A-Z &.\-/]+?)\s+[\d,]+\s+SGD([\d,]+\.\d+)\s+\S+\s+SGD([\d,]+\.\d+)\s*$")
+    # 2017-18 format: a 3-line block under "Summary of Payments"
+    #   L1  <NAME>  <Reg'd Holdings>  SGD<Gross>  <Exchange Rate|->  SGD<Amount Paid>
+    #   L2  DIVIDEND  <Book Close dd/mm/yyyy>  SGD<Tax>  SGD<Payment Rate>  <Handling Fee|->
+    #   L3  <Type>    <Credit dd/mm/yyyy>      SGD<Net Amount>            <GST|->
+    # The credit date is the cash pay date; units + per-share rate are stated explicitly.
+    rx_sec = re.compile(
+        r"^\s*([A-Z][A-Za-z0-9 &.\-/']+?)\s+([\d,]+)\s+SGD([\d,]+\.\d{2})\s+(?:-|[\d.]+)\s+SGD([\d,]+\.\d{2})\s*$")
+    rx_pay = re.compile(r"(?:DIVIDEND|DISTRIB\w*)\s+(\d{2}/\d{2}/\d{4})\s+SGD[\d,]*\.?\d*\s+SGD([\d.]+)")
+    rx_credit = re.compile(r"(\d{2}/\d{2}/\d{4})\s+SGD[\d,]+\.\d{2}")
     for f in sorted(glob.glob(os.path.join(DATA, "cdp-statements/*.pdf"))):
         txt = subprocess.run(["pdftotext", "-layout", f, "-"], capture_output=True, text=True).stdout
-        for ln in txt.splitlines():
+        lines = txt.splitlines()
+        for i, ln in enumerate(lines):
             if "Payment Made" in ln: continue
             m = rx_new.match(ln.strip())
             if m:
@@ -104,15 +112,22 @@ def cdp():
                     units=(num(ur.group(1)) if ur else ""), rate=(num(ur.group(2)) if ur else ""),
                     currency="SGD", source="cdp (cash dividend)")
                 continue
-            m = rx_old.match(ln)
-            if m and m.group(1).strip() not in ("Security", "Payment Type", "Dividend Type"):
-                name = m.group(1).strip()
-                key = ("old", name, m.group(3))
-                if key in seen: continue
-                seen.add(key)
-                add(date="", account="CDP", market="SG", ticker=cdp_code(name),
-                    name=name.title(), kind="cash", gross=num(m.group(3)),
-                    currency="SGD", source="cdp (cash dividend)")
+            m = rx_sec.match(ln)
+            if not m or m.group(1).strip() in ("Security", "Payment Type", "Dividend Type"):
+                continue
+            # L2 must be a DIVIDEND payment line; otherwise this is some other payment type.
+            p = rx_pay.search(lines[i + 1]) if i + 1 < len(lines) else None
+            if not p: continue
+            c = rx_credit.search(lines[i + 2]) if i + 2 < len(lines) else None
+            name = m.group(1).strip()
+            pay_date = c.group(1) if c else p.group(1)   # credit date (fallback: book close)
+            key = (pay_date, name, m.group(3))
+            if key in seen: continue
+            seen.add(key)
+            add(date=pay_date, account="CDP", market="SG", ticker=cdp_code(name),
+                name=name.title(), kind="cash", gross=num(m.group(3)),
+                units=num(m.group(2)), rate=num(p.group(2)),
+                currency="SGD", source="cdp (cash dividend)")
 
 # ---------- Moomoo (PDF) ----------
 def moomoo():
@@ -159,8 +174,24 @@ def moomoo():
                 rate=(round(amt / units, 6) if units else ""),
                 source="moomoo (cash dividend)")
 
+# ---------- one-time external retrievals ----------
+# For dividends whose statement omits units/rate AND whose ledger holds no position at the
+# pay date, the per-share rate is fetched once from Yahoo Finance (finance-manager-v2's
+# approach: GET query1.finance.yahoo.com/v8/finance/chart/<ticker>.SI?events=div). units is
+# then gross / rate; each is cross-checked so gross == round(units * rate, 2).
+#   (account, ticker, date, gross): (units, rate)
+CORRECTIONS = {
+    # Sembcorp Ind U96 — no ledger position at pay date; Yahoo ex 2022-04-26 @ SGD0.03.
+    ("FSM", "U96", "10 May 2022", 90.0): (3000.0, 0.03),
+}
+def apply_corrections():
+    for d in DIV:
+        k = (d.get("account"), d.get("ticker"), d.get("date"), d.get("gross"))
+        if k in CORRECTIONS and not d.get("units") and not d.get("rate"):
+            d["units"], d["rate"] = CORRECTIONS[k]
+
 # ---------- run all sources ----------
-tiger(); fsm(); cdp(); moomoo()
+tiger(); fsm(); cdp(); moomoo(); apply_corrections()
 out = os.path.join(HERE, "dividends.csv")
 cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "units", "rate", "currency", "source"]
 with open(out, "w", newline="") as fh:
