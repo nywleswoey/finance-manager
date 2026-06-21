@@ -83,7 +83,10 @@ def load_ledger(session, acct, alias):
         sid = alias.get(r["ticker"])
         if not a or not sid:
             continue
-        key = (r["account"], r["ticker"], r["date"], r["action"], r["qty_signed"], r["amount"])
+        # dedup on the STABLE natural key only (no amount/price/currency) so ledger
+        # corrections to those mutable fields update the existing row instead of
+        # inserting a duplicate. occ disambiguates genuinely repeated trades.
+        key = (r["account"], r["ticker"], r["date"], r["action"], r["qty_signed"])
         occ[key] += 1                      # nth identical row in this file -> distinct, but stable on re-ingest
         dh = h(*key, occ[key])
         payload.append(dict(
@@ -93,7 +96,7 @@ def load_ledger(session, acct, alias):
             currency=(r["currency"] or None), funding_bucket=BUCKET.get(r["account"]),
             source_file=r["source"], raw=r["raw"], batch_id=b.id, dedup_hash=dh,
         ))
-    return upsert(session, Txn, payload)
+    return upsert(session, Txn, payload, ["gross_amount", "price", "currency"])
 
 
 def load_dividends(session, acct, alias):
@@ -116,15 +119,20 @@ def load_dividends(session, acct, alias):
             gross=num(r["gross"]), net=num(r["gross"]), currency=r["currency"],
             source_file=r["source"], batch_id=b.id, dedup_hash=dh,
         ))
-    return upsert(session, Dividend, payload)
+    return upsert(session, Dividend, payload, ["gross", "net", "currency"])
 
 
-def upsert(session, model, payload):
+def upsert(session, model, payload, update_cols):
+    """Idempotent on dedup_hash; mutable fields (amount/price/currency) are refreshed
+    so re-ingesting a corrected ledger updates rows in place. Returns count of NEW rows."""
     if not payload:
         return 0
     before = session.scalar(select(func.count()).select_from(model))
-    stmt = pg_insert(model).on_conflict_do_nothing(index_elements=["dedup_hash"])
-    session.execute(stmt, payload)
+    stmt = pg_insert(model).values(payload)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=["dedup_hash"],
+        set_={c: getattr(stmt.excluded, c) for c in update_cols})
+    session.execute(stmt)
     session.flush()
     after = session.scalar(select(func.count()).select_from(model))
     return after - before
