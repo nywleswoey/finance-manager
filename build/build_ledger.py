@@ -238,6 +238,39 @@ def load_endowus():
             asset_type="fund", action=r["action"], qty_signed=float(r["qty_signed"]),
             currency="SGD", source="endowus (pdf)", raw=r["fund"])
 
+# ---------- synthesize missing transfer-in legs ----------
+REAL_ACCTS = {"Tiger Prime", "Tiger Cash Boost", "Moomoo", "FSM", "CDP", "CPF", "SRS"}
+def synthesize_transfer_ins():
+    """Inter-broker custody moves (e.g. CDP -> FSM) were logged only on the sending
+    side as `transfer_out`; the receiving broker recorded only the later sale. That
+    leaves the receiver with an impossible negative position — shares it sold but
+    never acquired. Where a real account nets negative for a ticker AND a matching
+    `transfer_out` of the same ticker+qty exists elsewhere, inject the missing
+    `transfer_in` on the receiver so both legs net to zero. This records the real
+    custody move instead of leaving a phantom short."""
+    net = defaultdict(float)
+    for r in LEDGER:
+        if r["asset_type"] in ("stock", "fund") and r["ticker"]:
+            net[(r["account"], canon(r["ticker"]))] += float(r["qty_signed"] or 0)
+    def is_out(a): return "transfer_out" in a or "transfer out" in a
+    outs = [r for r in LEDGER if r["asset_type"] == "stock" and r["ticker"] and is_out(r["action"])]
+    used = [False] * len(outs)
+    for (acct, tk), q in sorted(net.items()):
+        if q >= -1e-6 or acct not in REAL_ACCTS:
+            continue
+        need = -q                                   # shares the receiver is short
+        mi = next((i for i, o in enumerate(outs) if not used[i]
+                   and canon(o["ticker"]) == tk
+                   and abs(abs(float(o["qty_signed"] or 0)) - need) < 1e-6), None)
+        if mi is None:
+            continue
+        used[mi] = True; m = outs[mi]
+        add(date=m["date"], account=acct, market=m["market"] or "SG", ticker=tk,
+            asset_type="stock", action="transfer_in", qty_signed=need,
+            source="synthesized (custody move)",
+            raw=f"transfer-in leg of {m['account']} {m['raw']}")
+        print(f"  synthesized transfer_in: {acct} {tk} +{need:g} (from {m['account']} {m['date']})")
+
 # ---------- reconcile inter-broker stock transfers ----------
 def reconcile_transfer_amounts():
     """Inter-broker custody move conserves cost as well as shares. The receiving
@@ -263,6 +296,7 @@ def reconcile_transfer_amounts():
 
 # ---------- run ----------
 load_simple(); load_tiger(); load_fsm(); load_moomoo(); load_cdp(); load_endowus()
+synthesize_transfer_ins()
 reconcile_transfer_amounts()
 LEDGER.sort(key=lambda r: (str(r["date"]), r["account"], r["ticker"]))
 
