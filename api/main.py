@@ -1,0 +1,139 @@
+"""FastAPI — serves portfolio positions, performance, dividends, transactions.
+
+Run: PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload --port 8000
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from fastapi import FastAPI, Query
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from sqlalchemy import text
+
+from portfolio.db import SessionLocal
+from portfolio.performance import alloc_by_account, compute, rollup
+from portfolio.reconcile import reconcile
+
+app = FastAPI(title="Portfolio API")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+_cache: dict = {}
+
+
+def perf():
+    if "rows" not in _cache:
+        _cache["rows"] = [r for r in compute() if r["units"] > 1e-6]
+    return _cache["rows"]
+
+
+@app.post("/api/refresh")
+def refresh():
+    _cache.clear()
+    return {"ok": True}
+
+
+@app.get("/api/overview")
+def overview():
+    rows = perf()
+    mv = sum(r["mv_sgd"] for r in rows)
+    income = sum(r["income_sgd"] for r in rows)
+    pl = sum(r["pl_sgd"] or 0 for r in rows if r["cost_known"])
+    cost = sum(r["invested_sgd"] for r in rows if r["cost_known"])
+    return {
+        "market_value_sgd": round(mv, 2),
+        "dividends_sgd": round(income, 2),
+        "pl_sgd": round(pl, 2),
+        "cost_sgd": round(cost, 2),
+        "return_pct": round(pl / cost, 4) if cost else None,
+        "positions": len(rows),
+        "by_market": rollup(rows, "market"),
+        "by_bucket": rollup(rows, "bucket"),
+        "by_account": alloc_by_account(),
+    }
+
+
+@app.get("/api/positions")
+def positions():
+    return sorted(perf(), key=lambda r: -r["mv_sgd"])
+
+
+@app.get("/api/performance")
+def performance(by: str = Query("market", enum=["market", "bucket", "account"])):
+    return rollup(perf(), by)
+
+
+@app.get("/api/dividends")
+def dividends():
+    s = SessionLocal()
+    by = s.execute(text(
+        "SELECT s.market, d.currency, round(sum(d.gross)) gross, count(*) n "
+        "FROM dividend d LEFT JOIN security s ON s.id=d.security_id "
+        "GROUP BY s.market, d.currency ORDER BY gross DESC NULLS LAST")).mappings().all()
+    recent = s.execute(text(
+        "SELECT d.pay_date, a.name account, COALESCE(s.name,'?') name, "
+        "s.canonical_ticker ticker, d.gross, d.currency "
+        "FROM dividend d JOIN account a ON a.id=d.account_id "
+        "LEFT JOIN security s ON s.id=d.security_id "
+        "WHERE d.pay_date IS NOT NULL ORDER BY d.pay_date DESC LIMIT 50")).mappings().all()
+    s.close()
+    return {"by_market": [dict(r) for r in by], "recent": [dict(r) for r in recent]}
+
+
+@app.get("/api/transactions")
+def transactions(account: str | None = None, ticker: str | None = None, limit: int = 500):
+    s = SessionLocal()
+    # CDP transactions come from cdp-stocks (has price + amount); statements omit them
+    rows = []
+    if account != "CDP":                               # CDP comes only from cdp-stocks below
+        q = ("SELECT t.trade_date, a.name account, s.canonical_ticker ticker, COALESCE(s.name,'') name, "
+             "t.action, t.qty_signed, t.price, t.gross_amount, t.currency, t.source_file "
+             "FROM txn t JOIN account a ON a.id=t.account_id JOIN security s ON s.id=t.security_id "
+             "WHERE a.name <> 'CDP'")
+        p: dict = {}
+        if account:
+            q += " AND a.name=:acct"; p["acct"] = account
+        if ticker:
+            q += " AND s.canonical_ticker=:tk"; p["tk"] = ticker
+        rows = [dict(r) for r in s.execute(text(q + " LIMIT 2000"), p).mappings().all()]
+    s.close()
+    if account in (None, "CDP"):                       # add CDP from cdp-stocks
+        from portfolio.performance import cdp_transactions
+        cdp = cdp_transactions()
+        if ticker:
+            cdp = [r for r in cdp if r["ticker"] == ticker]
+        rows += cdp
+    rows.sort(key=lambda r: (r["trade_date"] is None, str(r["trade_date"] or "")))
+    return rows[:limit]
+
+
+@app.get("/api/return")
+def portfolio_return():
+    if "ret" not in _cache:
+        from portfolio.twr import compute_twr
+        try:
+            _cache["ret"] = compute_twr()
+        except Exception as e:
+            return {"error": str(e)[:120]}
+    return _cache["ret"]
+
+
+@app.get("/api/reconciliation")
+def reconciliation():
+    rows = reconcile()
+    from collections import Counter
+    return {"summary": dict(Counter(r["status"] for r in rows)), "rows": rows}
+
+
+@app.get("/api/accounts")
+def accounts():
+    s = SessionLocal()
+    rows = s.execute(text("SELECT name, broker, funding_bucket FROM account ORDER BY funding_bucket, name")).mappings().all()
+    s.close()
+    return [dict(r) for r in rows]
+
+
+# serve the built frontend (web/dist) if present
+_dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "dist")
+if os.path.isdir(_dist):
+    app.mount("/", StaticFiles(directory=_dist, html=True), name="web")
