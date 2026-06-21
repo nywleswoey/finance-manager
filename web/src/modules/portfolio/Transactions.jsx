@@ -39,7 +39,7 @@ export default function Transactions() {
                 <td className="l">{r.action}</td>
                 <td className={cls(r.qty_signed)}>{r.qty_signed > 0 ? "+" : ""}{fmt(r.qty_signed, 2)}</td>
                 <td className="mut">{r.price == null ? "" : fmt(r.price, 4)}</td>
-                <td className="mut">{r.gross_amount == null ? "" : fmt(r.gross_amount, 2)} {r.currency}</td>
+                <td className="mut">{r.gross_amount == null ? "" : `${fmt(r.gross_amount, 2)} ${r.currency || ""}`.trim()}</td>
                 <td className="l mut" style={{ fontSize: 11 }}>{r.source_file}</td>
               </tr>
             ))}

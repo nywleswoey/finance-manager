@@ -50,10 +50,15 @@ def parse_date(s):
     return s  # leave raw if unknown
 
 LEDGER = []
+MARKET_CCY = {"SG": "SGD", "US": "USD", "HK": "HKD"}
 def add(**k):
     k.setdefault("price", ""); k.setdefault("amount", ""); k.setdefault("fees", "")
     k.setdefault("currency", ""); k.setdefault("market", ""); k.setdefault("ticker", "")
     k.setdefault("asset_type", "stock"); k.setdefault("raw", "")
+    # standardise currency: SG/CDP/CPF/SRS sources omit it -> derive from market.
+    # FX cash transfers set currency explicitly, so the empty-check leaves them intact.
+    if not str(k["currency"]).strip():
+        k["currency"] = MARKET_CCY.get(k["market"], "")
     LEDGER.append(k)
 
 # ---------- simple CSV sources (cdp / cpf / srs / vickers / archive tiger) ----------
