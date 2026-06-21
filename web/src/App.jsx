@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { post } from "./api.js";
+import { useAuth } from "./auth.jsx";
 import Overview from "./modules/portfolio/Overview.jsx";
 import Holdings from "./modules/portfolio/Holdings.jsx";
 import Performance from "./modules/portfolio/Performance.jsx";
@@ -24,6 +25,7 @@ export default function App() {
   const [msg, setMsg] = useState("");
   const [ver, setVer] = useState(0);            // bump to remount active tab
   const View = TABS[tab];
+  const { user, logout } = useAuth() || {};
 
   async function refreshPrices() {
     setBusy(true);
@@ -51,6 +53,12 @@ export default function App() {
              data-testid="nav-networth" onClick={() => setSection("Net Worth")}>Net Worth</div>
         <div className="navitem dim">Budget</div>
         <div className="navitem dim">Settings</div>
+        {user && (
+          <div className="side-user">
+            <div className="side-email" title={user.email}>{user.email}</div>
+            <button className="logout-btn" onClick={logout}>Sign out</button>
+          </div>
+        )}
       </div>
       <div className="main">
         {section === "Portfolio" ? (

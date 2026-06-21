@@ -1,16 +1,23 @@
 const base = "";
+// Session lives in an HttpOnly cookie; include it on every request. A 401 means the
+// session expired or was revoked -> tell the AuthGate to drop back to the login screen.
+const CREDS = { credentials: "include" };
+function on401(r) {
+  if (r.status === 401) window.dispatchEvent(new Event("auth-expired"));
+  return r;
+}
 export async function get(path) {
-  const r = await fetch(base + path);
+  const r = on401(await fetch(base + path, CREDS));
   if (!r.ok) throw new Error(path + " " + r.status);
   return r.json();
 }
 export async function post(path, body) {
-  const opts = { method: "POST" };
+  const opts = { method: "POST", ...CREDS };
   if (body !== undefined) {
     opts.headers = { "Content-Type": "application/json" };
     opts.body = JSON.stringify(body);
   }
-  const r = await fetch(base + path, opts);
+  const r = on401(await fetch(base + path, opts));
   if (!r.ok) {
     let detail = "";
     try { detail = (await r.json()).detail || ""; } catch {}
@@ -19,7 +26,7 @@ export async function post(path, body) {
   return r.json();
 }
 export async function del(path) {
-  const r = await fetch(base + path, { method: "DELETE" });
+  const r = on401(await fetch(base + path, { method: "DELETE", ...CREDS }));
   if (!r.ok) throw new Error(path + " " + r.status);
   return r.json();
 }
