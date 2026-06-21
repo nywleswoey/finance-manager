@@ -13,6 +13,8 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
   if (d.error || !d.summary) return <div className="loading">No data for {ticker}. <a onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)" }}>← back</a></div>;
   const s = d.summary;
   const divTotal = d.dividends.reduce((a, x) => a + Number(x.gross || 0), 0);
+  const opts = d.options || [];
+  const optPlSgd = opts.reduce((a, t) => a + (t.close_date ? Number(t.realized_sgd || 0) : 0), 0);
 
   return (
     <div>
@@ -34,6 +36,7 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
         <Tile lbl="Market Value" val={sgd(s.mv_sgd)} />
         <Tile lbl="Unrealised P/L" val={s.unrealised_pl_sgd == null ? "n/a" : sgd(s.unrealised_pl_sgd)} cls={cls(s.unrealised_pl_sgd)} />
         <Tile lbl="Dividends" val={`${fmt(divTotal, 0)} ${d.dividends[0]?.currency || s.currency}`} cls="pos" />
+        {opts.length > 0 && <Tile lbl="Options P/L" val={sgd(optPlSgd)} cls={cls(optPlSgd)} />}
         <Tile lbl="XIRR" val={s.xirr == null ? "—" : pct(s.xirr)} cls={cls(s.xirr)} />
       </div>
 
@@ -84,6 +87,36 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
           </table>
         )}
       </div>
+
+      {opts.length > 0 && (
+        <div className="card" style={{ marginTop: 18 }}>
+          <h3>Option trades ({opts.length}) · {s.ticker} wheel
+            <span className="pill" style={{ marginLeft: 8 }}>realised {sgd(optPlSgd)}</span></h3>
+          <table>
+            <thead><tr>
+              <th className="l">Type</th><th>Qty</th><th>Strike</th>
+              <th className="l">Opened</th><th className="l">Closed</th>
+              <th>Premium</th><th>Buyback</th><th className="l">Outcome</th><th>P/L</th>
+            </tr></thead>
+            <tbody>
+              {opts.map((t, i) => (
+                <tr key={i}>
+                  <td className="l" style={{ textTransform: "capitalize" }}>{t.type}</td>
+                  <td>{fmt(t.contracts, 0)}</td>
+                  <td className="mut">{t.strike == null ? "—" : fmt(t.strike, 2)}</td>
+                  <td className="l mut">{t.open_date || "—"}</td>
+                  <td className="l mut">{t.close_date || "—"}</td>
+                  <td>{t.premium_open == null ? "—" : fmt(t.premium_open, 2)}</td>
+                  <td className="mut">{t.premium_close ? fmt(t.premium_close, 2) : "—"}</td>
+                  <td className="l mut">{t.outcome}</td>
+                  <td className={cls(t.realized_native)}>
+                    {t.realized_native == null ? "—" : `${fmt(t.realized_native, 0)} ${t.currency}`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

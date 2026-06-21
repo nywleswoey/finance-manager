@@ -96,26 +96,80 @@ def compute():
     }
 
 
+def realized_by_ticker():
+    """Closed-trade realized P/L (SGD + native) keyed by underlying ticker.
+    For folding the options income stream into per-security (Holdings) views."""
+    s = SessionLocal()
+    fx = _fx(s)
+    out = {}
+    for t in s.scalars(select(OptionTrade)).all():
+        if t.close_date is None:                       # open trade — not yet realized
+            continue
+        r = out.setdefault(t.underlying, {"pl_sgd": 0.0, "pl_native": 0.0, "trades": 0,
+                                          "currency": t.currency, "market": t.market})
+        r["pl_sgd"] += _sgd(t.realized_pl, t.currency, fx)
+        r["pl_native"] += float(t.realized_pl or 0)
+        r["trades"] += 1
+    s.close()
+    return {k: {**v, "pl_sgd": round(v["pl_sgd"], 2), "pl_native": round(v["pl_native"], 2)}
+            for k, v in out.items()}
+
+
+def realized_by(dim):
+    """Closed-trade realized P/L (SGD) grouped by dimension: 'market' | 'bucket' | 'account'.
+    Options trade on the Tiger Prime cash account, so bucket='cash', account='Tiger Prime'."""
+    s = SessionLocal()
+    fx = _fx(s)
+    agg = {}
+    for t in s.scalars(select(OptionTrade)).all():
+        if t.close_date is None:
+            continue
+        if dim == "market":
+            key = t.market or "—"
+        elif dim == "bucket":
+            key = "cash"
+        else:                                          # account
+            key = "Tiger Prime"
+        agg[key] = agg.get(key, 0.0) + _sgd(t.realized_pl, t.currency, fx)
+    s.close()
+    return {k: round(v, 2) for k, v in agg.items()}
+
+
+def trades_for(underlying):
+    """Per-underlying option trade list (for the holding-detail view)."""
+    s = SessionLocal()
+    fx = _fx(s)
+    trades = s.scalars(
+        select(OptionTrade).filter(OptionTrade.underlying == underlying.upper())
+        .order_by(OptionTrade.open_date.desc().nullslast())
+    ).all()
+    out = [_trade_dict(t, fx) for t in trades]
+    s.close()
+    return out
+
+
+def _trade_dict(t, fx):
+    return {
+        "underlying": t.underlying, "type": t.option_type,
+        "contracts": float(t.contracts or 0), "strike": float(t.strike) if t.strike is not None else None,
+        "open_date": t.open_date.isoformat() if t.open_date else None,
+        "expiry": t.expiry_date.isoformat() if t.expiry_date else None,
+        "close_date": t.close_date.isoformat() if t.close_date else None,
+        "premium_open": float(t.premium_open) if t.premium_open is not None else None,
+        "premium_close": float(t.premium_close) if t.premium_close is not None else None,
+        "realized_native": float(t.realized_pl) if t.realized_pl is not None else None,
+        "realized_sgd": round(_sgd(t.realized_pl, t.currency, fx), 2),
+        "currency": t.currency, "outcome": t.outcome,
+    }
+
+
 def recent(limit=200):
     s = SessionLocal()
     fx = _fx(s)
     trades = s.scalars(
         select(OptionTrade).order_by(OptionTrade.open_date.desc().nullslast()).limit(limit)
     ).all()
-    out = []
-    for t in trades:
-        out.append({
-            "underlying": t.underlying, "type": t.option_type,
-            "contracts": float(t.contracts or 0), "strike": float(t.strike) if t.strike is not None else None,
-            "open_date": t.open_date.isoformat() if t.open_date else None,
-            "expiry": t.expiry_date.isoformat() if t.expiry_date else None,
-            "close_date": t.close_date.isoformat() if t.close_date else None,
-            "premium_open": float(t.premium_open) if t.premium_open is not None else None,
-            "premium_close": float(t.premium_close) if t.premium_close is not None else None,
-            "realized_native": float(t.realized_pl) if t.realized_pl is not None else None,
-            "realized_sgd": round(_sgd(t.realized_pl, t.currency, fx), 2),
-            "currency": t.currency, "outcome": t.outcome,
-        })
+    out = [_trade_dict(t, fx) for t in trades]
     s.close()
     return out
 

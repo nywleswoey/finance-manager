@@ -18,7 +18,7 @@ export default function Performance() {
         <table>
           <thead><tr>
             <th className="l">{by}</th><th>Market Value</th><th>Cost (known)</th>
-            <th>P/L</th><th>Return</th><th>Dividends</th>
+            <th>P/L</th><th>Return</th><th>Dividends</th><th>Options P/L</th>
           </tr></thead>
           <tbody>
             {Object.entries(d).sort((a, b) => b[1].mv_sgd - a[1].mv_sgd).map(([k, v]) => (
@@ -29,11 +29,17 @@ export default function Performance() {
                 <td className={cls(v.pl_sgd)}>{v.cost_sgd ? sgd(v.pl_sgd) : "—"}</td>
                 <td className={cls(v.pl_sgd)}>{v.cost_sgd ? pct(v.pl_sgd / v.cost_sgd) : "—"}</td>
                 <td className="pos">{sgd(v.income_sgd)}</td>
+                <td className={cls(v.options_pl_sgd)}>{v.options_pl_sgd ? sgd(v.options_pl_sgd) : "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+      <p className="mut" style={{ fontSize: 12 }}>
+        P/L = stock market-value − cost (+ realised trades & dividends), where cost is known.
+        <b> Options P/L</b> is realised income from the sold-option (wheel) book, shown separately
+        (not in the stock P/L / Return). All SGD at latest FX.
+      </p>
     </div>
   );
 }

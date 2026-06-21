@@ -10,7 +10,7 @@ const GROUPS = {                                   // group key -> label
   none: "None (flat)",
 };
 
-const NCOLS = 11;
+const NCOLS = 12;
 const groupKey = (r, by) =>
   by === "account" ? ((r.accounts || []).join(", ") || "—") : (r[by] || "—");
 const plOf = (r) => (r.status === "closed" ? r.pl_sgd : r.unrealised_pl_sgd);
@@ -33,6 +33,8 @@ function DataRow({ r, onClick }) {
       <td className={cls(pl)} title={closed ? "realised P/L" : "unrealised P/L"}>
         {pl == null ? <span className="mut">n/a</span> : sgd(pl)}</td>
       <td className="pos">{r.income_native ? fmt(r.income_native, 0) + " " + r.currency : "—"}</td>
+      <td className={cls(r.options_pl_sgd)} title="realised options (wheel) P/L">
+        {r.options_pl_sgd ? sgd(r.options_pl_sgd) : "—"}</td>
       <td className={cls(r.xirr)}>{r.xirr == null ? "—" : pct(r.xirr)}</td>
     </tr>
   );
@@ -62,8 +64,9 @@ export default function Holdings() {
     const subtotal = (rs) => rs.reduce((a, r) => {
       a.mv += r.status === "closed" ? 0 : (r.mv_sgd || 0);
       a.pl += plOf(r) || 0;
+      a.opt += r.options_pl_sgd || 0;
       return a;
-    }, { mv: 0, pl: 0 });
+    }, { mv: 0, pl: 0, opt: 0 });
     return [...m.entries()]
       .map(([key, rs]) => ({ key, label: key, rows: rs, ...subtotal(rs) }))
       .sort((a, b) => b.mv - a.mv);
@@ -96,7 +99,7 @@ export default function Holdings() {
         <thead><tr>
           <th className="l">Security</th><th className="l">Bucket</th><th className="l">Mkt</th>
           <th>Units</th><th>Avg Cost</th><th>Price</th>
-          <th>Cost (SGD)</th><th>MV (SGD)</th><th>P/L</th><th>Dividends</th><th>XIRR</th>
+          <th>Cost (SGD)</th><th>MV (SGD)</th><th>P/L</th><th>Dividends</th><th>Options P/L</th><th>XIRR</th>
         </tr></thead>
         <tbody>
           {flat
@@ -112,7 +115,9 @@ export default function Holdings() {
                     </td>
                     <td>{sgd(g.mv)}</td>
                     <td className={cls(g.pl)}>{sgd(g.pl)}</td>
-                    <td colSpan={2}></td>
+                    <td></td>
+                    <td className={cls(g.opt)}>{g.opt ? sgd(g.opt) : ""}</td>
+                    <td></td>
                   </tr>
                   {!hidden && g.rows.map((r, i) => <DataRow key={i} r={r} onClick={() => open(r)} />)}
                 </React.Fragment>

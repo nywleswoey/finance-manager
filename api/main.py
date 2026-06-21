@@ -80,7 +80,16 @@ def positions(closed: bool = False):
 
 @app.get("/api/performance")
 def performance(by: str = Query("market", enum=["market", "bucket", "account"])):
-    return rollup(perf(), by)
+    r = rollup(perf(), by)
+    # fold in realized options P/L for the same dimension (computed directly from the
+    # options book so orphan underlyings with no stock position are still counted)
+    from portfolio.options import realized_by
+    for k, v in realized_by(by).items():
+        r.setdefault(k, {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0})
+        r[k]["options_pl_sgd"] = v
+    for g in r.values():
+        g.setdefault("options_pl_sgd", 0.0)
+    return r
 
 
 BUCKET_ACCTS = {"cash": ["Tiger Prime", "Tiger Cash Boost", "Moomoo", "FSM", "CDP"],
@@ -130,7 +139,12 @@ def holding(ticker: str, bucket: str = "cash"):
             rate = round(float(x["gross"] or 0) / units, 6)
         x["units"] = units
         x["rate"] = rate
-    return {"summary": summary, "transactions": txns, "dividends": divs}
+    # option trades on this underlying (wheel income), only for the cash bucket
+    options = []
+    if bucket == "cash":
+        from portfolio.options import trades_for
+        options = trades_for(ticker)
+    return {"summary": summary, "transactions": txns, "dividends": divs, "options": options}
 
 
 @app.get("/api/dividends")

@@ -259,6 +259,14 @@ def compute(session=None):
             "xirr": round(xirr, 4) if xirr is not None else None,
             "simple_return": round(simple, 4) if cost_known else None,
         })
+    # fold in the options income stream per underlying (realized, SGD). Options trade on the
+    # cash account, so attach to the cash-bucket row for that security; orphan underlyings
+    # (no stock position) are still counted in the Performance rollup via options.realized_by().
+    from .options import realized_by_ticker
+    opt = realized_by_ticker()
+    for r in out:
+        o = opt.get(r["ticker"]) if r["bucket"] == "cash" else None
+        r["options_pl_sgd"] = o["pl_sgd"] if o else 0.0
     if session is None:
         s.close()
     return out
@@ -287,7 +295,9 @@ def rollup(rows, by):
     for r in rows:
         if r["units"] <= 1e-6:
             continue
-        g = agg[r[by]]
+        # positions are pooled per funding bucket, so a row can span accounts -> join them
+        key = (", ".join(r["accounts"]) or "—") if by == "account" else r[by]
+        g = agg[key]
         g["mv_sgd"] += r["mv_sgd"]; g["income_sgd"] += r["income_sgd"]
         if r["cost_known"]:                              # only sum P/L where cost is real
             g["pl_sgd"] += r["pl_sgd"] or 0
