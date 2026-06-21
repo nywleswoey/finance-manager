@@ -6,6 +6,7 @@ import Performance from "./modules/portfolio/Performance.jsx";
 import Dividends from "./modules/portfolio/Dividends.jsx";
 import Options from "./modules/portfolio/Options.jsx";
 import Transactions from "./modules/portfolio/Transactions.jsx";
+import NetWorth from "./modules/networth/NetWorth.jsx";
 
 const TABS = {
   Overview: Overview,
@@ -17,6 +18,7 @@ const TABS = {
 };
 
 export default function App() {
+  const [section, setSection] = useState("Portfolio");
   const [tab, setTab] = useState("Overview");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
@@ -43,26 +45,34 @@ export default function App() {
     <div className="app">
       <div className="side">
         <div className="brand">📊 MyApp</div>
-        <div className="navitem on">Portfolio</div>
-        <div className="navitem dim">Net Worth</div>
+        <div className={"navitem" + (section === "Portfolio" ? " on" : "")}
+             data-testid="nav-portfolio" onClick={() => setSection("Portfolio")}>Portfolio</div>
+        <div className={"navitem" + (section === "Net Worth" ? " on" : " dim")}
+             data-testid="nav-networth" onClick={() => setSection("Net Worth")}>Net Worth</div>
         <div className="navitem dim">Budget</div>
         <div className="navitem dim">Settings</div>
       </div>
       <div className="main">
-        <div className="tabs">
-          {Object.keys(TABS).map((t) => (
-            <div key={t} className={"tab" + (t === tab ? " on" : "")} onClick={() => setTab(t)}>
-              {t}
+        {section === "Portfolio" ? (
+          <>
+            <div className="tabs">
+              {Object.keys(TABS).map((t) => (
+                <div key={t} className={"tab" + (t === tab ? " on" : "")} onClick={() => setTab(t)}>
+                  {t}
+                </div>
+              ))}
+              <div className="tabs-right">
+                {msg && <span className="refresh-msg">{msg}</span>}
+                <button className="refresh-btn" onClick={refreshPrices} disabled={busy}>
+                  {busy ? "Refreshing…" : "↻ Refresh prices"}
+                </button>
+              </div>
             </div>
-          ))}
-          <div className="tabs-right">
-            {msg && <span className="refresh-msg">{msg}</span>}
-            <button className="refresh-btn" onClick={refreshPrices} disabled={busy}>
-              {busy ? "Refreshing…" : "↻ Refresh prices"}
-            </button>
-          </div>
-        </div>
-        <View key={ver} />
+            <View key={ver} />
+          </>
+        ) : (
+          <NetWorth />
+        )}
       </div>
     </div>
   );

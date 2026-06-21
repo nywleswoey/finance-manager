@@ -4,8 +4,22 @@ export async function get(path) {
   if (!r.ok) throw new Error(path + " " + r.status);
   return r.json();
 }
-export async function post(path) {
-  const r = await fetch(base + path, { method: "POST" });
+export async function post(path, body) {
+  const opts = { method: "POST" };
+  if (body !== undefined) {
+    opts.headers = { "Content-Type": "application/json" };
+    opts.body = JSON.stringify(body);
+  }
+  const r = await fetch(base + path, opts);
+  if (!r.ok) {
+    let detail = "";
+    try { detail = (await r.json()).detail || ""; } catch {}
+    throw new Error(detail || path + " " + r.status);
+  }
+  return r.json();
+}
+export async function del(path) {
+  const r = await fetch(base + path, { method: "DELETE" });
   if (!r.ok) throw new Error(path + " " + r.status);
   return r.json();
 }
