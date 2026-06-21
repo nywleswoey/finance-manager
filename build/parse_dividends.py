@@ -96,6 +96,16 @@ CDP_NAME2TK = {
 }
 # foreign-currency CDP holdings (others are SGD); used when native != SGD column
 CDP_FCCY = {"LIW": "USD", "SET": "EUR", "BTOU": "USD", "CMOU": "USD", "H78": "USD", "UD1U": "EUR"}
+# manual corrections to the CDP sheet, keyed by (ticker, ISO pay-date). The sheet is a broader
+# tracker and occasionally mis-records. Value None = drop the row; a dict = override gross/sgd/units.
+CDP_DIV_FIX = {
+    # 2021 Accordia "dividend" is the remainder of the delisting payout — booked as txn proceeds,
+    # not income (position already sold 2020-10-15).
+    ("ADQU", "2021-08-17"): None,
+    # CDP held only 1,400 Stoneweg on this date; the sheet's 14,500 units (and 1,260.78) also
+    # counted the 13,100 later held in Tiger Prime. Scale to the CDP-only 1,400.
+    ("SET", "2022-09-28"): {"gross": 121.73, "sgd": 171.21, "units": 1400},
+}
 
 def _cdp_date(d):
     d = (d or "").strip()
@@ -139,9 +149,14 @@ def cdp():
             continue
         if tracked_elsewhere(tk, date):                   # already in a broker statement -> skip
             continue
+        fix = CDP_DIV_FIX.get((tk, date))                 # manual corrections (see dict above)
+        if fix is None and (tk, date) in CDP_DIV_FIX:     # explicit drop
+            continue
+        if fix:
+            natg, sgdg, qty = fix["gross"], fix["sgd"], fix["units"]
         ccy = "SGD" if abs(natg - sgdg) < 0.01 else CDP_FCCY.get(tk, "SGD")
         add(date=date, account="CDP", market="SG", ticker=tk, name=name, kind="cash",
-            gross=natg, units=num(qty), rate=num(rate), currency=ccy,
+            gross=num(natg), units=num(qty), rate=num(rate), currency=ccy,
             source="cdp (cash dividend)")
 
 # ---------- Moomoo (PDF) ----------
