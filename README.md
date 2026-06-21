@@ -35,8 +35,12 @@ Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `mak
 - **Performance** — per security in native currency, rolled up to market / account / bucket /
   total in SGD: market value, dividend income, P/L (where cost is known), per-position XIRR,
   and a portfolio **money-weighted return** (historical-FX XIRR).
+- **Options** — realized return from the sold-option (wheel) book: `option_trade` table loaded
+  from `data/.archive/tiger-options/options.csv` by `ingestion/parse_options.py`; analytics in
+  `portfolio/options.py` (realized P/L, premium collected, win-rate, by year/ticker/type, SGD at
+  latest FX). API `/api/options`, `/api/options-trades`.
 - **App** (`web/`) — Overview (tiles + allocation donuts), Holdings, Performance, Dividends,
-  Transactions, Reconciliation. Modular shell so other modules (Net Worth, Budget…) slot in.
+  Options, Transactions, Reconciliation. Modular shell so other modules (Net Worth, Budget…) slot in.
 
 ## Layout
 

@@ -202,6 +202,39 @@ def dividend_details():
     return {"rows": out, "flagged": sum(1 for r in out if r["flags"]), "total": len(out)}
 
 
+@app.get("/api/dividends-annual")
+def dividends_annual():
+    """Annual dividend income by funding bucket, converted to SGD at latest FX.
+    Historical FX is not stored, so prior years use today's rate (an approximation)."""
+    from collections import defaultdict
+    s = SessionLocal()
+    fx = {c: float(r) for c, r in s.execute(text(
+        "SELECT currency, rate_to_sgd FROM fx_rate")).all()}
+    rows = s.execute(text(
+        "SELECT EXTRACT(YEAR FROM d.pay_date)::int yr, "
+        "COALESCE(a.funding_bucket, 'cash') bucket, d.currency, sum(d.gross) gross "
+        "FROM dividend d JOIN account a ON a.id=d.account_id "
+        "WHERE d.pay_date IS NOT NULL "
+        "GROUP BY yr, bucket, d.currency")).mappings().all()
+    s.close()
+    matrix = defaultdict(lambda: defaultdict(float))   # bucket -> year -> sgd
+    totals = defaultdict(float)                         # year -> sgd
+    years, buckets = set(), set()
+    for r in rows:
+        sgd = float(r["gross"] or 0) * fx.get(r["currency"], 1.0)
+        matrix[r["bucket"]][r["yr"]] += sgd
+        totals[r["yr"]] += sgd
+        years.add(r["yr"]); buckets.add(r["bucket"])
+    order = {"cash": 0, "srs": 1, "cpf": 2}
+    return {
+        "currency": "SGD",
+        "years": sorted(years, reverse=True),
+        "buckets": sorted(buckets, key=lambda b: order.get(b, 9)),
+        "matrix": {b: {y: round(v, 2) for y, v in yr.items()} for b, yr in matrix.items()},
+        "totals": {y: round(v, 2) for y, v in totals.items()},
+    }
+
+
 @app.get("/api/transactions")
 def transactions(account: str | None = None, ticker: str | None = None, limit: int = 500):
     s = SessionLocal()
@@ -245,6 +278,20 @@ def reconciliation():
     rows = reconcile()
     from collections import Counter
     return {"summary": dict(Counter(r["status"] for r in rows)), "rows": rows}
+
+
+@app.get("/api/options")
+def options_summary():
+    if "opt" not in _cache:
+        from portfolio.options import compute
+        _cache["opt"] = compute()
+    return _cache["opt"]
+
+
+@app.get("/api/options-trades")
+def options_trades(limit: int = 500):
+    from portfolio.options import recent
+    return recent(limit)
 
 
 @app.get("/api/accounts")

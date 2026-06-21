@@ -1,0 +1,125 @@
+"""Options-trading analytics: realized return from the sold-option (wheel) book.
+
+Realized P&L is stored per trade in native currency (option_trade.realized_pl). Here we
+roll it up to SGD (latest FX, matching the rest of the app) and slice by year / ticker /
+type, with win-rate and premium-collected. Money-weighted return isn't meaningful for
+cash-secured premium selling (no stable capital base), so we report realized P&L, premium
+collected, and yield-style ratios instead.
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from sqlalchemy import select, text
+
+from portfolio.db import SessionLocal
+from portfolio.models import OptionTrade
+
+
+def _fx(s):
+    rows = s.execute(text("SELECT currency, rate_to_sgd FROM fx_rate")).all()
+    fx = {c: float(r) for c, r in rows}
+    fx.setdefault("SGD", 1.0)
+    return fx
+
+
+def _sgd(v, ccy, fx):
+    if v is None:
+        return 0.0
+    return float(v) * fx.get(ccy or "SGD", 1.0)
+
+
+def compute():
+    s = SessionLocal()
+    fx = _fx(s)
+    trades = s.scalars(select(OptionTrade)).all()
+
+    by_year, by_ticker, by_type, by_ccy = {}, {}, {}, {}
+    total_pl = total_prem = 0.0
+    wins = losses = closed = 0
+    open_trades = []
+
+    def bucket(d, k):
+        d.setdefault(k, {"trades": 0, "wins": 0, "premium_sgd": 0.0, "pl_sgd": 0.0, "pl_native": 0.0, "currency": None})
+        return d[k]
+
+    for t in trades:
+        ccy = t.currency or "USD"
+        pl_n = float(t.realized_pl or 0)
+        pl = _sgd(t.realized_pl, ccy, fx)
+        prem = _sgd((t.premium_open or 0) * (t.contracts or 0) * (t.multiplier or 100), ccy, fx)
+        is_open = t.close_date is None
+        if is_open:
+            open_trades.append(t)
+            continue
+        total_pl += pl
+        total_prem += prem
+        closed += 1
+        if pl_n > 0:
+            wins += 1
+        elif pl_n < 0:
+            losses += 1
+
+        yr = t.open_date.year if t.open_date else 0
+        for d, key in ((by_year, yr), (by_ticker, t.underlying), (by_type, t.option_type), (by_ccy, ccy)):
+            row = bucket(d, key)
+            row["trades"] += 1
+            row["wins"] += 1 if pl_n > 0 else 0
+            row["premium_sgd"] += prem
+            row["pl_sgd"] += pl
+            row["pl_native"] += pl_n
+            row["currency"] = ccy if d is by_ticker or d is by_ccy else None
+
+    def listify(d, sort_key="pl_sgd"):
+        out = []
+        for k, v in d.items():
+            v = dict(v)
+            v["key"] = k
+            v["win_rate"] = (v["wins"] / v["trades"]) if v["trades"] else None
+            out.append(v)
+        out.sort(key=lambda r: r[sort_key], reverse=True)
+        return out
+
+    s.close()
+    return {
+        "total_pl_sgd": round(total_pl, 2),
+        "total_premium_sgd": round(total_prem, 2),
+        "trades_closed": closed,
+        "wins": wins,
+        "losses": losses,
+        "win_rate": round(wins / closed, 4) if closed else None,
+        "open_trades": len(open_trades),
+        "by_year": sorted(listify(by_year), key=lambda r: r["key"], reverse=True),
+        "by_ticker": listify(by_ticker),
+        "by_type": listify(by_type),
+        "by_currency": listify(by_ccy),
+    }
+
+
+def recent(limit=200):
+    s = SessionLocal()
+    fx = _fx(s)
+    trades = s.scalars(
+        select(OptionTrade).order_by(OptionTrade.open_date.desc().nullslast()).limit(limit)
+    ).all()
+    out = []
+    for t in trades:
+        out.append({
+            "underlying": t.underlying, "type": t.option_type,
+            "contracts": float(t.contracts or 0), "strike": float(t.strike) if t.strike is not None else None,
+            "open_date": t.open_date.isoformat() if t.open_date else None,
+            "expiry": t.expiry_date.isoformat() if t.expiry_date else None,
+            "close_date": t.close_date.isoformat() if t.close_date else None,
+            "premium_open": float(t.premium_open) if t.premium_open is not None else None,
+            "premium_close": float(t.premium_close) if t.premium_close is not None else None,
+            "realized_native": float(t.realized_pl) if t.realized_pl is not None else None,
+            "realized_sgd": round(_sgd(t.realized_pl, t.currency, fx), 2),
+            "currency": t.currency, "outcome": t.outcome,
+        })
+    s.close()
+    return out
+
+
+if __name__ == "__main__":
+    import json
+    print(json.dumps(compute(), indent=2))
