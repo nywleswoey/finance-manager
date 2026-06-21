@@ -91,7 +91,7 @@ O5RU,2025-12-24,2025-11-13,high,dividends.sg/divvydiary
 O5RU,2026-03-26,2026-02-13,high,dividends.sg/divvydiary
 S7OU,2018-12-21,2018-12-13,high,divvydiary
 S7OU,2019-03-29,2019-03-21,high,divvydiary/SGX announcement
-S7OU,2019-06-20,,low,divvydiary (ledger date equals ex-date; actual pay ~28-Jun-2019)
+S7OU,2019-06-20,2019-06-19,high,SGX corporateactions API
 S7OU,2019-09-27,2019-09-19,high,divvydiary
 S7OU,2019-12-24,2019-12-16,high,divvydiary
 CRPU,2019-09-26,2019-08-22,high,digrin
@@ -230,8 +230,8 @@ S61,2024-08-28,2024-08-20,high,dividends.sg
 S61,2025-05-13,2025-05-02,high,dividends.sg
 S61,2025-08-26,2025-08-18,high,dividends.sg
 S61,2026-05-11,2026-04-30,high,dividends.sg
-9CI,2021-05-18,,low,C31 pre-demerger FY2020 final - ex not found
-9CI,2021-09-17,,low,restructuring scheme distribution - no std ex-date
+9CI,2021-05-18,2021-05-03,high,SGX corporateactions API
+9CI,2021-09-17,2021-09-12,high,SGX corporateactions API
 9CI,2022-05-20,2022-05-05,high,dividends.sg
 9CI,2023-05-15,2023-04-28,high,dividends.sg
 9CI,2024-05-15,2024-05-02,high,dividends.sg
