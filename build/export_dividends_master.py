@@ -59,19 +59,25 @@ def main():
         if r["amount_per_unit"] is not None:
             a["declared"] += float(r["amount_per_unit"])
 
-    # collapse to one rate per (date, ticker). Prefer the implied rate (gross/units, exact)
-    # over the summed declared rate (often rounded); fall back when units can't be determined.
-    best = {}                                          # (date, tk) -> (rate, ccy, exact?)
+    # collapse to one rate per (date, ticker), choosing the most trustworthy source.
+    # rank 0 best: gross / STATED units (the statement's own dividend-bearing qty — exact);
+    # rank 1: declared per-unit rate (authoritative but sometimes rounded);
+    # rank 2 worst: gross / ledger-REPLAYED units (approximate — misfires when the position
+    #   changed near the pay date). Keep the lowest rank across accounts for that date.
+    best = {}                                          # (date, tk) -> (rate, ccy, rank)
     for (aid, sid, day, tk), a in agg.items():
-        units = a["units"] if a["units"] and a["units"] > 1e-6 else held(aid, sid, day)
-        implied = round(a["gross"] / units, 6) if units > 1e-6 else None
-        rate = implied if implied is not None else (a["declared"] or None)
-        if rate is None:
-            continue
-        exact = implied is not None
+        if a["units"] and a["units"] > 1e-6:
+            rate, rank = round(a["gross"] / a["units"], 6), 0
+        elif a["declared"]:
+            rate, rank = a["declared"], 1
+        else:
+            units = held(aid, sid, day)
+            if units <= 1e-6:
+                continue
+            rate, rank = round(a["gross"] / units, 6), 2
         key = (day, tk)
-        if key not in best or (exact and not best[key][2]):
-            best[key] = (rate, a["ccy"], exact)
+        if key not in best or rank < best[key][2]:
+            best[key] = (rate, a["ccy"], rank)
 
     out = [{"date": d, "ticker": tk, "rate_per_unit": f"{rate:g}", "currency": ccy}
            for (d, tk), (rate, ccy, _) in best.items()]
