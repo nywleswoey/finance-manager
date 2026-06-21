@@ -326,6 +326,67 @@ def accounts():
     return [dict(r) for r in rows]
 
 
+# ---------------- net worth ----------------
+import datetime as _dt
+
+from fastapi import HTTPException
+from pydantic import BaseModel
+
+from portfolio import networth as nw
+
+
+class NwValueIn(BaseModel):
+    code: str | None = None
+    item_id: int | None = None
+    native_value: float = 0
+    currency: str | None = None
+
+
+class NwSnapshotIn(BaseModel):
+    date: _dt.date
+    note: str | None = None
+    values: list[NwValueIn] = []
+
+
+@app.get("/api/networth/items")
+def nw_items():
+    return nw.catalogue()
+
+
+@app.get("/api/networth/snapshots")
+def nw_snapshots():
+    return nw.list_snapshots()
+
+
+@app.get("/api/networth/latest")
+def nw_latest():
+    return nw.latest()
+
+
+@app.get("/api/networth/snapshots/{snap_id}")
+def nw_get(snap_id: int):
+    d = nw.get_snapshot(snap_id)
+    if d is None:
+        raise HTTPException(404, "snapshot not found")
+    return d
+
+
+@app.post("/api/networth/snapshots")
+def nw_create(body: NwSnapshotIn):
+    try:
+        return nw.create_snapshot(body.date, [v.model_dump() for v in body.values], body.note)
+    except ValueError as e:
+        # duplicate date -> 409; missing FX / unknown item -> 400
+        raise HTTPException(409 if "already exists" in str(e) else 400, str(e))
+
+
+@app.delete("/api/networth/snapshots/{snap_id}")
+def nw_delete(snap_id: int):
+    if not nw.delete_snapshot(snap_id):
+        raise HTTPException(404, "snapshot not found")
+    return {"ok": True}
+
+
 # serve the built frontend (web/dist) if present
 _dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "dist")
 if os.path.isdir(_dist):
