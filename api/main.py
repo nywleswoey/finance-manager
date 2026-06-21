@@ -21,9 +21,15 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 _cache: dict = {}
 
 
+def perf_all():
+    if "all" not in _cache:
+        _cache["all"] = compute()
+    return _cache["all"]
+
+
 def perf():
     if "rows" not in _cache:
-        _cache["rows"] = [r for r in compute() if r["units"] > 1e-6]
+        _cache["rows"] = [r for r in perf_all() if r["units"] > 1e-6]
     return _cache["rows"]
 
 
@@ -54,8 +60,22 @@ def overview():
 
 
 @app.get("/api/positions")
-def positions():
-    return sorted(perf(), key=lambda r: -r["mv_sgd"])
+def positions(closed: bool = False):
+    """Open positions (units > 0). With closed=true, also include closed positions
+    (units ≈ 0 that had real activity); each row tagged status=open|closed."""
+    out = []
+    for r in perf_all():
+        is_open = r["units"] > 1e-6
+        if not is_open:
+            if not closed:
+                continue
+            if not (r["invested_native"] or r["income_native"]):
+                continue                                # drop noise: never really held
+        out.append({**r, "status": "open" if is_open else "closed"})
+    # open first (by market value desc), then closed (by realised P/L desc)
+    out.sort(key=lambda r: (r["status"] != "open", -(r["mv_sgd"] if r["status"] == "open"
+                                                      else (r["pl_sgd"] or 0))))
+    return out
 
 
 @app.get("/api/performance")
