@@ -58,3 +58,12 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **Context**: CONSTRUCTION - Functional Design Step 7
 
 ---
+
+## Functional Design — Approved / Code Generation Planning
+**Timestamp**: 2026-06-21T00:40:00Z
+**User Input**: "/commit then continue"
+**AI Response**: Committed docs (4f6e7a7). Approved Functional Design. Created code-generation-plan.md (8 steps). Discovered App.jsx already has a left-nav "Net Worth" section placeholder → Net Worth implemented as nav section, not Portfolio tab. Awaiting plan approval before generating code.
+**Approval Prompt**: "Approve code generation plan (8 steps) and proceed to generate code?"
+**Context**: CONSTRUCTION - Code Generation Part 1 Step 7
+
+---
