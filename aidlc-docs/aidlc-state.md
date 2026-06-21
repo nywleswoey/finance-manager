@@ -23,7 +23,7 @@ Net-worth snapshot: maintain manual assets & liabilities (cash accounts, CPF, HD
 ## Extension Configuration
 | Extension | Enabled | Decided At |
 |---|---|---|
-| Security Baseline | No | Requirements Analysis |
+| Security Baseline | Yes | Requirements Analysis (auth unit) |
 | Property-Based Testing | No | Requirements Analysis |
 
 ## Execution Plan Summary

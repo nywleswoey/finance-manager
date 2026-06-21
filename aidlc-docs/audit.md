@@ -87,3 +87,17 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **Context**: CONSTRUCTION - Build and Test complete
 
 ---
+
+## New Feature Request — Auth / Vercel Deploy
+**Timestamp**: 2026-06-21T02:00:00Z
+**User Input**: "create a new branch then use ai-dlc to secure the app for deployment to vercel. i need to put this behind google auth and only allow designated accounts to access"
+**AI Response**: Created branch feat/google-auth-vercel. Brownfield (existing artifacts present) → adaptive Requirements Analysis. Assessed architecture: Vite SPA + FastAPI (Postgres), CORS wildcard, zero auth. Presented 3 blocking decisions via question gate.
+**Context**: INCEPTION - Workspace Detection + Requirements Analysis (new unit: auth)
+
+---
+
+## Requirements Analysis — Decisions
+**Timestamp**: 2026-06-21T02:05:00Z
+**User Input**: Topology="All on Vercel (serverless)"; Auth="App-level Google OAuth + email allowlist (httponly cookie session)"; Security Baseline="Yes — enforce".
+**AI Response**: Recorded decisions. Security Baseline extension ENABLED (blocking). Mapped SECURITY-01..15 to plan. Drafted consolidated Functional Design + Code Generation plan for single 'auth' unit.
+**Context**: INCEPTION - Requirements Analysis complete; Extension Configuration updated
