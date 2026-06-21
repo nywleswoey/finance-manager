@@ -1,4 +1,4 @@
-.PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset
+.PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net
 
 PY = PYTHONPATH=. .venv/bin/python
 AL = PYTHONPATH=. .venv/bin/alembic
@@ -34,6 +34,8 @@ build-web:    ## build the React frontend
 app: build-web   ## build frontend then run API+web on :8000
 	$(PY) -m uvicorn api.main:app --port 8000
 
+net:          ## per-ticker net verdict (+/-) incl dividends + option premiums
+	$(PY) scripts/net.py $(filter-out $@,$(MAKECMDGOALS))
 psql:         ## open a psql shell
 	docker exec -it portfolio_db psql -U portfolio
 reset:        ## drop + recreate schema (destructive)
