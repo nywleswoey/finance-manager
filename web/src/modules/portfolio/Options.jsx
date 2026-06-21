@@ -12,7 +12,7 @@ export default function Options() {
   if (!d) return <div className="loading">Loading…</div>;
   if (d.error) return <div className="loading">API not reachable.</div>;
 
-  const yrChart = [...d.by_year].sort((a, b) => a.key - b.key)
+  const yrChart = [...d.by_year].sort((a, b) => b.key - a.key)
     .map((r) => ({ year: String(r.key), pl: Math.round(r.pl_sgd) }));
 
   return (
