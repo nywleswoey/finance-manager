@@ -33,7 +33,7 @@ NAME = {
     "SET": "Stoneweg European Reit", "5E2": "Seatrium", "S51": "Seatrium (old S51)",
     "0P0001OOJG": "Amundi Prime USA Fund",
 }
-ASSET_TYPE = {"0P0001OOJG": "fund"}
+ASSET_TYPE = {"0P0001OOJG": "fund", "0P00006FYT": "fund"}
 REITS = {"O5RU", "C38U", "UD1U", "N2IU", "CRPU", "SET", "CWBU", "BTOU", "S7OU", "P40U",
          "SV3U", "ADQU", "HMN", "9CI", "CMOU", "LIW", "H78", "CJLU"}
 CCY = {"US": "USD", "HK": "HKD", "SG": "SGD"}
@@ -44,6 +44,7 @@ CORP_ACTIONS = [
     ("consolidation", "S51", "5E2", 1, 20, "Sembcorp Marine -> Seatrium 20:1 share consolidation"),
     ("split", "C31", "9CI", None, None, "CapitaLand restructuring 2021 -> CapitaLand Investment (9CI)"),
     ("distribution", "C31", "C38U", None, None, "CapitaLand restructuring 2021 -> CICT (C38U) in-specie distribution"),
+    ("switch", "0P00006FYT", "0P0001OOJG", None, None, "CPF fund switch Apr-2023: LionGlobal Infinity US500 -> Amundi Prime USA (proceeds reinvested; cost carries)"),
 ]
 
 

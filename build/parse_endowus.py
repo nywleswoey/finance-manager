@@ -1,84 +1,123 @@
 #!/usr/bin/env python3
-"""Parse Endowus monthly statements -> fund unit transactions (CPF fund: Amundi Prime USA).
+"""Parse Endowus monthly statements -> fund unit transactions WITH cost (CPF fund: Amundi Prime USA).
 
-Each statement has a Transactions section:
-  Trade date | Transaction type | Details (Buy/Sell <fund>) | Funding Source | Units | Price | Amount
-  e.g. 09 Apr 2025  Investment   Buy Amundi Prime USA Fund   CPF OA   16.62603  S$180.44  S$3,000.00
-       15 Apr 2025  Endowus Fee  Sell Amundi Prime USA Fund  CPF OA    0.35376  S$174.36     S$61.68
-Buy -> +units, Sell -> -units. Dedup across statements (each txn shown once, but be safe).
-Also reads the latest holdings snapshot (units) to verify.
+Each statement has a Transactions section. Two layouts seen:
+  later ("DD Mon YYYY"):
+    09 Apr 2025  Investment   Buy Amundi Prime USA Fund   CPF OA   16.62603  S$180.44  S$3,000.00
+    15 Jul 2025  Endowus Fee  Sell Amundi Prime USA Fund  CPF OA    0.30560  S$198.66     S$60.71
+  earlier ("DD/MM/YYYY", no funding column, amount printed twice):
+    27/04/2023 Investment  Amundi Prime USA  393.2710  S$131.85  S$51,852.90 S$51,852.90
+    26/07/2023 Redemption   Amundi Prime USA   0.2850  S$145.62      S$41.47    S$41.47
+
+We emit price + amount (the cost the snapshot-diff approach threw away) so the fund
+gets a real cost basis. Action mapping:
+  Investment / Buy   -> buy        (cash in; cost booked)
+  Redemption / Sell  -> fee        (Amundi redemptions here are trailer-fee deductions)
+  Endowus Fee        -> fee
+A switch-IN (Amundi Investment whose amount equals a same-period redemption of ANOTHER
+fund — the 2023 LionGlobal Infinity -> Amundi switch) is emitted as `switch_in` with NO
+price/amount: it is internal, not new capital. Its cost carries from the predecessor via
+the `switch` corporate_action (see performance.py / seed.py), so booking it here would
+double-count. Infinity itself stays in cpf-stocks/transactions.csv (authoritative cost).
 """
 import glob, os, re, subprocess, csv
 from datetime import datetime
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "endowus statement")
-MONEY = r"S\$([\d,]+\.\d+)"
-# date  type            Buy|Sell  <fund name>           funding         units      price        amount
-TXN = re.compile(
+FUND = "Amundi"                     # the fund Endowus is authoritative for (others come from cpf-stocks)
+M = r"S\$([\d,]+\.\d+)"            # money
+
+# later format: date  type  Buy|Sell  <fund>  <funding>  units  price  amount
+TXN_A = re.compile(
     r"(\d{1,2} \w{3} \d{4})\s+(Investment|Endowus Fee|Rebalancing|Redemption|Subscription)\s+"
-    r"(Buy|Sell)\s+(.+?)\s+(CPF OA|SRS|Cash|CPF SA)\s+([\d,]+\.\d+)\s+" + MONEY + r"\s+" + MONEY)
+    r"(Buy|Sell)\s+(.+?)\s+(?:CPF OA|SRS|Cash|CPF SA)\s+([\d,]+\.\d+)\s+" + M + r"\s+" + M)
+# earlier format: date  type  <fund>  units  price  amount [amount]
+TXN_B = re.compile(
+    r"(\d{2}/\d{2}/\d{4})\s+(Investment|Endowus Fee|Redemption|Subscription)\s+"
+    r"(.+?)\s+([\d,]+\.\d+)\s+" + M + r"\s+" + M)
 
 def f(s): return float(s.replace(",", ""))
-def iso(d): return datetime.strptime(d, "%d %b %Y").date().isoformat()
+def isoA(d): return datetime.strptime(d, "%d %b %Y").date().isoformat()
+def isoB(d): return datetime.strptime(d, "%d/%m/%Y").date().isoformat()
+
+def text_of(path):
+    return subprocess.run(["pdftotext", "-layout", path, "-"], capture_output=True, text=True).stdout
 
 def holdings(path):
-    """fund unit snapshot from the asset-allocation table (handles 'Equity'/'Equity Fund')."""
-    txt = subprocess.run(["pdftotext", "-layout", path, "-"], capture_output=True, text=True).stdout
+    """fund unit snapshot from the asset-allocation table — used only to sanity-check units."""
     out = {}
-    for m in re.finditer(r"(.+?Fund)\s+Equity(?:\s+Fund)?\s+(CPF OA|CPF SA|SRS|Cash)\s+([\d,]+\.\d+)\s+S\$", txt):
+    for m in re.finditer(r"(.+?Fund)\s+Equity(?:\s+Fund)?\s+(CPF OA|CPF SA|SRS|Cash)\s+([\d,]+\.\d+)\s+S\$", text_of(path)):
         out[(re.sub(r"\s+", " ", m.group(1)).strip(), m.group(2))] = f(m.group(3))
     return out
 
-def txn_types(path):
-    """map date -> transaction type (Investment / Endowus Fee / Redemption) for labelling."""
-    txt = subprocess.run(["pdftotext", "-layout", path, "-"], capture_output=True, text=True).stdout
-    out = {}
-    for m in TXN.finditer(txt):                 # later-format rows
-        out[iso(m.group(1))] = m.group(2)
-    for m in re.finditer(r"(\d{2}/\d{2}/\d{4})\s+(Investment|Endowus Fee|Redemption|Subscription)", txt):
-        out[datetime.strptime(m.group(1), "%d/%m/%Y").date().isoformat()] = m.group(2)
-    return out
+def parse_txns(txt):
+    """All transactions in one statement: list of (date, type, fund, units, price, amount).
+    units signed (Buy/Investment +, Sell/Redemption -). Funding source not tracked here (CPF OA assumed)."""
+    rows = []
+    for m in TXN_A.finditer(txt):
+        date, typ, side, fund, units, price, amt = m.groups()
+        q = f(units) * (1 if side == "Buy" else -1)
+        rows.append((isoA(date), typ, re.sub(r"\s+", " ", fund).strip(), q, f(price), f(amt)))
+    for m in TXN_B.finditer(txt):
+        date, typ, fund, units, price, amt = m.groups()
+        q = f(units) * (-1 if typ in ("Redemption", "Endowus Fee") else 1)
+        rows.append((isoB(date), typ, re.sub(r"\s+", " ", fund).strip(), q, f(price), f(amt)))
+    return rows
 
 def main():
     files = sorted(glob.glob(os.path.join(DATA, "endowus_*.pdf")))
-    # snapshot-diff units per (fund, src) across months — robust to statement-format changes
-    snaps = {}; types = {}
+    allrows, snaps = [], {}
     for path in files:
-        mo = re.search(r"(\d{6})", path).group(1); ym = f"{mo[:4]}-{mo[4:]}"
+        txt = text_of(path)
+        allrows += parse_txns(txt)
         h = holdings(path)
-        if h: snaps[ym] = h
-        types.update(txn_types(path))
-    months = sorted(snaps)
-    keys = sorted({k for h in snaps.values() for k in h})
-    ev = []
-    for k in keys:
-        prev = 0.0; seen = False
-        for mo in months:
-            if k in snaps[mo]:
-                cur = snaps[mo][k]; d = cur - prev
-                date = mo + "-15"
-                if not seen and cur:
-                    ev.append((date, k, "subscription", cur))
-                elif abs(d) > 1e-9:
-                    # label from the txn-type table when a transaction fell in this month
-                    tt = next((t for dd, t in types.items() if dd[:7] == mo), None)
-                    act = "fee" if (tt == "Endowus Fee" or d < 0) else "buy"
-                    ev.append((date, k, act, d))
-                prev = cur; seen = True
-    net = {}
-    for _, k, _, q in ev: net[k] = net.get(k, 0) + q
-    print(f"Endowus statements: {len(months)} ({months[0]}..{months[-1]})")
-    print("\n=== fund units: reconstructed vs latest statement ===")
-    last = snaps[months[-1]]
-    for k in keys:
-        print(f"  {k[1]:6} {k[0]:24} reconstructed={net.get(k,0):>12.5f}   latest-stmt={last.get(k,'?')}")
-    print("\n=== transaction timeline ===")
-    for date, k, act, q in ev:
-        print(f"  {date}  {k[1]:6} {act:12} {q:>+11.5f}")
+        if h:
+            mo = re.search(r"(\d{6})", path).group(1); snaps[f"{mo[:4]}-{mo[4:]}"] = h
+    # dedup identical (date, type, fund, qty, amount) across statements
+    seen, rows = set(), []
+    for r in allrows:
+        k = (r[0], r[1], r[2], round(r[3], 5), round(r[5], 2))
+        if k not in seen:
+            seen.add(k); rows.append(r)
+    rows.sort()
+
+    # switch-IN detection: an Amundi Investment whose amount matches a same-period (same month)
+    # redemption of a DIFFERENT fund => it was funded by a switch, not new capital.
+    redemptions = {}            # month -> set of redemption amounts of non-target funds (material)
+    for date, typ, fund, q, price, amt in rows:
+        if typ in ("Redemption",) and FUND not in fund and amt > 1000:
+            redemptions.setdefault(date[:7], set()).add(round(amt, 2))
+
+    ev = []                     # (date, fund, action, qty_signed, price, amount)
+    for date, typ, fund, q, price, amt in rows:
+        if FUND not in fund:
+            continue            # only Amundi; other funds (Infinity) come from cpf-stocks
+        if typ in ("Endowus Fee", "Redemption"):
+            act = "fee"
+        elif round(amt, 2) in redemptions.get(date[:7], set()):
+            act = "switch_in"   # internal; cost carries from predecessor via corporate_action
+        else:
+            act = "buy"
+        ev.append((date, fund, act, q, ("" if act == "switch_in" else price),
+                   ("" if act == "switch_in" else amt)))
+
+    print(f"Endowus statements: {len(files)}")
+    print("\n=== transaction timeline (Amundi) ===")
+    for date, fund, act, q, price, amt in ev:
+        print(f"  {date}  {act:10} {q:>+12.5f}  price={price or '-':>8}  amt={amt or '-':>10}")
+    net = sum(q for _, _, _, q, _, _ in ev)
+    last = max((mo for mo in snaps), default=None)
+    stmt_units = next(iter(snaps[last].values())) if last else "?"
+    print(f"\nreconstructed units={net:.5f}   latest-stmt units={stmt_units}  (as of {last})")
+    invested = sum(amt for _, _, act, _, _, amt in ev if act == "buy")
+    print(f"external cash booked (buys only): S${invested:,.2f}  (switch-in excluded)")
+
     out = os.path.join(os.path.dirname(__file__), "endowus_events.csv")
     with open(out, "w", newline="") as fh:
-        w = csv.writer(fh); w.writerow(["date", "src", "fund", "action", "qty_signed"])
-        for date, k, act, q in ev: w.writerow([date, k[1], k[0], act, q])
+        w = csv.writer(fh)
+        w.writerow(["date", "src", "fund", "action", "qty_signed", "price", "amount"])
+        for date, fund, act, q, price, amt in ev:
+            w.writerow([date, "CPF OA", fund, act, q, price, amt])
     print(f"\nwrote {out}")
 
 if __name__ == "__main__":

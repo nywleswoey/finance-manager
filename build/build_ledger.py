@@ -236,6 +236,7 @@ def load_endowus():
         acct = ENDOWUS_BUCKET.get(r["src"], "CPF")
         add(date=r["date"], account=acct, market="SG", ticker="0P0001OOJG",
             asset_type="fund", action=r["action"], qty_signed=float(r["qty_signed"]),
+            price=r.get("price", ""), amount=r.get("amount", ""),
             currency="SGD", source="endowus (pdf)", raw=r["fund"])
 
 # ---------- synthesize missing transfer-in legs ----------
