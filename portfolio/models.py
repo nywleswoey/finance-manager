@@ -191,3 +191,51 @@ class PositionSnapshot(Base):
     market_value: Mapped[Decimal | None] = mapped_column(MONEY)
     source: Mapped[str | None] = mapped_column(String(32))
     __table_args__ = (UniqueConstraint("account_id", "security_id", "date", "source", name="uq_snapshot"),)
+
+
+# ---------------- net worth ----------------
+class NwItem(Base):
+    """Fixed catalogue of manual asset/liability line items. Tags drive the metrics.
+    The live investment portfolio is NOT a row here — it enters via the snapshot's
+    frozen portfolio_value_sgd."""
+    __tablename__ = "nw_item"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(32), unique=True)        # posb, tiger_hkd, cpf_oa, hdb, home_loan
+    label: Mapped[str] = mapped_column(String(64))
+    kind: Mapped[str] = mapped_column(String(9))                      # asset | liability
+    currency_default: Mapped[str] = mapped_column(String(3), default="SGD")
+    is_liquid: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_housing: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_cpf: Mapped[bool] = mapped_column(Boolean, default=False)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    __table_args__ = (CheckConstraint("kind in ('asset','liability')", name="ck_nw_item_kind"),)
+
+
+class NwSnapshot(Base):
+    """One dated net-worth snapshot. Live portfolio value frozen at capture so history
+    stays stable when prices move."""
+    __tablename__ = "nw_snapshot"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    date: Mapped[dt.date] = mapped_column(Date, unique=True, index=True)
+    note: Mapped[str | None] = mapped_column(String(256))
+    portfolio_value_sgd: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    values: Mapped[list[NwValue]] = relationship(back_populates="snapshot", cascade="all, delete-orphan")
+
+
+class NwValue(Base):
+    """Per-snapshot value of one catalogue item. fx + sgd value frozen at capture."""
+    __tablename__ = "nw_value"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    snapshot_id: Mapped[int] = mapped_column(ForeignKey("nw_snapshot.id", ondelete="CASCADE"))
+    item_id: Mapped[int] = mapped_column(ForeignKey("nw_item.id"))
+    native_value: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    currency: Mapped[str] = mapped_column(String(3), default="SGD")
+    rate_to_sgd: Mapped[Decimal] = mapped_column(RATE, default=1)
+    value_sgd: Mapped[Decimal] = mapped_column(MONEY, default=0)
+
+    snapshot: Mapped[NwSnapshot] = relationship(back_populates="values")
+    item: Mapped[NwItem] = relationship()
+    __table_args__ = (UniqueConstraint("snapshot_id", "item_id", name="uq_nw_value"),)

@@ -41,3 +41,15 @@ tr:hover td { background: #1a212a; }
 input, select { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
   padding: 6px 9px; border-radius: 6px; font: inherit; }
 .loading { color: var(--mut); padding: 40px; }
+
+/* net worth */
+.nw-formhead { display: flex; gap: 14px; margin-bottom: 12px; }
+.nw-formhead label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--mut); }
+.nw-group { margin-bottom: 12px; }
+.nw-grouptitle { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--mut); margin: 8px 0 4px; }
+.nw-row { display: grid; grid-template-columns: 1fr 120px 70px; gap: 8px; align-items: center; margin-bottom: 5px; }
+.nw-label { font-size: 13px; display: flex; align-items: center; gap: 6px; }
+.nw-row input, .nw-row select { text-align: right; }
+.nw-del { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 13px; }
+.nw-del:hover { color: var(--neg); }
+.nw-err { color: var(--neg); padding: 8px 0; font-size: 13px; }
