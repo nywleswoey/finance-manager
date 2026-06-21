@@ -233,8 +233,32 @@ def load_endowus():
             asset_type="fund", action=r["action"], qty_signed=float(r["qty_signed"]),
             currency="SGD", source="endowus (pdf)", raw=r["fund"])
 
+# ---------- reconcile inter-broker stock transfers ----------
+def reconcile_transfer_amounts():
+    """Inter-broker custody move conserves cost as well as shares. The receiving
+    broker (FSM) stamps the transfer-in at market value on the move date, which
+    disagrees with the sending record's cost basis. Carry cost basis across so both
+    legs show the same amount. Stock legs only — FX cash transfers (no ticker) are
+    genuine currency conversions and keep their differing amounts."""
+    def is_in(a):  return "transfer in" in a or a == "transfer_in"
+    def is_out(a): return "transfer_out" in a or "transfer out" in a
+    outs = [r for r in LEDGER if r["asset_type"] == "stock" and r["ticker"]
+            and is_out(r["action"]) and str(r["amount"]).strip()]
+    for i in LEDGER:
+        if not (i["asset_type"] == "stock" and i["ticker"] and is_in(i["action"])):
+            continue
+        qi = abs(float(i["qty_signed"] or 0))
+        m = next((o for o in outs
+                  if canon(o["ticker"]) == canon(i["ticker"])
+                  and abs(abs(float(o["qty_signed"] or 0)) - qi) < 1e-6), None)
+        if m and i["amount"] != m["amount"]:
+            print(f"  transfer cost carried: {i['ticker']} {i['amount']} -> {m['amount']}")
+            i["amount"] = m["amount"]
+            i["price"]  = m["price"]   # keep price x qty consistent (avg cost)
+
 # ---------- run ----------
 load_simple(); load_tiger(); load_fsm(); load_moomoo(); load_cdp(); load_endowus()
+reconcile_transfer_amounts()
 LEDGER.sort(key=lambda r: (str(r["date"]), r["account"], r["ticker"]))
 
 # write ledger.csv
