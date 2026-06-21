@@ -13,7 +13,6 @@ from sqlalchemy import text
 
 from portfolio.db import SessionLocal
 from portfolio.performance import alloc_by_account, compute, rollup
-from portfolio.reconcile import reconcile
 
 app = FastAPI(title="Portfolio API")
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -106,7 +105,9 @@ BUCKET_ACCTS = {"cash": ["Tiger Prime", "Tiger Cash Boost", "Moomoo", "FSM", "CD
 @app.get("/api/holding")
 def holding(ticker: str, bucket: str = "cash"):
     """full history for one holding: summary + transactions (running balance) + dividends."""
-    summary = next((r for r in perf() if r["ticker"] == ticker and r["bucket"] == bucket), None)
+    # perf_all (not perf) so CLOSED positions (units≈0) still resolve a summary — else the
+    # detail view shows "No data" despite having transaction/dividend history.
+    summary = next((r for r in perf_all() if r["ticker"] == ticker and r["bucket"] == bucket), None)
     accts = BUCKET_ACCTS.get(bucket, [])
     s = SessionLocal()
     txns = [dict(r) for r in s.execute(text(
@@ -292,13 +293,6 @@ def portfolio_return():
         except Exception as e:
             return {"error": str(e)[:120]}
     return _cache["ret"]
-
-
-@app.get("/api/reconciliation")
-def reconciliation():
-    rows = reconcile()
-    from collections import Counter
-    return {"summary": dict(Counter(r["status"] for r in rows)), "rows": rows}
 
 
 @app.get("/api/options")
