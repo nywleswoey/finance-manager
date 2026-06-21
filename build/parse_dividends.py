@@ -115,7 +115,8 @@ def cdp():
 # ---------- Moomoo (PDF) ----------
 def moomoo():
     seen = set()
-    rx = re.compile(r"([A-Z0-9]{2,6})\s+CASH DIVIDEND")
+    # "<TKR> CASH DIVIDEND @ <CCY> <rate>" — currency is stated explicitly
+    rx = re.compile(r"([A-Z0-9]{2,6})\s+CASH DIVIDEND\s+@\s+([A-Z]{3})")
     for f in sorted(glob.glob(os.path.join(DATA, "moomoo/moomoo_*.pdf"))):
         mo = re.search(r"(\d{6})", f).group(1); ym = f"{mo[:4]}-{mo[4:]}"
         txt = subprocess.run(["pdftotext", "-layout", f, "-"], capture_output=True, text=True).stdout
@@ -123,7 +124,7 @@ def moomoo():
         for i, ln in enumerate(lines):
             m = rx.search(ln)
             if not m: continue
-            tkr = canon(m.group(1))
+            tkr = canon(m.group(1)); ccy = m.group(2)
             # amount: nearest "Corporate Action  +<amt>" in surrounding lines
             amt = 0.0
             for j in range(max(0, i - 3), min(len(lines), i + 3)):
@@ -133,9 +134,9 @@ def moomoo():
             key = (ym, tkr, amt)
             if key in seen: continue
             seen.add(key)
-            mkt = "US" if re.fullmatch(r"[A-Z]+", tkr) else "SG"
+            mkt = "SG" if ccy == "SGD" else ("HK" if ccy == "HKD" else "US")
             add(date=ym + "-15", account="Moomoo", market=mkt, ticker=tkr,
-                name=tkr, kind="cash", gross=amt, currency=CCY[mkt],
+                name=tkr, kind="cash", gross=amt, currency=ccy,
                 source="moomoo (cash dividend)")
 
 # ---------- run all sources ----------
