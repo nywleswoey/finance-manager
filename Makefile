@@ -21,6 +21,7 @@ flat:         ## (re)build the normalized flat files from statements
 
 load:         ## load ledger + dividends into DB (idempotent)
 	$(PY) -m ingestion.load
+	$(PY) build/export_dividends_master.py
 prices:       ## fetch latest prices + FX (needs network)
 	$(PY) -m ingestion.prices
 
