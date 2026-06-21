@@ -50,5 +50,5 @@ Net-worth snapshot: maintain manual assets & liabilities (cash accounts, CPF, HD
 - [x] Build and Test (EXECUTE)
 
 ## Current Status
-- **Current Stage**: Build and Test Complete (7 unit + 8 integration pass; migrated+seeded on PG)
-- **Next Stage**: Operations (placeholder) — feature done
+- **Current Stage**: Auth unit — Build and Test complete (24 tests pass; web build OK)
+- **Next Stage**: Deploy to Vercel (manual — see DEPLOY.md). Operations placeholder.

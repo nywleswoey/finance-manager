@@ -101,3 +101,16 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **User Input**: Topology="All on Vercel (serverless)"; Auth="App-level Google OAuth + email allowlist (httponly cookie session)"; Security Baseline="Yes — enforce".
 **AI Response**: Recorded decisions. Security Baseline extension ENABLED (blocking). Mapped SECURITY-01..15 to plan. Drafted consolidated Functional Design + Code Generation plan for single 'auth' unit.
 **Context**: INCEPTION - Requirements Analysis complete; Extension Configuration updated
+
+## Code Generation — Auth Unit (Generated)
+**Timestamp**: 2026-06-21T02:30:00Z
+**User Input**: "/commit and 2" (approve plan option 2 + commit)
+**AI Response**: Implemented Google OAuth + allowlist + Vercel deploy. Backend: portfolio/config.py (auth env fields), api/auth.py (Google verify, session JWT cookie, allowlist, login router, rate-limit, logging), api/main.py (deny-by-default gate mw, security-headers mw, locked CORS+credentials, /api/health, global error handler), api/index.py (Vercel ASGI entry). Deps: google-auth, requests, PyJWT pinned (requirements.txt + pyproject + uv.lock). Frontend: web/src/auth.jsx (GIS login gate + logout), api.js (credentials:include + 401 broadcast), main.jsx (wrap in AuthGate), App.jsx + styles.css (signed-in user + sign out), web/.env.example. Deploy: vercel.json (builds + routes + static security headers), .env.example, DEPLOY.md.
+**Context**: CONSTRUCTION - Code Generation (auth unit)
+
+## Build and Test — Auth Unit
+**Timestamp**: 2026-06-21T02:35:00Z
+**Build Status**: Success (web: vite build OK; api imports clean)
+**Test Status**: Pass — 17 auth unit tests (session mint/verify/expire/tamper, allowlist incl. revoke + case-insensitive, deny-by-default gate, login set-cookie/403/401/422, logout). Full suite 24 passed (7 networth + 17 auth), no regression.
+**Security Compliance**: SECURITY-01..15 assessed — no blocking findings. Exceptions documented (13 GIS no-SRI -> CSP origin pin; 04 inline styles). Infra rules 02/06/07 platform-managed; object-level IDOR N/A (single shared owner dataset).
+**Context**: CONSTRUCTION - Build and Test (auth unit) complete
