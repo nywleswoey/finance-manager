@@ -63,6 +63,39 @@ def performance(by: str = Query("market", enum=["market", "bucket", "account"]))
     return rollup(perf(), by)
 
 
+BUCKET_ACCTS = {"cash": ["Tiger Prime", "Tiger Cash Boost", "Moomoo", "FSM", "CDP"],
+                "cpf": ["CPF"], "srs": ["SRS"]}
+
+
+@app.get("/api/holding")
+def holding(ticker: str, bucket: str = "cash"):
+    """full history for one holding: summary + transactions (running balance) + dividends."""
+    summary = next((r for r in perf() if r["ticker"] == ticker and r["bucket"] == bucket), None)
+    accts = BUCKET_ACCTS.get(bucket, [])
+    s = SessionLocal()
+    txns = [dict(r) for r in s.execute(text(
+        "SELECT t.trade_date, a.name account, t.action, t.qty_signed, t.price, t.gross_amount, "
+        "t.currency, t.source_file FROM txn t JOIN account a ON a.id=t.account_id "
+        "JOIN security sec ON sec.id=t.security_id "
+        "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) AND a.name <> 'CDP'"),
+        {"tk": ticker, "accts": accts}).mappings().all()]
+    divs = [dict(r) for r in s.execute(text(
+        "SELECT d.pay_date, a.name account, d.gross, d.currency, d.kind FROM dividend d "
+        "JOIN account a ON a.id=d.account_id JOIN security sec ON sec.id=d.security_id "
+        "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) ORDER BY d.pay_date"),
+        {"tk": ticker, "accts": accts}).mappings().all()]
+    s.close()
+    if bucket == "cash":                               # CDP trades from cdp-stocks (priced)
+        from portfolio.performance import cdp_transactions
+        txns += [r for r in cdp_transactions() if r["ticker"] == ticker]
+    txns.sort(key=lambda r: (r["trade_date"] is None, str(r["trade_date"] or "")))
+    bal = 0.0
+    for t in txns:
+        bal += float(t["qty_signed"] or 0)
+        t["balance"] = round(bal, 4)
+    return {"summary": summary, "transactions": txns, "dividends": divs}
+
+
 @app.get("/api/dividends")
 def dividends():
     s = SessionLocal()
