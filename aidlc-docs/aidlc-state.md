@@ -42,7 +42,7 @@ Net-worth snapshot: maintain manual assets & liabilities (cash accounts, CPF, HD
 - [ ] Units Generation (SKIP)
 
 ### 🟢 CONSTRUCTION PHASE
-- [ ] Functional Design (EXECUTE)
+- [x] Functional Design (EXECUTE)
 - [ ] NFR Requirements (SKIP)
 - [ ] NFR Design (SKIP)
 - [ ] Infrastructure Design (SKIP)
@@ -50,5 +50,5 @@ Net-worth snapshot: maintain manual assets & liabilities (cash accounts, CPF, HD
 - [ ] Build and Test (EXECUTE)
 
 ## Current Status
-- **Current Stage**: Workflow Planning Complete
-- **Next Stage**: Functional Design
+- **Current Stage**: Functional Design Complete
+- **Next Stage**: Code Generation

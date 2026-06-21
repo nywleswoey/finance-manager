@@ -49,3 +49,12 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **Context**: INCEPTION - Workflow Planning Step 9
 
 ---
+
+## Workflow Planning — Approved / Functional Design
+**Timestamp**: 2026-06-21T00:30:00Z
+**User Input**: "proceed"
+**AI Response**: Plan approved. Executed Functional Design for unit `networth`. Created domain-entities.md (nw_item catalogue, nw_snapshot, nw_value), business-logic-model.md (live value freeze, fx convert, 6-metric math), business-rules.md (BR1–BR10), frontend-components.md (React NetWorth tab). Awaiting approval to Code Generation.
+**Status**: Approved (plan) → Functional Design presented
+**Context**: CONSTRUCTION - Functional Design Step 7
+
+---
