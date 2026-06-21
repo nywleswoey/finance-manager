@@ -12,9 +12,15 @@ body { margin: 0; background: var(--bg); color: var(--txt);
 .navitem.on { color: var(--txt); background: var(--panel2); border-left: 3px solid var(--acc); }
 .navitem.dim { opacity: .4; cursor: default; font-weight: 500; font-size: 13px; }
 .main { flex: 1; padding: 22px 28px; overflow: auto; }
-.tabs { display: flex; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+.tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
 .tab { padding: 8px 14px; cursor: pointer; color: var(--mut); font-weight: 600; border-bottom: 2px solid transparent; }
 .tab.on { color: var(--txt); border-bottom-color: var(--acc); }
+.tabs-right { margin-left: auto; display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
+.refresh-msg { color: var(--mut); font-size: 12px; }
+.refresh-btn { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+  padding: 6px 12px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
+.refresh-btn:hover:not(:disabled) { border-color: var(--acc); color: var(--acc); }
+.refresh-btn:disabled { opacity: .5; cursor: default; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 22px; }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .tile .lbl { color: var(--mut); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }

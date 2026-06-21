@@ -4,6 +4,11 @@ export async function get(path) {
   if (!r.ok) throw new Error(path + " " + r.status);
   return r.json();
 }
+export async function post(path) {
+  const r = await fetch(base + path, { method: "POST" });
+  if (!r.ok) throw new Error(path + " " + r.status);
+  return r.json();
+}
 export const fmt = (n, d = 0) =>
   n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
 export const pct = (n) => (n == null ? "—" : (n * 100).toFixed(1) + "%");
