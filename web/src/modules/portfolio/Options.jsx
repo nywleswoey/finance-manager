@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from "recharts";
 import { get, sgd, pct, fmt, cls } from "../../api.js";
 
 export default function Options() {
@@ -29,11 +29,13 @@ export default function Options() {
         <h3>Realized P/L by Year&nbsp;<span className="pill">SGD · latest FX</span></h3>
         <div style={{ width: "100%", height: 240 }}>
           <ResponsiveContainer>
-            <BarChart data={yrChart}>
+            <BarChart data={yrChart} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
               <XAxis dataKey="year" /><YAxis tickFormatter={(v) => (v / 1000) + "k"} />
               <Tooltip formatter={(v) => sgd(v)} />
               <Bar dataKey="pl">
                 {yrChart.map((e, i) => <Cell key={i} fill={e.pl >= 0 ? "#2ea043" : "#f85149"} />)}
+                <LabelList dataKey="pl" position="top" fill="#c9d1d9" fontSize={12}
+                           formatter={(v) => sgd(v)} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
