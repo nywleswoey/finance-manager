@@ -38,6 +38,15 @@ def refresh():
     return {"ok": True}
 
 
+@app.post("/api/refresh-prices")
+def refresh_prices():
+    """Fetch latest prices + FX for held tickers, then invalidate the cache."""
+    from ingestion.prices import main as fetch_prices
+    result = fetch_prices()   # blocking; upserts price/fx_rate for current_position
+    _cache.clear()            # next overview/positions recompute with fresh prices
+    return result             # {ok, fail, date, failed, fx_failed}
+
+
 @app.get("/api/overview")
 def overview():
     rows = perf()

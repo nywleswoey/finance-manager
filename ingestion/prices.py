@@ -62,6 +62,7 @@ def main():
         "SELECT DISTINCT security_id, canonical_ticker, market, asset_type "
         "FROM current_position WHERE units > 0")).all()
     ok = fail = 0
+    failed, fx_failed = [], []
     for sid, tk, market, atype in held:
         try:
             if atype == "fund":
@@ -73,6 +74,7 @@ def main():
             upsert_price(s, sid, today, px, ccy); ok += 1
         except Exception as e:
             fail += 1
+            failed.append(tk)
             print(f"  price fail {tk} ({market}): {type(e).__name__}")
     # FX -> SGD
     s.merge(FxRate(date=today, currency="SGD", rate_to_sgd=1))
@@ -81,10 +83,13 @@ def main():
             rate, _ = yahoo_price(f"{ccy}SGD=X")
             s.merge(FxRate(date=today, currency=ccy, rate_to_sgd=rate))
         except Exception as e:
+            fx_failed.append(ccy)
             print(f"  fx fail {ccy}: {type(e).__name__}")
     s.commit()
     print(f"prices: {ok} ok, {fail} fail; fx loaded for {today}")
     s.close()
+    return {"ok": ok, "fail": fail, "date": str(today),
+            "failed": failed, "fx_failed": fx_failed}
 
 
 if __name__ == "__main__":
