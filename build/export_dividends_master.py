@@ -46,22 +46,32 @@ def main():
     def held(aid, sid, on):
         return round(sum(q for td, q in by.get((aid, sid), []) if td <= on), 4)
 
-    # collapse to one rate per (date, ticker). Prefer the implied rate (gross/units,
-    # exact) over the source's declared rate (often rounded); fall back when units unknown.
-    best = {}                                          # (date, tk) -> (rate, ccy, exact?)
+    # A ticker can pay several components on one date (e.g. a REIT's taxable + tax-exempt
+    # tranches as separate records). Sum them per (account, date, ticker) so the rate is the
+    # TOTAL per-unit payout that day — rate × qty then reconstructs the whole dividend.
+    agg = defaultdict(lambda: {"gross": 0.0, "units": None, "ccy": None, "declared": 0.0})
     for r in rows:
-        units = float(r["units"]) if r["units"] is not None else 0.0
-        if units <= 1e-6:                              # no stated units -> replay the ledger
-            units = held(r["account_id"], r["security_id"], r["pay_date"])
-        implied = round(float(r["gross"] or 0) / units, 6) if units > 1e-6 else None
-        rate = implied if implied is not None else (
-            float(r["amount_per_unit"]) if r["amount_per_unit"] is not None else None)
+        a = agg[(r["account_id"], r["security_id"], r["pay_date"], r["tk"])]
+        a["gross"] += float(r["gross"] or 0)
+        a["ccy"] = r["currency"]
+        if r["units"] is not None:
+            a["units"] = float(r["units"])
+        if r["amount_per_unit"] is not None:
+            a["declared"] += float(r["amount_per_unit"])
+
+    # collapse to one rate per (date, ticker). Prefer the implied rate (gross/units, exact)
+    # over the summed declared rate (often rounded); fall back when units can't be determined.
+    best = {}                                          # (date, tk) -> (rate, ccy, exact?)
+    for (aid, sid, day, tk), a in agg.items():
+        units = a["units"] if a["units"] and a["units"] > 1e-6 else held(aid, sid, day)
+        implied = round(a["gross"] / units, 6) if units > 1e-6 else None
+        rate = implied if implied is not None else (a["declared"] or None)
         if rate is None:
             continue
         exact = implied is not None
-        key = (r["pay_date"], r["tk"])
+        key = (day, tk)
         if key not in best or (exact and not best[key][2]):
-            best[key] = (rate, r["currency"], exact)
+            best[key] = (rate, a["ccy"], exact)
 
     out = [{"date": d, "ticker": tk, "rate_per_unit": f"{rate:g}", "currency": ccy}
            for (d, tk), (rate, ccy, _) in best.items()]
