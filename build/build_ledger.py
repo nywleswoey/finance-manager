@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Unified transaction ledger builder + reconciliation vs Holdings.md.
+"""Unified transaction ledger builder.
 
 Parses every machine-readable source under data/ into one normalized schema,
 writes build/ledger.csv (the timeline), then replays share-affecting events
@@ -309,64 +309,6 @@ with open(out, "w", newline="") as fh:
     w.writeheader()
     for r in LEDGER: w.writerow(r)
 print(f"ledger rows: {len(LEDGER)} -> {out}")
-
-# ---------- reconciliation ----------
-# replay net qty per (account, ticker)
-pos = defaultdict(float)
-for r in LEDGER:
-    if r["asset_type"] in ("stock","fund") and r["ticker"]:
-        pos[(r["account"], r["ticker"])] += r["qty_signed"]
-
-# parse Holdings.md
-hold = {}   # (account, ticker) -> qty
-cur_acct = None
-acct_map = {
-    "Tiger Prime Account": "Tiger Prime",
-    "Tiger Cash Boost": "Tiger Cash Boost",
-    "Moomoo Margin Account": "Moomoo",
-    "FSM": "FSM", "CDP": "CDP", "CPF": "CPF", "SRS": "SRS",
-}
-for line in open(os.path.join(ROOT, "Holdings.md")):
-    line = line.strip()
-    m = re.match(r"^#+\s+(.*)", line)
-    if m:
-        name = m.group(1).strip()
-        cur_acct = acct_map.get(name, cur_acct if name in ("US Market","SG Market","HK Market") else None)
-        continue
-    m = re.match(r"^\|([A-Za-z0-9.]+)\|([0-9.]+)\|", line.replace(" ", ""))  # ignore trailing COMMENTS col
-    if m and cur_acct:
-        hold[(cur_acct, canon(m.group(1).upper()))] = float(m.group(2))
-
-# compare
-recon = []
-accts = sorted(set([a for a, _ in hold] + [a for a, _ in pos if a in acct_map.values()]))
-for acct in accts:
-    tickers = sorted(set([t for a, t in hold if a == acct] + [t for a, t in pos if a == acct]))
-    for t in tickers:
-        h = hold.get((acct, t))
-        p = pos.get((acct, t))
-        if h is None and (p is None or abs(p) < 1e-6): continue
-        ph = p if p is not None else 0.0
-        diff = (h or 0) - ph          # holdings minus replayed
-        if abs(diff) < 1e-6:
-            status = "OK"
-        elif ph < -1e-6:
-            status = "MISSING_BUY (ledger negative — impossible)"
-        elif h is None or h == 0:
-            status = "MISSING_SELL/XFER (ledger holds, Holdings empty)"
-        elif diff > 0 and ph > 0:
-            status = "MISSING_BUY/CORP-ACTION (Holdings > ledger)"
-        elif diff > 0 and ph == 0:
-            status = "NO_TXN_DATA (PDF-only or post-statement)"
-        else:
-            status = "MISSING_SELL (ledger > Holdings)"
-        recon.append((acct, t, h, ph, diff, status))
-
-print("\n=== RECONCILIATION: Holdings vs replayed ledger ===")
-print(f"{'account':16} {'ticker':8} {'holdings':>10} {'ledger':>10} {'diff':>10}  status")
-for acct, t, h, p, d, s in recon:
-    if s != "OK":
-        print(f"{acct:16} {t:8} {('' if h is None else h):>10} {p:>10.4f} {d:>10.4f}  {s}")
 
 # coverage / file inventory
 print("\n=== SOURCE COVERAGE ===")

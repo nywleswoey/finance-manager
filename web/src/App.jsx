@@ -5,7 +5,6 @@ import Performance from "./modules/portfolio/Performance.jsx";
 import Dividends from "./modules/portfolio/Dividends.jsx";
 import Options from "./modules/portfolio/Options.jsx";
 import Transactions from "./modules/portfolio/Transactions.jsx";
-import Reconciliation from "./modules/portfolio/Reconciliation.jsx";
 
 const TABS = {
   Overview: Overview,
@@ -14,7 +13,6 @@ const TABS = {
   Dividends: Dividends,
   Options: Options,
   Transactions: Transactions,
-  Reconciliation: Reconciliation,
 };
 
 export default function App() {

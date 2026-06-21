@@ -6,7 +6,7 @@ personal app. Built per [PLAN.md](PLAN.md).
 
 ```
 statements (data/) ──▶ parsers (build/, ingestion/) ──▶ Postgres ──▶ FastAPI ──▶ React app
-   csv + pdf            normalize + reconcile          txn/dividend   /api/*       web/
+   csv + pdf            normalize                      txn/dividend   /api/*       web/
                                                        price/fx
 ```
 
@@ -30,8 +30,6 @@ Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `mak
   normalized `txn` + `dividend`, idempotent (`dedup_hash`), securities resolved through an
   alias table. Renamed counters (CWBU→SET) and splits (S51→5E2 20:1) modelled as
   corporate actions.
-- **Reconciliation** — replayed DB positions checked against `Holdings.md`
-  (`/api/reconciliation`): 37 reconcile, 6 closed inter-broker transfers, 1 pending statement.
 - **Performance** — per security in native currency, rolled up to market / account / bucket /
   total in SGD: market value, dividend income, P/L (where cost is known), per-position XIRR,
   and a portfolio **money-weighted return** (historical-FX XIRR).
@@ -40,7 +38,7 @@ Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `mak
   `portfolio/options.py` (realized P/L, premium collected, win-rate, by year/ticker/type, SGD at
   latest FX). API `/api/options`, `/api/options-trades`.
 - **App** (`web/`) — Overview (tiles + allocation donuts), Holdings, Performance, Dividends,
-  Options, Transactions, Reconciliation. Modular shell so other modules (Net Worth, Budget…) slot in.
+  Options, Transactions. Modular shell so other modules (Net Worth, Budget…) slot in.
 
 ## Layout
 
@@ -49,7 +47,7 @@ Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `mak
 | `data/` | raw statements (immutable) |
 | `build/` | statement parsers → `ledger.csv`, `dividends.csv`, `symbols.csv` |
 | `ingestion/` | DB loaders (`load.py`) + market data (`prices.py`) |
-| `portfolio/` | models, db, `performance.py`, `twr.py`, `reconcile.py` |
+| `portfolio/` | models, db, `performance.py`, `twr.py` |
 | `migrations/` | Alembic schema |
 | `scripts/seed.py` | reference-data seed |
 | `api/` | FastAPI |

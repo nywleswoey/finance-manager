@@ -23,8 +23,7 @@ portofolio/
 │   ├── moomoo/  dbs-consolidated-statements/   # PDFs → need extraction
 │   ├── ibkr/  vickers-stocks/  .archive/        # legacy
 └── build/
-    ├── build_ledger.py              # parsers: raw/ → ledger.csv
-    └── reconcile.py                 # ledger → positions, diff vs Holdings.md
+    └── build_ledger.py              # parsers: raw/ → ledger.csv
 ```
 
 Raw files stay **immutable**; every parsed row keeps a `source` pointer so any number
@@ -86,17 +85,6 @@ Corporate-action splits stay distinct (different share counts): `C31`→`9CI`+`C
 
 The CDP parser snapshot-diffs **per canonical code** so a rename reads as continuity,
 not a spurious sell + rebuy. Ledger and `Holdings.md` resolve through this table.
-
-## Reconciliation = the missing-record detector
-
-`reconcile.py` replays the ledger and flags, per `(account, ticker)`:
-
-- `ledger < 0`  → **missing BUY** (impossible negative position)
-- `Holdings > ledger > 0` → **missing BUY / corporate action**
-- `ledger > Holdings` → **missing SELL**
-- `Holdings present, ledger = 0` → **no transaction data** (PDF-only or post-statement gap)
-
-Run it after every new statement import; a clean run = no missing records.
 
 ## Filling the remaining holes
 

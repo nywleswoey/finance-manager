@@ -164,7 +164,7 @@ class OptionTrade(Base):
     __table_args__ = (UniqueConstraint("dedup_hash", name="uq_opt_dedup"),)
 
 
-# ---------------- valuation / reconciliation ----------------
+# ---------------- valuation ----------------
 class Price(Base):
     __tablename__ = "price"
     security_id: Mapped[int] = mapped_column(ForeignKey("security.id"), primary_key=True)

@@ -139,7 +139,6 @@ GET /performance?scope=security|market|account|bucket|total&from=&to=
 GET /performance/{security_id}/timeseries
 GET /dividends?from=&to=&group_by=
 GET /transactions?account=&security=         (the ledger, paginated)
-GET /reconciliation                          (replayed vs snapshot/Holdings)
 POST /ingest                                  (upload/trigger a statement)
 ```
 
@@ -155,7 +154,6 @@ Next.js **app shell** (sidebar of modules) with the first module `modules/portfo
 - **Security detail** — price + cost-basis chart, transaction timeline & running balance
   (port the existing viewer), dividend history.
 - **Performance** — value/return-over-time chart, benchmark overlay, per-period table.
-- **Reconciliation** — current vs statement, flagged diffs.
 
 The existing `portfolio.html` is the throwaway prototype this module replaces; its grouping
 + transfer-netting + naming logic moves into API/SQL.
@@ -171,8 +169,8 @@ The existing `portfolio.html` is the throwaway prototype this module replaces; i
 | **2 — Dividends + corp actions** ✅ | `build/parse_dividends.py` (485 rows) loaded; corporate_action seeded | Tiger/CDP/FSM sections |
 | **3 — Market data** 🟡 | ✅ `ingestion/prices.py` — latest price (Yahoo) + Endowus NAV + FX → DB. ⬜ daily history for TWR | securities table |
 | **4 — Performance engine** ✅ | `portfolio/performance.py` (per-security native + SGD rollups, P/L, per-position XIRR) + `twr.py` (portfolio money-weighted return). TWR-proper needs daily history | phases 2–3 |
-| **5 — API** ✅ | `api/main.py` FastAPI: overview/positions/performance/dividends/transactions/return/reconciliation | phase 4 |
-| **6 — Frontend** ✅ | `web/` React (Vite) modular app: Overview/Holdings/Performance/Dividends/Transactions/Reconciliation, served by FastAPI | phase 5 |
+| **5 — API** ✅ | `api/main.py` FastAPI: overview/positions/performance/dividends/transactions/return | phase 4 |
+| **6 — Frontend** ✅ | `web/` React (Vite) modular app: Overview/Holdings/Performance/Dividends/Transactions, served by FastAPI | phase 5 |
 | **7 — Automation** 🟡 | ✅ `make ingest` / `make setup` pipeline. ⬜ scheduled trigger + upload endpoint + mismatch alerts | phase 1 |
 
 **Suggested first cut (MVP):** Phases 0–1 + a minimal Phase 4 (current value + simple

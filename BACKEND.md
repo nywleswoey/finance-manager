@@ -43,9 +43,8 @@ file inserts nothing new (`ON CONFLICT (dedup_hash) DO NOTHING`).
 
 ## Next (rest of Phase 1 → Phase 4)
 
-- Rewrite parsers to write **directly** to the DB + record `import_batch` per file, and add
-  the **reconciliation gate** (replay vs `position_snapshot`) — currently we load the
-  pre-built `ledger.csv`/`dividends.csv` as the bridge.
+- Rewrite parsers to write **directly** to the DB + record `import_batch` per file —
+  currently we load the pre-built `ledger.csv`/`dividends.csv` as the bridge.
 - Load `position_snapshot` from statement holdings tables (Moomoo/CDP/Endowus parsers
   already produce these).
 - Phase 3: `price` + `fx_rate` loaders (yfinance + statement NAVs).
@@ -58,7 +57,7 @@ Performance is computed **per funding bucket × security** (not per account): tr
 within the cash bucket (CDP→FSM) don't change ownership, so a position moved into FSM
 keeps its original CDP purchase cost. CDP cost (which the CDP statements omit) is taken
 from `data/cdp-stocks/transactions.csv` via `portfolio/performance.cdp_cost()` and pooled
-into the cash-bucket position. Positions/reconciliation still come from the authoritative
+into the cash-bucket position. Positions still come from the authoritative
 CDP statements; `alloc_by_account()` gives the per-account MV split for charts.
 
 Result: **31/37** bucket-positions have a known cost basis (XIRR + P/L) — incl. the
