@@ -1,14 +1,21 @@
 #!/usr/bin/env python3
-"""Export the consolidated dividend-event log -> data/dividends-master.csv.
+"""Export the dividend-rate master -> data/dividends-master.csv.
 
-One row per cash dividend / distribution across every account (CDP, Tiger, FSM,
-SRS, CPF, Moomoo), date-sorted. This is the single reference for "what dividends
-did I receive, when". Regenerated from the DB after each ingest (it reflects the
-deduped, reconciled dividend table — see build/parse_dividends.py for sources).
+A per-unit dividend-rate reference: one row per distinct dividend event
+(date, ticker, rate_per_unit, currency) for every security ever held. Rates are
+account-independent, so rows are deduped across accounts (a ticker held in both
+CDP and Tiger yields one rate row per pay date). Only dividends paid while the
+stock was held appear — that is inherent, since the dividend table only records
+distributions actually received.
 
-SGD column converts the native gross at the latest stored FX (fx_rate); historical
-FX is not kept, so prior-year SGD figures are approximate.
+Multiply a rate by the qty held at the pay date to recover the cash dividend;
+this file is the rate source for that (and for spotting gaps where a held
+position has no recorded rate). The implied rate (gross / units) is preferred
+because it reconstructs the gross exactly — declared rates in source statements
+are often rounded — falling back to the declared rate when units are unknown.
 """
+from collections import defaultdict
+
 import csv
 import os
 
@@ -17,44 +24,55 @@ from sqlalchemy import text
 from portfolio.db import SessionLocal
 
 OUT = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "dividends-master.csv")
-COLS = ["date", "ticker", "name", "account", "qty", "rate_per_unit", "gross", "currency", "gross_sgd"]
+COLS = ["date", "ticker", "rate_per_unit", "currency"]
 
 
 def main():
     s = SessionLocal()
-    fx = {c: float(r) for c, r in s.execute(text("SELECT currency, rate_to_sgd FROM fx_rate")).all()}
     rows = s.execute(text(
-        "SELECT d.pay_date, sec.canonical_ticker tk, COALESCE(sec.name, d.source_file) name, "
-        "a.name account, d.units, d.amount_per_unit, d.gross, d.currency "
-        "FROM dividend d JOIN account a ON a.id = d.account_id "
-        "LEFT JOIN security sec ON sec.id = d.security_id "
-        "ORDER BY d.pay_date NULLS LAST, a.name, sec.canonical_ticker")).mappings().all()
+        "SELECT d.account_id, d.security_id, d.pay_date, sec.canonical_ticker tk, d.currency, "
+        "d.amount_per_unit, d.gross, d.units "
+        "FROM dividend d JOIN security sec ON sec.id = d.security_id "
+        "WHERE d.pay_date IS NOT NULL AND sec.canonical_ticker IS NOT NULL")).mappings().all()
+    # ledger, grouped per (account, security), to replay qty held at the pay date when a
+    # dividend doesn't state units (Tiger/FSM HK & US holdings) — gives an implied rate.
+    by = defaultdict(list)
+    for aid, sid, td, q in s.execute(text(
+            "SELECT account_id, security_id, trade_date, qty_signed FROM txn "
+            "WHERE security_id IS NOT NULL AND trade_date IS NOT NULL")).all():
+        by[(aid, sid)].append((td, float(q)))
     s.close()
 
-    out = []
+    def held(aid, sid, on):
+        return round(sum(q for td, q in by.get((aid, sid), []) if td <= on), 4)
+
+    # collapse to one rate per (date, ticker). Prefer the implied rate (gross/units,
+    # exact) over the source's declared rate (often rounded); fall back when units unknown.
+    best = {}                                          # (date, tk) -> (rate, ccy, exact?)
     for r in rows:
-        gross = float(r["gross"] or 0)
-        units = float(r["units"]) if r["units"] is not None else None
-        rate = float(r["amount_per_unit"]) if r["amount_per_unit"] is not None else (
-            round(gross / units, 6) if units and units > 1e-6 else None)
-        out.append({
-            "date": r["pay_date"] or "",
-            "ticker": r["tk"] or "",
-            "name": r["name"] or "",
-            "account": r["account"],
-            "qty": f"{units:g}" if units is not None else "",
-            "rate_per_unit": f"{rate:g}" if rate is not None else "",
-            "gross": f"{gross:g}",
-            "currency": r["currency"],
-            "gross_sgd": f"{gross * fx.get(r['currency'], 1.0):.2f}",
-        })
+        units = float(r["units"]) if r["units"] is not None else 0.0
+        if units <= 1e-6:                              # no stated units -> replay the ledger
+            units = held(r["account_id"], r["security_id"], r["pay_date"])
+        implied = round(float(r["gross"] or 0) / units, 6) if units > 1e-6 else None
+        rate = implied if implied is not None else (
+            float(r["amount_per_unit"]) if r["amount_per_unit"] is not None else None)
+        if rate is None:
+            continue
+        exact = implied is not None
+        key = (r["pay_date"], r["tk"])
+        if key not in best or (exact and not best[key][2]):
+            best[key] = (rate, r["currency"], exact)
+
+    out = [{"date": d, "ticker": tk, "rate_per_unit": f"{rate:g}", "currency": ccy}
+           for (d, tk), (rate, ccy, _) in best.items()]
+    out.sort(key=lambda x: (x["ticker"], x["date"]))   # per-ticker rate history
 
     with open(OUT, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=COLS)
         w.writeheader()
         w.writerows(out)
-    total = sum(float(r["gross_sgd"]) for r in out)
-    print(f"dividend-master rows: {len(out)} -> {OUT}  (total ~{total:,.0f} SGD @ latest FX)")
+    tickers = len({x["ticker"] for x in out})
+    print(f"dividend-rate master: {len(out)} rows, {tickers} tickers -> {OUT}")
 
 
 if __name__ == "__main__":
