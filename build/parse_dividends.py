@@ -43,17 +43,29 @@ def add(**k): DIV.append(k)
 def tiger():
     for pat, acct in [("tiger-prime/*.csv", "Tiger Prime"),
                       ("tiger-cash-boost/*.csv", "Tiger Cash Boost")]:
+        accr = defaultdict(float)        # canonical ticker -> net accrual (Increase - Decrease)
+        info = {}                        # ticker -> (latest date, sym, market)
         for f in glob.glob(os.path.join(DATA, pat)):
             for row in csv.reader(open(f, encoding="utf-8-sig")):
                 if not (row and row[0] == "Dividends" and len(row) > 10 and row[3] == "DATA"):
                     continue
-                if row[9].strip() != "Paid":            # skip accruals; Paid = cash received
-                    continue
-                sym = row[6].strip()
-                mkt = market_of(sym)
-                add(date=row[4], account=acct, market=mkt, ticker=norm(sym, mkt),
-                    name=re.sub(r"\s*\(.*\)$", "", sym), kind="cash",
-                    gross=num(row[10]), currency=CCY[mkt], source="tiger (dividends)")
+                sym = row[6].strip(); st = row[9].strip()
+                mkt = market_of(sym); tk = norm(sym, mkt)
+                if st == "Paid":                       # cash received
+                    add(date=row[4], account=acct, market=mkt, ticker=tk,
+                        name=re.sub(r"\s*\(.*\)$", "", sym), kind="cash",
+                        gross=num(row[10]), currency=CCY[mkt], source="tiger (dividends)")
+                elif st.startswith("Dividend Accruals"):
+                    net = num(row[13]) if len(row) > 13 and row[13] else num(row[10])
+                    accr[tk] += net if "Increase" in st else -net
+                    info[tk] = (row[4], sym, mkt)
+        # net-positive accrual = declared but not yet Paid in the available statements
+        for tk, v in accr.items():
+            if v > 1:
+                date, sym, mkt = info[tk]
+                add(date=date, account=acct, market=mkt, ticker=tk,
+                    name=re.sub(r"\s*\(.*\)$", "", sym), kind="accrued",
+                    gross=round(v, 2), currency=CCY[mkt], source="tiger (accrued)")
 
 # ---------- FSM / iFast ----------
 def fsm():
@@ -137,6 +149,22 @@ def moomoo():
             mkt = "SG" if ccy == "SGD" else ("HK" if ccy == "HKD" else "US")
             add(date=ym + "-15", account="Moomoo", market=mkt, ticker=tkr,
                 name=tkr, kind="cash", gross=amt, currency=ccy,
+                source="moomoo (cash dividend)")
+        # US dividends use "<TKR> ... SHARES DIVIDENDS" + "US Dividend Paying +<gross>"
+        rxus = re.compile(r"([A-Z]{1,5})\s+[\d.]+\s+SHARES DIVIDENDS")
+        for i, ln in enumerate(lines):
+            mu = rxus.search(ln)
+            if not mu: continue
+            tkr = canon(mu.group(1)); amt = 0.0
+            for j in range(max(0, i - 2), min(len(lines), i + 4)):
+                a = re.search(r"US Dividend Paying\s+\+([\d,]+\.\d+)", lines[j])  # positive = gross
+                if a: amt = num(a.group(1)); break
+            if amt <= 0: continue
+            key = (ym, tkr, amt, "us")
+            if key in seen: continue
+            seen.add(key)
+            add(date=ym + "-15", account="Moomoo", market="US", ticker=tkr,
+                name=tkr, kind="cash", gross=amt, currency="USD",
                 source="moomoo (cash dividend)")
 
 # ---------- run all sources ----------
