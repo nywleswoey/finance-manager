@@ -46,9 +46,9 @@ Net-worth snapshot: maintain manual assets & liabilities (cash accounts, CPF, HD
 - [ ] NFR Requirements (SKIP)
 - [ ] NFR Design (SKIP)
 - [ ] Infrastructure Design (SKIP)
-- [ ] Code Generation (EXECUTE)
+- [x] Code Generation (EXECUTE)
 - [ ] Build and Test (EXECUTE)
 
 ## Current Status
-- **Current Stage**: Functional Design Complete
-- **Next Stage**: Code Generation
+- **Current Stage**: Code Generation Complete (7/7 tests pass, web builds)
+- **Next Stage**: Build and Test

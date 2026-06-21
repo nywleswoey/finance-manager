@@ -10,16 +10,16 @@ Brownfield. Modify existing files in-place; create new ones where noted. Workspa
 
 ## Steps
 
-### Step 1 — Models (backend) [ ]
+### Step 1 — Models (backend) [x]
 - **Modify** `portfolio/models.py`: add `NwItem`, `NwSnapshot`, `NwValue` (per domain-entities.md). Reuse `MONEY`, `RATE`, `Base`. CheckConstraint kind in (asset,liability); unique snapshot.date; unique(snapshot_id,item_id); cascade delete.
 
-### Step 2 — Migration [ ]
+### Step 2 — Migration [x]
 - **Create** `migrations/versions/<rev>_networth.py`, `down_revision='a1f2c3d4e5f6'`. `upgrade()` creates 3 tables; `downgrade()` drops them (reverse order).
 
-### Step 3 — Catalogue seed [ ]
+### Step 3 — Catalogue seed [x]
 - **Create** `scripts/seed_networth.py`: idempotent upsert of the 14 catalogue items (code/label/kind/ccy/flags/sort_order) by `code`. Wire into Makefile if a `seed` target exists.
 
-### Step 4 — Business logic [ ]
+### Step 4 — Business logic [x]
 - **Create** `portfolio/networth.py`:
   - `live_portfolio_sgd(s)` → Σ mv_sgd from `performance.compute` (open positions).
   - `rate_for(s, ccy, on_date)` → 1 if SGD else latest `fx_rate ≤ date`; raise ValueError if none (BR4).
@@ -27,7 +27,7 @@ Brownfield. Modify existing files in-place; create new ones where noted. Workspa
   - `metrics(snapshot)` → the 6 figures + portfolio_value_sgd (business-logic-model.md formulas).
   - `list_snapshots()`, `get_snapshot(id)`, `latest()`, `catalogue()`.
 
-### Step 5 — API layer [ ]
+### Step 5 — API layer [x]
 - **Modify** `api/main.py`: add routes
   - `GET /api/networth/items`
   - `GET /api/networth/snapshots`
@@ -37,16 +37,16 @@ Brownfield. Modify existing files in-place; create new ones where noted. Workspa
   - `DELETE /api/networth/snapshots/{id}`
   - Pydantic body model for create. Map ValueError → HTTP 400/409.
 
-### Step 6 — Frontend [ ]
+### Step 6 — Frontend [x]
 - **Modify** `web/src/api.js`: extend `post` to accept optional JSON body; add `del(path)`.
 - **Create** `web/src/modules/networth/NetWorth.jsx`: SummaryCards (6 metrics) + trend chart (recharts) + create-snapshot form (prefilled from latest) + history table. `data-testid` on interactive elements.
 - **Modify** `web/src/App.jsx`: add `section` state; make left-nav "Net Worth" clickable; render `<NetWorth/>` for that section, Portfolio tabs otherwise.
 - **Modify** `web/src/styles.css` if needed for cards/form (reuse existing classes first).
 
-### Step 7 — Tests [ ]
+### Step 7 — Tests [x]
 - **Create** `tests/test_networth.py`: metric math (the 6 formulas incl. housing/cpf exclusions), fx conversion (SGD=1, HKD/USD convert), BR4 missing-rate raises, BR1 duplicate-date reject. Use a throwaway in-memory/SQLite or seeded fixtures where feasible; otherwise pure-function metric tests on a constructed snapshot.
 
-### Step 8 — Code summary doc [ ]
+### Step 8 — Code summary doc [x]
 - **Create** `aidlc-docs/construction/networth/code/summary.md`: list created/modified files, endpoints, how to migrate+seed+run.
 
 ## Story traceability
