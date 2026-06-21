@@ -79,21 +79,24 @@ def main():
         if r["amount_per_unit"] is not None:
             a["declared"] += float(r["amount_per_unit"])
 
-    # Collapse to one rate per (date, ticker). Use gross/units (reconstructs exactly),
-    # picking the most trustworthy qty; declared rate only when no qty is available.
-    #   rank 0: stated units              rank 1: ledger qty at the ex date
-    #   rank 2: ledger qty at the pay date  rank 3: declared per-unit rate
+    # One rate per (date, ticker) = gross / units (reconstructs by construction), taking the
+    # most trustworthy per-account source and keeping the best across accounts:
+    #   rank 0: statement's stated units      rank 1: ledger qty replayed at the EX date
+    #   rank 2: ledger qty at the pay date     rank 3: declared per-unit rate
+    # Replaying at the ex date (not pay date) excludes shares bought between ex and pay (e.g.
+    # an IREIT rights issue). A genuine same-day double credit (one FSM DBS row paid twice)
+    # can't be expressed in a single rate and stays a known reconstruction gap.
     best = {}                                          # (date, tk) -> (rate, ccy, rank)
     for (aid, sid, day, tk), a in agg.items():
         ex = exmap.get((tk, str(day)))
-        ex_units = held(aid, sid, ex) if ex else 0.0
-        pay_units = held(aid, sid, day)
+        ex_q = held(aid, sid, ex) if ex else 0.0
+        pay_q = held(aid, sid, day)
         if a["units"] and a["units"] > 1e-6:
             rate, rank = round(a["gross"] / a["units"], 6), 0
-        elif ex_units > 1e-6:
-            rate, rank = round(a["gross"] / ex_units, 6), 1
-        elif pay_units > 1e-6:
-            rate, rank = round(a["gross"] / pay_units, 6), 2
+        elif ex_q > 1e-6:
+            rate, rank = round(a["gross"] / ex_q, 6), 1
+        elif pay_q > 1e-6:
+            rate, rank = round(a["gross"] / pay_q, 6), 2
         elif a["declared"]:
             rate, rank = a["declared"], 3
         else:
