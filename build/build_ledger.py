@@ -208,8 +208,9 @@ def load_moomoo():
     for r in csv.DictReader(open(p)):
         add(date=r["date"], account="Moomoo", market=r["market"],
             ticker=canon(norm_ticker(r["ticker"], r["market"])),
-            asset_type="stock", action=r["action"],
-            qty_signed=float(r["qty_signed"]), source=r["source"], raw=r["raw"])
+            asset_type="stock", action=r["action"], qty_signed=float(r["qty_signed"]),
+            price=r.get("price", ""), amount=num(r.get("amount")) if r.get("amount") else "",
+            source=r["source"], raw=r["raw"])
 
 # ---------- CDP (from parse_cdp.py snapshot-diff — authoritative custody) ----------
 def load_cdp():
