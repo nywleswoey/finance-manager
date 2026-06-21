@@ -17,28 +17,32 @@ export default function Performance() {
       {!d ? <div className="loading">Loading…</div> : (
         <table>
           <thead><tr>
-            <th className="l">{by}</th><th>Market Value</th><th>Cost (known)</th>
-            <th>P/L</th><th>Return</th><th>Dividends</th><th>Options P/L</th>
+            <th className="l">{by}</th><th>Capital</th><th>Current Value</th>
+            <th>Unrealised P/L</th><th>Realised P/L</th><th>Dividends</th>
+            <th>Options</th><th>Net P/L</th><th>Return</th>
           </tr></thead>
           <tbody>
-            {Object.entries(d).sort((a, b) => b[1].mv_sgd - a[1].mv_sgd).map(([k, v]) => (
+            {Object.entries(d).sort((a, b) => b[1].net_pl_sgd - a[1].net_pl_sgd).map(([k, v]) => (
               <tr key={k}>
                 <td className="l" style={{ fontWeight: 600 }}>{k}</td>
+                <td className="mut">{v.capital_sgd ? sgd(v.capital_sgd) : "—"}</td>
                 <td>{sgd(v.mv_sgd)}</td>
-                <td className="mut">{v.cost_sgd ? sgd(v.cost_sgd) : "—"}</td>
-                <td className={cls(v.pl_sgd)}>{v.cost_sgd ? sgd(v.pl_sgd) : "—"}</td>
-                <td className={cls(v.pl_sgd)}>{v.cost_sgd ? pct(v.pl_sgd / v.cost_sgd) : "—"}</td>
+                <td className={cls(v.unrealised_pl_sgd)}>{v.capital_sgd ? sgd(v.unrealised_pl_sgd) : "—"}</td>
+                <td className={cls(v.realised_pl_sgd)}>{v.realised_pl_sgd ? sgd(v.realised_pl_sgd) : "—"}</td>
                 <td className="pos">{sgd(v.income_sgd)}</td>
                 <td className={cls(v.options_pl_sgd)}>{v.options_pl_sgd ? sgd(v.options_pl_sgd) : "—"}</td>
+                <td className={cls(v.net_pl_sgd)} style={{ fontWeight: 600 }}>{sgd(v.net_pl_sgd)}</td>
+                <td className={cls(v.net_pl_sgd)}>{v.return_pct != null ? pct(v.return_pct) : "—"}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
       <p className="mut" style={{ fontSize: 12 }}>
-        P/L = stock market-value − cost (+ realised trades & dividends), where cost is known.
-        <b> Options P/L</b> is realised income from the sold-option (wheel) book, shown separately
-        (not in the stock P/L / Return). All SGD at latest FX.
+        <b>Capital</b> = cost basis of current holdings (Capital + Unrealised = Current Value).
+        <b> Net P/L</b> = Unrealised + Realised + Dividends + Options premiums.
+        <b> Return</b> = Net P/L ÷ total ever invested (incl. positions since sold).
+        Includes closed positions; cost-known rows only. All SGD at latest FX.
       </p>
     </div>
   );
