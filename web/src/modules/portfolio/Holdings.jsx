@@ -1,13 +1,16 @@
 import React, { useEffect, useState } from "react";
 import { get, fmt, sgd, pct, cls } from "../../api.js";
+import SecurityDetail from "./SecurityDetail.jsx";
 
 export default function Holdings() {
   const [rows, setRows] = useState(null);
+  const [sel, setSel] = useState(null);
   useEffect(() => { get("/api/positions").then(setRows).catch(() => setRows([])); }, []);
+  if (sel) return <SecurityDetail ticker={sel.ticker} bucket={sel.bucket} onBack={() => setSel(null)} />;
   if (!rows) return <div className="loading">Loading…</div>;
   return (
     <div className="card">
-      <h3>Holdings ({rows.length})</h3>
+      <h3>Holdings ({rows.length}) <span className="mut" style={{ fontWeight: 400, fontSize: 12 }}>— click a row for full history</span></h3>
       <table>
         <thead><tr>
           <th className="l">Security</th><th className="l">Bucket</th><th className="l">Mkt</th>
@@ -16,7 +19,7 @@ export default function Holdings() {
         </tr></thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i}>
+            <tr key={i} style={{ cursor: "pointer" }} onClick={() => setSel({ ticker: r.ticker, bucket: r.bucket })}>
               <td className="l">{r.name} <span className="pill">{r.ticker}</span>
                 <div className="mut" style={{ fontSize: 11 }}>{(r.accounts || []).join(", ")}</div></td>
               <td className="l"><span className="pill">{r.bucket}</span></td>

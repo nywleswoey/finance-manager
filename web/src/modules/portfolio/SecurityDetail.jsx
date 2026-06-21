@@ -1,0 +1,88 @@
+import React, { useEffect, useState } from "react";
+import { get, fmt, sgd, pct, cls } from "../../api.js";
+
+export default function SecurityDetail({ ticker, bucket, onBack }) {
+  const [d, setD] = useState(null);
+  useEffect(() => {
+    setD(null);
+    get(`/api/holding?ticker=${encodeURIComponent(ticker)}&bucket=${bucket}`)
+      .then(setD).catch(() => setD({ error: true }));
+  }, [ticker, bucket]);
+
+  if (!d) return <div className="loading">Loading {ticker}…</div>;
+  if (d.error || !d.summary) return <div className="loading">No data for {ticker}. <a onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)" }}>← back</a></div>;
+  const s = d.summary;
+  const divTotal = d.dividends.reduce((a, x) => a + Number(x.gross || 0), 0);
+
+  return (
+    <div>
+      <div style={{ marginBottom: 14 }}>
+        <a onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)", fontWeight: 600 }}>← Holdings</a>
+      </div>
+      <div className="hd-row" style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
+        <h2 style={{ margin: 0 }}>{s.name}</h2>
+        <span className="pill">{s.ticker}</span><span className="pill">{s.bucket}</span>
+        <span className="pill">{s.market}</span>
+        <span className="mut">{(s.accounts || []).join(", ")}</span>
+      </div>
+
+      <div className="tiles" style={{ marginTop: 14 }}>
+        <Tile lbl="Units" val={fmt(s.units, s.units < 10 ? 4 : 0)} />
+        <Tile lbl="Avg Cost" val={s.avg_cost == null ? "—" : `${fmt(s.avg_cost, 4)} ${s.currency}`} />
+        <Tile lbl="Price" val={s.price == null ? "—" : `${fmt(s.price, 4)} ${s.currency}`} />
+        <Tile lbl="Cost Basis" val={s.cost_basis_sgd == null ? "n/a" : sgd(s.cost_basis_sgd)} />
+        <Tile lbl="Market Value" val={sgd(s.mv_sgd)} />
+        <Tile lbl="Unrealised P/L" val={s.unrealised_pl_sgd == null ? "n/a" : sgd(s.unrealised_pl_sgd)} cls={cls(s.unrealised_pl_sgd)} />
+        <Tile lbl="Dividends" val={`${fmt(divTotal, 0)} ${d.dividends[0]?.currency || s.currency}`} cls="pos" />
+        <Tile lbl="XIRR" val={s.xirr == null ? "—" : pct(s.xirr)} cls={cls(s.xirr)} />
+      </div>
+
+      <div className="card" style={{ marginBottom: 18 }}>
+        <h3>Transaction history ({d.transactions.length}) · running balance</h3>
+        <table>
+          <thead><tr>
+            <th className="l">Date</th><th className="l">Account</th><th className="l">Action</th>
+            <th>Qty</th><th>Balance</th><th>Price</th><th>Amount</th><th className="l">Source</th>
+          </tr></thead>
+          <tbody>
+            {d.transactions.map((t, i) => (
+              <tr key={i} className={i === d.transactions.length - 1 ? "endrow" : ""}>
+                <td className="l mut">{t.trade_date || "—"}</td>
+                <td className="l mut">{t.account}</td>
+                <td className="l">{t.action}</td>
+                <td className={cls(t.qty_signed)}>{t.qty_signed > 0 ? "+" : ""}{fmt(t.qty_signed, 2)}</td>
+                <td style={{ fontWeight: 700 }}>{fmt(t.balance, 2)}</td>
+                <td className="mut">{t.price == null ? "" : fmt(t.price, 4)}</td>
+                <td className="mut">{t.gross_amount == null ? "" : `${fmt(t.gross_amount, 2)} ${t.currency || ""}`.trim()}</td>
+                <td className="l mut" style={{ fontSize: 11 }}>{t.source_file}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="card">
+        <h3>Dividend history ({d.dividends.length})</h3>
+        {d.dividends.length === 0 ? <p className="mut">No dividends recorded.</p> : (
+          <table>
+            <thead><tr><th className="l">Date</th><th className="l">Account</th><th className="l">Kind</th><th>Amount</th></tr></thead>
+            <tbody>
+              {d.dividends.map((x, i) => (
+                <tr key={i}>
+                  <td className="l mut">{x.pay_date || "—"}</td>
+                  <td className="l mut">{x.account}</td>
+                  <td className="l">{x.kind}</td>
+                  <td className="pos">{fmt(x.gross, 2)} {x.currency}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Tile({ lbl, val, cls }) {
+  return <div className="tile"><div className="lbl">{lbl}</div><div className={"val " + (cls || "")} style={{ fontSize: 18 }}>{val}</div></div>;
+}
