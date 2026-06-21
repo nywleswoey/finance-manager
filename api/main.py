@@ -1,21 +1,95 @@
 """FastAPI — serves portfolio positions, performance, dividends, transactions.
 
 Run: PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload --port 8000
+
+Locked behind Google OAuth: every /api/* route except the auth + health endpoints
+requires a valid session cookie (deny-by-default gate below). See api/auth.py.
 """
+import logging
 import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
+from api import auth
+from portfolio.config import settings
 from portfolio.db import SessionLocal
 from portfolio.performance import alloc_by_account, compute, rollup
 
+logging.basicConfig(level=logging.INFO,
+                    format="%(asctime)s %(levelname)s %(name)s %(message)s")  # SECURITY-03
+log = logging.getLogger("api")
+
 app = FastAPI(title="Portfolio API")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# Endpoints reachable WITHOUT a session (login entry + liveness). Everything else
+# under /api/ is denied by default by the gate middleware (SECURITY-08).
+_PUBLIC_PATHS = {"/api/auth/google", "/api/auth/me", "/api/auth/logout", "/api/health"}
+
+# HTML security headers, also set on static responses via vercel.json for prod.
+# script-src stays strict (no unsafe-inline) — the XSS-relevant directive. style-src
+# allows inline because React inline styles + the Google button need it (documented
+# exception, SECURITY-04). accounts.google.com is allowed for Google Identity Services
+# (SECURITY-13: GIS ships no SRI hash, so we pin its origin instead).
+_CSP = ("default-src 'self'; "
+        "script-src 'self' https://accounts.google.com; "
+        "frame-src https://accounts.google.com; "
+        "connect-src 'self' https://accounts.google.com; "
+        "img-src 'self' https://*.googleusercontent.com data:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "base-uri 'self'; frame-ancestors 'none'")
+
+
+@app.middleware("http")
+async def auth_gate(request: Request, call_next):
+    """Deny-by-default: any /api/* path that isn't public requires a valid session.
+    Fails closed (SECURITY-08, SECURITY-15)."""
+    path = request.url.path
+    if request.method == "OPTIONS" or not path.startswith("/api/") or path in _PUBLIC_PATHS:
+        return await call_next(request)
+    user = auth.user_from_request(request)
+    if not user:
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    request.state.user = user
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    resp.headers["Content-Security-Policy"] = _CSP
+    resp.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    resp.headers["X-Content-Type-Options"] = "nosniff"
+    resp.headers["X-Frame-Options"] = "DENY"
+    resp.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return resp
+
+
+# CORS added last => outermost => handles preflight before the gate. Locked to known
+# origins with credentials (cookies); never wildcard on authenticated APIs (SECURITY-08).
+app.add_middleware(CORSMiddleware, allow_origins=settings.origin_list,
+                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
+
+app.include_router(auth.router)
+
+
+@app.get("/api/health")
+def health():
+    return {"ok": True}
+
+
+@app.exception_handler(Exception)
+async def _unhandled(request: Request, exc: Exception):
+    """Top-level handler: log internally, return a generic message — never leak stack
+    traces or internals to the client (SECURITY-09, SECURITY-15)."""
+    log.exception("unhandled error path=%s", request.url.path)
+    return JSONResponse({"detail": "internal error"}, status_code=500)
+
 
 _cache: dict = {}
 

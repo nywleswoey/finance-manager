@@ -1,0 +1,11 @@
+# Vercel Python serverless runtime deps (pinned — SECURITY-10).
+# Runtime only: no alembic/uvicorn (migrations + local server run outside the function).
+fastapi==0.138.0
+sqlalchemy==2.0.51
+psycopg[binary]==3.3.4
+pydantic==2.13.4
+pydantic-settings==2.14.2
+python-dotenv==1.2.2
+google-auth==2.55.0
+requests==2.34.2
+PyJWT==2.13.0
