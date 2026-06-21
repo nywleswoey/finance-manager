@@ -97,10 +97,14 @@ def holding(ticker: str, bucket: str = "cash"):
         "SELECT t.trade_date, a.name account, t.action, t.qty_signed, t.price, t.gross_amount, "
         "t.currency, t.source_file FROM txn t JOIN account a ON a.id=t.account_id "
         "JOIN security sec ON sec.id=t.security_id "
-        "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) AND a.name <> 'CDP'"),
+        "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) AND a.name <> 'CDP' "
+        # cash dividends are recorded as 0-qty 'stock dividend' txns — they belong in the
+        # dividend history, not the transaction ledger (they don't change the position)
+        "AND NOT (t.action ILIKE '%dividend%' AND t.qty_signed = 0)"),
         {"tk": ticker, "accts": accts}).mappings().all()]
     divs = [dict(r) for r in s.execute(text(
-        "SELECT d.pay_date, a.name account, d.gross, d.currency, d.kind FROM dividend d "
+        "SELECT d.pay_date, a.name account, d.gross, d.currency, d.kind, "
+        "d.units, d.amount_per_unit FROM dividend d "
         "JOIN account a ON a.id=d.account_id JOIN security sec ON sec.id=d.security_id "
         "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) ORDER BY d.pay_date"),
         {"tk": ticker, "accts": accts}).mappings().all()]
@@ -113,6 +117,19 @@ def holding(ticker: str, bucket: str = "cash"):
     for t in txns:
         bal += float(t["qty_signed"] or 0)
         t["balance"] = round(bal, 4)
+    # enrich each dividend with qty held at pay date + declared rate per unit.
+    # prefer statement-stated values; fall back to ledger replay / implied (gross/qty).
+    for x in divs:
+        units = float(x["units"]) if x["units"] is not None else None
+        if units is None and x["pay_date"] is not None:
+            units = round(sum(float(t["qty_signed"] or 0) for t in txns
+                              if t["account"] == x["account"] and t["trade_date"] is not None
+                              and str(t["trade_date"]) <= str(x["pay_date"])), 4)
+        rate = float(x["amount_per_unit"]) if x["amount_per_unit"] is not None else None
+        if rate is None and units and units > 1e-6:
+            rate = round(float(x["gross"] or 0) / units, 6)
+        x["units"] = units
+        x["rate"] = rate
     return {"summary": summary, "transactions": txns, "dividends": divs}
 
 

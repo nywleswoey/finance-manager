@@ -65,13 +65,18 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
         <h3>Dividend history ({d.dividends.length})</h3>
         {d.dividends.length === 0 ? <p className="mut">No dividends recorded.</p> : (
           <table>
-            <thead><tr><th className="l">Date</th><th className="l">Account</th><th className="l">Kind</th><th>Amount</th></tr></thead>
+            <thead><tr>
+              <th className="l">Date</th><th className="l">Account</th><th className="l">Kind</th>
+              <th>Qty held</th><th>Rate/unit</th><th>Amount</th>
+            </tr></thead>
             <tbody>
               {d.dividends.map((x, i) => (
                 <tr key={i}>
                   <td className="l mut">{x.pay_date || "—"}</td>
                   <td className="l mut">{x.account}</td>
                   <td className="l">{x.kind}</td>
+                  <td className="mut">{x.units == null ? "—" : fmt(x.units, 2)}</td>
+                  <td className="mut">{x.rate == null ? "—" : `${fmt(x.rate, 4)} ${x.currency}`}</td>
                   <td className="pos">{fmt(x.gross, 2)} {x.currency}</td>
                 </tr>
               ))}
