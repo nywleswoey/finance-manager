@@ -43,29 +43,16 @@ def add(**k): DIV.append(k)
 def tiger():
     for pat, acct in [("tiger-prime/*.csv", "Tiger Prime"),
                       ("tiger-cash-boost/*.csv", "Tiger Cash Boost")]:
-        accr = defaultdict(float)        # canonical ticker -> net accrual (Increase - Decrease)
-        info = {}                        # ticker -> (latest date, sym, market)
         for f in glob.glob(os.path.join(DATA, pat)):
             for row in csv.reader(open(f, encoding="utf-8-sig")):
                 if not (row and row[0] == "Dividends" and len(row) > 10 and row[3] == "DATA"):
                     continue
-                sym = row[6].strip(); st = row[9].strip()
-                mkt = market_of(sym); tk = norm(sym, mkt)
-                if st == "Paid":                       # cash received
-                    add(date=row[4], account=acct, market=mkt, ticker=tk,
-                        name=re.sub(r"\s*\(.*\)$", "", sym), kind="cash",
-                        gross=num(row[10]), currency=CCY[mkt], source="tiger (dividends)")
-                elif st.startswith("Dividend Accruals"):
-                    net = num(row[13]) if len(row) > 13 and row[13] else num(row[10])
-                    accr[tk] += net if "Increase" in st else -net
-                    info[tk] = (row[4], sym, mkt)
-        # net-positive accrual = declared but not yet Paid in the available statements
-        for tk, v in accr.items():
-            if v > 1:
-                date, sym, mkt = info[tk]
-                add(date=date, account=acct, market=mkt, ticker=tk,
-                    name=re.sub(r"\s*\(.*\)$", "", sym), kind="accrued",
-                    gross=round(v, 2), currency=CCY[mkt], source="tiger (accrued)")
+                if row[9].strip() != "Paid":            # only cash received; ignore accruals
+                    continue
+                sym = row[6].strip(); mkt = market_of(sym)
+                add(date=row[4], account=acct, market=mkt, ticker=norm(sym, mkt),
+                    name=re.sub(r"\s*\(.*\)$", "", sym), kind="cash",
+                    gross=num(row[10]), currency=CCY[mkt], source="tiger (dividends)")
 
 # ---------- FSM / iFast ----------
 def fsm():
