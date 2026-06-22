@@ -19,5 +19,13 @@ dependencies = [
 [tool.uv]
 package = false
 
+# Vercel deploys this as a FastAPI app (single Vercel Function serving all routes).
+# Vercel detects the entrypoint at api/index.py (re-exports server.main:app) and
+# installs deps from pyproject/uv.lock. This build hook runs after deps install and
+# before deploy: build the React SPA into web/dist so FastAPI's StaticFiles mount
+# serves it (same-origin -> first-party session cookie).
+[tool.vercel.scripts]
+build = "npm --prefix web ci && npm --prefix web run build"
+
 [project.optional-dependencies]
 dev = ["ruff>=0.6"]

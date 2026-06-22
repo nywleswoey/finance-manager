@@ -35,9 +35,24 @@ Project → Settings → Environment Variables (Production + Preview):
 | `COOKIE_SECURE` | `true` |
 | `DATABASE_URL` | the `sslmode=require` Postgres URL |
 
-## 4. Deploy
-`vercel.json` already wires the build + routes. Push the branch / import the repo and
-deploy. Vercel builds the SPA and the Python function automatically.
+## 4. Deploy (single FastAPI project)
+Vercel deploys the whole repo as **one FastAPI Vercel Function** that serves both the
+API and the built SPA (same origin → first-party session cookie). There is no
+`vercel.json`; the model relies on Vercel's framework detection:
+
+- Vercel detects the entrypoint at `api/index.py` (re-exports `server.main:app`) and
+  installs Python deps from `pyproject.toml`/`uv.lock`.
+- The `[tool.vercel.scripts] build` hook in `pyproject.toml` runs `npm --prefix web run
+  build`, producing `web/dist`, which FastAPI serves via its StaticFiles mount.
+
+**Project Settings → General** (one-time):
+- **Framework Preset**: FastAPI
+- **Root Directory**: `./` (repo root)
+- **Build Command / Output Directory**: leave as preset defaults (no override). A custom
+  Build Command makes Vercel treat the project as static and skip the Python install —
+  that's what caused the earlier `ModuleNotFoundError: No module named 'fastapi'`.
+
+Push to `main` (or Redeploy) to build.
 
 ## 5. Revoking access
 Remove the email from `ALLOWED_EMAILS` and redeploy (or update the env var). The gate
