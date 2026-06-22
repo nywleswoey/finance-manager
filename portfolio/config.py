@@ -1,9 +1,20 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
     database_url: str = "postgresql+psycopg://portfolio:portfolio@localhost:5544/portfolio"
+
+    @field_validator("database_url")
+    @classmethod
+    def _use_psycopg3(cls, v: str) -> str:
+        # Providers (Neon, etc.) hand out bare postgresql:// URLs, which SQLAlchemy maps
+        # to the psycopg2 driver we don't ship. Force the psycopg (v3) driver.
+        for prefix in ("postgresql://", "postgres://"):
+            if v.startswith(prefix):
+                return "postgresql+psycopg://" + v[len(prefix):]
+        return v
 
     # --- auth / deploy (read from env on Vercel, from .env locally) ---
     google_client_id: str = ""           # OAuth client id == ID-token audience
