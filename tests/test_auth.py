@@ -6,8 +6,9 @@ import jwt
 import pytest
 from fastapi.testclient import TestClient
 
-from api import auth
 from portfolio.config import settings
+
+from server import auth
 
 
 @pytest.fixture(autouse=True)
@@ -84,7 +85,7 @@ def test_user_from_request_garbage_cookie():
 
 @pytest.fixture
 def client():
-    from api.main import app
+    from server.main import app
     return TestClient(app)
 
 

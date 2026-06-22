@@ -28,11 +28,11 @@ prices:       ## fetch latest prices + FX (needs network)
 ingest: flat load   ## full ingest: statements -> flat -> DB
 
 api:          ## run the API (serves built web/ at /)
-	$(PY) -m uvicorn api.main:app --reload --port 8000
+	$(PY) -m uvicorn server.main:app --reload --port 8000
 build-web:    ## build the React frontend
 	cd web && npm install && npm run build
 app: build-web   ## build frontend then run API+web on :8000
-	$(PY) -m uvicorn api.main:app --port 8000
+	$(PY) -m uvicorn server.main:app --port 8000
 
 net:          ## per-ticker net verdict (+/-) incl dividends + option premiums
 	$(PY) scripts/net.py $(filter-out $@,$(MAKECMDGOALS))

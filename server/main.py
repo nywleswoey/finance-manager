@@ -1,9 +1,9 @@
 """FastAPI — serves portfolio positions, performance, dividends, transactions.
 
-Run: PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload --port 8000
+Run: PYTHONPATH=. .venv/bin/uvicorn server.main:app --reload --port 8000
 
 Locked behind Google OAuth: every /api/* route except the auth + health endpoints
-requires a valid session cookie (deny-by-default gate below). See api/auth.py.
+requires a valid session cookie (deny-by-default gate below). See server/auth.py.
 """
 import logging
 import os
@@ -16,8 +16,9 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
-from api import auth
 from portfolio.config import settings
+
+from server import auth
 from portfolio.db import SessionLocal
 from portfolio.performance import alloc_by_account, compute, rollup
 

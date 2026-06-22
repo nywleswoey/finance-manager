@@ -1,22 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "builds": [
-    { "src": "api/index.py", "use": "@vercel/python" },
-    { "src": "web/package.json", "use": "@vercel/static-build", "config": { "distDir": "dist" } }
+  "installCommand": "npm --prefix web ci",
+  "buildCommand": "npm --prefix web run build",
+  "outputDirectory": "web/dist",
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/index" }
   ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "api/index.py" },
-    { "handle": "filesystem" },
+  "headers": [
     {
-      "src": "/(.*)",
-      "dest": "/index.html",
-      "headers": {
-        "Content-Security-Policy": "default-src 'self'; script-src 'self' https://accounts.google.com; frame-src https://accounts.google.com; connect-src 'self' https://accounts.google.com; img-src 'self' https://*.googleusercontent.com data:; style-src 'self' 'unsafe-inline'; base-uri 'self'; frame-ancestors 'none'",
-        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
-        "X-Content-Type-Options": "nosniff",
-        "X-Frame-Options": "DENY",
-        "Referrer-Policy": "strict-origin-when-cross-origin"
-      }
+      "source": "/((?!api/).*)",
+      "headers": [
+        { "key": "Content-Security-Policy", "value": "default-src 'self'; script-src 'self' https://accounts.google.com; frame-src https://accounts.google.com; connect-src 'self' https://accounts.google.com; img-src 'self' https://*.googleusercontent.com data:; style-src 'self' 'unsafe-inline'; base-uri 'self'; frame-ancestors 'none'" },
+        { "key": "Strict-Transport-Security", "value": "max-age=31536000; includeSubDomains" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+      ]
     }
   ]
 }

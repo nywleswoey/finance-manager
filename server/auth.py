@@ -1,7 +1,7 @@
 """Authentication — Google OAuth sign-in + email allowlist + signed session cookie.
 
 Security-critical logic is isolated in this module (SECURITY-11). The deny-by-default
-request gate lives in api.main. No secrets in source — everything via env (SECURITY-12).
+request gate lives in server.main. No secrets in source — everything via env (SECURITY-12).
 
 Flow:
   SPA does Google Sign-In -> gets a Google ID token (JWT) -> POST /api/auth/google.
