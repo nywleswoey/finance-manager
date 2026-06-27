@@ -52,7 +52,7 @@ Net-worth snapshot: maintain manual assets & liabilities (cash accounts, CPF, HD
 ## Units
 | Unit | Status |
 |---|---|
-| networth | Complete |
+| networth | Complete (snapshot id=2 @ 2026-06-18 statement-sourced; scripts/snapshot_from_statements.py) |
 | auth | Complete (24 tests pass; web build OK) |
 | spending-tracker | Code Generation + Verify complete — see construction/spending-tracker/code/summary.md |
 
