@@ -49,6 +49,16 @@ Net-worth snapshot: maintain manual assets & liabilities (cash accounts, CPF, HD
 - [x] Code Generation (EXECUTE)
 - [x] Build and Test (EXECUTE)
 
+## Units
+| Unit | Status |
+|---|---|
+| networth | Complete |
+| auth | Complete (24 tests pass; web build OK) |
+| spending-tracker | Code Generation + Verify complete — see construction/spending-tracker/code/summary.md |
+
 ## Current Status
-- **Current Stage**: Auth unit — Build and Test complete (24 tests pass; web build OK)
-- **Next Stage**: Deploy to Vercel (manual — see DEPLOY.md). Operations placeholder.
+- **Current Stage**: spending-tracker unit — built & verified (`make spending` end-to-end,
+  idempotent; 793 spend rows / S$141.7k / 17mo; invariant: 0 cc-payments counted as spend).
+- **Open items (need user input)**: TMLS recurring GIRO biller, helper-salary PayNows,
+  JB (MY) spend, DBS-card POS codes — currently Uncategorized (~35% of spend by value).
+- **Next Stage**: refine `data/spending/categories.yaml` for the long tail; Deploy (DEPLOY.md).

@@ -114,3 +114,28 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **Test Status**: Pass — 17 auth unit tests (session mint/verify/expire/tamper, allowlist incl. revoke + case-insensitive, deny-by-default gate, login set-cookie/403/401/422, logout). Full suite 24 passed (7 networth + 17 auth), no regression.
 **Security Compliance**: SECURITY-01..15 assessed — no blocking findings. Exceptions documented (13 GIS no-SRI -> CSP origin pin; 04 inline styles). Infra rules 02/06/07 platform-managed; object-level IDOR N/A (single shared owner dataset).
 **Context**: CONSTRUCTION - Build and Test (auth unit) complete
+
+## Spending Tracker — Goal & Decisions
+**Timestamp**: 2026-06-22T00:00:00Z
+**User Input**: "create a new branch then use ai-dlc to track the spending. Data source would be the bank statement and credit card statements (dbs-consolidated-statements, hsbc-cc, trust-cc). - avoid double counting (paying off credit card shouldn't count again since we read off cc statement) - exclude records like transfers to brokerage accounts - automatically classify transactions into categories - objective is to understand where i'm spending and my spending trends". Follow-up: shared existing tracker taxonomy (Income/Personal/Housing/Transport/Topups); "only interested in transactions from 2025 onwards".
+**AI Response**: Branch `feature/spending-tracker`. Plan approved via plan mode. Clarified 3 decisions: HSBC scanned PDFs → Claude-vision one-time extract; categorization → hybrid rules + LLM fallback cached to YAML; scope 2025-01+ (so always-exclude DBS→itemised-card bill payments, no lost-history edge case). Aligned categories.yaml to the user's shared spreadsheet taxonomy.
+**Context**: CONSTRUCTION - new unit `spending-tracker`
+
+## Spending Tracker — Code Generation (Generated)
+**Timestamp**: 2026-06-22T00:10:00Z
+**AI Response**: Implemented cash-flow ledger. DB: `CashTxn` model + migration `c3d4e5f6a7b8_cash_txn`. Parsers: build/parse_cash.py (DBS balance-delta; Trust cycle-year + wrapped-merchant/footer handling; HSBC from vision CSV build/hsbc_extracted.csv). Classify: build/classify_cash.py over data/spending/{categories,exclusions}.yaml. Loader: ingestion/load_cash.py (idempotent). API: /api/spending/{summary,trends,transactions,categories}. UI: web/src/modules/spending/{Overview,Transactions}.jsx + App.jsx "Spending" section. Makefile: flat-cash/load-cash/spending. Dep: pyyaml.
+**Key rules**: HSBC(4921)/Trust(4179) card bills in DBS excluded as cc_payment (their line items ingested); DBSC-5520 card (no statement) kept as lump spend; card-source credits = repayments (not spend); Advice Funds Transfer / FAST Collection / Investment / brokerage / CPF HOUSING excluded.
+**Context**: CONSTRUCTION - Code Generation (spending-tracker unit)
+
+## Spending Tracker — Build and Verify
+**Timestamp**: 2026-06-22T00:15:00Z
+**Build Status**: Success (web: vite build OK; api imports clean; `make spending` runs end-to-end, idempotent +0 on rerun).
+**Verification**: 1007 rows loaded (DBS 688 / Trust 310 / HSBC 9); 793 spend; total S$141.7k / 17 mo. Invariant PASS: 0 cc_payment rows counted as spend. Exclusions: income 274k, internal_transfer 70.8k, investment 27.7k, cc_payment 23.8k, brokerage 2k. Spend by group: Personal 66.6k, Uncategorized 49.1k (35%), Housing 14.7k, Topups 10.7k, Transport 0.6k.
+**Open items (need user input)**: TMLS recurring $98/mo GIRO biller; helper-salary PayNows; JB (MY) spend; DBS-card POS location codes — all currently Uncategorized.
+**Context**: CONSTRUCTION - Build and Verify (spending-tracker unit) complete
+
+## Spending Tracker — Manual Classification Round
+**Timestamp**: 2026-06-22T00:30:00Z
+**User Input**: Completed manual review of build/uncategorized_review.csv (172/174 rows labelled: Dining Out, Misc, Childcare, Shopping, Groceries, Other Transport, Insurance, 1 Exclude=SCL). "not too sure of the 3000+ stripe payment, make a note to inform me when this appears again since it looks recurring".
+**AI Response**: Persisted labels as data/spending/merchant_overrides.yaml (96 prefix-matched overrides + 1 exclude; same-merchant conflicts resolved by $-weight — STRIPE/WHAT2DO→Misc). classify_cash.py now applies overrides ahead of categories.yaml + handles manual excludes. Added data/spending/watchlist.yaml + watch_alerts(): every `make spending` prints "⚠ WATCH" for STRIPE PAYMENTS ≥ S$1,000 (2 hits: 2025-07-20, 2026-03-20). Saved assistant memory spending-stripe-watch.md. Result: uncategorized 0.3% (2 RED DOT rows, S$434); counted spend S$130.4k (SCL excluded). Groups: Personal 67.6%, Housing 15.3%, Topups 8.2%, Misc 7.9%, Transport 0.7%.
+**Context**: CONSTRUCTION - spending-tracker classification refinement
