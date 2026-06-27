@@ -8,6 +8,8 @@ import Dividends from "./modules/portfolio/Dividends.jsx";
 import Options from "./modules/portfolio/Options.jsx";
 import Transactions from "./modules/portfolio/Transactions.jsx";
 import NetWorth from "./modules/networth/NetWorth.jsx";
+import SpendOverview from "./modules/spending/Overview.jsx";
+import SpendTransactions from "./modules/spending/Transactions.jsx";
 
 const TABS = {
   Overview: Overview,
@@ -18,13 +20,20 @@ const TABS = {
   Transactions: Transactions,
 };
 
+const SPEND_TABS = {
+  Overview: SpendOverview,
+  Transactions: SpendTransactions,
+};
+
 export default function App() {
   const [section, setSection] = useState("Portfolio");
   const [tab, setTab] = useState("Overview");
+  const [spendTab, setSpendTab] = useState("Overview");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [ver, setVer] = useState(0);            // bump to remount active tab
   const View = TABS[tab];
+  const SpendView = SPEND_TABS[spendTab];
   const { user, logout } = useAuth() || {};
 
   async function refreshPrices() {
@@ -43,15 +52,18 @@ export default function App() {
     }
   }
 
+  const navItem = (name, testid) => (
+    <div className={"navitem" + (section === name ? " on" : "")}
+         data-testid={testid} onClick={() => setSection(name)}>{name}</div>
+  );
+
   return (
     <div className="app">
       <div className="side">
         <div className="brand">📊 MyApp</div>
-        <div className={"navitem" + (section === "Portfolio" ? " on" : "")}
-             data-testid="nav-portfolio" onClick={() => setSection("Portfolio")}>Portfolio</div>
-        <div className={"navitem" + (section === "Net Worth" ? " on" : " dim")}
-             data-testid="nav-networth" onClick={() => setSection("Net Worth")}>Net Worth</div>
-        <div className="navitem dim">Budget</div>
+        {navItem("Portfolio", "nav-portfolio")}
+        {navItem("Net Worth", "nav-networth")}
+        {navItem("Spending", "nav-spending")}
         <div className="navitem dim">Settings</div>
         {user && (
           <div className="side-user">
@@ -61,7 +73,7 @@ export default function App() {
         )}
       </div>
       <div className="main">
-        {section === "Portfolio" ? (
+        {section === "Portfolio" && (
           <>
             <div className="tabs">
               {Object.keys(TABS).map((t) => (
@@ -78,8 +90,19 @@ export default function App() {
             </div>
             <View key={ver} />
           </>
-        ) : (
-          <NetWorth />
+        )}
+        {section === "Net Worth" && <NetWorth />}
+        {section === "Spending" && (
+          <>
+            <div className="tabs">
+              {Object.keys(SPEND_TABS).map((t) => (
+                <div key={t} className={"tab" + (t === spendTab ? " on" : "")} onClick={() => setSpendTab(t)}>
+                  {t}
+                </div>
+              ))}
+            </div>
+            <SpendView />
+          </>
         )}
       </div>
     </div>
