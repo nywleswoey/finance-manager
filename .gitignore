@@ -22,3 +22,5 @@ data/*
 # misc
 .DS_Store
 .playwright-mcp/
+.vercel
+.env*
