@@ -128,6 +128,39 @@ class Dividend(Base):
     __table_args__ = (UniqueConstraint("dedup_hash", name="uq_div_dedup"),)
 
 
+# ---------------- spending (cash-flow ledger) ----------------
+class CashTxn(Base):
+    """One bank/credit-card cash-flow line — the spending ledger (distinct from the
+    securities `txn`). Outflows are spend candidates; `is_spend` is the filtered truth
+    after exclusions (credit-card bill payments, brokerage/internal transfers, income).
+
+    amount_sgd is SIGNED: negative = outflow (money leaving), positive = inflow.
+    Double-counting is avoided by excluding DBS->credit-card bill payments — the card's
+    own line items (HSBC/Trust statements) are the source of truth for that spend.
+    """
+    __tablename__ = "cash_txn"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(8))                    # dbs | hsbc | trust
+    account_label: Mapped[str] = mapped_column(String(32))            # DBS | HSBC Live+ | Trust
+    txn_date: Mapped[dt.date | None] = mapped_column(Date, index=True)
+    post_date: Mapped[dt.date | None] = mapped_column(Date)
+    description: Mapped[str | None] = mapped_column(Text)             # cleaned, multi-line joined
+    merchant: Mapped[str | None] = mapped_column(String(128))        # key used for categorization
+    amount_sgd: Mapped[Decimal | None] = mapped_column(MONEY)        # signed: -outflow / +inflow
+    fcy_amount: Mapped[Decimal | None] = mapped_column(MONEY)
+    fcy_currency: Mapped[str | None] = mapped_column(String(3))
+    direction: Mapped[str] = mapped_column(String(6))                # debit | credit
+    is_spend: Mapped[bool] = mapped_column(Boolean, default=False)
+    exclude_reason: Mapped[str | None] = mapped_column(String(24))   # cc_payment|brokerage_transfer|internal_transfer|income|refund|investment
+    category: Mapped[str | None] = mapped_column(String(48))
+    subcategory: Mapped[str | None] = mapped_column(String(48))
+    source_file: Mapped[str | None] = mapped_column(String(256))
+    raw: Mapped[str | None] = mapped_column(Text)
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("import_batch.id"))
+    dedup_hash: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (UniqueConstraint("dedup_hash", name="uq_cash_dedup"),)
+
+
 # ---------------- options ----------------
 class OptionTrade(Base):
     """One sold-option contract line (wheel strategy: cash-secured puts + covered calls).
