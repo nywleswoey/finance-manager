@@ -1,4 +1,5 @@
-.PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net
+.PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net \
+        flat-cash load-cash spending
 
 PY = PYTHONPATH=. .venv/bin/python
 AL = PYTHONPATH=. .venv/bin/alembic
@@ -26,6 +27,14 @@ prices:       ## fetch latest prices + FX (needs network)
 	$(PY) -m ingestion.prices
 
 ingest: flat load   ## full ingest: statements -> flat -> DB
+
+flat-cash:    ## parse bank/card statements -> classified spending ledger (build/cash_ledger.csv)
+	$(PY) build/parse_cash.py
+	$(PY) build/classify_cash.py
+load-cash:    ## load the spending ledger into DB (idempotent)
+	$(PY) -m ingestion.load_cash
+spending: flat-cash load-cash   ## full spending ingest: statements -> classify -> DB
+	@echo "spending ingested. (HSBC scanned PDFs are vision-extracted to build/hsbc_extracted.csv)"
 
 api:          ## run the API (serves built web/ at /)
 	$(PY) -m uvicorn server.main:app --reload --port 8000
