@@ -29,12 +29,28 @@ def _sgd(v, ccy, fx):
     return float(v) * fx.get(ccy or "SGD", 1.0)
 
 
+def _is_open(t):
+    """A contract is open only until it resolves. Expired-worthless legs carry
+    outcome='expired' with close_date=None (never bought back) — those are REALIZED,
+    not open. Fall back to close_date/realized_pl when outcome is unrecorded."""
+    if t.outcome == "open":
+        return True
+    if t.outcome:                                  # expired | closed | assigned
+        return False
+    return t.close_date is None and t.realized_pl is None
+
+
+def _realized_date(t):
+    """When the P/L was realized: buy-to-close date, else expiry (expired worthless)."""
+    return t.close_date or t.expiry_date
+
+
 def compute():
     s = SessionLocal()
     fx = _fx(s)
     trades = s.scalars(select(OptionTrade)).all()
 
-    by_year, by_ticker, by_type, by_ccy = {}, {}, {}, {}
+    by_year, by_month, by_ticker, by_type, by_ccy = {}, {}, {}, {}, {}
     total_pl = total_prem = 0.0
     wins = losses = closed = 0
     open_trades = []
@@ -48,8 +64,7 @@ def compute():
         pl_n = float(t.realized_pl or 0)
         pl = _sgd(t.realized_pl, ccy, fx)
         prem = _sgd((t.premium_open or 0) * (t.contracts or 0) * (t.multiplier or 100), ccy, fx)
-        is_open = t.close_date is None
-        if is_open:
+        if _is_open(t):
             open_trades.append(t)
             continue
         total_pl += pl
@@ -61,7 +76,9 @@ def compute():
             losses += 1
 
         yr = t.open_date.year if t.open_date else 0
-        for d, key in ((by_year, yr), (by_ticker, t.underlying), (by_type, t.option_type), (by_ccy, ccy)):
+        rd = _realized_date(t)
+        mo = f"{rd.year:04d}-{rd.month:02d}" if rd else "—"
+        for d, key in ((by_year, yr), (by_month, mo), (by_ticker, t.underlying), (by_type, t.option_type), (by_ccy, ccy)):
             row = bucket(d, key)
             row["trades"] += 1
             row["wins"] += 1 if pl_n > 0 else 0
@@ -90,6 +107,7 @@ def compute():
         "win_rate": round(wins / closed, 4) if closed else None,
         "open_trades": len(open_trades),
         "by_year": sorted(listify(by_year), key=lambda r: r["key"], reverse=True),
+        "by_month": sorted(listify(by_month), key=lambda r: r["key"]),
         "by_ticker": listify(by_ticker),
         "by_type": listify(by_type),
         "by_currency": listify(by_ccy),
@@ -103,7 +121,7 @@ def realized_by_ticker():
     fx = _fx(s)
     out = {}
     for t in s.scalars(select(OptionTrade)).all():
-        if t.close_date is None:                       # open trade — not yet realized
+        if _is_open(t):                                # not yet realized (expired legs ARE realized)
             continue
         r = out.setdefault(t.underlying, {"pl_sgd": 0.0, "pl_native": 0.0, "trades": 0,
                                           "currency": t.currency, "market": t.market})
@@ -122,7 +140,7 @@ def realized_by(dim):
     fx = _fx(s)
     agg = {}
     for t in s.scalars(select(OptionTrade)).all():
-        if t.close_date is None:
+        if _is_open(t):
             continue
         if dim == "market":
             key = t.market or "—"

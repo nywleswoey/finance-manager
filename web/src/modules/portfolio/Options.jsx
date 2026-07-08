@@ -14,6 +14,8 @@ export default function Options() {
 
   const yrChart = [...d.by_year].sort((a, b) => b.key - a.key)
     .map((r) => ({ year: String(r.key), pl: Math.round(r.pl_sgd) }));
+  const moAll = (d.by_month || []).map((r) => ({ month: r.key, pl: Math.round(r.pl_sgd), trades: r.trades }));
+  const moChart = moAll.slice(-24);
 
   return (
     <div>
@@ -40,6 +42,56 @@ export default function Options() {
             </BarChart>
           </ResponsiveContainer>
         </div>
+      </div>
+
+      <div className="card">
+        <h3>Realized P/L by Month&nbsp;<span className="pill">SGD · last {moChart.length}</span></h3>
+        {moChart.length === 0 ? <div className="mut">No realized months.</div> : (
+          <div style={{ width: "100%", height: 240 }}>
+            <ResponsiveContainer>
+              <BarChart data={moChart} margin={{ top: 20, right: 10, left: 0, bottom: 0 }}>
+                <XAxis dataKey="month" interval="preserveStartEnd" tick={{ fontSize: 11 }} />
+                <YAxis tickFormatter={(v) => (v / 1000) + "k"} />
+                <Tooltip formatter={(v, n, p) => [sgd(v), `P/L · ${p.payload.trades} trades`]} />
+                <Bar dataKey="pl">
+                  {moChart.map((e, i) => <Cell key={i} fill={e.pl >= 0 ? "#2ea043" : "#f85149"} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <h3>Trades&nbsp;<span className="pill">most recent {trades ? trades.length : 0}</span></h3>
+        {!trades ? <div className="loading">Loading…</div> : (
+          <div style={{ overflowX: "auto", maxHeight: 480, overflowY: "auto" }}>
+            <table>
+              <thead><tr>
+                <th className="l">Underlying</th><th className="l">Type</th><th>Qty</th><th>Strike</th>
+                <th className="l">Opened</th><th className="l">Closed</th>
+                <th>Prem.</th><th>Buyback</th><th className="l">Outcome</th><th>P/L (native)</th><th>P/L (SGD)</th>
+              </tr></thead>
+              <tbody>
+                {trades.map((t, i) => (
+                  <tr key={i}>
+                    <td className="l" style={{ fontWeight: 600 }}>{t.underlying}</td>
+                    <td className="l" style={{ textTransform: "capitalize" }}>{t.type}</td>
+                    <td>{fmt(t.contracts, 0)}</td>
+                    <td className="mut">{t.strike == null ? "—" : fmt(t.strike, 2)}</td>
+                    <td className="l mut">{t.open_date || "—"}</td>
+                    <td className="l mut">{t.close_date || "—"}</td>
+                    <td>{t.premium_open == null ? "—" : fmt(t.premium_open, 2)}</td>
+                    <td className="mut">{t.premium_close ? fmt(t.premium_close, 2) : "—"}</td>
+                    <td className="l mut">{t.outcome}</td>
+                    <td className={cls(t.realized_native)}>{money(t.realized_native, t.currency, 0)}</td>
+                    <td className={cls(t.realized_sgd)}>{sgd(t.realized_sgd)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <div className="grid2">
@@ -75,38 +127,6 @@ export default function Options() {
             </tbody>
           </table>
         </div>
-      </div>
-
-      <div className="card">
-        <h3>Trades&nbsp;<span className="pill">most recent {trades ? trades.length : 0}</span></h3>
-        {!trades ? <div className="loading">Loading…</div> : (
-          <div style={{ overflowX: "auto", maxHeight: 480, overflowY: "auto" }}>
-            <table>
-              <thead><tr>
-                <th className="l">Underlying</th><th className="l">Type</th><th>Qty</th><th>Strike</th>
-                <th className="l">Opened</th><th className="l">Closed</th>
-                <th>Prem.</th><th>Buyback</th><th className="l">Outcome</th><th>P/L (native)</th><th>P/L (SGD)</th>
-              </tr></thead>
-              <tbody>
-                {trades.map((t, i) => (
-                  <tr key={i}>
-                    <td className="l" style={{ fontWeight: 600 }}>{t.underlying}</td>
-                    <td className="l" style={{ textTransform: "capitalize" }}>{t.type}</td>
-                    <td>{fmt(t.contracts, 0)}</td>
-                    <td className="mut">{t.strike == null ? "—" : fmt(t.strike, 2)}</td>
-                    <td className="l mut">{t.open_date || "—"}</td>
-                    <td className="l mut">{t.close_date || "—"}</td>
-                    <td>{t.premium_open == null ? "—" : fmt(t.premium_open, 2)}</td>
-                    <td className="mut">{t.premium_close ? fmt(t.premium_close, 2) : "—"}</td>
-                    <td className="l mut">{t.outcome}</td>
-                    <td className={cls(t.realized_native)}>{money(t.realized_native, t.currency, 0)}</td>
-                    <td className={cls(t.realized_sgd)}>{sgd(t.realized_sgd)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
     </div>
   );
