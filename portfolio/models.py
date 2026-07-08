@@ -197,6 +197,33 @@ class OptionTrade(Base):
     __table_args__ = (UniqueConstraint("dedup_hash", name="uq_opt_dedup"),)
 
 
+# ---------------- CDP cost log ----------------
+class CdpCostLot(Base):
+    """CDP purchase/sale price log. CDP monthly statements carry share MOVEMENTS but omit
+    unit price, so the cost record lives here (was a runtime CSV: data/cdp-stocks/
+    transactions.csv). Distinct from `txn`: this table supplies COST only — units come from
+    the CDP `txn` rows — so the two are never double-counted (see performance.compute).
+
+    amount is SIGNED: negative = cash out (buy), positive = proceeds (sell).
+    """
+    __tablename__ = "cdp_cost_lot"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    trade_date: Mapped[dt.date | None] = mapped_column(Date, index=True)
+    code: Mapped[str] = mapped_column(String(24))                     # raw CDP code
+    ticker: Mapped[str] = mapped_column(String(24))                  # canonical (alias-resolved)
+    stock_name: Mapped[str | None] = mapped_column(String(128))
+    action: Mapped[str | None] = mapped_column(String(24))           # ipo | open market | sell | ...
+    qty: Mapped[Decimal] = mapped_column(QTY, default=0)
+    unit_price: Mapped[Decimal | None] = mapped_column(MONEY)
+    amount: Mapped[Decimal | None] = mapped_column(MONEY)            # signed: -buy / +sell
+    currency: Mapped[str | None] = mapped_column(String(3))
+    market: Mapped[str | None] = mapped_column(String(4))
+    source_file: Mapped[str | None] = mapped_column(String(256))
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("import_batch.id"))
+    dedup_hash: Mapped[str] = mapped_column(String(64))
+    __table_args__ = (UniqueConstraint("dedup_hash", name="uq_cdp_cost_dedup"),)
+
+
 # ---------------- valuation ----------------
 class Price(Base):
     __tablename__ = "price"

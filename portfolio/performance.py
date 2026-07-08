@@ -10,17 +10,11 @@ from __future__ import annotations
 import datetime as dt
 from collections import defaultdict
 
-import csv
-import datetime as _dt
-import os
-import re
-
 from sqlalchemy import text
 
 from .db import SessionLocal
 
 _ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}
-_ROOT = os.path.dirname(os.path.dirname(__file__))
 
 
 def _num(s):
@@ -36,55 +30,45 @@ def _num(s):
     return -v if neg else v
 
 
-def cdp_transactions():
-    """CDP trades from cdp-stocks.csv (with price + amount) for the transactions view —
-    the cost record the CDP statements omit. Returns txn-like dicts."""
-    out = []
-    p = os.path.join(_ROOT, "data", "cdp-stocks", "transactions.csv")
-    if not os.path.exists(p):
-        return out
-    for r in csv.DictReader(open(p, encoding="utf-8-sig")):
-        code = (r.get("Code") or "").upper()
-        out.append({
-            "trade_date": _try_date(r.get("Date")), "account": "CDP",
-            "ticker": _ALIAS.get(code, code), "name": (r.get("Stock Name") or "").strip(),
-            "action": (r.get("Action") or "").strip(), "qty_signed": _num(r.get("Qty")),
-            "price": _num(r.get("Unit Price")) or None, "gross_amount": _num(r.get("Amount")),
-            "currency": "SGD", "source_file": "cdp-stocks/transactions.csv",
-        })
-    return out
+def cdp_transactions(session=None):
+    """CDP trades from the cdp_cost_lot table (priced) for the transactions view — the cost
+    record the CDP statements omit. Loaded from data/cdp-stocks/transactions.csv by
+    ingestion.load_cdp_cost. Returns txn-like dicts."""
+    s = session or SessionLocal()
+    rows = s.execute(text(
+        "SELECT trade_date, ticker, stock_name, action, qty, unit_price, amount, currency "
+        "FROM cdp_cost_lot ORDER BY trade_date")).mappings().all()
+    if session is None:
+        s.close()
+    return [{
+        "trade_date": r["trade_date"].isoformat() if r["trade_date"] else None, "account": "CDP",
+        "ticker": r["ticker"], "name": r["stock_name"] or "", "action": r["action"] or "",
+        "qty_signed": float(r["qty"] or 0),
+        "price": float(r["unit_price"]) if r["unit_price"] is not None else None,
+        "gross_amount": float(r["amount"]) if r["amount"] is not None else None,
+        "currency": r["currency"] or "SGD", "source_file": "cdp-stocks/transactions.csv",
+    } for r in rows]
 
 
-def _try_date(s):
-    try:
-        return _dt.datetime.strptime((s or "").strip(), "%d-%b-%y").date().isoformat()
-    except (ValueError, AttributeError):
-        return None
-
-
-def cdp_cost():
-    """CDP cost/cashflows from cdp-stocks.csv (which has Unit Price + Amount; cdp-statements
-    don't). Keyed by canonical ticker -> {flows:[(date,cash)], invested}."""
+def cdp_cost(session=None):
+    """CDP cost/cashflows from the cdp_cost_lot table (Unit Price + Amount; cdp-statements
+    don't carry them). Keyed by canonical ticker -> {flows:[(date,cash)], invested}."""
+    s = session or SessionLocal()
+    rows = s.execute(text(
+        "SELECT ticker, trade_date, qty, amount FROM cdp_cost_lot")).all()
+    if session is None:
+        s.close()
     out = {}
-    p = os.path.join(_ROOT, "data", "cdp-stocks", "transactions.csv")
-    if not os.path.exists(p):
-        return out
-    for r in csv.DictReader(open(p, encoding="utf-8-sig")):
-        code = (r.get("Code") or "").upper()
-        code = _ALIAS.get(code, code)
-        cash = _num(r.get("Amount"))            # buys negative (cash out), sells positive
+    for ticker, d, qty, amount in rows:
+        cash = float(amount or 0)                # buys negative (cash out), sells positive
         if abs(cash) < 1e-9:
             continue
-        try:
-            d = _dt.datetime.strptime(r["Date"].strip(), "%d-%b-%y").date()
-        except (ValueError, KeyError):
-            d = _dt.date.today()
-        g = out.setdefault(code, {"flows": [], "invested": 0.0, "buy_cost": 0.0, "buy_qty": 0.0})
-        g["flows"].append((d, cash))
+        g = out.setdefault(ticker, {"flows": [], "invested": 0.0, "buy_cost": 0.0, "buy_qty": 0.0})
+        g["flows"].append((d or dt.date.today(), cash))
         if cash < 0:
             g["invested"] += -cash
             g["buy_cost"] += -cash
-            g["buy_qty"] += _num(r.get("Qty"))      # bought qty for avg-cost
+            g["buy_qty"] += float(qty or 0)      # bought qty for avg-cost
     return out
 
 # actions where qty*price is real cash paid/received (CPF/SRS CSVs use 'open market' etc.)
@@ -153,7 +137,7 @@ def compute(session=None):
         SELECT account_id, security_id, pay_date, gross, currency FROM dividend
     """)).mappings().all()
 
-    cdp = cdp_cost()
+    cdp = cdp_cost(s)
     # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
     # together, so a position transferred into FSM still carries its original CDP purchase cost.
     pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
