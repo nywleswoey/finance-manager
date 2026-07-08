@@ -24,6 +24,25 @@ make app       # build frontend + serve everything on http://localhost:8000
 
 Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `make api`.
 
+## Ingesting new data files
+
+Drop the new statement into its `data/` folder, then run the matching command. All loaders
+are idempotent (dedup by hash / duplicate-date skip) — safe to re-run.
+
+| New file in… | Command | What it does |
+|---|---|---|
+| `data/` broker statements (Tiger / Moomoo / FSM / CDP / Endowus) | `make ingest` | re-parse → `txn` + `dividend` (only net-new rows land) |
+| `data/*-cc`, bank/card statements | `make spending` | parse → classify → spending ledger |
+| — (market data) | `make prices` | refresh latest prices + FX (needs network) |
+| `data/dbs-consolidated-statements/dbs_YYYYMM.pdf` (+ latest `data/tiger-prime/`) | `make snapshot` → `make snapshot-commit` | preview, then write a net-worth snapshot per DBS month newer than the latest one (month-end dated) |
+
+One-off / backdated net-worth snapshot for a specific month:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 --date 2026-06-30            # dry-run
+PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 --date 2026-06-30 --commit  # write
+```
+
 ## What it does
 
 - **Ingestion** — Tiger / Moomoo / FSM / CDP / Endowus statements (CSV + PDF) →

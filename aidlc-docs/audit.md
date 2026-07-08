@@ -161,3 +161,9 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **User Input**: chose follow-up option 1 (add --all-new flag)
 **AI Response**: Refactored snapshot_from_statements.py: extracted build_snapshot(); added --all-new (forward-delta) that ingests DBS months strictly newer than the latest already-snapshotted month, each dated month-end. Guards: requires >=1 existing snapshot to anchor "latest"; refuses to backfill older un-ingested statements (tiger/FX/portfolio can't be reconstructed historically); per-date BR1 skip. Verified: nothing-new path, single-mode SKIP on existing date, and delta loop (temp fake 202607 -> previewed @ 2026-07-31, temp removed).
 **Context**: CONSTRUCTION - networth unit tooling
+
+## Ingestion Command Reference
+**Timestamp**: 2026-07-08T01:00:00Z
+**User Input**: "i need specific commands to be available for reference for ingesting new data files"
+**AI Response**: Added Makefile targets `snapshot` (dry-run --all-new) + `snapshot-commit` (--all-new --commit). Added README "Ingesting new data files" section: per-source table (broker->make ingest, bank/card->make spending, market->make prices, DBS->make snapshot/snapshot-commit) + one-off single-month snapshot commands. Verified `make snapshot`.
+**Context**: CONSTRUCTION - networth unit tooling/docs

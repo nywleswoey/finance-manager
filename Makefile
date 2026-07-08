@@ -1,5 +1,5 @@
 .PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net \
-        flat-cash load-cash spending
+        flat-cash load-cash spending snapshot snapshot-commit
 
 PY = PYTHONPATH=. .venv/bin/python
 AL = PYTHONPATH=. .venv/bin/alembic
@@ -35,6 +35,11 @@ load-cash:    ## load the spending ledger into DB (idempotent)
 	$(PY) -m ingestion.load_cash
 spending: flat-cash load-cash   ## full spending ingest: statements -> classify -> DB
 	@echo "spending ingested. (HSBC scanned PDFs are vision-extracted to build/hsbc_extracted.csv)"
+
+snapshot:     ## preview net-worth snapshots for DBS months newer than latest (dry-run)
+	$(PY) scripts/snapshot_from_statements.py --all-new
+snapshot-commit:   ## write those new net-worth snapshots to DB (forward-delta)
+	$(PY) scripts/snapshot_from_statements.py --all-new --commit
 
 api:          ## run the API (serves built web/ at /)
 	$(PY) -m uvicorn server.main:app --reload --port 8000
