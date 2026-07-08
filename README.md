@@ -37,6 +37,12 @@ Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `mak
   from `data/.archive/tiger-options/options.csv` by `ingestion/parse_options.py`; analytics in
   `portfolio/options.py` (realized P/L, premium collected, win-rate, by year/ticker/type, SGD at
   latest FX). API `/api/options`, `/api/options-trades`.
+- **Net-worth snapshots** — dated manual assets/liabilities + frozen live portfolio value →
+  net worth (and excl-housing / excl-housing-&-CPF) via `portfolio/networth.py`. Built from
+  broker/bank statements by `scripts/snapshot_from_statements.py` (Tiger Prime CSV cash +
+  MMF, DBS consolidated PDF Multiplier + SRS cash; other items carried forward; FX
+  auto-backfilled). Dry-run by default; `--commit` writes; `--all-new --commit` ingests each
+  DBS month newer than the latest snapshot (forward-delta, month-end dated).
 - **App** (`web/`) — Overview (tiles + allocation donuts), Holdings, Performance, Dividends,
   Options, Transactions. Modular shell so other modules (Net Worth, Budget…) slot in.
 
@@ -50,6 +56,7 @@ Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `mak
 | `portfolio/` | models, db, `performance.py`, `twr.py` |
 | `migrations/` | Alembic schema |
 | `scripts/seed.py` | reference-data seed |
+| `scripts/snapshot_from_statements.py` | net-worth snapshot from statements (`--all-new` delta) |
 | `api/` | FastAPI |
 | `web/` | React (Vite) app |
 
