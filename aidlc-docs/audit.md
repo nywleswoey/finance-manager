@@ -212,3 +212,11 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **User Input**: "approve" (code-gen plan)
 **AI Response**: Implemented per plan. Rewrote ingestion/parse_options.py (flex leg parser + _expiry YYYYMMDD fix caught in dry-run + reconciler + account-level prune on cutover + IBKR archive loader); added IBKR account to scripts/seed.py; carved data/ibkr-options/options.csv (8 rows ANF/GPS/HOG/WBA) with .gitignore exception; tests/test_options.py (9 tests). Build & Test: 33 tests pass (24+9); migrated local dev DB to head to fix an auth test hitting missing cdp_cost_lot (env). Loaded prod ep-shiny-star + local dev: 385 contracts (377 Tiger + 8 IBKR), latest open 2026-07-07, idempotent +0, realized_by_ticker 19 rows, IBKR orphans under IBKR account. All AC1-5 met. Unit options-flex COMPLETE.
 **Context**: CONSTRUCTION - Code Generation + Build & Test (unit: options-flex) — COMPLETE
+
+## Options Tab Reorg (bug fix + monthly view)
+**Timestamp**: 2026-07-09T00:00:00Z
+**User Input**: "using ai-dlc, i need to reorganise the options tab: 1. consolidated numbers doesn't match up. expired options shouldn't be left as open? 2. by underlying and by type are not as important as trades. swap their positions. 3. being able to see monthly p/l will be good" ; then "approve"
+**AI Response**: Brownfield targeted change on unit options-flex. Root cause of #1: compute()/realized_by/realized_by_ticker used is_open = (close_date is None); 277 outcome='expired' legs carry close_date=None (expired worthless, never bought back) -> miscounted OPEN and their realized P/L excluded via continue. Fix: added _is_open(t) [open only if outcome=='open'; expired/closed/assigned=realized; null-outcome fallback close_date+realized_pl None] and _realized_date(t)=close_date or expiry_date; applied to compute(), realized_by(), realized_by_ticker(). #3: added by_month bucket (realized-month key YYYY-MM) to compute(). #2 + #3 UI: web/src/modules/portfolio/Options.jsx — moved Trades table above By Underlying/By Type grid; added Realized P/L by Month bar chart (last 24 months) under year chart. Verify: open 286->9, trades_closed 376, win_rate 86.4%, sum(by_month)=sum(by_year)=total_pl 166425.98 (reconciles). Tests 33 pass; web build OK.
+**Context**: CONSTRUCTION - Code Generation + Build & Test (unit: options-flex) — reorg increment COMPLETE
+
+---
