@@ -167,3 +167,9 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **User Input**: "i need specific commands to be available for reference for ingesting new data files"
 **AI Response**: Added Makefile targets `snapshot` (dry-run --all-new) + `snapshot-commit` (--all-new --commit). Added README "Ingesting new data files" section: per-source table (broker->make ingest, bank/card->make spending, market->make prices, DBS->make snapshot/snapshot-commit) + one-off single-month snapshot commands. Verified `make snapshot`.
 **Context**: CONSTRUCTION - networth unit tooling/docs
+
+## Consolidated Delta Ingest — make ingest-all
+**Timestamp**: 2026-07-08T01:30:00Z
+**User Input**: "i need a consolidated command to ingest delta dbs consolidated statements, cdp-statements,dbs-cc,endowus statement,fsm,moomoo,tiger-cash-boost,tiger-prime and trust-cc"
+**AI Response**: Verified source->pipeline coverage: brokers (tiger-prime, tiger-cash-boost, moomoo, fsm, cdp-statements, endowus) -> make ingest (build_ledger + parse_dividends/parse_cdp/parse_endowus); spending (dbs-cc, trust-cc, dbs-consolidated) -> make spending (parse_cash/classify_cash); net-worth (dbs-consolidated + tiger-prime) -> make snapshot-commit; endowus NAV/FX -> make prices. Added Makefile target `ingest-all` = ingest + spending + (-)prices + snapshot-commit via $(MAKE) sub-calls (prices non-fatal). Verified idempotent: re-run shows txn +0/532, dividend +0/555, cash_txn +0/1424, prices 33 ok, snapshot nothing-new. Documented in README ingest section.
+**Context**: CONSTRUCTION - cross-unit ingestion tooling

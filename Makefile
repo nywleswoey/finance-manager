@@ -1,5 +1,5 @@
 .PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net \
-        flat-cash load-cash spending snapshot snapshot-commit
+        flat-cash load-cash spending snapshot snapshot-commit ingest-all
 
 PY = PYTHONPATH=. .venv/bin/python
 AL = PYTHONPATH=. .venv/bin/alembic
@@ -40,6 +40,12 @@ snapshot:     ## preview net-worth snapshots for DBS months newer than latest (d
 	$(PY) scripts/snapshot_from_statements.py --all-new
 snapshot-commit:   ## write those new net-worth snapshots to DB (forward-delta)
 	$(PY) scripts/snapshot_from_statements.py --all-new --commit
+
+ingest-all:   ## delta-ingest EVERY source: brokers + spending + prices + net-worth snapshots (all idempotent)
+	$(MAKE) ingest        # tiger-prime, tiger-cash-boost, moomoo, fsm, cdp-statements, endowus -> txn/dividend
+	$(MAKE) spending      # dbs-cc, trust-cc, dbs-consolidated -> spending ledger
+	-$(MAKE) prices       # endowus NAV + FX (needs network; non-fatal if offline)
+	$(MAKE) snapshot-commit   # new DBS months (+ tiger-prime) -> net-worth snapshots
 
 api:          ## run the API (serves built web/ at /)
 	$(PY) -m uvicorn server.main:app --reload --port 8000

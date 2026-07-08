@@ -26,8 +26,10 @@ Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `mak
 
 ## Ingesting new data files
 
-Drop the new statement into its `data/` folder, then run the matching command. All loaders
-are idempotent (dedup by hash / duplicate-date skip) — safe to re-run.
+Drop new statements into their `data/` folders, then **`make ingest-all`** — one command that
+delta-ingests every source (brokers + spending + prices + net-worth snapshots). All loaders are
+idempotent (dedup by hash / duplicate-date skip), so it's safe to re-run and only net-new data
+lands. Per-source commands below if you want to run just one pipeline.
 
 | New file in… | Command | What it does |
 |---|---|---|
