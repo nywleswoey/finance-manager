@@ -18,6 +18,10 @@ portfolio.html
 data/*
 # …except the dividend-rate reference (tickers/dates/rates, no account numbers)
 !data/dividends-master.csv
+# …and the IBKR options record (tickers/strikes/premiums — IBKR flex carries no trades,
+# so this hand-kept file is the only source; no account numbers)
+!data/ibkr-options/
+!data/ibkr-options/options.csv
 
 # misc
 .DS_Store

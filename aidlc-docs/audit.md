@@ -173,3 +173,42 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **User Input**: "i need a consolidated command to ingest delta dbs consolidated statements, cdp-statements,dbs-cc,endowus statement,fsm,moomoo,tiger-cash-boost,tiger-prime and trust-cc"
 **AI Response**: Verified source->pipeline coverage: brokers (tiger-prime, tiger-cash-boost, moomoo, fsm, cdp-statements, endowus) -> make ingest (build_ledger + parse_dividends/parse_cdp/parse_endowus); spending (dbs-cc, trust-cc, dbs-consolidated) -> make spending (parse_cash/classify_cash); net-worth (dbs-consolidated + tiger-prime) -> make snapshot-commit; endowus NAV/FX -> make prices. Added Makefile target `ingest-all` = ingest + spending + (-)prices + snapshot-commit via $(MAKE) sub-calls (prices non-fatal). Verified idempotent: re-run shows txn +0/532, dividend +0/555, cash_txn +0/1424, prices 33 ok, snapshot nothing-new. Documented in README ingest section.
 **Context**: CONSTRUCTION - cross-unit ingestion tooling
+
+---
+
+## New Unit: options-flex — Initial User Request
+**Timestamp**: 2026-07-08T00:00:00Z
+**User Input**: "my latest options transactions are in the tiger-broker file but not shown on the app" ... "using ai-dlc, pick option 1" (build a flex-options parser that reconciles tiger flex option legs into option_trade and retires the frozen archive dependency).
+**AI Response**: Diagnosed: option_trade is loaded by ingestion.parse_options from the frozen hand-export data/.archive/tiger-options/options.csv (341 reconciled contracts, latest open 2026-04-30). The live options now live in the tiger flex statements (tiger_prime_*.csv) -> build/ledger.csv as asset_type=option (503 legs, 2021-03-26 .. 2026-07-07), but load_ledger skips options and load_options doesn't read them, so 2026-05-01..07-07 options never reach the DB. Starting AI-DLC INCEPTION for new unit `options-flex`.
+**Context**: INCEPTION - Workspace Detection / Requirements (new unit: options-flex)
+
+---
+
+## Workspace Detection
+**Timestamp**: 2026-07-08T00:00:00Z
+**AI Response**: Resumed existing brownfield workspace (aidlc-state.md present). Prior units: networth, auth, spending-tracker (all Complete). New unit `options-flex` added. Reverse engineering not needed — options subsystem already located (ingestion/parse_options.py, portfolio/options.py, build/build_ledger.py option parsing, portfolio/models.OptionTrade). Proceeding to Requirements Analysis.
+**Context**: INCEPTION - Workspace Detection (brownfield resume)
+
+---
+
+## Requirements Analysis + Clarifications
+**Timestamp**: 2026-07-08T00:00:00Z
+**User Input**: Scope="Full replace"; Fees="the option fees are in the file?"
+**AI Response**: Investigated raw Tiger flex Trades section. Confirmed fees ARE in the raw file (per-file named header; fee columns [12]..[48] Commission/Platform/OptReg/etc.; Activity Type OpenShort/Close gives open/close explicitly; [49] Realized P/L as cross-check). Column offsets shift across years (2020=54 cols, 2021-26=53) -> must map columns by header NAME, not index. Decision: FULL REPLACE with REAL fees parsed from raw flex (fees=0/estimate tradeoff void). Wrote aidlc-docs/inception/requirements/options-flex-requirements.md (FR1-10, AC1-5). Extensions: Security Baseline N/A (local file parse, no auth/secrets/network); Property-Based Testing disabled per config.
+**Context**: INCEPTION - Requirements Analysis (unit: options-flex)
+
+---
+
+## Workflow Planning + Functional Design
+**Timestamp**: 2026-07-08T00:00:00Z
+**User Input**: [approve plan] "proceed"; then on orphan-scope question: "the ANF/GPS/HOG/WBA trades are from interactive brokers"
+**AI Response**: Prototyped reconciler against raw flex. Found: (1) symbol has 2 formats (bare + "Name (...)"); (2) older files leave Activity Type blank -> infer open/close by qty sign; (3) Tiger Realized P/L populated on close legs; (4) FULL REPLACE IS LOSSY — ANF/GPS/HOG/WBA (~$1,772 realized, closed 2022) exist in archive but NOT in any flex file. User clarified these are IBKR trades (IBKR flex exports carry no trades, so archive was their only record). Revised scope to HYBRID: Tiger options reconciled from flex (authoritative, real fees, retire archive for Tiger); IBKR orphans carved to data/ibkr-options/options.csv, loaded under a new IBKR account. Wrote aidlc-docs/construction/options-flex/functional-design/functional-design.md (algorithm, components, test plan). Skipped NFR/Infra (local parse). Awaiting approval to Code Generation.
+**Context**: CONSTRUCTION - Functional Design (unit: options-flex)
+
+---
+
+## Code Generation + Build & Test
+**Timestamp**: 2026-07-08T00:00:00Z
+**User Input**: "approve" (code-gen plan)
+**AI Response**: Implemented per plan. Rewrote ingestion/parse_options.py (flex leg parser + _expiry YYYYMMDD fix caught in dry-run + reconciler + account-level prune on cutover + IBKR archive loader); added IBKR account to scripts/seed.py; carved data/ibkr-options/options.csv (8 rows ANF/GPS/HOG/WBA) with .gitignore exception; tests/test_options.py (9 tests). Build & Test: 33 tests pass (24+9); migrated local dev DB to head to fix an auth test hitting missing cdp_cost_lot (env). Loaded prod ep-shiny-star + local dev: 385 contracts (377 Tiger + 8 IBKR), latest open 2026-07-07, idempotent +0, realized_by_ticker 19 rows, IBKR orphans under IBKR account. All AC1-5 met. Unit options-flex COMPLETE.
+**Context**: CONSTRUCTION - Code Generation + Build & Test (unit: options-flex) — COMPLETE

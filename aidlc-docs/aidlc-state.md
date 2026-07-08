@@ -55,10 +55,15 @@ Net-worth snapshot: maintain manual assets & liabilities (cash accounts, CPF, HD
 | networth | Complete (5 snapshots; latest DBS ingest Apr/May/Jun 2026 -> id=3/4/5 month-end dated; scripts/snapshot_from_statements.py) |
 | auth | Complete (24 tests pass; web build OK) |
 | spending-tracker | Code Generation + Verify complete — see construction/spending-tracker/code/summary.md |
+| options-flex | Complete — options reconciled from raw Tiger flex (retired archive); IBKR orphans under new IBKR account. 385 contracts (377 Tiger + 8 IBKR), latest 2026-07-07; 33 tests pass. See construction/options-flex/. |
 
 ## Current Status
-- **Current Stage**: spending-tracker unit — built & verified (`make spending` end-to-end,
-  idempotent; 793 spend rows / S$141.7k / 17mo; invariant: 0 cc-payments counted as spend).
-- **Open items (need user input)**: TMLS recurring GIRO biller, helper-salary PayNows,
-  JB (MY) spend, DBS-card POS codes — currently Uncategorized (~35% of spend by value).
-- **Next Stage**: refine `data/spending/categories.yaml` for the long tail; Deploy (DEPLOY.md).
+- **Current Stage**: options-flex unit — built & verified. `ingestion.parse_options` now reconciles
+  option contracts from the raw Tiger flex statements (per-file header map, Activity Type / qty-sign
+  open-close, real fees, Tiger Realized P/L), replacing the frozen `.archive/tiger-options` export.
+  IBKR orphans (ANF/GPS/HOG/WBA) carved to `data/ibkr-options/options.csv` under a new IBKR account.
+  385 contracts, latest open 2026-07-07; idempotent; 33 tests pass. Loaded to prod (ep-shiny-star)
+  + local dev DB.
+- **Known limitation**: HK option multiplier = 1 (pre-existing convention); HK realized approximate.
+- **Next Stage**: (options-flex) run loader against any other live DB (ep-royal-band) if still used;
+  Deploy already serves prod. Prior open items (spending categories long tail) still stand.

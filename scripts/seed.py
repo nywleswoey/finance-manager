@@ -26,6 +26,7 @@ ACCOUNTS = [
     ("CDP", "SGX CDP", "cash"),
     ("CPF", "CPF Investment Scheme", "cpf"),
     ("SRS", "SRS", "srs"),
+    ("IBKR", "Interactive Brokers", "cash"),   # options only (IBKR flex exports carry no trades)
 ]
 
 # curated display names + asset types (rest inferred)

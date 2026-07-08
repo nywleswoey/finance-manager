@@ -1,0 +1,9 @@
+Market,Ticker,Contracts,Strikeprice,OptionType,CreatedAt,CostCents, Fees ,Expiry Date,ClosedAt,Premium, Fees
+US,WBA,3,$40.00 , put ,18-May-22,$1.12 ,$1.30 ,17-Jun-22,10-Jun-22,($0.28),$2.21
+US,GPS,5,$10.00 , put ,3-Jun-22,$0.52 ,$0.52 ,15-Jul-22,15-Jul-22, $0.00   , $0.00
+US,HOG,5,$31.00 , put ,3-Jun-22,$0.88 ,$3.72 ,15-Jul-22,15-Jul-22, $0.00   , $0.00
+US,ANF,5,$18.00 , put ,4-Jun-22,$1.02 ,$0.52 ,15-Jul-22,15-Jul-22,($1.68),$1.49
+US,ANF,5,$16.00 , put ,15-Jul-22,$1.06 ,$3.77 ,19-Aug-22,8-Aug-22,($0.10),$2.94
+US,GPS,5,$10.00 , call ,18-Jul-22,$0.55 ,$3.71 ,16-Sep-22,16-Sep-22, $0.00   , $0.00
+US,GPS,5,$9.50 , call ,20-Sep-22,$0.56 ,$3.71 ,21-Oct-22,28-Sep-22,($0.16),$3.74
+US,GPS,5,$8.50 , call ,28-Sep-22,$0.45 ,$2.41 ,21-Oct-22,21-Oct-22, $0.00   , $0.00
