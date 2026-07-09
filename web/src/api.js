@@ -11,8 +11,8 @@ export async function get(path) {
   if (!r.ok) throw new Error(path + " " + r.status);
   return r.json();
 }
-export async function post(path, body) {
-  const opts = { method: "POST", ...CREDS };
+async function send(method, path, body) {
+  const opts = { method, ...CREDS };
   if (body !== undefined) {
     opts.headers = { "Content-Type": "application/json" };
     opts.body = JSON.stringify(body);
@@ -25,6 +25,8 @@ export async function post(path, body) {
   }
   return r.json();
 }
+export const post = (path, body) => send("POST", path, body);
+export const patch = (path, body) => send("PATCH", path, body);
 export async function del(path) {
   const r = on401(await fetch(base + path, { method: "DELETE", ...CREDS }));
   if (!r.ok) throw new Error(path + " " + r.status);

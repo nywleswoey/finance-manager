@@ -464,6 +464,23 @@ def nw_create(body: NwSnapshotIn):
         raise HTTPException(409 if "already exists" in str(e) else 400, str(e))
 
 
+class NwUpdateIn(BaseModel):
+    note: str | None = None
+    values: list[NwValueIn] = []
+
+
+@app.patch("/api/networth/snapshots/{snap_id}")
+def nw_update(snap_id: int, body: NwUpdateIn):
+    """Edit an existing snapshot's values (fill manual fields after a statement ingest)."""
+    try:
+        d = nw.update_snapshot(snap_id, [v.model_dump() for v in body.values], body.note)
+    except ValueError as e:
+        raise HTTPException(400, str(e))                    # bad FX / unknown item
+    if d is None:
+        raise HTTPException(404, "snapshot not found")
+    return d
+
+
 @app.delete("/api/networth/snapshots/{snap_id}")
 def nw_delete(snap_id: int):
     if not nw.delete_snapshot(snap_id):

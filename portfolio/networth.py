@@ -21,6 +21,11 @@ from sqlalchemy.orm import Session
 from .db import SessionLocal
 from .models import NwItem, NwSnapshot, NwValue
 
+# Catalogue codes auto-pulled from broker/bank statements (see scripts/snapshot_from_statements.py).
+# Everything else is manual: entered in-app or carried forward. Single source of truth so the UI
+# can flag which fields still need manual input and the ingest script stays in sync.
+AUTO_CODES = {"tiger_usd", "tiger_sgd", "tiger_hkd", "tiger_vault", "dbs_multiplier", "srs"}
+
 
 def live_portfolio_sgd(s: Session) -> Decimal:
     """Current live investment-portfolio market value in SGD (open positions),
@@ -60,6 +65,7 @@ def _item_dict(i: NwItem) -> dict:
         "id": i.id, "code": i.code, "label": i.label, "kind": i.kind,
         "currency_default": i.currency_default, "is_liquid": i.is_liquid,
         "is_housing": i.is_housing, "is_cpf": i.is_cpf, "sort_order": i.sort_order,
+        "is_manual": i.code not in AUTO_CODES,
     }
 
 
@@ -107,6 +113,7 @@ def _value_dict(v: NwValue) -> dict:
         "kind": v.item.kind, "native_value": float(v.native_value or 0),
         "currency": v.currency, "rate_to_sgd": float(v.rate_to_sgd or 1),
         "value_sgd": round(float(v.value_sgd or 0), 2),
+        "is_manual": v.item.code not in AUTO_CODES,
     }
 
 
@@ -176,6 +183,47 @@ def create_snapshot(date: dt.date, values: list[dict], note: str | None = None,
             rate = rate_for(s, ccy, date)
             s.add(NwValue(snapshot_id=snap.id, item_id=it.id, native_value=native,
                           currency=ccy, rate_to_sgd=rate, value_sgd=(native * rate)))
+        s.commit()
+        s.refresh(snap)
+        return snapshot_detail(snap)
+    finally:
+        if own:
+            s.close()
+
+
+def update_snapshot(snap_id: int, values: list[dict], note: str | None = None,
+                    s: Session | None = None) -> dict | None:
+    """Edit an existing snapshot in place — the path for filling manual fields (CPF, HDB,
+    loan, POSB, IBKR ...) after a statement ingest, without a duplicate-date conflict.
+
+    Only supplied items are changed; their FX rate is re-frozen at the snapshot's OWN date
+    (history stays stable) and value_sgd recomputed. Items not supplied and the frozen
+    portfolio_value_sgd are left untouched. Returns the detail, or None if the id is unknown."""
+    own = s is None
+    s = s or SessionLocal()
+    try:
+        snap = s.get(NwSnapshot, snap_id)
+        if snap is None:
+            return None
+        items = {i.code: i for i in s.scalars(select(NwItem).where(NwItem.active)).all()}
+        by_id = {i.id: i for i in items.values()}
+        existing = {v.item_id: v for v in snap.values}
+        for v in values:
+            it = by_id.get(v.get("item_id")) or items.get(v.get("code"))
+            if it is None:
+                raise ValueError(f"unknown item: {v.get('code') or v.get('item_id')}")
+            native = Decimal(str(v.get("native_value", 0) or 0))
+            ccy = (v.get("currency") or it.currency_default or "SGD").upper()
+            rate = rate_for(s, ccy, snap.date)
+            row = existing.get(it.id)
+            if row is None:                                 # item added after this snapshot
+                s.add(NwValue(snapshot_id=snap.id, item_id=it.id, native_value=native,
+                              currency=ccy, rate_to_sgd=rate, value_sgd=(native * rate)))
+            else:
+                row.native_value, row.currency = native, ccy
+                row.rate_to_sgd, row.value_sgd = rate, native * rate
+        if note is not None:
+            snap.note = note
         s.commit()
         s.refresh(snap)
         return snapshot_detail(snap)

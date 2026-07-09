@@ -53,8 +53,9 @@ from portfolio import networth
 DBS_DIR = "data/dbs-consolidated-statements"
 TIGER_GLOB = "data/tiger-prime/tiger_prime_*.csv"
 
-# Catalogue codes sourced from statements; everything else carries forward.
-STATEMENT_CODES = {"tiger_usd", "tiger_sgd", "tiger_hkd", "tiger_vault", "dbs_multiplier", "srs"}
+# Catalogue codes sourced from statements; everything else carries forward. Single source of
+# truth in portfolio.networth so the UI's manual/auto flag and this ingest never drift apart.
+STATEMENT_CODES = networth.AUTO_CODES
 
 
 def _num(s: str) -> Decimal:

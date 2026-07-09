@@ -120,6 +120,48 @@ class FxAndCreateTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             nw.create_snapshot(dt.date(2026, 6, 20), [], s=self.s)
 
+    def test_update_edits_only_supplied_and_refreezes(self):
+        d = nw.create_snapshot(dt.date(2026, 6, 20),
+                               [{"code": "posb", "native_value": 5000, "currency": "SGD"},
+                                {"code": "tiger_usd", "native_value": 100, "currency": "USD"}],
+                               s=self.s)
+        sid = d["id"]
+        # fill a manual field (cpf_oa) and change posb; tiger_usd left untouched
+        upd = nw.update_snapshot(sid, [{"code": "posb", "native_value": 8000, "currency": "SGD"},
+                                       {"code": "cpf_oa", "native_value": 50000, "currency": "SGD"}],
+                                 s=self.s)
+        by = {v["code"]: v for v in upd["values"]}
+        self.assertAlmostEqual(by["posb"]["value_sgd"], 8000, 2)          # changed
+        self.assertAlmostEqual(by["cpf_oa"]["value_sgd"], 50000, 2)       # newly filled
+        self.assertAlmostEqual(by["tiger_usd"]["value_sgd"], 100 * 1.36, 2)  # untouched
+        self.assertAlmostEqual(upd["portfolio_value_sgd"], 0, 2)          # frozen portfolio unchanged
+        self.assertAlmostEqual(upd["total_assets"], 8000 + 50000 + 100 * 1.36, 2)
+
+    def test_update_refreezes_fx_at_snapshot_date(self):
+        d = nw.create_snapshot(dt.date(2026, 6, 20),
+                               [{"code": "tiger_usd", "native_value": 100, "currency": "USD"}], s=self.s)
+        upd = nw.update_snapshot(d["id"],
+                                 [{"code": "tiger_usd", "native_value": 200, "currency": "USD"}], s=self.s)
+        by = {v["code"]: v for v in upd["values"]}
+        # rate re-frozen at the 2026-06-20 snapshot date -> latest <= that date is 1.36
+        self.assertAlmostEqual(by["tiger_usd"]["rate_to_sgd"], 1.36, 4)
+        self.assertAlmostEqual(by["tiger_usd"]["value_sgd"], 272, 2)
+
+    def test_update_missing_returns_none(self):
+        self.assertIsNone(nw.update_snapshot(9999, [], s=self.s))
+
+
+class ManualFlagTest(unittest.TestCase):
+    def setUp(self):
+        self.s = make_session()
+        seed_items(self.s)
+
+    def test_is_manual_on_catalogue(self):
+        by = {i["code"]: i for i in nw.catalogue(self.s)}
+        self.assertTrue(by["posb"]["is_manual"])        # not statement-sourced
+        self.assertTrue(by["cpf_oa"]["is_manual"])
+        self.assertFalse(by["tiger_usd"]["is_manual"])  # in AUTO_CODES
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

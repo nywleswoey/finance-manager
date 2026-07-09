@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { get, post, del, sgd, fmt, cls } from "../../api.js";
+import { get, post, patch, del, sgd, money, fmt, cls } from "../../api.js";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -33,6 +33,8 @@ export default function NetWorth() {
   if (err && !items) return <div className="loading">API not reachable: {err}</div>;
   if (!items) return <div className="loading">Loading…</div>;
 
+  const refreshSnaps = async () => setSnaps(await get("/api/networth/snapshots"));
+
   return (
     <div>
       <SummaryCards m={detail} />
@@ -41,6 +43,9 @@ export default function NetWorth() {
         <SnapshotForm items={items} prefill={detail} onSaved={reload} setErr={setErr} />
       </div>
       {err && <div className="nw-err" data-testid="networth-error">{err}</div>}
+      <Breakdown detail={detail}
+                 onSaved={(upd) => { setDetail(upd); refreshSnaps(); }}
+                 setErr={setErr} />
       <History snaps={snaps}
                onSelect={async (id) => setDetail(await get(`/api/networth/snapshots/${id}`))}
                onDelete={async (id) => { await del(`/api/networth/snapshots/${id}`); reload(); }} />
@@ -171,6 +176,77 @@ function SnapshotForm({ items, prefill, onSaved, setErr }) {
       ))}
       <button className="refresh-btn" onClick={save} disabled={busy} data-testid="snapshot-save">
         {busy ? "Saving…" : "Save snapshot (pulls live portfolio)"}
+      </button>
+    </div>
+  );
+}
+
+function Breakdown({ detail, onSaved, setErr }) {
+  // per-item breakdown of the selected snapshot; manual fields (CPF, HDB, loan, POSB, IBKR)
+  // are editable inline, auto-pulled fields are read-only.
+  const [edits, setEdits] = useState({});
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setEdits({}); }, [detail?.id]);        // reset when a different snapshot loads
+
+  if (!detail || !detail.values) return null;
+  const val = (v) => edits[v.code] ?? { native_value: v.native_value, currency: v.currency };
+  const set = (code, field, x) => setEdits((e) => {
+    const base = detail.values.find((r) => r.code === code);
+    const cur = e[code] ?? { native_value: base.native_value, currency: base.currency };
+    return { ...e, [code]: { ...cur, [field]: x } };
+  });
+  const dirty = Object.keys(edits).length > 0;
+
+  async function save() {
+    setBusy(true); setErr("");
+    try {
+      const values = Object.entries(edits).map(([code, r]) => ({
+        code, native_value: parseFloat(r.native_value) || 0, currency: r.currency,
+      }));
+      const upd = await patch(`/api/networth/snapshots/${detail.id}`, { values });
+      setEdits({});
+      onSaved(upd);
+    } catch (e) { setErr(e.message); } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 22 }} data-testid="networth-breakdown">
+      <h3>Breakdown&nbsp;<span className="pill">{String(detail.date)}</span>
+        {dirty && <span className="pill" style={{ background: "#d29922" }}>unsaved</span>}</h3>
+      <table>
+        <thead><tr>
+          <th style={{ textAlign: "left" }}>Item</th><th>Native</th><th className="l">Ccy</th>
+          <th>Rate</th><th>SGD</th><th></th>
+        </tr></thead>
+        <tbody>
+          {detail.values.map((v) => {
+            const r = val(v);
+            return (
+              <tr key={v.code}>
+                <td style={{ textAlign: "left" }}>{v.label}
+                  {v.kind === "liability" && <span className="pill">liab</span>}</td>
+                <td>{v.is_manual ? (
+                  <input type="number" step="0.01" value={r.native_value} style={{ width: 110 }}
+                         data-testid={"bd-input-" + v.code}
+                         onChange={(e) => set(v.code, "native_value", e.target.value)} />
+                ) : fmt(v.native_value, 2)}</td>
+                <td className="l">{v.is_manual && v.currency !== "SGD" ? (
+                  <select value={r.currency} onChange={(e) => set(v.code, "currency", e.target.value)}>
+                    {["SGD", "USD", "HKD"].map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                ) : v.currency}</td>
+                <td className="mut">{fmt(v.rate_to_sgd, 4)}</td>
+                <td>{money(v.value_sgd, "SGD", 0)}</td>
+                <td>{v.is_manual ? <span className="pill">manual</span>
+                                 : <span className="pill" title="pulled from statements">auto</span>}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      <button className="refresh-btn" style={{ marginTop: 12 }} onClick={save}
+              disabled={busy || !dirty} data-testid="breakdown-save">
+        {busy ? "Saving…" : dirty ? "Save manual fields" : "No changes"}
       </button>
     </div>
   );
