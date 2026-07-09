@@ -1,3 +1,5 @@
+import os
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,6 +24,17 @@ class Settings(BaseSettings):
     allowed_emails: str = ""             # comma-separated allowlist
     allowed_origins: str = "http://localhost:5173,http://localhost:8000"  # CORS
     cookie_secure: bool = True           # set false for local http dev
+    dev_auth_bypass: bool = False        # skip Google auth — LOCAL dev only (see auth_bypass_active)
+
+    @property
+    def auth_bypass_active(self) -> bool:
+        """Whether the auth gate should be bypassed (treat every request as a dev user).
+
+        Hard guard (SECURITY): the bypass is force-disabled whenever the VERCEL env var is
+        present, which every Vercel deployment sets. So DEV_AUTH_BYPASS=true can never unlock
+        a deployed environment even if the flag leaks into prod env vars — it is fail-safe by
+        construction and only ever active on a local machine."""
+        return self.dev_auth_bypass and not os.getenv("VERCEL")
 
     @property
     def allowed_email_set(self) -> set[str]:

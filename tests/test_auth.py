@@ -141,3 +141,34 @@ def test_logout_clears_cookie(client):
     client.cookies.set("session", tok)
     r = client.post("/api/auth/logout")
     assert r.status_code == 200
+
+
+# ---------------- local-dev auth bypass (DEV_AUTH_BYPASS) ----------------
+
+def test_bypass_off_by_default(monkeypatch):
+    monkeypatch.delenv("VERCEL", raising=False)
+    assert settings.dev_auth_bypass is False
+    assert settings.auth_bypass_active is False
+    assert auth.user_from_request(_Req()) is None      # no cookie, no bypass -> denied
+
+
+def test_bypass_grants_dev_user_without_cookie(monkeypatch):
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.setattr(settings, "dev_auth_bypass", True)
+    assert settings.auth_bypass_active is True
+    user = auth.user_from_request(_Req())              # no cookie at all
+    assert user["sub"] == "dev@localhost"
+
+
+def test_bypass_force_disabled_on_vercel(monkeypatch):
+    monkeypatch.setattr(settings, "dev_auth_bypass", True)   # flag ON...
+    monkeypatch.setenv("VERCEL", "1")                        # ...but deployed on Vercel
+    assert settings.auth_bypass_active is False              # guard wins
+    assert auth.user_from_request(_Req()) is None            # still fail-closed
+
+
+def test_bypass_opens_gate(client, monkeypatch):
+    monkeypatch.delenv("VERCEL", raising=False)
+    monkeypatch.setattr(settings, "dev_auth_bypass", True)
+    r = client.get("/api/overview")                    # no session cookie set
+    assert r.status_code != 401                        # gate let it through (handler may 500 w/o DB)

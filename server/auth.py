@@ -27,6 +27,9 @@ log = logging.getLogger("auth")
 
 COOKIE_NAME = "session"
 SESSION_TTL = dt.timedelta(days=7)
+# Synthetic user injected when settings.auth_bypass_active (local dev only). Never allowlisted
+# in prod — the bypass itself is force-disabled on Vercel (see config.auth_bypass_active).
+DEV_USER = {"sub": "dev@localhost", "name": "Local Dev"}
 _ALG = "HS256"
 _GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 
@@ -72,7 +75,13 @@ def verify_session(token: str) -> dict:
 def user_from_request(request: Request) -> dict | None:
     """Return the authenticated user claims, or None. Fail-closed (SECURITY-15):
     any missing/invalid/expired cookie, or an email no longer in the allowlist,
-    yields None."""
+    yields None.
+
+    Local-dev bypass: when settings.auth_bypass_active, return a synthetic dev user
+    without checking any cookie. That flag is force-disabled on Vercel, so this branch
+    can only be taken on a local machine."""
+    if settings.auth_bypass_active:
+        return dict(DEV_USER)
     token = request.cookies.get(COOKIE_NAME)
     if not token:
         return None

@@ -28,6 +28,10 @@ log = logging.getLogger("api")
 
 app = FastAPI(title="Portfolio API")
 
+if settings.auth_bypass_active:
+    log.warning("⚠️  DEV_AUTH_BYPASS active — auth gate DISABLED, every request is 'dev@localhost'. "
+                "Local dev only; this is force-off on Vercel.")
+
 # Endpoints reachable WITHOUT a session (login entry + liveness). Everything else
 # under /api/ is denied by default by the gate middleware (SECURITY-08).
 _PUBLIC_PATHS = {"/api/auth/google", "/api/auth/me", "/api/auth/logout", "/api/health"}
