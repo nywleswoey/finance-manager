@@ -68,9 +68,11 @@ def fsm():
         method = (r.get("Payment Method") or "").strip()
         acct = {"SRS": "SRS", "CPFIS-OA": "CPF"}.get(method, "FSM")
         name = re.sub(r"\s*(Cash Dividend|Cash in Lieu).*$", "", pn).strip()
-        add(date=r["Transaction Date"], account=acct, market="SG", ticker=code,
+        ccy = (r.get("Product Currency") or "SGD").strip()
+        mkt = "MY" if ccy.upper() == "MYR" else "SG"      # Bursa dividends land in MYR
+        add(date=r["Transaction Date"], account=acct, market=mkt, ticker=code,
             name=name, kind="cash", gross=amt,
-            currency=(r.get("Product Currency") or "SGD").strip(), source="fsm (stock dividend)")
+            currency=ccy, source="fsm (stock dividend)")
 
 # ---------- CDP cash dividends (maintained spreadsheet export) ----------
 # data/cdp-stocks/dividends.csv is the authoritative CDP dividend ledger (the prior

@@ -37,7 +37,7 @@ NAME = {
 ASSET_TYPE = {"0P0001OOJG": "fund", "0P00006FYT": "fund"}
 REITS = {"O5RU", "C38U", "UD1U", "N2IU", "CRPU", "SET", "CWBU", "BTOU", "S7OU", "P40U",
          "SV3U", "ADQU", "HMN", "9CI", "CMOU", "LIW", "H78", "CJLU"}
-CCY = {"US": "USD", "HK": "HKD", "SG": "SGD"}
+CCY = {"US": "USD", "HK": "HKD", "SG": "SGD", "MY": "MYR"}
 
 # ticker code changes / restructures (PLAN.md)
 CORP_ACTIONS = [

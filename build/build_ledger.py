@@ -50,7 +50,7 @@ def parse_date(s):
     return s  # leave raw if unknown
 
 LEDGER = []
-MARKET_CCY = {"SG": "SGD", "US": "USD", "HK": "HKD"}
+MARKET_CCY = {"SG": "SGD", "US": "USD", "HK": "HKD", "MY": "MYR"}
 def add(**k):
     k.setdefault("price", ""); k.setdefault("amount", ""); k.setdefault("fees", "")
     k.setdefault("currency", ""); k.setdefault("market", ""); k.setdefault("ticker", "")
@@ -95,6 +95,19 @@ def load_simple():
                 currency=(r.get("Currency") or "").strip(), source=rel, raw=r.get("Stock Name", ""))
 
 # ---------- Tiger flex statements (prime + cash boost) ----------
+# Per-trade fee columns in the Tiger flex Trades section (mirrors ingestion.parse_options._FEE_COLS;
+# kept local because build/ runs as a bare script without the repo root on sys.path).
+TIGER_FEE_COLS = [
+    "Transaction Fee", "Other Tripartite fees", "Settlement Fee", "SEC Fee",
+    "Option Regulatory Fee", "Stamp Duty", "Transaction Levy", "Clearing Fee",
+    "Trading Activity Fee", "Exchange Fee", "Future Regulatory Fee", "Commission",
+    "Platform Fee", "Option Settlement Fee", "Subscription Fee", "Redemption Fee",
+    "Switching Fee", "PH Stock Transaction Tax", "Tax Service Fee", "AFRC Transaction Levy",
+    "Trading Tariff", "Brokerage fee", "Handing Fee", "Securities Management Fee",
+    "Transfer Fees (CSDC)", "Transfer Fees (HKSCC)", "Stamp Duty On Stock Borrowing",
+    "Consolidated Audit Trail Fee", "Processing Fee", "CM DA SI Fee", "DVP SI Fee",
+    "IPO Transaction Fee", "IPO Process Fee", "Ipo Settle Fee", "IPO Channel Fee", "GST",
+]
 TIGER = [("tiger-prime/*.csv", "Tiger Prime"),
          ("tiger-cash-boost/*.csv", "Tiger Cash Boost")]
 def load_tiger():
@@ -106,7 +119,9 @@ def load_tiger():
                 if not row: continue
                 sec = row[0]
                 if sec == "Trades":
-                    if len(row) > 4 and row[3] == "HEADER": hdr = row; continue
+                    if len(row) > 4 and row[4] == "Symbol":            # flex header row
+                        hdr = {name: i for i, name in enumerate(row)}   # name -> col index
+                        continue
                     if len(row) > 8 and row[3] == "DATA":
                         atype = row[1]              # Stock / Option / Fund / Forex
                         sym = row[4]
@@ -129,10 +144,13 @@ def load_tiger():
                         # Tiger "Fund" trades are USD money-market cash sweeps -> treat as
                         # cash (not a tracked position); only real stocks/options reconcile.
                         atype_l = "cash" if atype == "Fund" else atype.lower()
+                        # sum the named fee columns for this trade (header map; offsets vary per file)
+                        fee = abs(sum(num(row[hdr[n]]) or 0 for n in TIGER_FEE_COLS
+                                      if hdr and n in hdr and hdr[n] < len(row)))
                         add(date=parse_date(tt), account=racct, market=mkt,
                             ticker=canon(norm_ticker(sym, mkt)), asset_type=atype_l,
                             action=("buy" if qty > 0 else "sell"), qty_signed=qty,
-                            price=row[9], amount=num(row[10]), fees="",
+                            price=row[9], amount=num(row[10]), fees=fee,
                             currency=row[-1], source=rel, raw=sym)
                 elif sec == "Transfer" and len(row) > 14 and row[3] == "DATA" and row[4] == "Stock":
                     # gifted / transferred-in shares (e.g. BABA, AMZN gifts)
@@ -165,10 +183,14 @@ def load_fsm():
         method = (r.get("Payment Method") or "").strip()
         fsm_acct = {"SRS": "SRS(via-iFast-dup)", "CPFIS-OA": "CPF(via-iFast-dup)"}.get(method, "FSM")
         qty = num(r.get("Quantity"))
+        # market from the trade's Product Currency (iFast trades Bursa Malaysia in MYR now);
+        # SG-centric otherwise. Drives ticker normalisation + the security's market/currency.
+        prod_ccy = (r.get("Product Currency") or "").strip().upper()
+        mkt = "MY" if prod_ccy == "MYR" else "SG"
         # only product names carrying a (CODE) are equity-like
         m = re.search(r"\(([^)]+)\)\s*$", pn)
         is_stock = bool(m) and "Cash Account" not in pn and "Auto-Sweep" not in pn
-        code = canon(norm_ticker(pn, "SG")) if is_stock else ""
+        code = canon(norm_ticker(pn, mkt)) if is_stock else ""
         action = t.lower()
         sign = FSM_POS.get(t)
         scrip = "Scrip" in pn
@@ -188,10 +210,11 @@ def load_fsm():
             if code == "S51" and pn.startswith("Seatrium"):
                 sign = -1
         qsig = (sign * abs(qty)) if (sign and is_stock and qty) else 0
-        add(date=parse_date(r.get("Transaction Date")), account=fsm_acct, market="SG",
+        add(date=parse_date(r.get("Transaction Date")), account=fsm_acct, market=mkt,
             ticker=code, asset_type=("stock" if is_stock else "cash"),
             action=action, qty_signed=qsig,
             price=r.get("Transaction Price", ""), amount=num(r.get("Product Amount")),
+            fees=num(r.get("Total Fee")),
             currency=(r.get("Product Currency") or "").strip(),
             source="fsm/ifast_historical.csv", raw=pn)
 

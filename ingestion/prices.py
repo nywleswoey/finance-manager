@@ -1,6 +1,6 @@
 """Phase 3: latest prices + FX into the DB.
 
-Stocks  -> Yahoo Finance (SG: <code>.SI, HK: <4-digit>.HK, US: <ticker>)
+Stocks  -> Yahoo Finance (SG: <code>.SI, HK: <4-digit>.HK, MY: <code>.KL, US: <ticker>)
 Fund    -> latest Endowus NAV (Amundi Prime USA)
 FX      -> Yahoo (USDSGD=X, HKDSGD=X, EURSGD=X); SGD = 1
 Only prices held securities (current_position). Run:
@@ -30,6 +30,8 @@ def yahoo_symbol(ticker, market):
         return f"{ticker}.SI"
     if market == "HK":
         return f"{int(ticker):04d}.HK"     # 00010 -> 0010.HK
+    if market == "MY":
+        return f"{ticker}.KL"              # Bursa Malaysia, e.g. 3255.KL
     return ticker                          # US
 
 
@@ -78,7 +80,7 @@ def main():
             print(f"  price fail {tk} ({market}): {type(e).__name__}")
     # FX -> SGD
     s.merge(FxRate(date=today, currency="SGD", rate_to_sgd=1))
-    for ccy in ("USD", "HKD", "EUR"):
+    for ccy in ("USD", "HKD", "EUR", "MYR"):
         try:
             rate, _ = yahoo_price(f"{ccy}SGD=X")
             s.merge(FxRate(date=today, currency=ccy, rate_to_sgd=rate))
