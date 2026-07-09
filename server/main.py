@@ -414,7 +414,7 @@ def accounts():
 import datetime as _dt
 
 from fastapi import HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from portfolio import networth as nw
 
@@ -619,6 +619,18 @@ def recurring_add(body: RecurringIn):
 def recurring_delete(rid: int):
     from portfolio.recurring import delete
     delete(rid)
+    return {"ok": True}
+
+
+class DismissIn(BaseModel):
+    merchant: str = Field(min_length=1, max_length=128)   # bounded input (SECURITY-05)
+
+
+@app.post("/api/spending/recurring/dismiss")
+def recurring_dismiss(body: DismissIn):
+    """Hide a detected-recurring merchant (false positive) from future suggestions."""
+    from portfolio.recurring import dismiss
+    dismiss(body.merchant.strip())
     return {"ok": True}
 
 

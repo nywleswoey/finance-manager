@@ -46,6 +46,11 @@ export default function Recurring() {
     setVer((v) => v + 1);
   }
 
+  async function dismiss(merchant) {
+    await post("/api/spending/recurring/dismiss", { merchant });
+    setVer((v) => v + 1);
+  }
+
   function addCandidate(c) {
     setForm({
       name: c.merchant.slice(0, 40), merchant_match: c.merchant.slice(0, 40),
@@ -105,7 +110,7 @@ export default function Recurring() {
                     {r.amount_drift == null ? "—" : (r.amount_drift > 0 ? "+" : "") + sgd(r.amount_drift)}</td>
                   <td className="l mut">{r.last_seen || "—"}</td>
                   <td className="mut">{r.typical_day || "—"}</td>
-                  <td className="l">{r.next_due || "—"}</td>
+                  <td className="l">{r.next_due || "—"}{r.shift && <span className="mut" title={"shifted to " + r.shift + " business day (weekend)"}>&nbsp;{shiftArrow(r.next_due)}</span>}</td>
                   <td className="l"><Badge status={r.status} /></td>
                   <td><button className="link-btn" onClick={() => remove(r.id)} title="Delete">✕</button></td>
                 </tr>
@@ -132,7 +137,10 @@ export default function Recurring() {
                   <td>{sgd(c.avg_amount)}</td>
                   <td className="mut">{c.typical_day}</td>
                   <td className="l mut">{c.last_seen}</td>
-                  <td><button className="link-btn" onClick={() => addCandidate(c)}>+ Track</button></td>
+                  <td style={{ whiteSpace: "nowrap" }}>
+                    <button className="link-btn" onClick={() => addCandidate(c)}>+ Track</button>
+                    &nbsp;<button className="link-btn mut" onClick={() => dismiss(c.merchant)} title="Not recurring — dismiss">✕</button>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -141,6 +149,12 @@ export default function Recurring() {
       </div>
     </div>
   );
+}
+
+function shiftArrow(iso) {
+  // iso is the business-day-adjusted next_due; label its weekday so the shift is visible
+  const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][new Date(iso + "T00:00:00").getDay()];
+  return "→" + wd;
 }
 
 function Badge({ status }) {

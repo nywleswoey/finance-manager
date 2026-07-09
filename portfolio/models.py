@@ -180,6 +180,19 @@ class RecurringSpend(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class RecurringDismissed(Base):
+    """A detected-recurring merchant the user dismissed as a false positive. Auto-detection
+    (portfolio.recurring.detect_candidates) skips any merchant listed here, so a rejected
+    suggestion never resurfaces. Manual tracking is unaffected — a dismissed merchant can
+    still be added by hand as a RecurringSpend.
+    """
+    __tablename__ = "recurring_dismissed"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    merchant: Mapped[str] = mapped_column(String(128))               # exact detected merchant string
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("merchant", name="uq_recurring_dismissed_merchant"),)
+
+
 # ---------------- options ----------------
 class OptionTrade(Base):
     """One sold-option contract line (wheel strategy: cash-secured puts + covered calls).
