@@ -244,3 +244,11 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **Context**: CONSTRUCTION - Code Generation + Build & Test (auth unit — local dev bypass increment) — COMPLETE
 
 ---
+
+## Recurring Spends (new unit: spending-recurring)
+**Timestamp**: 2026-07-09T00:00:00Z
+**User Input**: "using ai-dlc, i want to track/input recurrent spendings and understand when they happen" ; clarifications -> Source="Manual registry + auto-detect"; Storage="DB table + in-app add form"; Timing view="Per-item: last seen / next due / day-of-month" ; then "go"
+**AI Response**: New user-facing feature over existing spending domain (cash_txn ledger). Model RecurringSpend + migration e7f8a9b0c1d2 (recurring_spend: name, merchant_match, category, cadence[weekly|monthly|quarterly|annual], expected_amount, expected_day, active, notes). portfolio/recurring.py: list_recurring() matches cash_txn by merchant ILIKE -> occurrences, computes last_seen/last_amount/typical_day(median)/avg/next_due(_add_period calendar-month aware, month-end clamp)/amount_drift/status(overdue|due_soon|on_track|no_data|inactive); add()/delete(); detect_candidates() groups ledger by merchant, >=3 occ + regular median gap (_infer_cadence 0.7-1.3x nominal) + amount spread<=0.35 -> suggestions, excludes already-registered. API: GET/POST/DELETE /api/spending/recurring + GET .../detect (RecurringIn pydantic). Frontend: new Spending tab 'Recurring' (Recurring.jsx) — tiles(tracked/overdue/est-per-period/detected), add form, tracked table (name/merchant/cadence/expected/last-amt/drift/last-seen/typ-day/next-due/status badge/delete), Detected panel with +Track prefill; App.jsx SPEND_TABS; .link-btn css. watchlist.yaml left as-is. Verify: migration applied; 17 new pure-fn tests pass (_add_months leap/clamp, _add_period, _status, _infer_cadence); live e2e list/add/delete/detect(19 candidates) OK; web build OK. NOTE: 6 test_auth failures are pre-existing env artifact (.env DEV_AUTH_BYPASS=true enables local bypass; tests assert off-by-default) — orthogonal to this unit, not touched.
+**Context**: CONSTRUCTION - Code Generation + Build & Test (unit: spending-recurring) — COMPLETE
+
+---
