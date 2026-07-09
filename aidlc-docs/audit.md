@@ -220,3 +220,11 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **Context**: CONSTRUCTION - Code Generation + Build & Test (unit: options-flex) — reorg increment COMPLETE
 
 ---
+
+## Code Generation (unit: options-flex) — monthly P/L amount labels
+**Timestamp**: 2026-07-09T00:33:00Z
+**User Input**: "using ai-dlc show the amount as well for the monthly p/l for options"
+**AI Response**: Brownfield micro-increment on web/src/modules/portfolio/Options.jsx. Realized P/L by Month bar chart had color-coded bars + tooltip only, no always-visible amounts (year chart already had LabelList). Added <LabelList dataKey="pl" position="top" fontSize={9} formatter={kfmt}> to monthly Bar; kfmt = compact k-format (>=1000 -> "x.xk", else raw) since 24 bars are thin. Applied standing chart convention (most recent on LEFT): monthly data was slice(-24) ascending = newest on right; changed to .slice(-24).reverse() so newest is leftmost, matching year chart + preference. X-axis kept interval="preserveStartEnd" to avoid crowding. Verify: npm run build OK (841 modules, built 1.12s).
+**Context**: CONSTRUCTION - Code Generation (unit: options-flex) — monthly amount labels COMPLETE
+
+---
