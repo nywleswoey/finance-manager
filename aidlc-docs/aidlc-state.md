@@ -59,6 +59,19 @@ Net-worth snapshot: maintain manual assets & liabilities (cash accounts, CPF, HD
 | options-flex | Complete — options reconciled from raw Tiger flex (retired archive); IBKR orphans under new IBKR account. 385 contracts (377 Tiger + 8 IBKR), latest 2026-07-07; 33 tests pass. See construction/options-flex/. Reorg 2026-07-09: fixed expired-as-open bug (open 286->9, realized P/L reconciles, sum by_month=by_year=166425.98), added by_month; UI Trades moved above By-Underlying/Type grid + monthly P/L chart. |
 
 ## Current Status
+- **2026-07-09 (FSM + Malaysia)**: loaded latest iFast delta (data/fsm/ifast_20260709.csv, 20 rows May–Jul 2026
+  appended into ifast_historical.csv — disjoint by date). Added Bursa Malaysia / MYR market: FSM parsers now
+  infer market from Product Currency (MYR→MY, else SG) instead of hardcoding SG (build_ledger.py + parse_dividends.py);
+  seed.py CCY += MY:MYR; symbols.csv 3255→HEIM (Heineken Malaysia Bhd); prices.py yahoo_symbol MY→.KL + MYR FX.
+  Verified end-to-end: HEIM buy 1600 @ 19.34 MYR loaded, seeded MY/MYR, priced 19.30 MYR (.KL), MYR FX 0.3167,
+  mv_sgd 9779.70. Full suite 68 pass. Fee (70.91 MYR) not captured (consistent w/ existing FSM handling).
+- **2026-07-09 (trade fees)**: fees were dead plumbing (column in ledger+txn but never populated/loaded/used).
+  Now captured + folded into cost basis. build_ledger: load_fsm emits Total Fee; load_tiger sums flex fee columns
+  per trade via header map (fixed latent bug — Trades header is row[4]=='Symbol', not row[3]=='HEADER', so hdr was
+  always None). load.load_ledger maps fees→txn.fees (+ in upsert cols). performance.compute folds fee into
+  invested (buy) / proceeds (sell) in native ccy → flows through P/L, XIRR, TWR; exposes fees_sgd per position.
+  Options fees stay in option_trade (no double-count). Verified: HEIM invested 31014.91 = 1600*19.34 + 70.91;
+  total pl_sgd 327269.55→325801.68 (fees ~1468), total stock fees_sgd 1555.91; 68 tests pass.
 - **Current Stage**: options-flex unit — built & verified. `ingestion.parse_options` now reconciles
   option contracts from the raw Tiger flex statements (per-file header map, Activity Type / qty-sign
   open-close, real fees, Tiger Realized P/L), replacing the frozen `.archive/tiger-options` export.
