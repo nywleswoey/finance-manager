@@ -48,6 +48,91 @@ def ffill(series, days):
     return out
 
 
+# unit inflows that are RETURN in kind, not an external contribution (keep them in the return)
+RETURN_IN_KIND = {"stock dividend", "bonus issuance"}
+
+
+def _twr(days, txns, prices, ccy_of, fx):
+    """True time-weighted return: chain-linked daily sub-period returns over the daily-priced
+    sleeve. Each day r_t = (MV_t - C_t) / MV_{t-1}, where C_t is the net external contribution.
+
+    C_t is the market value of that day's unit changes (shares entering/leaving — buy, sell,
+    transfer, switch, IPO...), valued at the SAME daily price used for MV so a new position
+    nets out instead of registering as return. Many source rows carry no price (transfers/
+    opens), so we value by unit delta, not txn price. Stock dividends / bonus shares are return
+    in kind — excluded from C_t. Returns (cumulative, annualised)."""
+    import bisect
+
+    price_sids = [sid for sid, p in prices.items() if p]
+    cum = {}                                            # sid -> (sorted dates, running units)
+    for sid in price_sids:
+        evs = sorted((t["trade_date"], float(t["qty_signed"])) for t in txns if t["security_id"] == sid)
+        d_, u_, run = [], [], 0.0
+        for dd, q in evs:
+            run += q
+            d_.append(dd)
+            u_.append(run)
+        cum[sid] = (d_, u_)
+
+    def units(sid, day):
+        d_, u_ = cum[sid]
+        i = bisect.bisect_right(d_, day) - 1
+        return u_[i] if i >= 0 else 0.0
+
+    def price_on(sid, day):
+        px = prices[sid].get(day)
+        if px is not None:
+            return px
+        fut = [d for d in prices[sid] if d >= day]      # pre-history buy: nearest forward close
+        return prices[sid][min(fut)] if fut else None
+
+    def mv(day):
+        tot = 0.0
+        for sid in price_sids:
+            u = units(sid, day)
+            if u <= 1e-9:
+                continue
+            px = prices[sid].get(day)
+            if px is None:
+                continue
+            tot += u * px * fx.get(ccy_of[sid], {}).get(day, 1.0)
+        return tot
+
+    contrib = defaultdict(float)                        # day -> net external contribution (SGD)
+    for sid in price_sids:
+        per = defaultdict(float)
+        for t in txns:
+            if t["security_id"] == sid and t["action"] not in RETURN_IN_KIND:
+                per[t["trade_date"]] += float(t["qty_signed"])
+        for day, dq in per.items():
+            if abs(dq) < 1e-9:
+                continue
+            px = price_on(sid, day)
+            if px is None:
+                continue
+            contrib[day] += dq * px * fx.get(ccy_of[sid], {}).get(day, 1.0)
+
+    factor, prev_mv, first_live = 1.0, None, None
+    for day in days:
+        m = mv(day)
+        if prev_mv is not None and prev_mv > 1e-6:
+            r = (m - contrib.get(day, 0.0)) / prev_mv
+            if r > 0:                                   # guard against bad/gap data
+                factor *= r
+        if m > 1e-6:
+            prev_mv = m
+            if first_live is None:
+                first_live = day
+        elif prev_mv is not None:
+            prev_mv = m                                 # went flat; keep chaining from here
+
+    if first_live is None:
+        return None, None
+    yrs = max((days[-1] - first_live).days / 365.0, 0.1)
+    ann = factor ** (1 / yrs) - 1
+    return factor - 1, ann
+
+
 def compute_twr():
     s = SessionLocal()
     held = s.execute(text(
@@ -112,13 +197,16 @@ def compute_twr():
     if mv > 0:
         flows.append((today, mv))
     xirr = _xirr(flows)
+    twr_cum, twr_ann = _twr(days, txns, prices, ccy_of, fx)
     invested = sum(-a for _, a in flows if a < 0)
     received = sum(a for _, a in flows if a > 0)
     years = max((today - start).days / 365.0, 0.1)
     return {"xirr_annualised": round(xirr, 4) if xirr is not None else None,
+            "twr_annualised": round(twr_ann, 4) if twr_ann is not None else None,
+            "twr_cumulative": round(twr_cum, 4) if twr_cum is not None else None,
             "invested_sgd": round(invested, 0), "value_plus_income_sgd": round(received, 0),
             "years": round(years, 1), "from": str(start),
-            "note": "money-weighted (historical FX); fund excluded from daily series"}
+            "note": "money-weighted (XIRR) + time-weighted (TWR); fund excluded from daily series"}
 
 
 if __name__ == "__main__":
