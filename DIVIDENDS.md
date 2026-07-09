@@ -80,12 +80,62 @@ Totals: **CPF SGD 17,648**; **SRS SGD 8,620 + EUR 7,803**.
 - **Scrip dividends** deliver shares, not cash → already handled in the position ledger,
   excluded here.
 
-## Re-generate
+## Pipeline (end-to-end)
 
-```bash
-python3 build/parse_dividends.py     # -> build/dividends.csv
-python3 build/build_viewer.py        # viewer shows dividends per security
+Statements are the only source of truth; everything downstream is regenerated, idempotent,
+and safe to re-run. The `dividend` Postgres table is the store of record; the two CSVs are
+a build cache (`build/dividends.csv`) and a derived reference (`data/dividends-master.csv`).
+
+```
+data/**  (broker statements: tiger-prime, fsm, cdp-stocks, moomoo, cpf/srs …)
+  │
+  ├─ make flat   build/parse_dividends.py  ──►  build/dividends.csv   (549 rows, all sources merged + deduped)
+  │              (also parse_moomoo / parse_cdp / parse_endowus / build_ledger)
+  │
+  ├─ make load   ingestion.load  →  load_dividends()  ──►  Postgres `dividend` table
+  │              │   idempotent upsert keyed on dedup_hash = h(account,ticker,date,gross,source,occ#);
+  │              │   mutable fields (gross/net/currency/rate/units) refreshed in place;
+  │              │   rows that vanish from the CSV are pruned.
+  │              └─ build/export_dividends_master.py  ──►  data/dividends-master.csv
+  │                  (one row per distinct dividend event: date, ex_date, ticker, rate_per_unit, currency;
+  │                   rate = gross / qty-at-ex-date, account-independent, deduped across accounts)
+  │
+  └─ server/main.py   /api/dividends · /api/dividend-details · /api/dividends-annual
+                      web/src/modules/portfolio/Dividends.jsx  (annual matrix + per-payment detail table)
 ```
 
+`make ingest` runs `flat` then `load` in one shot. `make ingest-all` also folds in spending,
+prices/FX, and net-worth snapshots. Everything is delta/idempotent — re-running never
+double-counts (dedup_hash guards it).
+
+### Adding a new dividend (statement arrives)
+
+Normal case — the dividend **is already in a new statement**:
+
+1. Drop the new statement into its `data/<broker>/` folder (same as any position update).
+2. `make ingest` — reparse → `build/dividends.csv` → upsert into DB → re-export master.
+3. Only genuinely new payments insert; corrected amounts update in place. Check the printed
+   "NEW rows" count. Refresh the API/`app` to see it in the Dividends tab.
+
+Manual case — a payment **no statement carries** (e.g. a CPF/SRS holding, whose transaction
+files have no dividend lines):
+
+1. Add the row to the relevant hand-tracker CSV — `data/cpf-srs-dividends.csv` for CPF/SRS,
+   or `data/cdp-stocks/dividends.csv` for CDP — matching its column layout
+   (`date, account, market, ticker, name, kind, gross, units, rate, currency, source`).
+2. `make ingest` picks it up via the parser's `cpf_srs()` / `cdp()` readers.
+3. If it's a brand-new ticker, seed it first (`make seed`) so the loader can map the alias —
+   otherwise `load_dividends()` maps `security_id=null` and it shows as **unmapped ticker**.
+
+Fixing a wrong amount: edit the source statement/tracker row and re-`make ingest`; the upsert
+overwrites (same dedup_hash) — do **not** hand-edit `data/dividends-master.csv`, it's regenerated.
+
+### Manual-input flags
+
+`/api/dividend-details` flags rows that need a human: **qty unknown** (no declared rate and no
+replayable ledger qty), **no date** (old CDP layout), **unmapped ticker**. The Dividends tab
+has a "flagged only" filter. ~34 of 466 rows currently need input (mostly dateless 2017-18 CDP).
+Resolve by adding the missing rate/date/units to the source tracker row and re-ingesting.
+
 This is **Phase 2 (dividends) of [PLAN.md](PLAN.md) front-loaded** — `dividends.csv` maps
-directly onto the planned `dividend` table and makes total-return computable.
+directly onto the `dividend` table and makes total-return computable.
