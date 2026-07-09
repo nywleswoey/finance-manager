@@ -92,11 +92,11 @@ def load_ledger(session, acct, alias):
         payload.append(dict(
             account_id=a.id, security_id=sid, trade_date=pdate(r["date"]),
             action=r["action"], qty_signed=num(r["qty_signed"]) or 0,
-            price=num(r["price"]), gross_amount=num(r["amount"]),
+            price=num(r["price"]), gross_amount=num(r["amount"]), fees=num(r.get("fees")),
             currency=(r["currency"] or None), funding_bucket=BUCKET.get(r["account"]),
             source_file=r["source"], raw=r["raw"], batch_id=b.id, dedup_hash=dh,
         ))
-    return upsert(session, Txn, payload, ["gross_amount", "price", "currency"])
+    return upsert(session, Txn, payload, ["gross_amount", "price", "currency", "fees"])
 
 
 def load_dividends(session, acct, alias):

@@ -130,7 +130,7 @@ def compute(session=None):
     rows = s.execute(text("""
         SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
                sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
-               t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount
+               t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount, t.fees
         FROM txn t JOIN account a ON a.id=t.account_id JOIN security sec ON sec.id=t.security_id
     """)).mappings().all()
     divs = s.execute(text("""
@@ -141,7 +141,8 @@ def compute(session=None):
     # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
     # together, so a position transferred into FSM still carries its original CDP purchase cost.
     pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
-                                "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "accounts": set()})
+                                "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
+                                "accounts": set()})
     meta = {}
     for r in rows:
         k = (r["funding_bucket"], r["security_id"])
@@ -153,8 +154,12 @@ def compute(session=None):
             continue                                   # CDP cost comes from cdp-stocks below
         act = r["action"]
         px = float(r["price"]) if r["price"] is not None else None
+        fee = abs(float(r["fees"])) if r["fees"] is not None else 0.0   # native ccy, same as px*qty
         if act in CASH_TRADE and px:
             cash = -float(r["qty_signed"]) * px
+            # fees are a real cost: bigger outflow on a buy, smaller net inflow on a sell
+            cash -= fee
+            p["fees"] += fee
             p["flows"].append((r["trade_date"] or today, cash))
             if cash < 0:
                 p["invested"] += -cash
@@ -266,7 +271,7 @@ def compute(session=None):
             "unrealised_pl_sgd": round(unreal * rate, 2) if unreal is not None else None,
             "realised_pl_sgd": round(realised * rate, 2) if realised is not None else None,
             "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
-            "cost_known": cost_known,
+            "fees_sgd": round(p["fees"] * rate, 2), "cost_known": cost_known,
             "total_pl_native": round(total_pl, 2) if cost_known else None,
             "invested_sgd": round(p["invested"] * rate, 2) if cost_known else 0.0,
             "mv_sgd": round(mv * rate, 2), "income_sgd": round(p["income"] * rate, 2),
