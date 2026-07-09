@@ -53,7 +53,7 @@ Net-worth snapshot: maintain manual assets & liabilities (cash accounts, CPF, HD
 | Unit | Status |
 |---|---|
 | networth | Complete (5 snapshots; latest DBS ingest Apr/May/Jun 2026 -> id=3/4/5 month-end dated; scripts/snapshot_from_statements.py) |
-| auth | Complete (24 tests pass; web build OK) |
+| auth | Complete (web build OK). 2026-07-09: added DEV_AUTH_BYPASS local-dev flag — skips Google auth via single chokepoint user_from_request; force-OFF on Vercel (guard: dev_auth_bypass AND NOT env VERCEL); synthetic dev@localhost user; startup warning. 21 auth tests pass (+4 bypass tests). |
 | spending-tracker | Code Generation + Verify complete — see construction/spending-tracker/code/summary.md |
 | options-flex | Complete — options reconciled from raw Tiger flex (retired archive); IBKR orphans under new IBKR account. 385 contracts (377 Tiger + 8 IBKR), latest 2026-07-07; 33 tests pass. See construction/options-flex/. Reorg 2026-07-09: fixed expired-as-open bug (open 286->9, realized P/L reconciles, sum by_month=by_year=166425.98), added by_month; UI Trades moved above By-Underlying/Type grid + monthly P/L chart. |
 

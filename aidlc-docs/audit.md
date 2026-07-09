@@ -228,3 +228,19 @@ questions i need to answer: total assest, total liabilities, liquid assets, netw
 **Context**: CONSTRUCTION - Code Generation (unit: options-flex) — monthly amount labels COMPLETE
 
 ---
+
+## Overview TWR (add time-weighted return)
+**Timestamp**: 2026-07-09T00:00:00Z
+**User Input**: "using ai-dlc, add the TWR to my overview dashboard as well" ; then "approve"
+**AI Response**: Overview already showed a return tile but it was money-weighted (XIRR), despite portfolio/twr.py being named 'twr'. Added a TRUE time-weighted return: _twr() chains daily sub-period returns r_t=(MV_t - C_t)/MV_{t-1} over the daily-priced sleeve (funds excluded, same universe as XIRR). Key correctness fix found in verify: contribution C_t must be the MARKET VALUE of each day's UNIT DELTA (not txn.price — many opens/transfers/buys carry price=NULL), else share inflows via transfer/open register as return (first attempt gave 48.8% p.a. from spurious month-end spikes). Excludes return-in-kind (stock dividend, bonus issuance). Result: twr_annualised 1.3% vs xirr 27.6% — divergence is the expected money-vs-time weighting (most capital deployed in recent 2024-25 winners); yearly factors track real market history (2018 -15%, 2022 -10%, 2024 +18%, 2025 +25%), no artifacts. Added twr_annualised + twr_cumulative to compute_twr() return -> /api/return auto-carries; Overview.jsx new tile 'Time-weighted Return (p.a.)'. 33 tests pass; web build OK.
+**Context**: CONSTRUCTION - Code Generation + Build & Test (performance/twr increment) — COMPLETE
+
+---
+
+## Auth: local dev bypass feature flag (DEV_AUTH_BYPASS)
+**Timestamp**: 2026-07-09T00:00:00Z
+**User Input**: "using ai-dlc, i need a way to skip auth when running on local. maybe a feature flag?" ; then two confirmations via AskUserQuestion: guardrail = "Guard on VERCEL env (Recommended)", tests = "Yes, add tests (Recommended)"
+**AI Response**: Brownfield increment on the auth unit (Security Baseline extension enabled). Added a DEV_AUTH_BYPASS feature flag so the API+web can run locally without Google OAuth. Design routes the bypass through the SINGLE existing chokepoint auth.user_from_request() so both the deny-by-default gate (main.auth_gate) AND /api/auth/me honor it consistently. Security guardrail (SECURITY): config.auth_bypass_active = dev_auth_bypass AND NOT os.getenv("VERCEL") — every Vercel deploy sets VERCEL, so the bypass is force-OFF in any deployed env even if the flag leaks into prod env vars; fail-safe by construction. When active, user_from_request returns synthetic DEV_USER {sub: dev@localhost} without reading any cookie. main.py logs a loud ⚠️ warning at startup when active. Default false → zero behavior change to prod/existing flows. Files: portfolio/config.py (flag + auth_bypass_active property, import os), server/auth.py (DEV_USER const + bypass branch), server/main.py (startup warning), .env.example (documented DEV_AUTH_BYPASS=false). Tests: +4 in tests/test_auth.py (off-by-default, grants dev user without cookie, force-disabled on Vercel even with flag on, opens the gate) — 21 pass (17 prior + 4 new).
+**Context**: CONSTRUCTION - Code Generation + Build & Test (auth unit — local dev bypass increment) — COMPLETE
+
+---
