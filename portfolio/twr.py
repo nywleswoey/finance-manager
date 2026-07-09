@@ -2,8 +2,13 @@
 
 Fetches daily closes (Yahoo) for held securities + daily FX -> values the whole portfolio
 each trading day -> links daily sub-period returns excluding external cash flows (buys/sells).
-Dividends count as return (not a flow). TWR strips out contribution timing -> comparable to
-an index. Run: PYTHONPATH=. .venv/bin/python -m portfolio.twr
+Dividends count as return (not a flow), credited on ex-date because Yahoo's `close` is
+unadjusted. TWR strips out contribution timing -> comparable to an index.
+
+The same unit-delta contribution series feeds the money-weighted XIRR, so a position that
+arrives without a txn price (transfer, snapshot-diff open, fund switch) still carries a cost
+basis instead of landing in the terminal value for free.
+Run: PYTHONPATH=. .venv/bin/python -m portfolio.twr
 """
 import datetime as dt
 import json
@@ -50,22 +55,33 @@ def ffill(series, days):
 
 # unit inflows that are RETURN in kind, not an external contribution (keep them in the return)
 RETURN_IN_KIND = {"stock dividend", "bonus issuance"}
+# unit outflows that are a COST in kind (fund fee paid by redeeming units). No cash reaches the
+# investor, so this is not a withdrawal — leave it out of C_t and let the MV drop bite the return.
+COST_IN_KIND = {"fee"}
+# unit changes that are neither a contribution nor a withdrawal
+NON_EXTERNAL = RETURN_IN_KIND | COST_IN_KIND
 
 
-def _twr(days, txns, prices, ccy_of, fx):
-    """True time-weighted return: chain-linked daily sub-period returns over the daily-priced
-    sleeve. Each day r_t = (MV_t - C_t) / MV_{t-1}, where C_t is the net external contribution.
+def fx_on(fx, ccy, day):
+    """SGD rate for `ccy` on `day`. Clamps to the nearest end of the series rather than silently
+    falling back to 1.0 (a missing HKD rate defaulting to 1.0 overstates by ~6x). None if the
+    currency has no series at all."""
+    if ccy in (None, "SGD"):
+        return 1.0
+    ser = fx.get(ccy)
+    if not ser:
+        return None
+    r = ser.get(day)
+    if r is not None:
+        return r
+    ks = sorted(ser)
+    return ser[ks[0]] if day < ks[0] else ser[ks[-1]]
 
-    C_t is the market value of that day's unit changes (shares entering/leaving — buy, sell,
-    transfer, switch, IPO...), valued at the SAME daily price used for MV so a new position
-    nets out instead of registering as return. Many source rows carry no price (transfers/
-    opens), so we value by unit delta, not txn price. Stock dividends / bonus shares are return
-    in kind — excluded from C_t. Returns (cumulative, annualised)."""
-    import bisect
 
-    price_sids = [sid for sid, p in prices.items() if p]
-    cum = {}                                            # sid -> (sorted dates, running units)
-    for sid in price_sids:
+def running_units(txns, sids):
+    """sid -> (sorted trade dates, running unit total) for bisect lookup."""
+    cum = {}
+    for sid in sids:
         evs = sorted((t["trade_date"], float(t["qty_signed"])) for t in txns if t["security_id"] == sid)
         d_, u_, run = [], [], 0.0
         for dd, q in evs:
@@ -73,50 +89,70 @@ def _twr(days, txns, prices, ccy_of, fx):
             d_.append(dd)
             u_.append(run)
         cum[sid] = (d_, u_)
+    return cum
 
-    def units(sid, day):
-        d_, u_ = cum[sid]
-        i = bisect.bisect_right(d_, day) - 1
-        return u_[i] if i >= 0 else 0.0
 
-    def price_on(sid, day):
-        px = prices[sid].get(day)
-        if px is not None:
-            return px
-        fut = [d for d in prices[sid] if d >= day]      # pre-history buy: nearest forward close
-        return prices[sid][min(fut)] if fut else None
+def units_on(cum, sid, day):
+    import bisect
+    d_, u_ = cum[sid]
+    i = bisect.bisect_right(d_, day) - 1
+    return u_[i] if i >= 0 else 0.0
 
-    def mv(day):
-        tot = 0.0
-        for sid in price_sids:
-            u = units(sid, day)
-            if u <= 1e-9:
-                continue
-            px = prices[sid].get(day)
-            if px is None:
-                continue
-            tot += u * px * fx.get(ccy_of[sid], {}).get(day, 1.0)
-        return tot
 
-    contrib = defaultdict(float)                        # day -> net external contribution (SGD)
-    for sid in price_sids:
+def contributions(txns, sids, px, ccy_of, fx):
+    """day -> net external contribution (SGD, positive = units in).
+
+    Values that day's net unit change at `px(sid, day)` — the same price used to value MV — so a
+    new position nets out instead of registering as return. Valuing by unit delta rather than by
+    txn price is what lets price-less rows (transfers, opens, snapshot-diff buys) carry a real
+    cost basis. RETURN_IN_KIND and COST_IN_KIND unit changes are not external flows."""
+    contrib = defaultdict(float)
+    for sid in sids:
         per = defaultdict(float)
         for t in txns:
-            if t["security_id"] == sid and t["action"] not in RETURN_IN_KIND:
+            if t["security_id"] == sid and t["action"] not in NON_EXTERNAL:
                 per[t["trade_date"]] += float(t["qty_signed"])
         for day, dq in per.items():
             if abs(dq) < 1e-9:
                 continue
-            px = price_on(sid, day)
-            if px is None:
+            p = px(sid, day)
+            rate = fx_on(fx, ccy_of[sid], day)
+            if p is None or rate is None:
                 continue
-            contrib[day] += dq * px * fx.get(ccy_of[sid], {}).get(day, 1.0)
+            contrib[day] += dq * p * rate
+    return contrib
+
+
+def _twr(days, txns, prices, ccy_of, fx, contrib, div_by_day=None):
+    """True time-weighted return: chain-linked daily sub-period returns over the daily-priced
+    sleeve. Each day r_t = (MV_t + D_t - C_t) / MV_{t-1}, where C_t is the net external
+    contribution and D_t the dividends going ex that day.
+
+    D_t is needed because Yahoo's `close` is unadjusted: the ex-date price drop lands in MV and
+    the cash never returns to the series. Without it TWR understates by roughly the yield.
+    Returns (cumulative, annualised)."""
+    div_by_day = div_by_day or {}
+    price_sids = [sid for sid, p in prices.items() if p]
+    cum = running_units(txns, price_sids)
+
+    def mv(day):
+        tot = 0.0
+        for sid in price_sids:
+            u = units_on(cum, sid, day)
+            if u <= 1e-9:
+                continue
+            px = prices[sid].get(day)
+            rate = fx_on(fx, ccy_of[sid], day)
+            if px is None or rate is None:
+                continue
+            tot += u * px * rate
+        return tot
 
     factor, prev_mv, first_live = 1.0, None, None
     for day in days:
         m = mv(day)
         if prev_mv is not None and prev_mv > 1e-6:
-            r = (m - contrib.get(day, 0.0)) / prev_mv
+            r = (m + div_by_day.get(day, 0.0) - contrib.get(day, 0.0)) / prev_mv
             if r > 0:                                   # guard against bad/gap data
                 factor *= r
         if m > 1e-6:
@@ -135,14 +171,25 @@ def _twr(days, txns, prices, ccy_of, fx):
 
 def compute_twr():
     s = SessionLocal()
+    # one row per (account, security): the same counter can sit in FSM and CPF at once
     held = s.execute(text(
-        "SELECT security_id, canonical_ticker, market, asset_type, currency FROM current_position "
-        "WHERE units > 0")).all()
+        "SELECT DISTINCT security_id, canonical_ticker, market, asset_type, currency "
+        "FROM current_position WHERE units > 0")).all()
+    ids = sorted({h[0] for h in held})
     # txns for held securities (units over time + external cash flows)
     txns = s.execute(text(
-        "SELECT security_id, trade_date, action, qty_signed, price, currency FROM txn "
-        "WHERE trade_date IS NOT NULL AND security_id = ANY(:ids)"),
-        {"ids": [h[0] for h in held]}).mappings().all()
+        "SELECT security_id, trade_date, action, qty_signed, price, fees, currency FROM txn "
+        "WHERE trade_date IS NOT NULL AND security_id = ANY(:ids)"), {"ids": ids}).mappings().all()
+    # dividends scoped to held securities: a dividend whose purchase cost never entered `flows`
+    # (sold-out position) is a free inflow that inflates XIRR.
+    divs = s.execute(text(
+        "SELECT security_id, COALESCE(ex_date, pay_date) AS ex_date, pay_date, gross, currency "
+        "FROM dividend WHERE pay_date IS NOT NULL AND security_id = ANY(:ids)"),
+        {"ids": ids}).mappings().all()
+    # last known close per security — covers what Yahoo can't price (funds, delisted tickers)
+    last_px = {sid: float(px) for sid, px in s.execute(text(
+        "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC"
+    )).all()}
     s.close()
 
     start = min((t["trade_date"] for t in txns), default=dt.date.today())
@@ -163,41 +210,89 @@ def compute_twr():
         try:
             fx[c] = ffill(daily(f"{c}SGD=X"), days)
         except Exception:
-            fx[c] = {d: 1.0 for d in days}
+            fx[c] = {}
+    price_sids = [sid for sid, p in prices.items() if p]
 
-    # money-weighted (XIRR): every external cash flow converted at the FX on its own date,
-    # plus current market value (SGD) as a terminal inflow. Robust to the zero-value start.
+    # traded price per (security, day), for securities Yahoo has no daily series for
+    day_px, day_qty = defaultdict(float), defaultdict(float)
+    for t in txns:
+        if t["price"] is not None:
+            q = abs(float(t["qty_signed"]))
+            day_px[(t["security_id"], t["trade_date"])] += q * float(t["price"])
+            day_qty[(t["security_id"], t["trade_date"])] += q
+    txn_px = defaultdict(list)                           # sid -> sorted [(date, vwap)]
+    for (sid, day), q in sorted(day_qty.items()):
+        if q > 1e-9:                                    # zero-qty priced rows carry no vwap
+            txn_px[sid].append((day, day_px[(sid, day)] / q))
+
+    def px_daily(sid, day):
+        """Daily close, forward-filled for a pre-history buy."""
+        ser = prices[sid]
+        v = ser.get(day)
+        if v is not None:
+            return v
+        fut = [d for d in ser if d >= day]
+        return ser[min(fut)] if fut else None
+
+    def px_any(sid, day):
+        """As px_daily, falling back to the nearest-dated traded price (the Endowus fee rows carry
+        quarterly NAV) and then the last known close, so a fund or a delisted ticker gets a cost
+        basis instead of free units. Nearest-by-date, not latest — a 2023 switch must not be
+        valued at today's NAV."""
+        if prices.get(sid):
+            return px_daily(sid, day)
+        near = txn_px.get(sid)
+        if near:
+            return min(near, key=lambda dp: abs((dp[0] - day).days))[1]
+        return last_px.get(sid)
+
+    # one definition of external contribution feeds both metrics
+    contrib_twr = contributions(txns, price_sids, px_daily, ccy_of, fx)
+    contrib_all = contributions(txns, ids, px_any, ccy_of, fx)
+
+    # dividends. TWR credits them on ex-date (when the price drops), scoped to the daily-priced
+    # sleeve — crediting a fund's dividend whose MV is absent from the series would be free return.
+    # XIRR takes them on pay-date (when the cash lands), clamped to the first trade so t0 doesn't
+    # anchor on a pre-history dividend.
+    div_by_day = defaultdict(float)
+    div_flows = []
+    for d in divs:
+        if not d["gross"]:
+            continue
+        g, ccy = float(d["gross"]), d["currency"] or "SGD"
+        if d["security_id"] in price_sids:
+            rate = fx_on(fx, ccy, d["ex_date"])
+            if rate is not None:
+                div_by_day[d["ex_date"]] += g * rate
+        rate = fx_on(fx, ccy, d["pay_date"])
+        if rate is not None and d["pay_date"] >= start:
+            div_flows.append((d["pay_date"], g * rate))
+
+    # money-weighted (XIRR): units in => cash out, units out => cash in, valued at the same price
+    # MV uses; brokerage fees are a real cost; current market value is the terminal inflow.
     from .performance import _xirr
 
-    flows = []
-    CASH = {"buy", "sell", "open market", "ipo", "private placement", "rights", "rights issue"}
+    flows = [(day, -c) for day, c in contrib_all.items()]
     for t in txns:
-        if t["action"] in CASH and t["price"] is not None:
-            rate = fx.get(t["currency"] or "SGD", {}).get(t["trade_date"], 1.0)
-            flows.append((t["trade_date"], -float(t["qty_signed"]) * float(t["price"]) * rate))
-    # dividends as positive flows (historical fx)
-    s2 = SessionLocal()
-    divs = s2.execute(text("SELECT pay_date, gross, currency FROM dividend WHERE pay_date IS NOT NULL")).all()
-    s2.close()
-    for d, g, c in divs:
-        if g:
-            flows.append((d, float(g) * fx.get(c or "SGD", {}).get(d, 1.0)))
-    # CDP cost flows (cdp-stocks; CDP DB txns carry no price) — CDP is SGD
-    from .performance import cdp_cost
-    for tk, c in cdp_cost().items():
-        flows.extend(c["flows"])
-    # terminal market value (today, SGD) from latest prices
+        if t["fees"]:
+            rate = fx_on(fx, t["currency"] or "SGD", t["trade_date"])
+            if rate is not None:
+                flows.append((t["trade_date"], -abs(float(t["fees"])) * rate))
+    flows.extend(div_flows)
+
     today = dt.date.today()
+    cum_all = running_units(txns, ids)
     mv = 0.0
-    for sid in prices:
-        u = sum(float(t["qty_signed"]) for t in txns if t["security_id"] == sid)
-        px = prices[sid].get(max(prices[sid], default=today)) if prices[sid] else None
-        if u > 1e-9 and px:
-            mv += u * px * fx.get(ccy_of[sid], {}).get(max(fx[ccy_of[sid]], default=today), 1.0)
+    for sid in ids:
+        u = units_on(cum_all, sid, today)
+        px = prices[sid][max(prices[sid])] if prices.get(sid) else last_px.get(sid)
+        rate = fx_on(fx, ccy_of[sid], today)
+        if u > 1e-9 and px and rate is not None:
+            mv += u * px * rate
     if mv > 0:
         flows.append((today, mv))
     xirr = _xirr(flows)
-    twr_cum, twr_ann = _twr(days, txns, prices, ccy_of, fx)
+    twr_cum, twr_ann = _twr(days, txns, prices, ccy_of, fx, contrib_twr, div_by_day)
     invested = sum(-a for _, a in flows if a < 0)
     received = sum(a for _, a in flows if a > 0)
     years = max((today - start).days / 365.0, 0.1)
@@ -206,7 +301,8 @@ def compute_twr():
             "twr_cumulative": round(twr_cum, 4) if twr_cum is not None else None,
             "invested_sgd": round(invested, 0), "value_plus_income_sgd": round(received, 0),
             "years": round(years, 1), "from": str(start),
-            "note": "money-weighted (XIRR) + time-weighted (TWR); fund excluded from daily series"}
+            "note": "money-weighted (XIRR, pay-date dividends) + time-weighted (TWR, ex-date "
+                    "dividends); fund excluded from the daily series but not from XIRR"}
 
 
 if __name__ == "__main__":
