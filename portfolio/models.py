@@ -161,6 +161,25 @@ class CashTxn(Base):
     __table_args__ = (UniqueConstraint("dedup_hash", name="uq_cash_dedup"),)
 
 
+class RecurringSpend(Base):
+    """A user-defined recurring charge (subscription, rent, insurance, loan...). Matched
+    against the cash_txn ledger by `merchant_match` (case-insensitive substring) to surface
+    actual occurrences + timing (last seen, typical day-of-month, next due). Definitions are
+    entered in-app; auto-detection suggests candidates but does NOT write rows here.
+    """
+    __tablename__ = "recurring_spend"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(64))                    # user label: "Netflix", "Rent"
+    merchant_match: Mapped[str | None] = mapped_column(String(128))  # substring matched vs cash_txn.merchant
+    category: Mapped[str | None] = mapped_column(String(48))
+    cadence: Mapped[str] = mapped_column(String(12), default="monthly")  # weekly|monthly|quarterly|annual
+    expected_amount: Mapped[Decimal | None] = mapped_column(MONEY)   # SGD, positive magnitude
+    expected_day: Mapped[int | None] = mapped_column(Integer)        # day-of-month it usually lands
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 # ---------------- options ----------------
 class OptionTrade(Base):
     """One sold-option contract line (wheel strategy: cash-secured puts + covered calls).

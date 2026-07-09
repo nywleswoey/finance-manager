@@ -35,6 +35,8 @@ td.l, th.l { text-align: left; }
 tr:hover td { background: #1a212a; }
 .pos { color: var(--pos); } .neg { color: var(--neg); } .mut { color: var(--mut); }
 .pill { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: var(--panel2); color: var(--mut); }
+.link-btn { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 13px; padding: 2px 6px; }
+.link-btn:hover { color: var(--txt); }
 .bar { height: 8px; border-radius: 4px; background: var(--acc); }
 .barrow { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
 .barrow .nm { width: 130px; color: var(--mut); font-size: 13px; }

@@ -582,6 +582,46 @@ def spending_categories():
         s.close()
 
 
+# ---------------- recurring spends ----------------
+class RecurringIn(BaseModel):
+    name: str
+    merchant_match: str | None = None
+    category: str | None = None
+    cadence: str = "monthly"
+    expected_amount: float | None = None
+    expected_day: int | None = None
+    notes: str | None = None
+
+
+@app.get("/api/spending/recurring")
+def recurring_list():
+    from portfolio.recurring import list_recurring
+    return list_recurring()
+
+
+@app.get("/api/spending/recurring/detect")
+def recurring_detect():
+    from portfolio.recurring import detect_candidates
+    return detect_candidates()
+
+
+@app.post("/api/spending/recurring")
+def recurring_add(body: RecurringIn):
+    from portfolio.recurring import add
+    if not body.name.strip():
+        raise HTTPException(400, "name is required")
+    rid = add(body.name.strip(), body.merchant_match, body.category, body.cadence,
+              body.expected_amount, body.expected_day, body.notes)
+    return {"id": rid}
+
+
+@app.delete("/api/spending/recurring/{rid}")
+def recurring_delete(rid: int):
+    from portfolio.recurring import delete
+    delete(rid)
+    return {"ok": True}
+
+
 # serve the built frontend (web/dist) if present
 _dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "dist")
 if os.path.isdir(_dist):
