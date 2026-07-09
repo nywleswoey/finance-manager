@@ -15,7 +15,8 @@ export default function Options() {
   const yrChart = [...d.by_year].sort((a, b) => b.key - a.key)
     .map((r) => ({ year: String(r.key), pl: Math.round(r.pl_sgd) }));
   const moAll = (d.by_month || []).map((r) => ({ month: r.key, pl: Math.round(r.pl_sgd), trades: r.trades }));
-  const moChart = moAll.slice(-24);
+  const moChart = moAll.slice(-24).reverse();
+  const kfmt = (v) => (Math.abs(v) >= 1000 ? (v / 1000).toFixed(1) + "k" : String(v));
 
   return (
     <div>
@@ -55,6 +56,7 @@ export default function Options() {
                 <Tooltip formatter={(v, n, p) => [sgd(v), `P/L · ${p.payload.trades} trades`]} />
                 <Bar dataKey="pl">
                   {moChart.map((e, i) => <Cell key={i} fill={e.pl >= 0 ? "#2ea043" : "#f85149"} />)}
+                  <LabelList dataKey="pl" position="top" fill="#c9d1d9" fontSize={9} formatter={kfmt} />
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
