@@ -50,6 +50,11 @@ _CSP = ("default-src 'self'; "
         "base-uri 'self'; frame-ancestors 'none'")
 
 
+def _is_spending(path: str) -> bool:
+    # exact-or-child only: a bare startswith would also swallow a future "/api/spending-export"
+    return path == "/api/spending" or path.startswith("/api/spending/")
+
+
 @app.middleware("http")
 async def auth_gate(request: Request, call_next):
     """Deny-by-default: any /api/* path that isn't public requires a valid session.
@@ -60,6 +65,13 @@ async def auth_gate(request: Request, call_next):
     user = auth.user_from_request(request)
     if not user:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    # Function-level authorization (SECURITY-08). Runs after authentication, so an anonymous
+    # caller still gets 401 and we don't advertise the feature's existence to strangers; runs
+    # before call_next, so a denied caller never reaches a handler or a database query.
+    # Hiding the nav item in the SPA is cosmetic — this is the control.
+    if _is_spending(path) and not auth.can_view_spending(user):
+        log.warning("spending denied path=%s", path)   # no email: SECURITY-03 keeps PII out of logs
+        return JSONResponse({"detail": "forbidden"}, status_code=403)
     request.state.user = user
     return await call_next(request)
 

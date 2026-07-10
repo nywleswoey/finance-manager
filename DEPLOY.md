@@ -31,9 +31,14 @@ Project → Settings → Environment Variables (Production + Preview):
 | `VITE_GOOGLE_CLIENT_ID` | **same** client id (exposed to the web build) |
 | `SESSION_SECRET` | `python -c "import secrets;print(secrets.token_urlsafe(48))"` |
 | `ALLOWED_EMAILS` | `you@gmail.com,partner@gmail.com` |
+| `SPENDING_EMAILS` | `you@gmail.com` — subset of `ALLOWED_EMAILS` that may see Spending |
 | `ALLOWED_ORIGINS` | `https://<your-app>.vercel.app` |
 | `COOKIE_SECURE` | `true` |
 | `DATABASE_URL` | the `sslmode=require` Postgres URL |
+
+> **`SPENDING_EMAILS` fails closed.** Omit it and the Spending section disappears for everyone —
+> the nav item is hidden and `/api/spending/*` returns 403, including for accounts in
+> `ALLOWED_EMAILS`. Set it on Production *and* Preview.
 
 ## 4. Deploy (single FastAPI project)
 Vercel deploys the whole repo as **one FastAPI Vercel Function** that serves both the

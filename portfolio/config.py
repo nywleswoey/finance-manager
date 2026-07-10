@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     google_client_id: str = ""           # OAuth client id == ID-token audience
     session_secret: str = ""             # HS256 signing key for our session cookie
     allowed_emails: str = ""             # comma-separated allowlist
+    spending_emails: str = ""            # comma-separated; empty => nobody (fail closed)
     allowed_origins: str = "http://localhost:5173,http://localhost:8000"  # CORS
     cookie_secure: bool = True           # set false for local http dev
     dev_auth_bypass: bool = False        # skip Google auth — LOCAL dev only (see auth_bypass_active)
@@ -39,6 +40,14 @@ class Settings(BaseSettings):
     @property
     def allowed_email_set(self) -> set[str]:
         return {e.strip().lower() for e in self.allowed_emails.split(",") if e.strip()}
+
+    @property
+    def spending_email_set(self) -> set[str]:
+        """Emails allowed to see the Spending feature — a subset of allowed_email_set.
+
+        Empty when SPENDING_EMAILS is unset, which denies everyone (SECURITY-15: fail closed).
+        Read fresh on every request, so removing an email revokes access without a redeploy."""
+        return {e.strip().lower() for e in self.spending_emails.split(",") if e.strip()}
 
     @property
     def origin_list(self) -> list[str]:

@@ -37,6 +37,10 @@ export default function App() {
   const View = TABS[tab];
   const SpendView = SPEND_TABS[spendTab];
   const { user, logout } = useAuth() || {};
+  // Server decides; we only render. /api/spending/* returns 403 regardless of what we draw.
+  const canSpend = (user?.features || []).includes("spending");
+  // Losing the capability mid-session must not leave the user staring at an empty pane.
+  const activeSection = section === "Spending" && !canSpend ? "Portfolio" : section;
 
   async function refreshPrices() {
     setBusy(true);
@@ -55,7 +59,7 @@ export default function App() {
   }
 
   const navItem = (name, testid) => (
-    <div className={"navitem" + (section === name ? " on" : "")}
+    <div className={"navitem" + (activeSection === name ? " on" : "")}
          data-testid={testid} onClick={() => setSection(name)}>{name}</div>
   );
 
@@ -65,7 +69,7 @@ export default function App() {
         <div className="brand">📊 MyApp</div>
         {navItem("Portfolio", "nav-portfolio")}
         {navItem("Net Worth", "nav-networth")}
-        {navItem("Spending", "nav-spending")}
+        {canSpend && navItem("Spending", "nav-spending")}
         <div className="navitem dim">Settings</div>
         {user && (
           <div className="side-user">
@@ -75,7 +79,7 @@ export default function App() {
         )}
       </div>
       <div className="main">
-        {section === "Portfolio" && (
+        {activeSection === "Portfolio" && (
           <>
             <div className="tabs">
               {Object.keys(TABS).map((t) => (
@@ -93,8 +97,8 @@ export default function App() {
             <View key={ver} />
           </>
         )}
-        {section === "Net Worth" && <NetWorth />}
-        {section === "Spending" && (
+        {activeSection === "Net Worth" && <NetWorth />}
+        {activeSection === "Spending" && (
           <>
             <div className="tabs">
               {Object.keys(SPEND_TABS).map((t) => (

@@ -94,6 +94,36 @@ def user_from_request(request: Request) -> dict | None:
     return payload
 
 
+# ---------------- capabilities ----------------
+# Authentication says who you are; this says what you may reach. Today there is exactly one
+# capability. Keep the rule here, server-side, in one function — the client renders from its
+# output and never re-implements it (SECURITY-08: never rely on client-side hiding).
+
+FEATURE_SPENDING = "spending"
+
+
+def can_view_spending(user: dict | None) -> bool:
+    """Whether this principal may reach the Spending feature.
+
+    Recomputed from env on every request — never read back from the session cookie — so dropping
+    an email from SPENDING_EMAILS revokes access immediately, with no redeploy and no re-login.
+    Same contract as the allowlist re-check in user_from_request.
+
+    Fails closed (SECURITY-15): no user, no email, or an empty SPENDING_EMAILS all deny. The
+    local-dev bypass is checked first and is force-disabled on Vercel."""
+    if settings.auth_bypass_active:
+        return True
+    if not user:
+        return False
+    return (user.get("sub") or "").lower() in settings.spending_email_set
+
+
+def features_for(user: dict | None) -> list[str]:
+    """Capability list handed to the frontend, so it can hide what the caller cannot reach.
+    Hiding is cosmetic; the gate in server.main is the control."""
+    return [FEATURE_SPENDING] if can_view_spending(user) else []
+
+
 def _set_cookie(response: Response, token: str) -> None:
     response.set_cookie(
         COOKIE_NAME, token,
@@ -160,7 +190,7 @@ def me(request: Request):
     user = user_from_request(request)
     if not user:
         raise HTTPException(401, "not authenticated")
-    return {"email": user["sub"], "name": user.get("name")}
+    return {"email": user["sub"], "name": user.get("name"), "features": features_for(user)}
 
 
 @router.post("/logout")
