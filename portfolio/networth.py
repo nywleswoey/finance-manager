@@ -165,6 +165,11 @@ def create_snapshot(date: dt.date, values: list[dict], note: str | None = None,
         if s.scalar(select(NwSnapshot).where(NwSnapshot.date == date)):
             raise ValueError(f"snapshot for {date} already exists")
         items = {i.code: i for i in s.scalars(select(NwItem).where(NwItem.active)).all()}
+        if not items:
+            # One NwValue is written per catalogue item below, so an empty catalogue produced a
+            # snapshot with zero values: metrics all zero, breakdown blank, and no error anywhere.
+            # Refuse it. An empty net worth is a seeding failure, not a reading.
+            raise ValueError("net-worth catalogue is empty — run scripts/seed_networth.py")
         by_id = {i.id: i for i in items.values()}
         supplied = {}
         for v in values:

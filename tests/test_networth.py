@@ -165,3 +165,49 @@ class ManualFlagTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
+
+
+class TestEmptyCatalogue(unittest.TestCase):
+    """A snapshot is one NwValue per catalogue item. With no catalogue, create_snapshot used to
+    write a row with zero values — every metric zero, breakdown blank, no error. Production ran
+    that way: 1 nw_snapshot, 0 nw_value, because scripts/seed_networth.py was never wired into
+    any make target and so never ran there."""
+
+    def setUp(self):
+        self.s = make_session()          # schema only: nw_item deliberately left empty
+        nw.live_portfolio_sgd = lambda s: Decimal("0")
+
+    def tearDown(self):
+        self.s.close()
+
+    def test_create_snapshot_refuses_an_empty_catalogue(self):
+        with self.assertRaises(ValueError) as cm:
+            nw.create_snapshot(dt.date(2026, 7, 10), [], s=self.s)
+        self.assertIn("catalogue is empty", str(cm.exception))
+        self.assertIn("seed_networth", str(cm.exception))   # names the remedy
+
+    def test_no_snapshot_row_is_left_behind(self):
+        with self.assertRaises(ValueError):
+            nw.create_snapshot(dt.date(2026, 7, 10), [], s=self.s)
+        self.s.rollback()
+        self.assertEqual(self.s.query(NwSnapshot).count(), 0)
+
+
+class TestSeededCatalogueStillWorks(unittest.TestCase):
+    def setUp(self):
+        self.s = make_session()
+        seed_items(self.s)
+        self.s.execute(text("INSERT INTO fx_rate(date, currency, rate_to_sgd) VALUES "
+                            "('2026-07-01','USD',1.28)"))     # tiger_usd is a USD item
+        self.s.commit()
+        nw.live_portfolio_sgd = lambda s: Decimal("0")
+
+    def tearDown(self):
+        self.s.close()
+
+    def test_snapshot_writes_one_value_per_item(self):
+        n_items = self.s.query(NwItem).count()
+        d = nw.create_snapshot(dt.date(2026, 7, 10), [{"code": "posb", "native_value": 100}],
+                               s=self.s)
+        self.assertEqual(len(d["values"]), n_items)
+        self.assertGreater(n_items, 0)

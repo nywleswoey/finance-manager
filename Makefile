@@ -10,8 +10,11 @@ db-down:      ## stop postgres
 	docker compose down
 migrate:      ## apply alembic migrations
 	$(AL) upgrade head
-seed:         ## seed accounts / securities / aliases / corporate actions
+seed:         ## seed accounts / securities / aliases / corporate actions / net-worth catalogue
 	$(PY) scripts/seed.py
+	@# nw_item must exist before any snapshot: create_snapshot writes one value per catalogue
+	@# item, so an unseeded catalogue yields a snapshot with zero values and an empty breakdown.
+	$(PY) scripts/seed_networth.py
 
 flat:         ## (re)build the normalized flat files from statements
 	$(PY) build/parse_moomoo.py >/dev/null
