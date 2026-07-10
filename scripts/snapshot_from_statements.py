@@ -66,6 +66,8 @@ def parse_tiger(path: str) -> dict[str, dict]:
     """Return {code: {native_value, currency}} from a tiger-prime Activity Statement CSV."""
     out: dict[str, dict] = {}
     ccy_to_code = {"USD": "tiger_usd", "SGD": "tiger_sgd", "HKD": "tiger_hkd"}
+    fund_base: dict | None = None       # the "Total(In Base)" row, if the statement has one
+    fund_totals: list[dict] = []        # one per fund, in the fund's own currency
     rows = list(csv.reader(open(path, encoding="utf-8-sig")))
     for r in rows:
         if (r[:1] == ["Cash Report"] and len(r) > 5 and r[4] == "Ending Cash"
@@ -73,8 +75,26 @@ def parse_tiger(path: str) -> dict[str, dict]:
             ccy = r[2].split("Currency: ", 1)[1].strip()
             if ccy in ccy_to_code:
                 out[ccy_to_code[ccy]] = {"native_value": _num(r[5]), "currency": ccy}
-        if r[:2] == ["Holdings", "Fund"] and len(r) > 4 and r[3] == "TOTAL":
-            out["tiger_vault"] = {"native_value": _num(r[8]), "currency": r[-1].strip()}
+        # Holdings/Fund carries one TOTAL row per fund, then a "Total(In Base)" row combining
+        # them. Take the base-currency row explicitly. Letting the loop overwrite until the last
+        # TOTAL wins gives the right answer only because that row happens to come last — reorder
+        # the statement and tiger_vault silently becomes a single fund, losing six figures.
+        if r[:2] == ["Holdings", "Fund"] and len(r) > 8 and r[3] == "TOTAL":
+            if r[4].strip().startswith("Total(In Base)"):
+                fund_base = {"native_value": _num(r[8]), "currency": r[-1].strip()}
+            else:
+                fund_totals.append({"native_value": _num(r[8]), "currency": r[-1].strip()})
+    if fund_base is not None:
+        out["tiger_vault"] = fund_base              # combined, already in the statement's base ccy
+    elif len(fund_totals) == 1:
+        out["tiger_vault"] = fund_totals[0]         # single fund: its own total IS the total
+    elif len(fund_totals) > 1:
+        # Multiple funds in different currencies and no base-currency total to combine them.
+        # Summing would need an FX rate we don't have here; picking one would silently under-count.
+        raise ValueError(
+            f"tiger parse: {len(fund_totals)} fund totals but no 'Total(In Base)' row in {path} "
+            f"— cannot combine {[f['currency'] for f in fund_totals]} without an FX rate")
+
     missing = {"tiger_usd", "tiger_sgd", "tiger_hkd", "tiger_vault"} - out.keys()
     if missing:
         raise ValueError(f"tiger parse missing {missing} in {path}")

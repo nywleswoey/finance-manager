@@ -26,11 +26,15 @@ BUCKET = {"Tiger Prime": "cash", "Tiger Cash Boost": "cash", "Moomoo": "cash",
 # ledger 'account' values that aren't real tracked accounts (dups/superseded/legacy) -> skip
 SKIP_ACCT = ("superseded", "dup", "Vickers", "Tiger-archive")
 
-# SGX T-bill counters bought through CPF. They mature back to cash rather than being sold, carry
-# no price source, and are not holdings — seeding them would invent a phantom position. Skipped
-# deliberately, and named here so they don't drown the unresolved-ticker warning that exists to
-# catch a genuinely new ticker (an FSM Bursa buy once vanished into that noise).
-SKIP_TICKER_PREFIX = ("SGXZ",)
+# CPF T-bill counters. Bought at a discount and redeemed at par on maturity, no price source, not
+# holdings — seeding them would invent a phantom position. Skipped deliberately, and named here so
+# they don't drown the unresolved-ticker warning that exists to catch a genuinely new ticker (an
+# FSM Bursa buy once vanished into that noise).
+#
+# Matched by exact code, NOT by an "SGXZ" prefix: Tiger's money-market funds share that prefix
+# (SGXZ40088619 Fullerton SGD Liquidity, SGXZ99103178, SGXZ75661421), so a prefix rule would one
+# day swallow a real position the moment those stop being classified as cash sweeps.
+SKIP_TICKERS = frozenset({"SGXZ17686775", "SGXZ18842542", "SGXZ87559985"})
 
 
 def h(*parts):
@@ -100,7 +104,7 @@ def load_ledger(session, acct, alias):
             continue
         if r["asset_type"] not in ("stock", "fund"):
             continue
-        if r["ticker"].startswith(SKIP_TICKER_PREFIX):
+        if r["ticker"] in SKIP_TICKERS:
             continue
         a = acct.get(r["account"])
         sid = alias.get(r["ticker"])
