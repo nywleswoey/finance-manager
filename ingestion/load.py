@@ -153,11 +153,16 @@ def main():
     nd = load_dividends(s, acct, alias)
     from ingestion.parse_options import load_options
     no = load_options(s, acct, alias)
+    # CDP statements omit unit price, so the hand-maintained cost CSV is the only cost record
+    # for every CDP-origin holding. Left unloaded, those positions report no cost basis at all.
+    from ingestion.load_cdp_cost import load_cdp_cost
+    nc = load_cdp_cost(s)
     s.commit()
     print(f"txn: +{nt} new (total {s.scalar(select(func.count()).select_from(Txn))})")
     print(f"dividend: +{nd} new (total {s.scalar(select(func.count()).select_from(Dividend))})")
-    from portfolio.models import OptionTrade
+    from portfolio.models import OptionTrade, CdpCostLot
     print(f"option_trade: +{no} new (total {s.scalar(select(func.count()).select_from(OptionTrade))})")
+    print(f"cdp_cost_lot: +{nc} new (total {s.scalar(select(func.count()).select_from(CdpCostLot))})")
     s.close()
 
 
