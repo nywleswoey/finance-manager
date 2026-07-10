@@ -8,11 +8,14 @@ native currency (exact); MV / income / P&L converted to SGD at the latest FX for
 from __future__ import annotations
 
 import datetime as dt
+import logging
 from collections import defaultdict
 
 from sqlalchemy import text
 
 from .db import SessionLocal
+
+log = logging.getLogger(__name__)
 
 _ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}
 
@@ -50,16 +53,28 @@ def cdp_transactions(session=None):
     } for r in rows]
 
 
+# CDP rows that move stock between custodians rather than trade it. The CSV records these at
+# market value with a POSITIVE Amount (the 2020-03-19 CDP->FSM migration of D05 and O5RU), which
+# reads exactly like a sale. Booking them as proceeds hands the position its cost back in cash
+# while the units re-enter at FSM as a free `transfer in` — cash out AND units kept.
+CDP_TRANSFER = {"transfer out", "transfer in", "transfer_out", "transfer_in"}
+
+
 def cdp_cost(session=None):
     """CDP cost/cashflows from the cdp_cost_lot table (Unit Price + Amount; cdp-statements
-    don't carry them). Keyed by canonical ticker -> {flows:[(date,cash)], invested}."""
+    don't carry them). Keyed by canonical ticker -> {flows:[(date,cash)], invested}.
+
+    Transfers are skipped: the position is grouped per (funding_bucket, security), so a CDP->FSM
+    move keeps both legs in the same position and the cost carries across on its own."""
     s = session or SessionLocal()
     rows = s.execute(text(
-        "SELECT ticker, trade_date, qty, amount FROM cdp_cost_lot")).all()
+        "SELECT ticker, trade_date, qty, amount, action FROM cdp_cost_lot")).all()
     if session is None:
         s.close()
     out = {}
-    for ticker, d, qty, amount in rows:
+    for ticker, d, qty, amount, action in rows:
+        if (action or "").strip().lower() in CDP_TRANSFER:
+            continue
         cash = float(amount or 0)                # buys negative (cash out), sells positive
         if abs(cash) < 1e-9:
             continue
@@ -78,8 +93,40 @@ CASH_TRADE = {"buy", "sell", "open market", "ipo", "private placement",
 ZERO_CASH = {"transfer_in", "transfer_out", "gift_in", "gifted stock in", "gifted stock out",
              "bonus", "bonus issuance", "scrip", "script dividend", "scrip dividend",
              "corp action", "corp_action", "open", "open/transfer_in", "transfer in",
-             "sell/transfer_out", "stock dividend",
+             "sell/transfer_out", "sell/transfer", "stock dividend",
              "switch_in"}      # fund-switch IN leg: units only; cost carries from predecessor
+# 'corp action' is a catch-all in the FSM ledger. A PRICED row is an entitlement the holder paid
+# cash for — the ESR-LOGOS (UD1U) rights issues at 0.49 / 0.595 / 0.408, C38U, O5RU, S51. A
+# zero-priced row is a bonus or consolidation (D05's 280 bonus shares). Only the first costs money.
+PRICED_CORP_ACTION = {"corp action", "corp_action"}
+# a fund fee paid by redeeming units (Endowus). No cash leaves the investor's pocket, so the
+# unit drop already carries the whole cost through market value — booking a cash outflow too
+# would charge the fee twice.
+COST_IN_KIND = {"fee"}
+# XIRR annualises, so a position held for days turns a rounding move into a triple-digit rate
+# (1600 HEIM bought yesterday, -0.2% -> -79.6% p.a.). Below this span the number is noise.
+MIN_XIRR_DAYS = 30
+
+
+def classify(act, px):
+    """How a txn row affects cost basis.
+
+    cash         — real money moved; qty*price is the flow
+    uncosted     — a trade whose price the source never carried. The units still land in market
+                   value, so booking them at zero cost would invent a free lot.
+    cost_in_kind — units redeemed to pay a fee; the market-value drop already carries the cost
+    zero         — free units (bonus, scrip) or an internal move whose cost carries across
+    unknown      — an action string nobody has classified; caller should shout, not assume free
+    """
+    if act in CASH_TRADE:
+        return "cash" if px else "uncosted"
+    if act in PRICED_CORP_ACTION:
+        return "cash" if px else "zero"
+    if act in COST_IN_KIND:
+        return "cost_in_kind"
+    if act in ZERO_CASH:
+        return "zero"
+    return "unknown"
 
 
 def _xirr(flows, guess=0.1):
@@ -142,8 +189,9 @@ def compute(session=None):
     # together, so a position transferred into FSM still carries its original CDP purchase cost.
     pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
                                 "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
-                                "accounts": set()})
+                                "uncosted_units": 0.0, "accounts": set()})
     meta = {}
+    _unknown_actions = set()
     for r in rows:
         k = (r["funding_bucket"], r["security_id"])
         meta[k] = r
@@ -155,7 +203,8 @@ def compute(session=None):
         act = r["action"]
         px = float(r["price"]) if r["price"] is not None else None
         fee = abs(float(r["fees"])) if r["fees"] is not None else 0.0   # native ccy, same as px*qty
-        if act in CASH_TRADE and px:
+        kind = classify(act, px)
+        if kind == "cash":
             cash = -float(r["qty_signed"]) * px
             # fees are a real cost: bigger outflow on a buy, smaller net inflow on a sell
             cash -= fee
@@ -167,8 +216,15 @@ def compute(session=None):
                 p["buy_qty"] += float(r["qty_signed"])
             else:
                 p["proceeds"] += cash
-        elif act == "fee" and px:
-            p["flows"].append((r["trade_date"] or today, -abs(float(r["qty_signed"]) * px)))
+        elif kind == "uncosted":
+            if float(r["qty_signed"]) > 0:
+                p["uncosted_units"] += float(r["qty_signed"])
+        elif kind == "unknown":
+            _unknown_actions.add(act)                  # don't silently hand out free units
+
+    if _unknown_actions:
+        log.warning("unclassified txn action(s) %s — treated as zero-cash; units may be uncosted",
+                    sorted(_unknown_actions))
 
     # CDP cost (cdp-stocks) -> the CASH bucket position for that security
     sec_by_ticker = {m["canonical_ticker"]: sid for (b, sid), m in meta.items()}
@@ -251,7 +307,11 @@ def compute(session=None):
         if p["units"] > 1e-6 and px:
             flows.append((today, mv))
         cost_known = p["invested"] > 1e-6
-        xirr = _xirr(flows) if cost_known else None
+        # XIRR is only meaningful when every unit that entered has a known cost and the flows
+        # span long enough for annualisation to mean something.
+        span = (max(d for d, _ in flows) - min(d for d, _ in flows)).days if flows else 0
+        xirr_ok = cost_known and p["uncosted_units"] < 1e-6 and span >= MIN_XIRR_DAYS
+        xirr = _xirr(flows) if xirr_ok else None
         total_pl = (mv + p["proceeds"] + p["income"] - p["invested"]) if cost_known else None
         simple = (total_pl / p["invested"]) if cost_known else None
         # cost basis of CURRENT holding (avg cost × held units) + unrealised P/L
@@ -272,6 +332,7 @@ def compute(session=None):
             "realised_pl_sgd": round(realised * rate, 2) if realised is not None else None,
             "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
             "fees_sgd": round(p["fees"] * rate, 2), "cost_known": cost_known,
+            "uncosted_units": round(p["uncosted_units"], 4),
             "total_pl_native": round(total_pl, 2) if cost_known else None,
             "invested_sgd": round(p["invested"] * rate, 2) if cost_known else 0.0,
             "mv_sgd": round(mv * rate, 2), "income_sgd": round(p["income"] * rate, 2),
