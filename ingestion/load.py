@@ -26,6 +26,12 @@ BUCKET = {"Tiger Prime": "cash", "Tiger Cash Boost": "cash", "Moomoo": "cash",
 # ledger 'account' values that aren't real tracked accounts (dups/superseded/legacy) -> skip
 SKIP_ACCT = ("superseded", "dup", "Vickers", "Tiger-archive")
 
+# SGX T-bill counters bought through CPF. They mature back to cash rather than being sold, carry
+# no price source, and are not holdings — seeding them would invent a phantom position. Skipped
+# deliberately, and named here so they don't drown the unresolved-ticker warning that exists to
+# catch a genuinely new ticker (an FSM Bursa buy once vanished into that noise).
+SKIP_TICKER_PREFIX = ("SGXZ",)
+
 
 def h(*parts):
     return hashlib.sha256("|".join(str(p) for p in parts).encode()).hexdigest()
@@ -70,18 +76,39 @@ def batch(session, source, name, rows_in):
     return b
 
 
+def _report_dropped(dropped):
+    """Ledger rows that couldn't be placed. An unseeded ticker is the common one, and it is
+    indistinguishable from 'you don't own that' once the load finishes — so name it here."""
+    if not dropped:
+        return
+    tickers = sorted(v for (kind, v) in dropped if kind == "ticker")
+    accounts = sorted(v for (kind, v) in dropped if kind == "account")
+    total = sum(dropped.values())
+    print(f"⚠️  ledger: dropped {total} row(s) that could not be resolved")
+    if tickers:
+        print(f"    unseeded ticker(s): {', '.join(tickers)}  -> add to symbols.csv, then `make seed`")
+    if accounts:
+        print(f"    unknown account(s): {', '.join(accounts)}  -> add to scripts/seed.py or SKIP_ACCT")
+
+
 def load_ledger(session, acct, alias):
     rows = list(csv.DictReader(open(os.path.join(ROOT, "build", "ledger.csv"))))
     b = batch(session, "ledger", "build/ledger.csv", len(rows))
-    payload, occ = [], Counter()
+    payload, occ, dropped = [], Counter(), Counter()
     for r in rows:
         if any(x in r["account"] for x in SKIP_ACCT):
             continue
         if r["asset_type"] not in ("stock", "fund"):
             continue
+        if r["ticker"].startswith(SKIP_TICKER_PREFIX):
+            continue
         a = acct.get(r["account"])
         sid = alias.get(r["ticker"])
         if not a or not sid:
+            # A trade the DB cannot place. Dropping it silently is how a real HEIM buy went
+            # missing: the statement introduced a ticker that seed.py had never registered,
+            # so the position simply never existed. Say so.
+            dropped[("account", r["account"]) if not a else ("ticker", r["ticker"])] += 1
             continue
         # dedup on the STABLE natural key only (no amount/price/currency) so ledger
         # corrections to those mutable fields update the existing row instead of
@@ -96,6 +123,7 @@ def load_ledger(session, acct, alias):
             currency=(r["currency"] or None), funding_bucket=BUCKET.get(r["account"]),
             source_file=r["source"], raw=r["raw"], batch_id=b.id, dedup_hash=dh,
         ))
+    _report_dropped(dropped)
     return upsert(session, Txn, payload, ["gross_amount", "price", "currency", "fees"])
 
 

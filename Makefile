@@ -26,7 +26,10 @@ load:         ## load ledger + dividends into DB (idempotent)
 prices:       ## fetch latest prices + FX (needs network)
 	$(PY) -m ingestion.prices
 
-ingest: flat load   ## full ingest: statements -> flat -> DB
+ingest: flat seed load   ## full ingest: statements -> flat -> seed -> DB
+	@# seed runs BETWEEN flat and load: it reads build/ledger.csv for the ticker->market
+	@# mapping, and load silently drops trades whose ticker has no security row yet. A
+	@# statement introducing a new ticker (e.g. FSM's first Bursa buy) needs both, in order.
 
 flat-cash:    ## parse bank/card statements -> classified spending ledger (build/cash_ledger.csv)
 	$(PY) build/parse_cash.py
