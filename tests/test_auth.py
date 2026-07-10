@@ -6,18 +6,24 @@ import jwt
 import pytest
 from fastapi.testclient import TestClient
 
-from portfolio.config import settings
+from portfolio.config import Settings, settings
 
 from server import auth
 
 
 @pytest.fixture(autouse=True)
 def _cfg():
-    """Deterministic auth config for every test."""
+    """Deterministic auth config for every test.
+
+    dev_auth_bypass is pinned like the rest: a developer's local .env sets DEV_AUTH_BYPASS=true,
+    which would otherwise short-circuit user_from_request and silently pass tests that exist to
+    prove the cookie/allowlist path denies. The tests that exercise the bypass turn it on
+    explicitly via monkeypatch."""
     settings.session_secret = "test-secret-key"
     settings.google_client_id = "test-client.apps.googleusercontent.com"
     settings.allowed_emails = "yes@gmail.com, Owner@Gmail.com"
     settings.cookie_secure = False
+    settings.dev_auth_bypass = False
     yield
 
 
@@ -145,9 +151,14 @@ def test_logout_clears_cookie(client):
 
 # ---------------- local-dev auth bypass (DEV_AUTH_BYPASS) ----------------
 
-def test_bypass_off_by_default(monkeypatch):
+def test_bypass_off_by_default():
+    """Off by default is a property of the class, not of the instance the fixture just pinned.
+    Asserting settings.dev_auth_bypass here would only prove _cfg ran."""
+    assert Settings.model_fields["dev_auth_bypass"].default is False
+
+
+def test_no_bypass_denies_without_cookie(monkeypatch):
     monkeypatch.delenv("VERCEL", raising=False)
-    assert settings.dev_auth_bypass is False
     assert settings.auth_bypass_active is False
     assert auth.user_from_request(_Req()) is None      # no cookie, no bypass -> denied
 
