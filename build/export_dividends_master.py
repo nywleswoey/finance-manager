@@ -14,7 +14,9 @@ come from the statement's stated qty when given, else the ledger qty replayed at
 the ex date (the dividend-bearing date — using the pay date would wrongly count
 shares bought between ex and pay), else the pay-date qty, else the declared rate.
 
-ex_date is read from the dividend.ex_date column in the DB.
+ex_date is read from the dividend.ex_date column in the DB, which nothing upstream produces —
+ingestion.load.backfill_ex_dates seeds it back from THIS file, so the two round-trip. Hence the
+write guard below: a DB missing ex-dates must never be allowed to overwrite them here.
 """
 from collections import defaultdict
 
@@ -27,6 +29,25 @@ from portfolio.db import SessionLocal
 
 OUT = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "dividends-master.csv")
 COLS = ["date", "ex_date", "ticker", "rate_per_unit", "currency"]
+
+
+def assert_no_ex_date_loss(path, withex):
+    """Refuse to overwrite `path` when the DB yields fewer ex-dates than the file already holds.
+
+    This file is the ONLY durable record of ex-dates (no statement carries them; the loader reads
+    them back from here). Overwriting it from a database whose ex_date column is NULL would
+    destroy them irrecoverably, and would also silently downgrade every affected rate_per_unit
+    from qty-at-ex-date to qty-at-pay-date. Fail loud and point at the loader instead.
+    """
+    prior = 0
+    if os.path.exists(path):
+        with open(path) as fh:
+            prior = sum(1 for r in csv.DictReader(fh) if r.get("ex_date"))
+    if withex < prior:
+        raise SystemExit(
+            f"REFUSING to write {path}: it holds {prior} ex-dates but the DB yields only {withex}. "
+            "The dividend.ex_date column is under-populated — run `ingestion.load` (which "
+            "backfills ex_date from this file) before exporting. Nothing was written.")
 
 
 def main():
@@ -93,12 +114,14 @@ def main():
                     "ticker": tk, "rate_per_unit": f"{rate:g}", "currency": ccy})
     out.sort(key=lambda x: (x["ticker"], x["date"]))   # per-ticker rate history
 
+    withex = sum(1 for x in out if x["ex_date"])
+    assert_no_ex_date_loss(OUT, withex)
+
     with open(OUT, "w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=COLS)
         w.writeheader()
         w.writerows(out)
     tickers = len({x["ticker"] for x in out})
-    withex = sum(1 for x in out if x["ex_date"])
     print(f"dividend-rate master: {len(out)} rows, {tickers} tickers, {withex} with ex_date -> {OUT}")
 
 

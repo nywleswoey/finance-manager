@@ -13,7 +13,7 @@ import sys
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import func, insert, select
+from sqlalchemy import func, insert, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from portfolio.db import SessionLocal
@@ -162,6 +162,37 @@ def load_dividends(session, acct, alias):
     return upsert(session, Dividend, payload, ["gross", "net", "currency", "amount_per_unit", "units"])
 
 
+def backfill_ex_dates(session):
+    """Restore dividend.ex_date from data/dividends-master.csv, which is its only durable record.
+
+    No statement carries an ex-date, so nothing upstream produces this column: it was populated
+    once by hand. Rows created fresh (a new database, `make reset`, or a dividend whose dedup_hash
+    changed and got pruned + reinserted) therefore land with ex_date NULL. The exporter would then
+    rewrite the master CSV without those ex-dates, destroying the only copy AND silently degrading
+    rate_per_unit from qty-at-ex-date to qty-at-pay-date. Reading the CSV back in here closes the
+    loop so the pair (loader, exporter) round-trips; the exporter's guard refuses any write that
+    would lose ex-dates, so a single bad run can't poison the input.
+    """
+    p = os.path.join(ROOT, "data", "dividends-master.csv")
+    if not os.path.exists(p):
+        return 0
+    n = 0
+    with open(p) as fh:
+        rows = list(csv.DictReader(fh))
+    for r in rows:
+        if not r.get("ex_date"):
+            continue
+        # ex-dates are account-independent, so one CSV row updates every account's copy of
+        # that (security, pay_date) dividend. Only NULLs are touched: the DB stays authoritative
+        # for anything already set, so a stale CSV can never overwrite a corrected ex-date.
+        n += session.execute(text(
+            "UPDATE dividend SET ex_date = :ex WHERE ex_date IS NULL AND pay_date = :pay "
+            "AND security_id IN (SELECT id FROM security WHERE canonical_ticker = :tk)"),
+            {"ex": r["ex_date"], "tk": r["ticker"], "pay": r["date"]}).rowcount
+    session.flush()
+    return n
+
+
 def upsert(session, model, payload, update_cols):
     """Idempotent on dedup_hash; mutable fields (amount/price/currency) are refreshed
     so re-ingesting a corrected ledger updates rows in place. Returns count of NEW rows."""
@@ -183,6 +214,7 @@ def main():
     acct, alias = maps(s)
     nt = load_ledger(s, acct, alias)
     nd = load_dividends(s, acct, alias)
+    nx = backfill_ex_dates(s)
     from ingestion.parse_options import load_options
     no = load_options(s, acct, alias)
     # CDP statements omit unit price, so the hand-maintained cost CSV is the only cost record
@@ -191,7 +223,8 @@ def main():
     nc = load_cdp_cost(s)
     s.commit()
     print(f"txn: +{nt} new (total {s.scalar(select(func.count()).select_from(Txn))})")
-    print(f"dividend: +{nd} new (total {s.scalar(select(func.count()).select_from(Dividend))})")
+    print(f"dividend: +{nd} new (total {s.scalar(select(func.count()).select_from(Dividend))}), "
+          f"ex_date backfilled on {nx}")
     from portfolio.models import OptionTrade, CdpCostLot
     print(f"option_trade: +{no} new (total {s.scalar(select(func.count()).select_from(OptionTrade))})")
     print(f"cdp_cost_lot: +{nc} new (total {s.scalar(select(func.count()).select_from(CdpCostLot))})")
