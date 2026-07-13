@@ -23,10 +23,10 @@ Usage:
 Options:
   --date YYYY-MM-DD    snapshot date (default 2026-06-18, the tiger statement end date)
   --dbs YYYYMM         DBS statement month (default: latest available)
-  --all-new            ingest every DBS month newer than the latest already-snapshotted
-                       month, each dated to its month-end. Forward-delta only: older
-                       un-ingested statements are skipped (tiger/FX/portfolio can't be
-                       reconstructed historically). Ignores --date/--dbs.
+  --all-new            ingest every DBS month that closes after the latest existing snapshot,
+                       each dated to its month-end. Forward-delta only: older un-ingested
+                       statements are skipped (tiger/FX/portfolio can't be reconstructed
+                       historically). Ignores --date/--dbs.
   --commit             persist the snapshot(s) (otherwise dry-run)
 """
 from __future__ import annotations
@@ -147,12 +147,16 @@ def dbs_month(path: str) -> str:
     return re.search(r"dbs_(\d{6})", os.path.basename(path)).group(1)
 
 
-def ingested_dbs_months(s) -> set[str]:
-    """DBS YYYYMM tokens already referenced by an existing snapshot note."""
-    months = set()
-    for sn in s.scalars(select(NwSnapshot)).all():
-        months.update(re.findall(r"dbs_(\d{6})", sn.note or ""))
-    return months
+def latest_snapshot_date(s) -> dt.date | None:
+    """Date of the most recent snapshot, or None if the DB has none.
+
+    This — not the snapshot's note — is what bounds the forward delta. Each ingested DBS month
+    yields a snapshot dated to its month-end, so "a snapshot exists at or after month_end(M)"
+    is exactly "M is already covered". Matching `dbs_YYYYMM` in the note instead made any
+    snapshot created outside this script (the API's manual entry writes no note) read as "no
+    snapshot at all", which aborted --all-new and took `make ingest-all` down with it.
+    """
+    return s.scalar(select(NwSnapshot.date).order_by(NwSnapshot.date.desc()).limit(1))
 
 
 def build_snapshot(s, snap_date: dt.date, dbs_path: str, tiger_path: str, commit: bool) -> int:
@@ -231,20 +235,19 @@ def main(argv):
     s = SessionLocal()
     try:
         if args.all_new:
-            done = ingested_dbs_months(s)
-            if not done:
-                print("No DBS snapshot exists yet. Seed one explicitly first "
+            latest = latest_snapshot_date(s)
+            if latest is None:
+                print("No snapshot exists yet. Seed one explicitly first "
                       "(--dbs YYYYMM --date ...), then --all-new picks up newer months.")
                 return 1
-            # forward delta only: months strictly newer than the latest ingested month.
+            # forward delta only: months whose month-end falls after the latest snapshot.
             # (Older un-ingested statements are NOT backfilled — tiger/FX/portfolio can't be
             # reconstructed historically, so they'd be garbage.)
-            latest_done = max(done)
             pending = [p for p in sorted(glob.glob(os.path.join(DBS_DIR, "dbs_*.pdf")))
-                       if dbs_month(p) > latest_done]
+                       if month_end(dbs_month(p)) > latest]
             if not pending:
-                print(f"Nothing new: latest ingested DBS month is {latest_done}, "
-                      "no newer statement present.")
+                print(f"Nothing new: latest snapshot is {latest}, "
+                      "no DBS statement closes after it.")
                 return 0
             print(f"delta: {len(pending)} new DBS month(s) -> {[dbs_month(p) for p in pending]}\n")
             rc = 0
