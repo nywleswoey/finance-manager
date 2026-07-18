@@ -18,6 +18,11 @@ from .db import fx_map, latest_close, session_scope
 log = logging.getLogger(__name__)
 
 
+def _f(x):
+    """float(x), passing None through unchanged — for nullable numeric fields."""
+    return float(x) if x is not None else None
+
+
 def cdp_transactions(session=None):
     """CDP trades from the cdp_cost_lot table (priced) for the transactions view — the cost
     record the CDP statements omit. Loaded from data/cdp-stocks/transactions.csv by
@@ -30,8 +35,8 @@ def cdp_transactions(session=None):
         "trade_date": r["trade_date"].isoformat() if r["trade_date"] else None, "account": "CDP",
         "ticker": r["ticker"], "name": r["stock_name"] or "", "action": r["action"] or "",
         "qty_signed": float(r["qty"] or 0),
-        "price": float(r["unit_price"]) if r["unit_price"] is not None else None,
-        "gross_amount": float(r["amount"]) if r["amount"] is not None else None,
+        "price": _f(r["unit_price"]),
+        "gross_amount": _f(r["amount"]),
         "currency": r["currency"] or "SGD", "source_file": "cdp-stocks/transactions.csv",
     } for r in rows]
 
@@ -201,7 +206,7 @@ def _apply_txn(p, r, today):
     """Fold one non-CDP txn row into its position accumulator `p`. Returns the action
     string if it couldn't be classified (caller should warn), else None."""
     act = r["action"]
-    px = float(r["price"]) if r["price"] is not None else None
+    px = _f(r["price"])
     fee = abs(float(r["fees"])) if r["fees"] is not None else 0.0   # native ccy, same as px*qty
     kind = classify(act, px)
     if kind == "cash":
