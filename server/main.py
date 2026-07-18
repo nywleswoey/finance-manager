@@ -116,16 +116,19 @@ async def _unhandled(request: Request, exc: Exception):
 _cache: dict = {}
 
 
+def _cached(key, fn):
+    """Memoize fn()'s result in the process-wide _cache under key (cleared by /refresh)."""
+    if key not in _cache:
+        _cache[key] = fn()
+    return _cache[key]
+
+
 def perf_all():
-    if "all" not in _cache:
-        _cache["all"] = compute()
-    return _cache["all"]
+    return _cached("all", compute)
 
 
 def perf():
-    if "rows" not in _cache:
-        _cache["rows"] = [r for r in perf_all() if r["units"] > 1e-6]
-    return _cache["rows"]
+    return _cached("rows", lambda: [r for r in perf_all() if r["units"] > 1e-6])
 
 
 @app.post("/api/refresh")
@@ -402,10 +405,8 @@ def portfolio_return():
 
 @app.get("/api/options")
 def options_summary():
-    if "opt" not in _cache:
-        from portfolio.options import compute
-        _cache["opt"] = compute()
-    return _cache["opt"]
+    from portfolio.options import compute
+    return _cached("opt", compute)
 
 
 @app.get("/api/options-trades")
