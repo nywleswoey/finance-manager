@@ -10,15 +10,14 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import select, text
+from sqlalchemy import select
 
-from portfolio.db import SessionLocal
+from portfolio.db import SessionLocal, fx_map
 from portfolio.models import OptionTrade
 
 
 def _fx(s):
-    rows = s.execute(text("SELECT currency, rate_to_sgd FROM fx_rate")).all()
-    fx = {c: float(r) for c, r in rows}
+    fx = fx_map(s)
     fx.setdefault("SGD", 1.0)
     return fx
 

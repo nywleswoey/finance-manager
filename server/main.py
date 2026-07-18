@@ -19,7 +19,7 @@ from sqlalchemy import text
 from portfolio.config import settings
 
 from server import auth
-from portfolio.db import SessionLocal
+from portfolio.db import SessionLocal, fx_map
 from portfolio.performance import alloc_by_account, compute, rollup
 
 logging.basicConfig(level=logging.INFO,
@@ -338,8 +338,7 @@ def dividends_annual():
     Historical FX is not stored, so prior years use today's rate (an approximation)."""
     from collections import defaultdict
     s = SessionLocal()
-    fx = {c: float(r) for c, r in s.execute(text(
-        "SELECT currency, rate_to_sgd FROM fx_rate")).all()}
+    fx = fx_map(s)
     rows = s.execute(text(
         "SELECT EXTRACT(YEAR FROM d.pay_date)::int yr, "
         "COALESCE(a.funding_bucket, 'cash') bucket, d.currency, sum(d.gross) gross "

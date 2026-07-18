@@ -13,7 +13,7 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
-from .db import session_scope
+from .db import fx_map, session_scope
 
 log = logging.getLogger(__name__)
 
@@ -164,7 +164,7 @@ def _xirr(flows, guess=0.1):
 
 def _fx_and_price(s):
     """Latest FX (currency -> rate_to_sgd) and latest close per security_id."""
-    fx = {c: float(r) for c, r in s.execute(text("SELECT currency, rate_to_sgd FROM fx_rate")).all()}
+    fx = fx_map(s)
     price = {sid: float(px) for sid, px in s.execute(text(
         "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC")).all()}
     return fx, price
