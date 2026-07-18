@@ -102,9 +102,8 @@ def _occurrences(s, match):
 
 def list_recurring():
     """Every registered recurring charge with matched-occurrence timing + status."""
-    s = SessionLocal()
     today = dt.date.today()
-    try:
+    with SessionLocal() as s:
         defs = s.execute(text(
             "SELECT id, name, merchant_match, category, cadence, expected_amount, "
             "expected_day, active, notes FROM recurring_spend ORDER BY name")).mappings().all()
@@ -143,14 +142,11 @@ def list_recurring():
                 "status": "inactive" if not d["active"] else _status(next_due, today),
             })
         return out
-    finally:
-        s.close()
 
 
 def add(name, merchant_match=None, category=None, cadence="monthly",
         expected_amount=None, expected_day=None, notes=None):
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         row = s.execute(text(
             "INSERT INTO recurring_spend (name, merchant_match, category, cadence, "
             "expected_amount, expected_day, notes) VALUES "
@@ -160,28 +156,20 @@ def add(name, merchant_match=None, category=None, cadence="monthly",
              "amt": expected_amount, "day": expected_day, "notes": notes}).scalar()
         s.commit()
         return row
-    finally:
-        s.close()
 
 
 def delete(rid):
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         s.execute(text("DELETE FROM recurring_spend WHERE id = :id"), {"id": rid})
         s.commit()
-    finally:
-        s.close()
 
 
 def dismiss(merchant):
     """Mark a detected merchant as a false positive so detect_candidates stops suggesting it."""
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         s.execute(text("INSERT INTO recurring_dismissed (merchant) VALUES (:m) "
                        "ON CONFLICT (merchant) DO NOTHING"), {"m": merchant})
         s.commit()
-    finally:
-        s.close()
 
 
 def _infer_cadence(gaps):
@@ -204,8 +192,7 @@ def detect_candidates(min_occurrences=3):
     hsbc / trust) and DBS GIRO / standing instructions — so one-off transfers, PayNow, ATM
     withdrawals etc. never surface as suggestions. Merchants the user has dismissed are
     excluded so a rejected suggestion never reappears."""
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         registered = [r[0].lower() for r in s.execute(text(
             "SELECT merchant_match FROM recurring_spend WHERE merchant_match IS NOT NULL")).all()]
         dismissed = {r[0].lower() for r in s.execute(text(
@@ -246,5 +233,3 @@ def detect_candidates(min_occurrences=3):
             })
         out.sort(key=lambda r: r["avg_amount"], reverse=True)
         return out
-    finally:
-        s.close()
