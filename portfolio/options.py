@@ -28,6 +28,11 @@ def _sgd(v, ccy, fx):
     return float(v) * fx.get(ccy or "SGD", 1.0)
 
 
+def _f(x):
+    """float(x), passing None through (nullable numeric column -> nullable output)."""
+    return float(x) if x is not None else None
+
+
 def _is_open(t):
     """A contract is open only until it resolves. Expired-worthless legs carry
     outcome='expired' with close_date=None (never bought back) — those are REALIZED,
@@ -174,13 +179,13 @@ def trades_for(underlying):
 def _trade_dict(t, fx):
     return {
         "underlying": t.underlying, "type": t.option_type,
-        "contracts": float(t.contracts or 0), "strike": float(t.strike) if t.strike is not None else None,
+        "contracts": float(t.contracts or 0), "strike": _f(t.strike),
         "open_date": t.open_date.isoformat() if t.open_date else None,
         "expiry": t.expiry_date.isoformat() if t.expiry_date else None,
         "close_date": t.close_date.isoformat() if t.close_date else None,
-        "premium_open": float(t.premium_open) if t.premium_open is not None else None,
-        "premium_close": float(t.premium_close) if t.premium_close is not None else None,
-        "realized_native": float(t.realized_pl) if t.realized_pl is not None else None,
+        "premium_open": _f(t.premium_open),
+        "premium_close": _f(t.premium_close),
+        "realized_native": _f(t.realized_pl),
         "realized_sgd": round(_sgd(t.realized_pl, t.currency, fx), 2),
         "currency": t.currency, "outcome": t.outcome,
     }
