@@ -174,6 +174,51 @@ def _fx_and_price(s):
     return fx, price
 
 
+def _build_row(k, p, m, fx, price, today):
+    """Assemble one position's output dict (native ccy + SGD) from its accumulated flows/units."""
+    ccy = m["currency"] or "SGD"
+    rate = fx.get(ccy, 1.0)
+    px = price.get(k[1])
+    mv = (p["units"] * px) if px else 0.0
+    flows = list(p["flows"])
+    if p["units"] > 1e-6 and px:
+        flows.append((today, mv))
+    cost_known = p["invested"] > 1e-6
+    # XIRR is only meaningful when every unit that entered has a known cost and the flows
+    # span long enough for annualisation to mean something.
+    span = (max(d for d, _ in flows) - min(d for d, _ in flows)).days if flows else 0
+    xirr_ok = cost_known and p["uncosted_units"] < 1e-6 and span >= MIN_XIRR_DAYS
+    xirr = _xirr(flows) if xirr_ok else None
+    total_pl = (mv + p["proceeds"] + p["income"] - p["invested"]) if cost_known else None
+    simple = (total_pl / p["invested"]) if cost_known else None
+    # cost basis of CURRENT holding (avg cost × held units) + unrealised P/L
+    avg_cost = (p["buy_cost"] / p["buy_qty"]) if p["buy_qty"] > 1e-6 else None
+    cost_basis = (avg_cost * p["units"]) if (avg_cost and p["units"] > 1e-6) else None
+    unreal = (mv - cost_basis) if cost_basis is not None else None
+    # realised stock P/L = sell proceeds − cost of the shares sold (buy_cost minus the
+    # cost still tied up in the current holding). Closed positions: cost_basis None -> all sold.
+    realised = (p["proceeds"] - p["buy_cost"] + (cost_basis or 0.0)) if cost_known else None
+    return {
+        "bucket": k[0], "accounts": sorted(p["accounts"]), "ticker": m["canonical_ticker"],
+        "name": m["name"], "market": m["market"], "asset_type": m["asset_type"], "currency": ccy,
+        "units": round(p["units"], 4), "price": px, "mv_native": round(mv, 2),
+        "avg_cost": round(avg_cost, 4) if avg_cost else None,
+        "cost_basis_native": round(cost_basis, 2) if cost_basis is not None else None,
+        "cost_basis_sgd": round(cost_basis * rate, 2) if cost_basis is not None else None,
+        "unrealised_pl_sgd": round(unreal * rate, 2) if unreal is not None else None,
+        "realised_pl_sgd": round(realised * rate, 2) if realised is not None else None,
+        "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
+        "fees_sgd": round(p["fees"] * rate, 2), "cost_known": cost_known,
+        "uncosted_units": round(p["uncosted_units"], 4),
+        "total_pl_native": round(total_pl, 2) if cost_known else None,
+        "invested_sgd": round(p["invested"] * rate, 2) if cost_known else 0.0,
+        "mv_sgd": round(mv * rate, 2), "income_sgd": round(p["income"] * rate, 2),
+        "pl_sgd": round(total_pl * rate, 2) if cost_known else None,
+        "xirr": round(xirr, 4) if xirr is not None else None,
+        "simple_return": round(simple, 4) if cost_known else None,
+    }
+
+
 def compute(session=None):
     s = session or SessionLocal()
     today = dt.date.today()
@@ -300,47 +345,7 @@ def compute(session=None):
         m = meta.get(k)
         if not m:
             continue
-        ccy = m["currency"] or "SGD"
-        rate = fx.get(ccy, 1.0)
-        px = price.get(k[1])
-        mv = (p["units"] * px) if px else 0.0
-        flows = list(p["flows"])
-        if p["units"] > 1e-6 and px:
-            flows.append((today, mv))
-        cost_known = p["invested"] > 1e-6
-        # XIRR is only meaningful when every unit that entered has a known cost and the flows
-        # span long enough for annualisation to mean something.
-        span = (max(d for d, _ in flows) - min(d for d, _ in flows)).days if flows else 0
-        xirr_ok = cost_known and p["uncosted_units"] < 1e-6 and span >= MIN_XIRR_DAYS
-        xirr = _xirr(flows) if xirr_ok else None
-        total_pl = (mv + p["proceeds"] + p["income"] - p["invested"]) if cost_known else None
-        simple = (total_pl / p["invested"]) if cost_known else None
-        # cost basis of CURRENT holding (avg cost × held units) + unrealised P/L
-        avg_cost = (p["buy_cost"] / p["buy_qty"]) if p["buy_qty"] > 1e-6 else None
-        cost_basis = (avg_cost * p["units"]) if (avg_cost and p["units"] > 1e-6) else None
-        unreal = (mv - cost_basis) if cost_basis is not None else None
-        # realised stock P/L = sell proceeds − cost of the shares sold (buy_cost minus the
-        # cost still tied up in the current holding). Closed positions: cost_basis None -> all sold.
-        realised = (p["proceeds"] - p["buy_cost"] + (cost_basis or 0.0)) if cost_known else None
-        out.append({
-            "bucket": k[0], "accounts": sorted(p["accounts"]), "ticker": m["canonical_ticker"],
-            "name": m["name"], "market": m["market"], "asset_type": m["asset_type"], "currency": ccy,
-            "units": round(p["units"], 4), "price": px, "mv_native": round(mv, 2),
-            "avg_cost": round(avg_cost, 4) if avg_cost else None,
-            "cost_basis_native": round(cost_basis, 2) if cost_basis is not None else None,
-            "cost_basis_sgd": round(cost_basis * rate, 2) if cost_basis is not None else None,
-            "unrealised_pl_sgd": round(unreal * rate, 2) if unreal is not None else None,
-            "realised_pl_sgd": round(realised * rate, 2) if realised is not None else None,
-            "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
-            "fees_sgd": round(p["fees"] * rate, 2), "cost_known": cost_known,
-            "uncosted_units": round(p["uncosted_units"], 4),
-            "total_pl_native": round(total_pl, 2) if cost_known else None,
-            "invested_sgd": round(p["invested"] * rate, 2) if cost_known else 0.0,
-            "mv_sgd": round(mv * rate, 2), "income_sgd": round(p["income"] * rate, 2),
-            "pl_sgd": round(total_pl * rate, 2) if cost_known else None,
-            "xirr": round(xirr, 4) if xirr is not None else None,
-            "simple_return": round(simple, 4) if cost_known else None,
-        })
+        out.append(_build_row(k, p, m, fx, price, today))
     # fold in the options income stream per underlying (realized, SGD). Options trade on the
     # cash account, so attach to the cash-bucket row for that security; orphan underlyings
     # (no stock position) are still counted in the Performance rollup via options.realized_by().
