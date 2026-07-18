@@ -43,13 +43,10 @@ def f(s): return float(s.replace(",", ""))
 def isoA(d): return datetime.strptime(d, "%d %b %Y").date().isoformat()
 def isoB(d): return datetime.strptime(d, "%d/%m/%Y").date().isoformat()
 
-def text_of(path):
-    return raw_text(path)
-
 def holdings(path):
     """fund unit snapshot from the asset-allocation table — used only to sanity-check units."""
     out = {}
-    for m in re.finditer(r"(.+?Fund)\s+Equity(?:\s+Fund)?\s+(CPF OA|CPF SA|SRS|Cash)\s+([\d,]+\.\d+)\s+S\$", text_of(path)):
+    for m in re.finditer(r"(.+?Fund)\s+Equity(?:\s+Fund)?\s+(CPF OA|CPF SA|SRS|Cash)\s+([\d,]+\.\d+)\s+S\$", raw_text(path)):
         out[(re.sub(r"\s+", " ", m.group(1)).strip(), m.group(2))] = f(m.group(3))
     return out
 
@@ -71,7 +68,7 @@ def main():
     files = sorted(glob.glob(os.path.join(DATA, "endowus_*.pdf")))
     allrows, snaps = [], {}
     for path in files:
-        txt = text_of(path)
+        txt = raw_text(path)
         allrows += parse_txns(txt)
         h = holdings(path)
         if h:
