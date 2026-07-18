@@ -9,7 +9,7 @@ Normalized row schema:
   date, account, market, ticker, asset_type, action, qty_signed,
   price, amount, currency, fees, source, raw
 """
-import csv, glob, os, re, sys
+import csv, glob, os, re
 from collections import defaultdict
 from datetime import datetime
 

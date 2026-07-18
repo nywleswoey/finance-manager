@@ -13,7 +13,7 @@ import sys
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import func, insert, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from portfolio.db import SessionLocal

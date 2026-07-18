@@ -8,7 +8,7 @@ Each statement has a per-symbol table:
 We emit buy/sell/transfer events from BuyQ/SellQ/TransferIn/TransferOut and also
 record the ending quantity per symbol per month (to confirm current positions).
 """
-import glob, os, re, csv, subprocess, sys
+import glob, os, re, csv, subprocess
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 NUM = r"[+\-]?[\d,]+(?:\.\d+)?"
