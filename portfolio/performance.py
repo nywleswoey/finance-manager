@@ -17,21 +17,6 @@ from .db import fx_map, latest_close, session_scope
 
 log = logging.getLogger(__name__)
 
-_ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}
-
-
-def _num(s):
-    s = str(s or "").replace(",", "").replace("$", "").strip()
-    if not s or s == "-":
-        return 0.0
-    neg = s.startswith("(") and s.endswith(")")
-    s = s.strip("()")
-    try:
-        v = float(s)
-    except ValueError:
-        return 0.0
-    return -v if neg else v
-
 
 def cdp_transactions(session=None):
     """CDP trades from the cdp_cost_lot table (priced) for the transactions view — the cost

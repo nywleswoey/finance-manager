@@ -14,10 +14,26 @@ from collections import Counter
 from ingestion.load import batch, count, occ_hash, pdate, prune_stale, upsert
 from portfolio.db import SessionLocal
 from portfolio.models import CdpCostLot
-from portfolio.performance import _ALIAS, _num
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 CSV = os.path.join(ROOT, "data", "cdp-stocks", "transactions.csv")
+
+# CDP code -> canonical SGX/exchange code (Holdings.md label aliasing; CWBU->SET is the
+# Cromwell->Stoneweg counter rename).
+_ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}
+
+
+def _num(s):
+    s = str(s or "").replace(",", "").replace("$", "").strip()
+    if not s or s == "-":
+        return 0.0
+    neg = s.startswith("(") and s.endswith(")")
+    s = s.strip("()")
+    try:
+        v = float(s)
+    except ValueError:
+        return 0.0
+    return -v if neg else v
 
 
 def load_cdp_cost(session):
