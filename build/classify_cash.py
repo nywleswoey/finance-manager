@@ -123,6 +123,21 @@ def _apply_correction(o, target):
     return o
 
 
+def _assign_spend_category(o, r, hay, og, ol, groups, unmatched):
+    """Set category/subcategory on a spend row: a manual override (og/ol) wins, else the
+    keyword category from categories.yaml, else Uncategorized (recording the merchant in
+    `unmatched` for the LLM fallback report)."""
+    if og:
+        o["category"], o["subcategory"] = og, ol or ""
+        return
+    group, leaf = category_for(hay, groups)
+    if group:
+        o["category"], o["subcategory"] = group, leaf
+    else:
+        o["category"], o["subcategory"] = "Uncategorized", ""
+        unmatched[r["merchant"][:60]] = unmatched.get(r["merchant"][:60], 0) + 1
+
+
 def classify(rows, cats, excl, overrides, oexcl, corrections=None):
     corrections = corrections or {}
     groups = cats.get("groups", {})
@@ -145,15 +160,8 @@ def classify(rows, cats, excl, overrides, oexcl, corrections=None):
             if og == "EXCLUDE":
                 o["is_spend"] = "false"
                 o["exclude_reason"], o["category"], o["subcategory"] = "manual", "Excluded", "manual"
-            elif og:
-                o["category"], o["subcategory"] = og, ol or ""
             else:
-                group, leaf = category_for(hay, groups)
-                if group:
-                    o["category"], o["subcategory"] = group, leaf
-                else:
-                    o["category"], o["subcategory"] = "Uncategorized", ""
-                    unmatched[r["merchant"][:60]] = unmatched.get(r["merchant"][:60], 0) + 1
+                _assign_spend_category(o, r, hay, og, ol, groups, unmatched)
             out.append(o)
             continue
         if amt >= 0:  # inflow
@@ -182,15 +190,7 @@ def classify(rows, cats, excl, overrides, oexcl, corrections=None):
             out.append(o)
             continue
         o["is_spend"] = "true"
-        if og:
-            o["category"], o["subcategory"] = og, ol or ""
-        else:
-            group, leaf = category_for(hay, groups)
-            if group:
-                o["category"], o["subcategory"] = group, leaf
-            else:
-                o["category"], o["subcategory"] = "Uncategorized", ""
-                unmatched[r["merchant"][:60]] = unmatched.get(r["merchant"][:60], 0) + 1
+        _assign_spend_category(o, r, hay, og, ol, groups, unmatched)
         out.append(o)
     return out, unmatched
 
