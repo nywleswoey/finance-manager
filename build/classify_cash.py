@@ -22,6 +22,8 @@ import os
 
 import yaml
 
+from _csvout import write_csv
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW = os.path.join(ROOT, "build", "cash_ledger_raw.csv")
 OUT = os.path.join(ROOT, "build", "cash_ledger.csv")
@@ -218,10 +220,7 @@ def main():
     watchlist = _load(WATCHLIST, {}) or {}
     corrections = load_record_corrections()
     out, unmatched = classify(rows, cats, excl, overrides, oexcl, corrections)
-    with open(OUT, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=OUT_COLS)
-        w.writeheader()
-        w.writerows(out)
+    write_csv(OUT, OUT_COLS, out)
 
     for d, amt, m, note in watch_alerts(out, watchlist):
         print(f"  ⚠ WATCH {d}  S${amt:,.2f}  {m}  — {note}")

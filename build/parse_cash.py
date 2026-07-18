@@ -25,6 +25,7 @@ import re
 import unicodedata
 
 from _pdf import raw_text
+from _csvout import write_csv
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "build", "cash_ledger_raw.csv")
@@ -375,10 +376,7 @@ def main():
     rows = [r for r in rows if not _is_suppressed_cc_bill(r, windows)]
     rows = [r for r in rows if r["txn_date"] >= START.isoformat()]
     rows.sort(key=lambda r: (r["txn_date"], r["source"]))
-    with open(OUT, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=COLS)
-        w.writeheader()
-        w.writerows(rows)
+    write_csv(OUT, COLS, rows)
     by_src = {}
     for r in rows:
         by_src[r["source"]] = by_src.get(r["source"], 0) + 1

@@ -14,6 +14,7 @@ import csv, glob, os, re
 from collections import defaultdict
 
 from _pdf import raw_text
+from _csvout import write_csv
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -239,9 +240,7 @@ def apply_corrections():
 tiger(); fsm(); moomoo(); cpf_srs(); cdp(); apply_corrections()   # cdp() last: dedups vs the rest
 out = os.path.join(HERE, "dividends.csv")
 cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "units", "rate", "currency", "source"]
-with open(out, "w", newline="") as fh:
-    w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore"); w.writeheader()
-    for d in DIV: w.writerow(d)
+write_csv(out, cols, DIV, extrasaction="ignore")
 
 # ---------- summary ----------
 by_ccy = defaultdict(lambda: defaultdict(float))

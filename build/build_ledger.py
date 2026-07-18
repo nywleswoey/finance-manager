@@ -12,6 +12,7 @@ Normalized row schema:
 import csv, glob, os, re
 from collections import defaultdict
 from datetime import datetime
+from _csvout import write_csv
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -328,10 +329,7 @@ LEDGER.sort(key=lambda r: (str(r["date"]), r["account"], r["ticker"]))
 cols = ["date","account","market","ticker","asset_type","action","qty_signed",
         "price","amount","currency","fees","source","raw"]
 out = os.path.join(os.path.dirname(__file__), "ledger.csv")
-with open(out, "w", newline="") as fh:
-    w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
-    w.writeheader()
-    for r in LEDGER: w.writerow(r)
+write_csv(out, cols, LEDGER, extrasaction="ignore")
 print(f"ledger rows: {len(LEDGER)} -> {out}")
 
 # coverage / file inventory
