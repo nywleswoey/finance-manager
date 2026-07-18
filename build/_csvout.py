@@ -16,3 +16,11 @@ def write_csv(path, fieldnames, rows, extrasaction="raise"):
         w = csv.DictWriter(fh, fieldnames=fieldnames, extrasaction=extrasaction)
         w.writeheader()
         w.writerows(rows)
+
+
+def write_rows(path, header, rows):
+    """Write list `rows` to `path` as a CSV led by a `header` row (csv.writer)."""
+    with open(path, "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(header)
+        w.writerows(rows)

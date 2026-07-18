@@ -20,10 +20,11 @@ price/amount: it is internal, not new capital. Its cost carries from the predece
 the `switch` corporate_action (see performance.py / seed.py), so booking it here would
 double-count. Infinity itself stays in cpf-stocks/transactions.csv (authoritative cost).
 """
-import glob, os, re, csv
+import glob, os, re
 from datetime import datetime
 
 from _pdf import raw_text
+from _csvout import write_rows
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "endowus statement")
 FUND = "Amundi"                     # the fund Endowus is authoritative for (others come from cpf-stocks)
@@ -115,11 +116,8 @@ def main():
     print(f"external cash booked (buys only): S${invested:,.2f}  (switch-in excluded)")
 
     out = os.path.join(os.path.dirname(__file__), "endowus_events.csv")
-    with open(out, "w", newline="") as fh:
-        w = csv.writer(fh)
-        w.writerow(["date", "src", "fund", "action", "qty_signed", "price", "amount"])
-        for date, fund, act, q, price, amt in ev:
-            w.writerow([date, "CPF OA", fund, act, q, price, amt])
+    write_rows(out, ["date", "src", "fund", "action", "qty_signed", "price", "amount"],
+               [[date, "CPF OA", fund, act, q, price, amt] for date, fund, act, q, price, amt in ev])
     print(f"\nwrote {out}")
 
 if __name__ == "__main__":

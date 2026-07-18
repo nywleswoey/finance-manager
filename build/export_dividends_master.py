@@ -25,7 +25,10 @@ import os
 
 from sqlalchemy import text
 
-from _csvout import write_csv
+try:
+    from _csvout import write_csv          # script mode: build/ is sys.path[0]
+except ModuleNotFoundError:
+    from build._csvout import write_csv     # package mode: imported as build.export_...
 
 from portfolio.db import SessionLocal
 
