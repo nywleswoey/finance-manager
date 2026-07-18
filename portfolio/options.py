@@ -114,21 +114,29 @@ def compute():
     }
 
 
+def _closed_trades():
+    """Yield (trade, fx) for each closed (realized) trade — expired legs ARE realized.
+    Opens the session and loads FX once; the session stays open until iteration finishes."""
+    s = SessionLocal()
+    fx = _fx(s)
+    try:
+        for t in s.scalars(select(OptionTrade)).all():
+            if not _is_open(t):
+                yield t, fx
+    finally:
+        s.close()
+
+
 def realized_by_ticker():
     """Closed-trade realized P/L (SGD + native) keyed by underlying ticker.
     For folding the options income stream into per-security (Holdings) views."""
-    s = SessionLocal()
-    fx = _fx(s)
     out = {}
-    for t in s.scalars(select(OptionTrade)).all():
-        if _is_open(t):                                # not yet realized (expired legs ARE realized)
-            continue
+    for t, fx in _closed_trades():
         r = out.setdefault(t.underlying, {"pl_sgd": 0.0, "pl_native": 0.0, "trades": 0,
                                           "currency": t.currency, "market": t.market})
         r["pl_sgd"] += _sgd(t.realized_pl, t.currency, fx)
         r["pl_native"] += float(t.realized_pl or 0)
         r["trades"] += 1
-    s.close()
     return {k: {**v, "pl_sgd": round(v["pl_sgd"], 2), "pl_native": round(v["pl_native"], 2)}
             for k, v in out.items()}
 
@@ -136,12 +144,8 @@ def realized_by_ticker():
 def realized_by(dim):
     """Closed-trade realized P/L (SGD) grouped by dimension: 'market' | 'bucket' | 'account'.
     Options trade on the Tiger Prime cash account, so bucket='cash', account='Tiger Prime'."""
-    s = SessionLocal()
-    fx = _fx(s)
     agg = {}
-    for t in s.scalars(select(OptionTrade)).all():
-        if _is_open(t):
-            continue
+    for t, fx in _closed_trades():
         if dim == "market":
             key = t.market or "—"
         elif dim == "bucket":
@@ -149,7 +153,6 @@ def realized_by(dim):
         else:                                          # account
             key = "Tiger Prime"
         agg[key] = agg.get(key, 0.0) + _sgd(t.realized_pl, t.currency, fx)
-    s.close()
     return {k: round(v, 2) for k, v in agg.items()}
 
 
