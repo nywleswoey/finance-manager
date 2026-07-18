@@ -166,12 +166,18 @@ def _xirr(flows, guess=0.1):
     return (lo + hi) / 2
 
 
+def _fx_and_price(s):
+    """Latest FX (currency -> rate_to_sgd) and latest close per security_id."""
+    fx = {c: float(r) for c, r in s.execute(text("SELECT currency, rate_to_sgd FROM fx_rate")).all()}
+    price = {sid: float(px) for sid, px in s.execute(text(
+        "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC")).all()}
+    return fx, price
+
+
 def compute(session=None):
     s = session or SessionLocal()
     today = dt.date.today()
-    fx = {c: float(r) for c, r in s.execute(text("SELECT currency, rate_to_sgd FROM fx_rate")).all()}
-    price = {(sid): float(px) for sid, px in s.execute(text(
-        "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC")).all()}
+    fx, price = _fx_and_price(s)
 
     # group txns + dividends per (account, security)
     rows = s.execute(text("""
@@ -239,14 +245,9 @@ def compute(session=None):
         pos[k]["buy_qty"] += c["buy_qty"]
         pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
 
-    bucket_of_acct = {r["account"]: r["funding_bucket"] for r in rows}
+    bucket_by_acct_id = {r["account_id"]: r["funding_bucket"] for r in rows}
     for d in divs:
-        # find the bucket this dividend's account belongs to
-        b = None
-        for r in rows:
-            if r["account_id"] == d["account_id"]:
-                b = r["funding_bucket"]; break
-        k = (b, d["security_id"])
+        k = (bucket_by_acct_id.get(d["account_id"]), d["security_id"])
         if k not in pos:
             continue
         amt = float(d["gross"] or 0)
@@ -356,9 +357,7 @@ def compute(session=None):
 def alloc_by_account(session=None):
     """market value per account (SGD) — for allocation charts (no cost needed)."""
     s = session or SessionLocal()
-    fx = {c: float(r) for c, r in s.execute(text("SELECT currency, rate_to_sgd FROM fx_rate")).all()}
-    price = {sid: float(px) for sid, px in s.execute(text(
-        "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC")).all()}
+    fx, price = _fx_and_price(s)
     rows = s.execute(text(
         "SELECT account, security_id, currency, units FROM current_position WHERE units > 0")).all()
     if session is None:
