@@ -13,26 +13,13 @@ fx + value_sgd + portfolio_value_sgd are frozen at capture so history stays stab
 from __future__ import annotations
 
 import datetime as dt
-from contextlib import contextmanager
 from decimal import Decimal
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from .db import SessionLocal
+from .db import session_scope
 from .models import NwItem, NwSnapshot, NwValue
-
-
-@contextmanager
-def _session(s: Session | None):
-    """Yield the caller's Session, or open (and afterwards close) an owned one."""
-    own = s is None
-    s = s or SessionLocal()
-    try:
-        yield s
-    finally:
-        if own:
-            s.close()
 
 # Catalogue codes auto-pulled from broker/bank statements (see scripts/snapshot_from_statements.py).
 # Everything else is manual: entered in-app or carried forward. Single source of truth so the UI
@@ -96,7 +83,7 @@ def _write_value(s: Session, snap_id: int, it: NwItem, native, ccy, rate, existi
 
 
 def catalogue(s: Session | None = None) -> list[dict]:
-    with _session(s) as s:
+    with session_scope(s) as s:
         items = s.scalars(select(NwItem).where(NwItem.active).order_by(NwItem.sort_order)).all()
         return [_item_dict(i) for i in items]
 
@@ -164,19 +151,19 @@ def snapshot_detail(snap: NwSnapshot) -> dict:
 
 
 def list_snapshots(s: Session | None = None) -> list[dict]:
-    with _session(s) as s:
+    with session_scope(s) as s:
         snaps = s.scalars(select(NwSnapshot).order_by(NwSnapshot.date.desc())).all()
         return [metrics(sn) for sn in snaps]
 
 
 def get_snapshot(snap_id: int, s: Session | None = None) -> dict | None:
-    with _session(s) as s:
+    with session_scope(s) as s:
         snap = s.get(NwSnapshot, snap_id)
         return snapshot_detail(snap) if snap else None
 
 
 def latest(s: Session | None = None) -> dict | None:
-    with _session(s) as s:
+    with session_scope(s) as s:
         snap = s.scalars(select(NwSnapshot).order_by(NwSnapshot.date.desc()).limit(1)).first()
         return snapshot_detail(snap) if snap else None
 
@@ -185,7 +172,7 @@ def create_snapshot(date: dt.date, values: list[dict], note: str | None = None,
                     s: Session | None = None) -> dict:
     """Create a dated snapshot. `values` = [{code|item_id, native_value, currency?}].
     Missing catalogue items default to 0 (BR2). Duplicate date rejected (BR1)."""
-    with _session(s) as s:
+    with session_scope(s) as s:
         if s.scalar(select(NwSnapshot).where(NwSnapshot.date == date)):
             raise ValueError(f"snapshot for {date} already exists")
         items, by_id = _active_items(s)
@@ -215,7 +202,7 @@ def update_snapshot(snap_id: int, values: list[dict], note: str | None = None,
     Only supplied items are changed; their FX rate is re-frozen at the snapshot's OWN date
     (history stays stable) and value_sgd recomputed. Items not supplied and the frozen
     portfolio_value_sgd are left untouched. Returns the detail, or None if the id is unknown."""
-    with _session(s) as s:
+    with session_scope(s) as s:
         snap = s.get(NwSnapshot, snap_id)
         if snap is None:
             return None
@@ -233,7 +220,7 @@ def update_snapshot(snap_id: int, values: list[dict], note: str | None = None,
 
 
 def delete_snapshot(snap_id: int, s: Session | None = None) -> bool:
-    with _session(s) as s:
+    with session_scope(s) as s:
         snap = s.get(NwSnapshot, snap_id)
         if snap is None:
             return False

@@ -13,7 +13,7 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
-from .db import SessionLocal
+from .db import session_scope
 
 log = logging.getLogger(__name__)
 
@@ -37,12 +37,10 @@ def cdp_transactions(session=None):
     """CDP trades from the cdp_cost_lot table (priced) for the transactions view — the cost
     record the CDP statements omit. Loaded from data/cdp-stocks/transactions.csv by
     ingestion.load_cdp_cost. Returns txn-like dicts."""
-    s = session or SessionLocal()
-    rows = s.execute(text(
-        "SELECT trade_date, ticker, stock_name, action, qty, unit_price, amount, currency "
-        "FROM cdp_cost_lot ORDER BY trade_date")).mappings().all()
-    if session is None:
-        s.close()
+    with session_scope(session) as s:
+        rows = s.execute(text(
+            "SELECT trade_date, ticker, stock_name, action, qty, unit_price, amount, currency "
+            "FROM cdp_cost_lot ORDER BY trade_date")).mappings().all()
     return [{
         "trade_date": r["trade_date"].isoformat() if r["trade_date"] else None, "account": "CDP",
         "ticker": r["ticker"], "name": r["stock_name"] or "", "action": r["action"] or "",
@@ -66,11 +64,9 @@ def cdp_cost(session=None):
 
     Transfers are skipped: the position is grouped per (funding_bucket, security), so a CDP->FSM
     move keeps both legs in the same position and the cost carries across on its own."""
-    s = session or SessionLocal()
-    rows = s.execute(text(
-        "SELECT ticker, trade_date, qty, amount, action FROM cdp_cost_lot")).all()
-    if session is None:
-        s.close()
+    with session_scope(session) as s:
+        rows = s.execute(text(
+            "SELECT ticker, trade_date, qty, amount, action FROM cdp_cost_lot")).all()
     out = {}
     for ticker, d, qty, amount, action in rows:
         if (action or "").strip().lower() in CDP_TRANSFER:
@@ -289,68 +285,68 @@ def _build_row(k, p, m, fx, price, today):
 
 
 def compute(session=None):
-    s = session or SessionLocal()
     today = dt.date.today()
-    fx, price = _fx_and_price(s)
+    with session_scope(session) as s:
+        fx, price = _fx_and_price(s)
 
-    # group txns + dividends per (account, security)
-    rows = s.execute(text("""
-        SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
-               sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
-               t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount, t.fees
-        FROM txn t JOIN account a ON a.id=t.account_id JOIN security sec ON sec.id=t.security_id
-    """)).mappings().all()
-    divs = s.execute(text("""
-        SELECT account_id, security_id, pay_date, gross, currency FROM dividend
-    """)).mappings().all()
+        # group txns + dividends per (account, security)
+        rows = s.execute(text("""
+            SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
+                   sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
+                   t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount, t.fees
+            FROM txn t JOIN account a ON a.id=t.account_id JOIN security sec ON sec.id=t.security_id
+        """)).mappings().all()
+        divs = s.execute(text("""
+            SELECT account_id, security_id, pay_date, gross, currency FROM dividend
+        """)).mappings().all()
 
-    cdp = cdp_cost(s)
-    # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
-    # together, so a position transferred into FSM still carries its original CDP purchase cost.
-    pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
-                                "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
-                                "uncosted_units": 0.0, "accounts": set()})
-    meta = {}
-    _unknown_actions = set()
-    for r in rows:
-        k = (r["funding_bucket"], r["security_id"])
-        meta[k] = r
-        p = pos[k]
-        p["units"] += float(r["qty_signed"])
-        p["accounts"].add(r["account"])
-        if r["account"] == "CDP":
-            continue                                   # CDP cost comes from cdp-stocks below
-        unk = _apply_txn(p, r, today)
-        if unk is not None:
-            _unknown_actions.add(unk)
+        cdp = cdp_cost(s)
+        # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
+        # together, so a position transferred into FSM still carries its original CDP purchase cost.
+        pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
+                                    "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
+                                    "uncosted_units": 0.0, "accounts": set()})
+        meta = {}
+        _unknown_actions = set()
+        for r in rows:
+            k = (r["funding_bucket"], r["security_id"])
+            meta[k] = r
+            p = pos[k]
+            p["units"] += float(r["qty_signed"])
+            p["accounts"].add(r["account"])
+            if r["account"] == "CDP":
+                continue                                   # CDP cost comes from cdp-stocks below
+            unk = _apply_txn(p, r, today)
+            if unk is not None:
+                _unknown_actions.add(unk)
 
-    if _unknown_actions:
-        log.warning("unclassified txn action(s) %s — treated as zero-cash; units may be uncosted",
-                    sorted(_unknown_actions))
+        if _unknown_actions:
+            log.warning("unclassified txn action(s) %s — treated as zero-cash; units may be uncosted",
+                        sorted(_unknown_actions))
 
-    # CDP cost (cdp-stocks) -> the CASH bucket position for that security
-    sec_by_ticker = {m["canonical_ticker"]: sid for (b, sid), m in meta.items()}
-    for tk, c in cdp.items():
-        sid = sec_by_ticker.get(tk)
-        k = ("cash", sid)
-        if sid is None or k not in pos:
-            continue
-        pos[k]["flows"].extend(c["flows"])
-        pos[k]["invested"] += c["invested"]
-        pos[k]["buy_cost"] += c["buy_cost"]
-        pos[k]["buy_qty"] += c["buy_qty"]
-        pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
+        # CDP cost (cdp-stocks) -> the CASH bucket position for that security
+        sec_by_ticker = {m["canonical_ticker"]: sid for (b, sid), m in meta.items()}
+        for tk, c in cdp.items():
+            sid = sec_by_ticker.get(tk)
+            k = ("cash", sid)
+            if sid is None or k not in pos:
+                continue
+            pos[k]["flows"].extend(c["flows"])
+            pos[k]["invested"] += c["invested"]
+            pos[k]["buy_cost"] += c["buy_cost"]
+            pos[k]["buy_qty"] += c["buy_qty"]
+            pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
 
-    bucket_by_acct_id = {r["account_id"]: r["funding_bucket"] for r in rows}
-    for d in divs:
-        k = (bucket_by_acct_id.get(d["account_id"]), d["security_id"])
-        if k not in pos:
-            continue
-        amt = float(d["gross"] or 0)
-        pos[k]["income"] += amt
-        pos[k]["flows"].append((d["pay_date"] or today, amt))
+        bucket_by_acct_id = {r["account_id"]: r["funding_bucket"] for r in rows}
+        for d in divs:
+            k = (bucket_by_acct_id.get(d["account_id"]), d["security_id"])
+            if k not in pos:
+                continue
+            amt = float(d["gross"] or 0)
+            pos[k]["income"] += amt
+            pos[k]["flows"].append((d["pay_date"] or today, amt))
 
-    _carry_corporate_actions(s, pos, meta)
+        _carry_corporate_actions(s, pos, meta)
 
     out = []
     for k, p in pos.items():
@@ -366,19 +362,15 @@ def compute(session=None):
     for r in out:
         o = opt.get(r["ticker"]) if r["bucket"] == "cash" else None
         r["options_pl_sgd"] = o["pl_sgd"] if o else 0.0
-    if session is None:
-        s.close()
     return out
 
 
 def alloc_by_account(session=None):
     """market value per account (SGD) — for allocation charts (no cost needed)."""
-    s = session or SessionLocal()
-    fx, price = _fx_and_price(s)
-    rows = s.execute(text(
-        "SELECT account, security_id, currency, units FROM current_position WHERE units > 0")).all()
-    if session is None:
-        s.close()
+    with session_scope(session) as s:
+        fx, price = _fx_and_price(s)
+        rows = s.execute(text(
+            "SELECT account, security_id, currency, units FROM current_position WHERE units > 0")).all()
     agg = defaultdict(float)
     for acct, sid, ccy, u in rows:
         px = price.get(sid)
