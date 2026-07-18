@@ -133,6 +133,11 @@ def _date_key(field):
     return lambda r: (r[field] is None, str(r[field] or ""))
 
 
+def _f(x):
+    """float(x), passing None through unchanged."""
+    return float(x) if x is not None else None
+
+
 def perf_all():
     return _cached("all", compute)
 
@@ -253,12 +258,12 @@ def holding(ticker: str, bucket: str = "cash"):
     # enrich each dividend with qty held at pay date + declared rate per unit.
     # prefer statement-stated values; fall back to ledger replay / implied (gross/qty).
     for x in divs:
-        units = float(x["units"]) if x["units"] is not None else None
+        units = _f(x["units"])
         if units is None and x["pay_date"] is not None:
             units = round(sum(float(t["qty_signed"] or 0) for t in txns
                               if t["account"] == x["account"] and t["trade_date"] is not None
                               and str(t["trade_date"]) <= str(x["pay_date"])), 4)
-        rate = float(x["amount_per_unit"]) if x["amount_per_unit"] is not None else None
+        rate = _f(x["amount_per_unit"])
         if rate is None and units and units > 1e-6:
             rate = round(float(x["gross"] or 0) / units, 6)
         x["units"] = units
@@ -312,8 +317,8 @@ def dividend_details():
     out = []
     for d in divs:
         gross = float(d["gross"] or 0)
-        declared = float(d["declared_rate"]) if d["declared_rate"] is not None else None
-        stated = float(d["stated_units"]) if d["stated_units"] is not None else None
+        declared = _f(d["declared_rate"])
+        stated = _f(d["stated_units"])
         held = None
         if d["pay_date"] is not None and d["security_id"] is not None:
             held = round(sum(q for td, q in by.get((d["account_id"], d["security_id"]), [])
