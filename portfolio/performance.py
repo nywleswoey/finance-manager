@@ -217,6 +217,32 @@ def _carry_corporate_actions(s, pos, meta):
             pos[k]["buy_qty"] = pos[k]["units"]
 
 
+def _apply_txn(p, r, today):
+    """Fold one non-CDP txn row into its position accumulator `p`. Returns the action
+    string if it couldn't be classified (caller should warn), else None."""
+    act = r["action"]
+    px = float(r["price"]) if r["price"] is not None else None
+    fee = abs(float(r["fees"])) if r["fees"] is not None else 0.0   # native ccy, same as px*qty
+    kind = classify(act, px)
+    if kind == "cash":
+        # fees are a real cost: bigger outflow on a buy, smaller net inflow on a sell
+        cash = -float(r["qty_signed"]) * px - fee
+        p["fees"] += fee
+        p["flows"].append((r["trade_date"] or today, cash))
+        if cash < 0:
+            p["invested"] += -cash
+            p["buy_cost"] += -cash
+            p["buy_qty"] += float(r["qty_signed"])
+        else:
+            p["proceeds"] += cash
+    elif kind == "uncosted":
+        if float(r["qty_signed"]) > 0:
+            p["uncosted_units"] += float(r["qty_signed"])
+    elif kind == "unknown":
+        return act                                     # don't silently hand out free units
+    return None
+
+
 def _build_row(k, p, m, fx, price, today):
     """Assemble one position's output dict (native ccy + SGD) from its accumulated flows/units."""
     ccy = m["currency"] or "SGD"
@@ -294,27 +320,9 @@ def compute(session=None):
         p["accounts"].add(r["account"])
         if r["account"] == "CDP":
             continue                                   # CDP cost comes from cdp-stocks below
-        act = r["action"]
-        px = float(r["price"]) if r["price"] is not None else None
-        fee = abs(float(r["fees"])) if r["fees"] is not None else 0.0   # native ccy, same as px*qty
-        kind = classify(act, px)
-        if kind == "cash":
-            cash = -float(r["qty_signed"]) * px
-            # fees are a real cost: bigger outflow on a buy, smaller net inflow on a sell
-            cash -= fee
-            p["fees"] += fee
-            p["flows"].append((r["trade_date"] or today, cash))
-            if cash < 0:
-                p["invested"] += -cash
-                p["buy_cost"] += -cash
-                p["buy_qty"] += float(r["qty_signed"])
-            else:
-                p["proceeds"] += cash
-        elif kind == "uncosted":
-            if float(r["qty_signed"]) > 0:
-                p["uncosted_units"] += float(r["qty_signed"])
-        elif kind == "unknown":
-            _unknown_actions.add(act)                  # don't silently hand out free units
+        unk = _apply_txn(p, r, today)
+        if unk is not None:
+            _unknown_actions.add(unk)
 
     if _unknown_actions:
         log.warning("unclassified txn action(s) %s — treated as zero-cash; units may be uncosted",
