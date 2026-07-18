@@ -33,6 +33,11 @@ def _f(x):
     return float(x) if x is not None else None
 
 
+def _d(x):
+    """x.isoformat() for a truthy date/datetime, else None (nullable date -> nullable ISO string)."""
+    return x.isoformat() if x else None
+
+
 def _is_open(t):
     """A contract is open only until it resolves. Expired-worthless legs carry
     outcome='expired' with close_date=None (never bought back) — those are REALIZED,
@@ -180,9 +185,9 @@ def _trade_dict(t, fx):
     return {
         "underlying": t.underlying, "type": t.option_type,
         "contracts": float(t.contracts or 0), "strike": _f(t.strike),
-        "open_date": t.open_date.isoformat() if t.open_date else None,
-        "expiry": t.expiry_date.isoformat() if t.expiry_date else None,
-        "close_date": t.close_date.isoformat() if t.close_date else None,
+        "open_date": _d(t.open_date),
+        "expiry": _d(t.expiry_date),
+        "close_date": _d(t.close_date),
         "premium_open": _f(t.premium_open),
         "premium_close": _f(t.premium_close),
         "realized_native": _f(t.realized_pl),
