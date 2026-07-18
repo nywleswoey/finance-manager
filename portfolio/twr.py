@@ -23,6 +23,10 @@ from .db import SessionLocal, latest_close
 UA = {"User-Agent": "Mozilla/5.0"}
 
 
+def _r4(x):
+    return round(x, 4) if x is not None else None
+
+
 def ysym(tk, market):
     if market == "SG":
         return f"{tk}.SI"
@@ -304,9 +308,9 @@ def compute_twr():
     invested = sum(-a for _, a in flows if a < 0)
     received = sum(a for _, a in flows if a > 0)
     years = max((today - start).days / 365.0, 0.1)
-    return {"xirr_annualised": round(xirr, 4) if xirr is not None else None,
-            "twr_annualised": round(twr_ann, 4) if twr_ann is not None else None,
-            "twr_cumulative": round(twr_cum, 4) if twr_cum is not None else None,
+    return {"xirr_annualised": _r4(xirr),
+            "twr_annualised": _r4(twr_ann),
+            "twr_cumulative": _r4(twr_cum),
             "invested_sgd": round(invested, 0), "value_plus_income_sgd": round(received, 0),
             "years": round(years, 1), "from": str(start),
             "note": "money-weighted (XIRR, pay-date dividends) + time-weighted (TWR, ex-date "
