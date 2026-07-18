@@ -363,10 +363,16 @@ def alloc_by_account(session=None):
     return {k: {"mv_sgd": round(v, 2)} for k, v in agg.items()}
 
 
+def empty_group():
+    """Zeroed rollup-group accumulator. Shared with server.main so the groups it
+    synthesises for orphan option underlyings match rollup()'s schema exactly."""
+    return {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0,
+            "capital_sgd": 0.0, "invested_sgd": 0.0,
+            "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0}
+
+
 def rollup(rows, by):
-    agg = defaultdict(lambda: {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0,
-                               "capital_sgd": 0.0, "invested_sgd": 0.0,
-                               "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0})
+    agg = defaultdict(empty_group)
     for r in rows:
         # include closed positions (units≈0): they still carry realised P/L + dividends.
         if r["units"] <= 1e-6 and not r["cost_known"] and abs(r["income_sgd"]) < 1e-6:

@@ -20,7 +20,7 @@ from portfolio.config import settings
 
 from server import auth
 from portfolio.db import SessionLocal, fx_map
-from portfolio.performance import alloc_by_account, compute, rollup
+from portfolio.performance import alloc_by_account, compute, empty_group, rollup
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s %(message)s")  # SECURITY-03
@@ -202,9 +202,7 @@ def performance(by: str = Query("market", enum=["market", "bucket", "account"]))
     # options book so orphan underlyings with no stock position are still counted)
     from portfolio.options import realized_by
     for k, v in realized_by(by).items():
-        r.setdefault(k, {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0,
-                         "capital_sgd": 0.0, "invested_sgd": 0.0,
-                         "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0})
+        r.setdefault(k, empty_group())
         r[k]["options_pl_sgd"] = v
     for g in r.values():
         g.setdefault("options_pl_sgd", 0.0)
