@@ -10,6 +10,7 @@ arrives without a txn price (transfer, snapshot-diff open, fund switch) still ca
 basis instead of landing in the terminal value for free.
 Run: PYTHONPATH=. .venv/bin/python -m portfolio.twr
 """
+import bisect
 import datetime as dt
 import json
 import urllib.request
@@ -93,10 +94,28 @@ def running_units(txns, sids):
 
 
 def units_on(cum, sid, day):
-    import bisect
     d_, u_ = cum[sid]
     i = bisect.bisect_right(d_, day) - 1
     return u_[i] if i >= 0 else 0.0
+
+
+def traded_vwap(txns):
+    """sid -> sorted [(date, vwap)] from priced txn rows.
+
+    Volume-weights same-day priced rows into one price per (security, day), so securities
+    Yahoo has no daily series for (funds, delisted tickers) still get a nearest-dated cost
+    basis. Zero-qty priced rows carry no vwap and are dropped."""
+    day_px, day_qty = defaultdict(float), defaultdict(float)
+    for t in txns:
+        if t["price"] is not None:
+            q = abs(float(t["qty_signed"]))
+            day_px[(t["security_id"], t["trade_date"])] += q * float(t["price"])
+            day_qty[(t["security_id"], t["trade_date"])] += q
+    txn_px = defaultdict(list)
+    for (sid, day), q in sorted(day_qty.items()):
+        if q > 1e-9:
+            txn_px[sid].append((day, day_px[(sid, day)] / q))
+    return txn_px
 
 
 def contributions(txns, sids, px, ccy_of, fx):
@@ -214,16 +233,7 @@ def compute_twr():
     price_sids = [sid for sid, p in prices.items() if p]
 
     # traded price per (security, day), for securities Yahoo has no daily series for
-    day_px, day_qty = defaultdict(float), defaultdict(float)
-    for t in txns:
-        if t["price"] is not None:
-            q = abs(float(t["qty_signed"]))
-            day_px[(t["security_id"], t["trade_date"])] += q * float(t["price"])
-            day_qty[(t["security_id"], t["trade_date"])] += q
-    txn_px = defaultdict(list)                           # sid -> sorted [(date, vwap)]
-    for (sid, day), q in sorted(day_qty.items()):
-        if q > 1e-9:                                    # zero-qty priced rows carry no vwap
-            txn_px[sid].append((day, day_px[(sid, day)] / q))
+    txn_px = traded_vwap(txns)
 
     def px_daily(sid, day):
         """Daily close, forward-filled for a pre-history buy."""
