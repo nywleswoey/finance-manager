@@ -174,6 +174,49 @@ def _fx_and_price(s):
     return fx, price
 
 
+def _carry_corporate_actions(s, pos, meta):
+    """Carry a closed predecessor's cost onto the surviving security (e.g. C31 -> 9CI on the
+    2021 CapitaLand restructuring; rename/split/consolidation/merger/switch). Mutates pos."""
+    ca = s.execute(text("SELECT from_ticker, to_ticker, type FROM corporate_action "
+                        "WHERE type IN ('rename','split','consolidation','merger','switch')")).all()
+    # match predecessor/successor within the SAME funding bucket (corp actions are bucket-agnostic)
+    tk_k = {(b, m["canonical_ticker"]): (b, sid) for (b, sid), m in meta.items()}
+    buckets = {b for (b, _) in pos}
+    switched = set()                       # successor keys whose cost carried through a cash switch
+    for frm, to, typ in ca:
+        for b in buckets:
+            kf, kt = tk_k.get((b, frm)), tk_k.get((b, to))
+            if not (kf and kt):
+                continue
+            if not (pos[kf]["invested"] > 1e-6 and abs(pos[kf]["units"]) < 1e-6):
+                continue                   # predecessor must be a closed position carrying cost
+            if typ == "switch":
+                # cash switch (e.g. CPF fund switch): the redemption proceeds were reinvested
+                # into the successor, not withdrawn. Carry the cost basis + the BUY legs only;
+                # DROP the redemption inflow so it isn't double-counted as a gain. Successor may
+                # already hold its own later top-up cost, so don't require it to be empty.
+                pos[kt]["flows"].extend([fl for fl in pos[kf]["flows"] if fl[1] < 0])
+                for fld in ("invested", "buy_cost"):
+                    pos[kt][fld] += pos[kf][fld]
+                switched.add(kt)
+            elif pos[kt]["invested"] < 1e-6:        # non-cash conversion: successor starts empty
+                pos[kt]["flows"].extend(pos[kf]["flows"])
+                for fld in ("invested", "buy_cost", "buy_qty", "proceeds"):
+                    pos[kt][fld] += pos[kf][fld]
+            else:
+                continue
+            for fld in ("invested", "buy_cost", "buy_qty", "proceeds"):
+                pos[kf][fld] = 0.0
+            pos[kf]["flows"] = []
+    # a switched holding rebased its units (predecessor units != successor units), so its carried
+    # buy_qty is meaningless. The position was never sold for cash (only fee nibbles), so treat the
+    # whole current holding as carrying the full invested cost: cost_basis = invested, realised = 0.
+    for k in switched:
+        if pos[k]["units"] > 1e-6:
+            pos[k]["buy_cost"] = pos[k]["invested"]
+            pos[k]["buy_qty"] = pos[k]["units"]
+
+
 def _build_row(k, p, m, fx, price, today):
     """Assemble one position's output dict (native ccy + SGD) from its accumulated flows/units."""
     ccy = m["currency"] or "SGD"
@@ -299,46 +342,7 @@ def compute(session=None):
         pos[k]["income"] += amt
         pos[k]["flows"].append((d["pay_date"] or today, amt))
 
-    # corporate-action cost carryover: a closed predecessor's cost follows to the surviving
-    # security (e.g. C31 -> 9CI on the 2021 CapitaLand restructuring; rename/split/consolidation)
-    ca = s.execute(text("SELECT from_ticker, to_ticker, type FROM corporate_action "
-                        "WHERE type IN ('rename','split','consolidation','merger','switch')")).all()
-    # match predecessor/successor within the SAME funding bucket (corp actions are bucket-agnostic)
-    tk_k = {(b, m["canonical_ticker"]): (b, sid) for (b, sid), m in meta.items()}
-    buckets = {b for (b, _) in pos}
-    switched = set()                       # successor keys whose cost carried through a cash switch
-    for frm, to, typ in ca:
-        for b in buckets:
-            kf, kt = tk_k.get((b, frm)), tk_k.get((b, to))
-            if not (kf and kt):
-                continue
-            if not (pos[kf]["invested"] > 1e-6 and abs(pos[kf]["units"]) < 1e-6):
-                continue                   # predecessor must be a closed position carrying cost
-            if typ == "switch":
-                # cash switch (e.g. CPF fund switch): the redemption proceeds were reinvested
-                # into the successor, not withdrawn. Carry the cost basis + the BUY legs only;
-                # DROP the redemption inflow so it isn't double-counted as a gain. Successor may
-                # already hold its own later top-up cost, so don't require it to be empty.
-                pos[kt]["flows"].extend([fl for fl in pos[kf]["flows"] if fl[1] < 0])
-                for fld in ("invested", "buy_cost"):
-                    pos[kt][fld] += pos[kf][fld]
-                switched.add(kt)
-            elif pos[kt]["invested"] < 1e-6:        # non-cash conversion: successor starts empty
-                pos[kt]["flows"].extend(pos[kf]["flows"])
-                for fld in ("invested", "buy_cost", "buy_qty", "proceeds"):
-                    pos[kt][fld] += pos[kf][fld]
-            else:
-                continue
-            for fld in ("invested", "buy_cost", "buy_qty", "proceeds"):
-                pos[kf][fld] = 0.0
-            pos[kf]["flows"] = []
-    # a switched holding rebased its units (predecessor units != successor units), so its carried
-    # buy_qty is meaningless. The position was never sold for cash (only fee nibbles), so treat the
-    # whole current holding as carrying the full invested cost: cost_basis = invested, realised = 0.
-    for k in switched:
-        if pos[k]["units"] > 1e-6:
-            pos[k]["buy_cost"] = pos[k]["invested"]
-            pos[k]["buy_qty"] = pos[k]["units"]
+    _carry_corporate_actions(s, pos, meta)
 
     out = []
     for k, p in pos.items():
