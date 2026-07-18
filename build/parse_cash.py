@@ -26,6 +26,7 @@ import unicodedata
 
 from _pdf import raw_text
 from _csvout import write_csv
+from _dates import try_date
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "build", "cash_ledger_raw.csv")
@@ -55,12 +56,7 @@ def _num(s):
 
 
 def _pdate(s):
-    for f in ("%d %b %Y", "%Y-%m-%d", "%d/%m/%Y"):
-        try:
-            return dt.datetime.strptime((s or "").strip(), f).date()
-        except ValueError:
-            pass
-    return None
+    return try_date(s, ("%d %b %Y", "%Y-%m-%d", "%d/%m/%Y"))
 
 
 def pdftext(path):

@@ -15,6 +15,7 @@ from collections import defaultdict
 
 from _pdf import raw_text
 from _csvout import write_csv
+from _dates import try_date
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -116,12 +117,8 @@ def _cdp_date(d):
     d = (d or "").strip()
     if re.fullmatch(r"\d{4,6}", d):                       # Excel serial
         return (_XL_EPOCH + _dt.timedelta(days=int(d))).isoformat()
-    for f in ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d-%b-%Y", "%d/%m/%Y"):
-        try:
-            return _dt.datetime.strptime(d, f).date().isoformat()
-        except ValueError:
-            pass
-    return None
+    dd = try_date(d, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d-%b-%Y", "%d/%m/%Y"))
+    return dd.isoformat() if dd else None
 
 def cdp():
     """CDP cash dividends from the maintained tracker. The sheet is broader than CDP —

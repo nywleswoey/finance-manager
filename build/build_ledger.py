@@ -11,8 +11,8 @@ Normalized row schema:
 """
 import csv, glob, os, re
 from collections import defaultdict
-from datetime import datetime
 from _csvout import write_csv
+from _dates import try_date
 from _ledgercommon import canon, is_transfer_in, is_transfer_out
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
@@ -41,10 +41,8 @@ def norm_ticker(sym, market):
 
 def parse_date(s):
     s = (s or "").strip().split("\n")[0].split(",")[0].strip()
-    for fmt in ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y%m%d"):
-        try: return datetime.strptime(s, fmt).date().isoformat()
-        except ValueError: pass
-    return s  # leave raw if unknown
+    d = try_date(s, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y%m%d"))
+    return d.isoformat() if d else s  # leave raw if unknown
 
 LEDGER = []
 MARKET_CCY = {"SG": "SGD", "US": "USD", "HK": "HKD", "MY": "MYR"}

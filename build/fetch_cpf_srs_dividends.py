@@ -25,6 +25,7 @@ import csv, os, re, time, json, urllib.request, urllib.parse, datetime as dt
 from collections import defaultdict
 
 from _csvout import write_csv
+from _dates import try_date
 
 HERE = os.path.dirname(__file__)
 ROOT = os.path.join(HERE, "..")
@@ -55,12 +56,7 @@ def epoch_date(ms):
 
 
 def pdate(s):
-    for f in ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y-%m"):
-        try:
-            return dt.datetime.strptime((s or "").strip(), f).date()
-        except ValueError:
-            pass
-    return None
+    return try_date(s, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y-%m"))
 
 
 def nearest(d, pool, days):

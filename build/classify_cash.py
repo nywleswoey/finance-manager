@@ -23,6 +23,7 @@ import os
 import yaml
 
 from _csvout import write_csv
+from _dates import try_date
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW = os.path.join(ROOT, "build", "cash_ledger_raw.csv")
@@ -87,14 +88,8 @@ def override_for(merchant, overrides, oexcl):
 
 def _iso(s):
     """Spreadsheet apps rewrite ISO dates to D/M/YY on save — normalise back to ISO."""
-    import datetime as _dt
-    s = (s or "").strip()
-    for f in ("%Y-%m-%d", "%d/%m/%y", "%d/%m/%Y"):
-        try:
-            return _dt.datetime.strptime(s, f).date().isoformat()
-        except ValueError:
-            pass
-    return s
+    d = try_date(s, ("%Y-%m-%d", "%d/%m/%y", "%d/%m/%Y"))
+    return d.isoformat() if d else (s or "").strip()
 
 
 def load_record_corrections():
