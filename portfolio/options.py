@@ -153,17 +153,20 @@ def realized_by(dim):
     return {k: round(v, 2) for k, v in agg.items()}
 
 
-def trades_for(underlying):
-    """Per-underlying option trade list (for the holding-detail view)."""
+def _trade_dicts(stmt):
+    """Run `stmt` (an OptionTrade select) and serialize each row to a dict at latest FX."""
     s = SessionLocal()
     fx = _fx(s)
-    trades = s.scalars(
-        select(OptionTrade).filter(OptionTrade.underlying == underlying.upper())
-        .order_by(OptionTrade.open_date.desc().nullslast())
-    ).all()
-    out = [_trade_dict(t, fx) for t in trades]
+    out = [_trade_dict(t, fx) for t in s.scalars(stmt).all()]
     s.close()
     return out
+
+
+def trades_for(underlying):
+    """Per-underlying option trade list (for the holding-detail view)."""
+    return _trade_dicts(
+        select(OptionTrade).filter(OptionTrade.underlying == underlying.upper())
+        .order_by(OptionTrade.open_date.desc().nullslast()))
 
 
 def _trade_dict(t, fx):
@@ -182,14 +185,8 @@ def _trade_dict(t, fx):
 
 
 def recent(limit=200):
-    s = SessionLocal()
-    fx = _fx(s)
-    trades = s.scalars(
-        select(OptionTrade).order_by(OptionTrade.open_date.desc().nullslast()).limit(limit)
-    ).all()
-    out = [_trade_dict(t, fx) for t in trades]
-    s.close()
-    return out
+    return _trade_dicts(
+        select(OptionTrade).order_by(OptionTrade.open_date.desc().nullslast()).limit(limit))
 
 
 if __name__ == "__main__":
