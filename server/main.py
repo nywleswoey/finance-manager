@@ -519,8 +519,7 @@ def _spend_where(frm, to, extra=""):
 def spending_summary(frm: str | None = Query(None, alias="from"),
                      to: str | None = Query(None, alias="to")):
     where, p = _spend_where(frm, to)
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         total = s.execute(text(f"SELECT COALESCE(SUM(-amount_sgd),0) FROM cash_txn WHERE {where}"),
                           p).scalar()
         by_group = s.execute(text(
@@ -541,8 +540,6 @@ def spending_summary(frm: str | None = Query(None, alias="from"),
             "by_subcategory": [dict(r) for r in by_sub],
             "by_month": [dict(r) for r in by_month],
         }
-    finally:
-        s.close()
 
 
 @app.get("/api/spending/trends")
@@ -550,8 +547,7 @@ def spending_trends(frm: str | None = Query(None, alias="from"),
                     to: str | None = Query(None, alias="to")):
     """Monthly spend split by group — a stacked time series (one key per group)."""
     where, p = _spend_where(frm, to)
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         rows = s.execute(text(
             f"SELECT to_char(txn_date,'YYYY-MM') ym, category, ROUND(SUM(-amount_sgd),2) v "
             f"FROM cash_txn WHERE {where} GROUP BY ym, category ORDER BY ym"), p).mappings().all()
@@ -562,8 +558,6 @@ def spending_trends(frm: str | None = Query(None, alias="from"),
             m[r["category"]] = float(r["v"])
         out = [{**{g: 0 for g in groups}, **m} for m in series.values()]
         return {"groups": groups, "series": sorted(out, key=lambda x: x["ym"])}
-    finally:
-        s.close()
 
 
 @app.get("/api/spending/transactions")
@@ -586,29 +580,23 @@ def spending_transactions(frm: str | None = Query(None, alias="from"),
         w.append("subcategory = :sub"); p["sub"] = subcategory
     if source:
         w.append("source = :src"); p["src"] = source
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         rows = s.execute(text(
             f"SELECT txn_date, source, account_label, merchant, description, amount_sgd, "
             f"direction, is_spend, exclude_reason, category, subcategory "
             f"FROM cash_txn WHERE {' AND '.join(w)} "
             f"ORDER BY txn_date DESC, id DESC LIMIT :lim"), p).mappings().all()
         return [dict(r) for r in rows]
-    finally:
-        s.close()
 
 
 @app.get("/api/spending/categories")
 def spending_categories():
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         rows = s.execute(text(
             "SELECT category, subcategory, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n "
             "FROM cash_txn WHERE is_spend GROUP BY category, subcategory ORDER BY category, v DESC"
         )).mappings().all()
         return [dict(r) for r in rows]
-    finally:
-        s.close()
 
 
 # ---------------- recurring spends ----------------
