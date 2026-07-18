@@ -61,7 +61,7 @@ def trades(path):
         m = TRADE.match(ln)
         if not m:
             continue
-        direction, exch, ccy, price, qty, amount = m.groups()
+        direction, _, _, price, qty, amount = m.groups()
         tk = ""
         for j in range(i - 2, i + 4):                 # ticker = first token of the time-bearing line
             if 0 <= j < len(lines) and re.search(r"\d\d:\d\d:\d\d", lines[j]):

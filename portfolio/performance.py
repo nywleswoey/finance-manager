@@ -324,7 +324,7 @@ def compute(session=None):
                         sorted(_unknown_actions))
 
         # CDP cost (cdp-stocks) -> the CASH bucket position for that security
-        sec_by_ticker = {m["canonical_ticker"]: sid for (b, sid), m in meta.items()}
+        sec_by_ticker = {m["canonical_ticker"]: sid for (_, sid), m in meta.items()}
         for tk, c in cdp.items():
             sid = sec_by_ticker.get(tk)
             k = ("cash", sid)
