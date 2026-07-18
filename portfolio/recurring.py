@@ -5,6 +5,7 @@ overdue / amount-drifted charges. Also auto-detects recurring merchants not yet 
 All amounts SGD, positive magnitude (spend). Occurrence = an is_spend cash_txn whose merchant
 contains the recurring's merchant_match (case-insensitive).
 """
+import calendar
 import datetime as dt
 import statistics
 
@@ -27,17 +28,11 @@ def _add_period(d, cadence):
     return _add_months(d, 1)                            # monthly (default)
 
 
-def _mdays(y, m):
-    """Days in month m of year y (leap-aware)."""
-    return [31, 29 if y % 4 == 0 and (y % 100 or y % 400 == 0) else 28,
-            31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1]
-
-
 def _add_months(d, n):
     m = d.month - 1 + n
     y = d.year + m // 12
     m = m % 12 + 1
-    return dt.date(y, m, min(d.day, _mdays(y, m)))
+    return dt.date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
 
 
 # ---- business-day handling: GIRO / standing instructions / card charges only post on
@@ -66,7 +61,7 @@ def _infer_shift(occ, nominal_day):
         return "next"
     nxt = prev = 0
     for d, _ in occ:
-        nominal = dt.date(d.year, d.month, min(nominal_day, _mdays(d.year, d.month)))
+        nominal = dt.date(d.year, d.month, min(nominal_day, calendar.monthrange(d.year, d.month)[1]))
         if not _is_weekend(nominal):
             continue
         delta = (d - nominal).days
