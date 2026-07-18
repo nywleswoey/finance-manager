@@ -13,7 +13,7 @@ from collections import Counter
 
 from sqlalchemy import func, select
 
-from ingestion.load import batch, h, pdate, upsert
+from ingestion.load import batch, h, pdate, prune_stale, upsert
 from portfolio.db import SessionLocal
 from portfolio.models import CdpCostLot
 from portfolio.performance import _ALIAS, _num
@@ -45,11 +45,7 @@ def load_cdp_cost(session):
             source_file="cdp-stocks/transactions.csv", batch_id=b.id, dedup_hash=dh,
         ))
     # rows dropped from the CSV are pruned from this batch
-    hashes = {p["dedup_hash"] for p in payload}
-    for old in session.scalars(select(CdpCostLot).filter_by(batch_id=b.id)).all():
-        if old.dedup_hash not in hashes:
-            session.delete(old)
-    session.flush()
+    prune_stale(session, CdpCostLot, {p["dedup_hash"] for p in payload}, batch_id=b.id)
     return upsert(session, CdpCostLot, payload,
                   ["ticker", "stock_name", "action", "qty", "unit_price", "amount",
                    "currency", "market", "trade_date"])

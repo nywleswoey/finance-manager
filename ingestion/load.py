@@ -153,12 +153,7 @@ def load_dividends(session, acct, alias):
             source_file=r["source"], batch_id=b.id, dedup_hash=dh,
         ))
     # prune dividends that vanished from the CSV (e.g. dateless rows now reparsed with a date)
-    hashes = {p["dedup_hash"] for p in payload}
-    stale = session.scalars(select(Dividend).filter_by(batch_id=b.id)).all()
-    for d in stale:
-        if d.dedup_hash not in hashes:
-            session.delete(d)
-    session.flush()
+    prune_stale(session, Dividend, {p["dedup_hash"] for p in payload}, batch_id=b.id)
     return upsert(session, Dividend, payload, ["gross", "net", "currency", "amount_per_unit", "units"])
 
 
@@ -191,6 +186,15 @@ def backfill_ex_dates(session):
             {"ex": r["ex_date"], "tk": r["ticker"], "pay": r["date"]}).rowcount
     session.flush()
     return n
+
+
+def prune_stale(session, model, keep_hashes, **scope):
+    """Delete `model` rows in `scope` (e.g. batch_id=… or account_id=…) whose dedup_hash isn't
+    in `keep_hashes` — removes entries that vanished from the source on re-ingest. Flushes."""
+    for old in session.scalars(select(model).filter_by(**scope)).all():
+        if old.dedup_hash not in keep_hashes:
+            session.delete(old)
+    session.flush()
 
 
 def upsert(session, model, payload, update_cols):

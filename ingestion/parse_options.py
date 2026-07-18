@@ -33,7 +33,7 @@ from sqlalchemy import func, select
 
 from portfolio.db import SessionLocal
 from portfolio.models import OptionTrade
-from ingestion.load import ROOT, batch, h, maps, num, pdate, upsert
+from ingestion.load import ROOT, batch, h, maps, num, pdate, prune_stale, upsert
 
 TIGER_GLOBS = ["data/tiger-prime/*.csv", "data/tiger-cash-boost/*.csv"]
 IBKR_SRC = os.path.join(ROOT, "data", "ibkr-options", "options.csv")
@@ -225,15 +225,6 @@ _UPSERT_COLS = ["premium_open", "premium_close", "fees_open", "fees_close", "clo
                 "contracts", "realized_pl", "outcome", "security_id", "open_date"]
 
 
-def _prune(session, account_id, keep_hashes):
-    """Delete this account's option rows that aren't in the current payload — removes the old
-    archive-sourced rows on cutover and any contract that vanished from the source on re-ingest."""
-    for old in session.scalars(select(OptionTrade).filter_by(account_id=account_id)).all():
-        if old.dedup_hash not in keep_hashes:
-            session.delete(old)
-    session.flush()
-
-
 def load_options(session, acct, alias):
     tiger = acct.get("Tiger Prime")
     if not tiger:
@@ -244,7 +235,8 @@ def load_options(session, acct, alias):
     b = batch(session, "options", "tiger-flex/options", len(flex))
     for p in flex:
         p["batch_id"] = b.id
-    _prune(session, tiger.id, {p["dedup_hash"] for p in flex})
+    # replaces the retired archive rows on this account + any contract gone from the source
+    prune_stale(session, OptionTrade, {p["dedup_hash"] for p in flex}, account_id=tiger.id)
     n += upsert(session, OptionTrade, flex, _UPSERT_COLS)
     # IBKR — pre-reconciled orphan export under the IBKR account
     ibkr = acct.get("IBKR")
@@ -253,7 +245,7 @@ def load_options(session, acct, alias):
         b = batch(session, "options-ibkr", "data/ibkr-options/options.csv", len(arc))
         for p in arc:
             p["batch_id"] = b.id
-        _prune(session, ibkr.id, {p["dedup_hash"] for p in arc})
+        prune_stale(session, OptionTrade, {p["dedup_hash"] for p in arc}, account_id=ibkr.id)
         n += upsert(session, OptionTrade, arc, _UPSERT_COLS)
     return n
 
