@@ -18,7 +18,7 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
-from .db import SessionLocal
+from .db import SessionLocal, latest_close
 
 UA = {"User-Agent": "Mozilla/5.0"}
 
@@ -206,9 +206,7 @@ def compute_twr():
         "FROM dividend WHERE pay_date IS NOT NULL AND security_id = ANY(:ids)"),
         {"ids": ids}).mappings().all()
     # last known close per security — covers what Yahoo can't price (funds, delisted tickers)
-    last_px = {sid: float(px) for sid, px in s.execute(text(
-        "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC"
-    )).all()}
+    last_px = latest_close(s)
     s.close()
 
     start = min((t["trade_date"] for t in txns), default=dt.date.today())

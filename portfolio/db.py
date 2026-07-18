@@ -15,6 +15,13 @@ def fx_map(s):
     return {c: float(r) for c, r in s.execute(text("SELECT currency, rate_to_sgd FROM fx_rate")).all()}
 
 
+def latest_close(s):
+    """security_id -> latest close (float) from price — the last known price per security,
+    covering securities Yahoo can't price live (funds, delisted tickers)."""
+    return {sid: float(px) for sid, px in s.execute(text(
+        "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC")).all()}
+
+
 @contextmanager
 def session_scope(s=None):
     """Yield the caller's Session, or open (and afterwards close) an owned one.
