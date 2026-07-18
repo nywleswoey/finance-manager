@@ -128,6 +128,11 @@ def _dicts(s, sql, params=None):
     return [dict(r) for r in s.execute(text(sql), params or {}).mappings().all()]
 
 
+def _date_key(field):
+    """Sort key over a nullable date `field`: null dates sort last (ascending)."""
+    return lambda r: (r[field] is None, str(r[field] or ""))
+
+
 def perf_all():
     return _cached("all", compute)
 
@@ -242,7 +247,7 @@ def holding(ticker: str, bucket: str = "cash"):
     if bucket == "cash":                               # CDP trades from cdp-stocks (priced)
         from portfolio.performance import cdp_transactions
         txns += [r for r in cdp_transactions() if r["ticker"] == ticker]
-    txns.sort(key=lambda r: (r["trade_date"] is None, str(r["trade_date"] or "")))
+    txns.sort(key=_date_key("trade_date"))
     bal = 0.0
     for t in txns:
         bal += float(t["qty_signed"] or 0)
@@ -333,7 +338,7 @@ def dividend_details():
             "rate_source": ("declared" if declared is not None else ("implied" if implied is not None else None)),
             "flags": flags,
         })
-    out.sort(key=lambda r: (r["pay_date"] is None, str(r["pay_date"] or "")), reverse=True)
+    out.sort(key=_date_key("pay_date"), reverse=True)
     return {"rows": out, "flagged": sum(1 for r in out if r["flags"]), "total": len(out)}
 
 
@@ -392,7 +397,7 @@ def transactions(account: str | None = None, ticker: str | None = None, limit: i
         if ticker:
             cdp = [r for r in cdp if r["ticker"] == ticker]
         rows += cdp
-    rows.sort(key=lambda r: (r["trade_date"] is None, str(r["trade_date"] or "")))
+    rows.sort(key=_date_key("trade_date"))
     return rows[:limit]
 
 
