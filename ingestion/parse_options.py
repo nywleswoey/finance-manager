@@ -31,7 +31,7 @@ from collections import Counter, defaultdict
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from portfolio.db import SessionLocal
 from portfolio.models import OptionTrade
-from ingestion.load import ROOT, batch, count, h, maps, num, pdate, prune_stale, upsert
+from ingestion.load import ROOT, batch, count, maps, num, occ_hash, pdate, prune_stale, upsert
 
 TIGER_GLOBS = ["data/tiger-prime/*.csv", "data/tiger-cash-boost/*.csv"]
 IBKR_SRC = os.path.join(ROOT, "data", "ibkr-options", "options.csv")
@@ -168,7 +168,6 @@ def _reconcile(legs, a, alias):
             outcome = "open"
             realized = None
         key = (und, typ, str(strike), str(exp), str(open_d))
-        occ[key] += 1
         payload.append(dict(
             account_id=a.id, security_id=alias.get(und), underlying=und,
             market=d["market"], option_type=typ, contracts=oc, strike=strike, multiplier=mult,
@@ -176,7 +175,7 @@ def _reconcile(legs, a, alias):
             premium_open=prem_open, premium_close=prem_close,
             fees_open=d["open_fees"], fees_close=d["close_fees"], realized_pl=realized,
             currency=CCY.get(d["market"], "USD"), outcome=outcome,
-            source_file="tiger-flex/options", dedup_hash=h(*key, occ[key]),
+            source_file="tiger-flex/options", dedup_hash=occ_hash(occ, key),
         ))
     return payload
 
@@ -207,14 +206,13 @@ def _archive_legs(src, a, alias):
         else:
             outcome = "expired"
         key = (ticker, otype, str(strike), str(contracts), str(open_d), str(expiry))
-        occ[key] += 1
         payload.append(dict(
             account_id=a.id, security_id=alias.get(ticker), underlying=ticker,
             market=market or None, option_type=otype, contracts=contracts or 0, strike=strike,
             multiplier=mult, open_date=open_d, expiry_date=expiry, close_date=close_d,
             premium_open=prem_open, premium_close=prem_close, fees_open=fees_open,
             fees_close=fees_close, realized_pl=realized, currency=CCY.get(market, "USD"),
-            outcome=outcome, source_file="ibkr-options/options.csv", dedup_hash=h(*key, occ[key]),
+            outcome=outcome, source_file="ibkr-options/options.csv", dedup_hash=occ_hash(occ, key),
         ))
     return payload
 

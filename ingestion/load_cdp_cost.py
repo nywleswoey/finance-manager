@@ -11,7 +11,7 @@ import csv
 import os
 from collections import Counter
 
-from ingestion.load import batch, count, h, pdate, prune_stale, upsert
+from ingestion.load import batch, count, occ_hash, pdate, prune_stale, upsert
 from portfolio.db import SessionLocal
 from portfolio.models import CdpCostLot
 from portfolio.performance import _ALIAS, _num
@@ -30,8 +30,7 @@ def load_cdp_cost(session):
         code = (r.get("Code") or "").upper()
         # stable natural key from the raw CSV cells; occ disambiguates identical repeats.
         key = (code, r.get("Date"), r.get("Action"), r.get("Qty"), r.get("Amount"))
-        occ[key] += 1
-        dh = h(*key, occ[key])
+        dh = occ_hash(occ, key)
         payload.append(dict(
             trade_date=pdate(r.get("Date")), code=code, ticker=_ALIAS.get(code, code),
             stock_name=(r.get("Stock Name") or "").strip() or None,

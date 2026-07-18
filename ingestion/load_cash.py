@@ -10,7 +10,7 @@ import csv
 import os
 from collections import Counter
 
-from ingestion.load import batch, count, h, num, pdate, prune_stale, upsert
+from ingestion.load import batch, count, num, occ_hash, pdate, prune_stale, upsert
 from portfolio.db import SessionLocal
 from portfolio.models import CashTxn
 
@@ -31,8 +31,7 @@ def load_cash(session):
         # the same row; occ disambiguates genuinely identical lines in one statement.
         key = (r["source"], r["account_label"], r["txn_date"], r["description"][:120],
                r["amount_sgd"])
-        occ[key] += 1
-        dh = h(*key, occ[key])
+        dh = occ_hash(occ, key)
         payload.append(dict(
             source=r["source"], account_label=r["account_label"],
             txn_date=pdate(r["txn_date"]), post_date=pdate(r["post_date"]),

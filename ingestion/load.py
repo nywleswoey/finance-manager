@@ -41,6 +41,14 @@ def h(*parts):
     return hashlib.sha256("|".join(str(p) for p in parts).encode()).hexdigest()
 
 
+def occ_hash(occ, key):
+    """Occurrence-disambiguated dedup hash. `occ` (a Counter) tracks how many times this exact
+    natural `key` tuple has been seen in the current file, so the nth identical row hashes
+    distinctly (genuine repeats stay distinct) yet stably on re-ingest."""
+    occ[key] += 1
+    return h(*key, occ[key])
+
+
 def pdate(s):
     s = (s or "").strip()
     for f in ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y-%m"):
@@ -118,8 +126,7 @@ def load_ledger(session, acct, alias):
         # corrections to those mutable fields update the existing row instead of
         # inserting a duplicate. occ disambiguates genuinely repeated trades.
         key = (r["account"], r["ticker"], r["date"], r["action"], r["qty_signed"])
-        occ[key] += 1                      # nth identical row in this file -> distinct, but stable on re-ingest
-        dh = h(*key, occ[key])
+        dh = occ_hash(occ, key)            # nth identical row in this file -> distinct, but stable on re-ingest
         payload.append(dict(
             account_id=a.id, security_id=sid, trade_date=pdate(r["date"]),
             action=r["action"], qty_signed=num(r["qty_signed"]) or 0,
@@ -144,8 +151,7 @@ def load_dividends(session, acct, alias):
         if not a:
             continue
         key = (r["account"], r["ticker"], r["date"], r["gross"], r["source"])
-        occ[key] += 1
-        dh = h(*key, occ[key])
+        dh = occ_hash(occ, key)
         payload.append(dict(
             account_id=a.id, security_id=sid, pay_date=pdate(r["date"]), kind=r["kind"],
             gross=num(r["gross"]), net=num(r["gross"]), currency=r["currency"],
