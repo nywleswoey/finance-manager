@@ -83,6 +83,18 @@ def _frozen_value(s: Session, it: NwItem, v: dict, on_date: dt.date) -> tuple:
     return native, ccy, rate_for(s, ccy, on_date)
 
 
+def _write_value(s: Session, snap_id: int, it: NwItem, native, ccy, rate, existing=None) -> None:
+    """Insert a NwValue for `it` (value_sgd = native*rate), or update its existing row in place.
+    `existing` is an item_id -> NwValue index; None means always insert."""
+    row = existing.get(it.id) if existing else None
+    if row is None:
+        s.add(NwValue(snapshot_id=snap_id, item_id=it.id, native_value=native,
+                      currency=ccy, rate_to_sgd=rate, value_sgd=native * rate))
+    else:
+        row.native_value, row.currency = native, ccy
+        row.rate_to_sgd, row.value_sgd = rate, native * rate
+
+
 def catalogue(s: Session | None = None) -> list[dict]:
     with _session(s) as s:
         items = s.scalars(select(NwItem).where(NwItem.active).order_by(NwItem.sort_order)).all()
@@ -189,8 +201,7 @@ def create_snapshot(date: dt.date, values: list[dict], note: str | None = None,
         s.flush()
         for code, it in items.items():
             native, ccy, rate = _frozen_value(s, it, supplied.get(code, {}), date)
-            s.add(NwValue(snapshot_id=snap.id, item_id=it.id, native_value=native,
-                          currency=ccy, rate_to_sgd=rate, value_sgd=(native * rate)))
+            _write_value(s, snap.id, it, native, ccy, rate)
         s.commit()
         s.refresh(snap)
         return snapshot_detail(snap)
@@ -213,13 +224,7 @@ def update_snapshot(snap_id: int, values: list[dict], note: str | None = None,
         for v in values:
             it = _resolve_item(items, by_id, v)
             native, ccy, rate = _frozen_value(s, it, v, snap.date)
-            row = existing.get(it.id)
-            if row is None:                                 # item added after this snapshot
-                s.add(NwValue(snapshot_id=snap.id, item_id=it.id, native_value=native,
-                              currency=ccy, rate_to_sgd=rate, value_sgd=(native * rate)))
-            else:
-                row.native_value, row.currency = native, ccy
-                row.rate_to_sgd, row.value_sgd = rate, native * rate
+            _write_value(s, snap.id, it, native, ccy, rate, existing)   # insert if added after snapshot
         if note is not None:
             snap.note = note
         s.commit()
