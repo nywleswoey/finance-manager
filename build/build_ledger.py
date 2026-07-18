@@ -50,6 +50,10 @@ def parse_date(s):
         except ValueError: pass
     return s  # leave raw if unknown
 
+# transfer-leg action predicates (both underscore and space spellings occur)
+def is_transfer_out(a): return "transfer_out" in a or "transfer out" in a
+def is_transfer_in(a):  return "transfer in" in a or a == "transfer_in"
+
 LEDGER = []
 MARKET_CCY = {"SG": "SGD", "US": "USD", "HK": "HKD", "MY": "MYR"}
 def add(**k):
@@ -277,8 +281,7 @@ def synthesize_transfer_ins():
     for r in LEDGER:
         if r["asset_type"] in ("stock", "fund") and r["ticker"]:
             net[(r["account"], canon(r["ticker"]))] += float(r["qty_signed"] or 0)
-    def is_out(a): return "transfer_out" in a or "transfer out" in a
-    outs = [r for r in LEDGER if r["asset_type"] == "stock" and r["ticker"] and is_out(r["action"])]
+    outs = [r for r in LEDGER if r["asset_type"] == "stock" and r["ticker"] and is_transfer_out(r["action"])]
     used = [False] * len(outs)
     for (acct, tk), q in sorted(net.items()):
         if q >= -1e-6 or acct not in REAL_ACCTS:
@@ -303,12 +306,10 @@ def reconcile_transfer_amounts():
     disagrees with the sending record's cost basis. Carry cost basis across so both
     legs show the same amount. Stock legs only — FX cash transfers (no ticker) are
     genuine currency conversions and keep their differing amounts."""
-    def is_in(a):  return "transfer in" in a or a == "transfer_in"
-    def is_out(a): return "transfer_out" in a or "transfer out" in a
     outs = [r for r in LEDGER if r["asset_type"] == "stock" and r["ticker"]
-            and is_out(r["action"]) and str(r["amount"]).strip()]
+            and is_transfer_out(r["action"]) and str(r["amount"]).strip()]
     for i in LEDGER:
-        if not (i["asset_type"] == "stock" and i["ticker"] and is_in(i["action"])):
+        if not (i["asset_type"] == "stock" and i["ticker"] and is_transfer_in(i["action"])):
             continue
         qi = abs(float(i["qty_signed"] or 0))
         m = next((o for o in outs
