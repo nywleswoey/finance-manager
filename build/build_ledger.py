@@ -213,17 +213,6 @@ def load_fsm():
             currency=(r.get("Product Currency") or "").strip(),
             source="fsm/ifast_historical.csv", raw=pn)
 
-# ---------- IBKR (legacy, NAV/MTM only — no trades) ----------
-def load_ibkr_positions():
-    """IBKR yearly files hold no Trades; capture MTM position rows for context."""
-    out = []
-    for f in sorted(glob.glob(os.path.join(DATA, "ibkr/*.csv"))):
-        yr = re.search(r"(\d{4})", f).group(1)
-        for row in csv.reader(open(f, encoding="utf-8-sig")):
-            if row and row[0] == "Mark-to-Market Performance Summary" and len(row) > 3 and row[2] == "Data":
-                out.append((yr, row))
-    return out
-
 # ---------- Moomoo (from parse_moomoo.py snapshot-diff) ----------
 def load_moomoo():
     p = os.path.join(os.path.dirname(__file__), "moomoo_events.csv")
