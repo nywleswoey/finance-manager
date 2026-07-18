@@ -223,6 +223,12 @@ def _apply_txn(p, r, today):
     return None
 
 
+def _rn(x, n, mult=1.0):
+    """round(x * mult, n), passing None through unchanged — for nullable output fields.
+    The None-check is on the base `x` (before multiplying) so a None never hits the *mult."""
+    return round(x * mult, n) if x is not None else None
+
+
 def _build_row(k, p, m, fx, price, today):
     """Assemble one position's output dict (native ccy + SGD) from its accumulated flows/units."""
     ccy = m["currency"] or "SGD"
@@ -252,10 +258,10 @@ def _build_row(k, p, m, fx, price, today):
         "name": m["name"], "market": m["market"], "asset_type": m["asset_type"], "currency": ccy,
         "units": round(p["units"], 4), "price": px, "mv_native": round(mv, 2),
         "avg_cost": round(avg_cost, 4) if avg_cost else None,
-        "cost_basis_native": round(cost_basis, 2) if cost_basis is not None else None,
-        "cost_basis_sgd": round(cost_basis * rate, 2) if cost_basis is not None else None,
-        "unrealised_pl_sgd": round(unreal * rate, 2) if unreal is not None else None,
-        "realised_pl_sgd": round(realised * rate, 2) if realised is not None else None,
+        "cost_basis_native": _rn(cost_basis, 2),
+        "cost_basis_sgd": _rn(cost_basis, 2, rate),
+        "unrealised_pl_sgd": _rn(unreal, 2, rate),
+        "realised_pl_sgd": _rn(realised, 2, rate),
         "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
         "fees_sgd": round(p["fees"] * rate, 2), "cost_known": cost_known,
         "uncosted_units": round(p["uncosted_units"], 4),
@@ -263,7 +269,7 @@ def _build_row(k, p, m, fx, price, today):
         "invested_sgd": round(p["invested"] * rate, 2) if cost_known else 0.0,
         "mv_sgd": round(mv * rate, 2), "income_sgd": round(p["income"] * rate, 2),
         "pl_sgd": round(total_pl * rate, 2) if cost_known else None,
-        "xirr": round(xirr, 4) if xirr is not None else None,
+        "xirr": _rn(xirr, 4),
         "simple_return": round(simple, 4) if cost_known else None,
     }
 
