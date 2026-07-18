@@ -123,6 +123,11 @@ def _cached(key, fn):
     return _cache[key]
 
 
+def _dicts(s, sql, params=None):
+    """Run a text() query on session `s` and return its rows as plain dicts."""
+    return [dict(r) for r in s.execute(text(sql), params or {}).mappings().all()]
+
+
 def perf_all():
     return _cached("all", compute)
 
@@ -218,21 +223,21 @@ def holding(ticker: str, bucket: str = "cash"):
     summary = next((r for r in perf_all() if r["ticker"] == ticker and r["bucket"] == bucket), None)
     accts = BUCKET_ACCTS.get(bucket, [])
     s = SessionLocal()
-    txns = [dict(r) for r in s.execute(text(
+    txns = _dicts(s,
         "SELECT t.trade_date, a.name account, t.action, t.qty_signed, t.price, t.gross_amount, "
         "t.currency, t.source_file FROM txn t JOIN account a ON a.id=t.account_id "
         "JOIN security sec ON sec.id=t.security_id "
         "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) AND a.name <> 'CDP' "
         # cash dividends are recorded as 0-qty 'stock dividend' txns — they belong in the
         # dividend history, not the transaction ledger (they don't change the position)
-        "AND NOT (t.action ILIKE '%dividend%' AND t.qty_signed = 0)"),
-        {"tk": ticker, "accts": accts}).mappings().all()]
-    divs = [dict(r) for r in s.execute(text(
+        "AND NOT (t.action ILIKE '%dividend%' AND t.qty_signed = 0)",
+        {"tk": ticker, "accts": accts})
+    divs = _dicts(s,
         "SELECT d.pay_date, a.name account, d.gross, d.currency, d.kind, "
         "d.units, d.amount_per_unit FROM dividend d "
         "JOIN account a ON a.id=d.account_id JOIN security sec ON sec.id=d.security_id "
-        "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) ORDER BY d.pay_date"),
-        {"tk": ticker, "accts": accts}).mappings().all()]
+        "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) ORDER BY d.pay_date",
+        {"tk": ticker, "accts": accts})
     s.close()
     if bucket == "cash":                               # CDP trades from cdp-stocks (priced)
         from portfolio.performance import cdp_transactions
@@ -266,18 +271,18 @@ def holding(ticker: str, bucket: str = "cash"):
 @app.get("/api/dividends")
 def dividends():
     s = SessionLocal()
-    by = s.execute(text(
+    by = _dicts(s,
         "SELECT s.market, d.currency, round(sum(d.gross)) gross, count(*) n "
         "FROM dividend d LEFT JOIN security s ON s.id=d.security_id "
-        "GROUP BY s.market, d.currency ORDER BY gross DESC NULLS LAST")).mappings().all()
-    recent = s.execute(text(
+        "GROUP BY s.market, d.currency ORDER BY gross DESC NULLS LAST")
+    recent = _dicts(s,
         "SELECT d.pay_date, a.name account, COALESCE(s.name,'?') name, "
         "s.canonical_ticker ticker, d.gross, d.currency "
         "FROM dividend d JOIN account a ON a.id=d.account_id "
         "LEFT JOIN security s ON s.id=d.security_id "
-        "WHERE d.pay_date IS NOT NULL ORDER BY d.pay_date DESC LIMIT 50")).mappings().all()
+        "WHERE d.pay_date IS NOT NULL ORDER BY d.pay_date DESC LIMIT 50")
     s.close()
-    return {"by_market": [dict(r) for r in by], "recent": [dict(r) for r in recent]}
+    return {"by_market": by, "recent": recent}
 
 
 @app.get("/api/dividend-details")
@@ -287,12 +292,12 @@ def dividend_details():
     determined (no position data, missing date, or unmapped ticker) for manual input."""
     from collections import defaultdict
     s = SessionLocal()
-    divs = [dict(r) for r in s.execute(text(
+    divs = _dicts(s,
         "SELECT d.id, d.pay_date, a.id account_id, a.name account, a.funding_bucket bucket, "
         "d.security_id, COALESCE(sec.name, d.source_file) name, sec.canonical_ticker ticker, "
         "d.gross, d.currency, d.amount_per_unit declared_rate, d.units stated_units "
         "FROM dividend d JOIN account a ON a.id=d.account_id "
-        "LEFT JOIN security sec ON sec.id=d.security_id")).mappings().all()]
+        "LEFT JOIN security sec ON sec.id=d.security_id")
     # txns grouped per (account, security) for point-in-time qty replay
     by = defaultdict(list)
     for aid, sid, td, q in s.execute(text(
@@ -379,7 +384,7 @@ def transactions(account: str | None = None, ticker: str | None = None, limit: i
             q += " AND a.name=:acct"; p["acct"] = account
         if ticker:
             q += " AND s.canonical_ticker=:tk"; p["tk"] = ticker
-        rows = [dict(r) for r in s.execute(text(q + " LIMIT 2000"), p).mappings().all()]
+        rows = _dicts(s, q + " LIMIT 2000", p)
     s.close()
     if account in (None, "CDP"):                       # add CDP from cdp-stocks
         from portfolio.performance import cdp_transactions
@@ -417,9 +422,9 @@ def options_trades(limit: int = 500):
 @app.get("/api/accounts")
 def accounts():
     s = SessionLocal()
-    rows = s.execute(text("SELECT name, broker, funding_bucket FROM account ORDER BY funding_bucket, name")).mappings().all()
+    rows = _dicts(s, "SELECT name, broker, funding_bucket FROM account ORDER BY funding_bucket, name")
     s.close()
-    return [dict(r) for r in rows]
+    return rows
 
 
 # ---------------- net worth ----------------
@@ -522,23 +527,23 @@ def spending_summary(frm: str | None = Query(None, alias="from"),
     with SessionLocal() as s:
         total = s.execute(text(f"SELECT COALESCE(SUM(-amount_sgd),0) FROM cash_txn WHERE {where}"),
                           p).scalar()
-        by_group = s.execute(text(
+        by_group = _dicts(s,
             f"SELECT category, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n FROM cash_txn "
-            f"WHERE {where} GROUP BY category ORDER BY v DESC"), p).mappings().all()
-        by_sub = s.execute(text(
+            f"WHERE {where} GROUP BY category ORDER BY v DESC", p)
+        by_sub = _dicts(s,
             f"SELECT category, subcategory, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n FROM cash_txn "
-            f"WHERE {where} GROUP BY category, subcategory ORDER BY v DESC"), p).mappings().all()
-        by_month = s.execute(text(
+            f"WHERE {where} GROUP BY category, subcategory ORDER BY v DESC", p)
+        by_month = _dicts(s,
             f"SELECT to_char(txn_date,'YYYY-MM') ym, ROUND(SUM(-amount_sgd),2) v FROM cash_txn "
-            f"WHERE {where} GROUP BY ym ORDER BY ym"), p).mappings().all()
+            f"WHERE {where} GROUP BY ym ORDER BY ym", p)
         months = len(by_month) or 1
         return {
             "total_sgd": round(float(total), 2),
             "avg_month_sgd": round(float(total) / months, 2),
             "months": months,
-            "by_group": [dict(r) for r in by_group],
-            "by_subcategory": [dict(r) for r in by_sub],
-            "by_month": [dict(r) for r in by_month],
+            "by_group": by_group,
+            "by_subcategory": by_sub,
+            "by_month": by_month,
         }
 
 
@@ -581,22 +586,19 @@ def spending_transactions(frm: str | None = Query(None, alias="from"),
     if source:
         w.append("source = :src"); p["src"] = source
     with SessionLocal() as s:
-        rows = s.execute(text(
+        return _dicts(s,
             f"SELECT txn_date, source, account_label, merchant, description, amount_sgd, "
             f"direction, is_spend, exclude_reason, category, subcategory "
             f"FROM cash_txn WHERE {' AND '.join(w)} "
-            f"ORDER BY txn_date DESC, id DESC LIMIT :lim"), p).mappings().all()
-        return [dict(r) for r in rows]
+            f"ORDER BY txn_date DESC, id DESC LIMIT :lim", p)
 
 
 @app.get("/api/spending/categories")
 def spending_categories():
     with SessionLocal() as s:
-        rows = s.execute(text(
+        return _dicts(s,
             "SELECT category, subcategory, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n "
-            "FROM cash_txn WHERE is_spend GROUP BY category, subcategory ORDER BY category, v DESC"
-        )).mappings().all()
-        return [dict(r) for r in rows]
+            "FROM cash_txn WHERE is_spend GROUP BY category, subcategory ORDER BY category, v DESC")
 
 
 # ---------------- recurring spends ----------------
