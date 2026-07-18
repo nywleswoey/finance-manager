@@ -10,8 +10,10 @@ Endowus Amundi fund is accumulating -> no distributions.
 
 Schema: date, account, market, ticker, name, kind, gross, currency, source
 """
-import csv, glob, os, re, subprocess
+import csv, glob, os, re
 from collections import defaultdict
+
+from _pdf import raw_text
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -168,7 +170,7 @@ def moomoo():
     rx = re.compile(r"([A-Z0-9]{2,6})\s+CASH DIVIDEND\s+@\s+([A-Z]{3})\s*([\d.]+)?")
     for f in sorted(glob.glob(os.path.join(DATA, "moomoo/moomoo_*.pdf"))):
         mo = re.search(r"(\d{6})", f).group(1); ym = f"{mo[:4]}-{mo[4:]}"
-        txt = subprocess.run(["pdftotext", "-layout", f, "-"], capture_output=True, text=True).stdout
+        txt = raw_text(f)
         lines = txt.splitlines()
         for i, ln in enumerate(lines):
             m = rx.search(ln)

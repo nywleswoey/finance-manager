@@ -8,7 +8,9 @@ Each statement has a per-symbol table:
 We emit buy/sell/transfer events from BuyQ/SellQ/TransferIn/TransferOut and also
 record the ending quantity per symbol per month (to confirm current positions).
 """
-import glob, os, re, csv, subprocess
+import glob, os, re, csv
+
+from _pdf import raw_text
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 NUM = r"[+\-]?[\d,]+(?:\.\d+)?"
@@ -24,8 +26,7 @@ def parse(path):
     """Return list of (month, ticker, market, endQ) snapshots."""
     month = re.search(r"(\d{6})", path).group(1)
     ym = f"{month[:4]}-{month[4:]}"
-    txt = subprocess.run(["pdftotext", "-layout", path, "-"],
-                         capture_output=True, text=True).stdout
+    txt = raw_text(path)
     lines = txt.splitlines()
     out = []
     for i, ln in enumerate(lines):
@@ -54,7 +55,7 @@ TRADE = re.compile(
 
 def trades(path):
     """priced trades from the Moomoo 'Transaction Details' section -> per (ym,ticker) totals."""
-    txt = subprocess.run(["pdftotext", "-layout", path, "-"], capture_output=True, text=True).stdout
+    txt = raw_text(path)
     lines = txt.splitlines()
     out = []
     for i, ln in enumerate(lines):

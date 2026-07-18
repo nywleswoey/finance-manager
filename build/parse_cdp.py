@@ -7,7 +7,9 @@ CDP statements are the authoritative custody record (no fees). Two layouts:
 Both have a NAME then Free, (NIL|qty), Balance, price, mktval. Snapshot-diff the
 Balance per security across months to recover every buy/sell/transfer.
 """
-import glob, os, re, subprocess, csv
+import glob, os, re, csv
+
+from _pdf import raw_text
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "cdp-statements")
 
@@ -38,7 +40,7 @@ def f(s): return float(s.replace(",", ""))
 def parse(path):
     mo = re.search(r"(\d{6})", path).group(1)
     ym = f"{mo[:4]}-{mo[4:]}"
-    txt = subprocess.run(["pdftotext", "-layout", path, "-"], capture_output=True, text=True).stdout
+    txt = raw_text(path)
     out = {}
     inhold = False
     for ln in txt.splitlines():

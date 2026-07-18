@@ -22,8 +22,9 @@ import datetime as dt
 import glob
 import os
 import re
-import subprocess
 import unicodedata
+
+from _pdf import raw_text
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "build", "cash_ledger_raw.csv")
@@ -62,10 +63,8 @@ def _pdate(s):
 
 
 def pdftext(path):
-    out = subprocess.run(["pdftotext", "-layout", path, "-"],
-                         capture_output=True, text=True).stdout
     # NFKC folds typographic ligatures (Netﬂix -> Netflix) so keyword matching works
-    return unicodedata.normalize("NFKC", out)
+    return unicodedata.normalize("NFKC", raw_text(path))
 
 
 def row(**kw):
