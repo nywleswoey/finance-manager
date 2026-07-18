@@ -7,6 +7,7 @@ a filterable transaction table + reconciliation badges. No server needed.
 """
 import csv, json, os, re
 from collections import defaultdict
+from _ledgercommon import canon, is_transfer_in as is_in, is_transfer_out as is_out
 
 HTML_TEMPLATE = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -107,9 +108,6 @@ renderSide();
 
 HERE = os.path.dirname(__file__)
 ROOT = os.path.join(HERE, "..")
-
-ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}  # CWBU->SET: SGX counter renamed (Cromwell->Stoneweg)
-def canon(t): return ALIAS.get(t, t)
 
 # ---- canonical code -> display name (from symbols.csv) ----
 DROP = ("Cash Dividend", "Scrip Dividend", "Cash in Lieu", "NRO")
@@ -215,9 +213,6 @@ btarget = defaultdict(float)
 for (acct, tk), q in hold.items():
     bk = BUCKET.get(acct)
     if bk: btarget[(bk, tk)] += q
-
-def is_in(a):  return "transfer in" in a or a == "transfer_in"
-def is_out(a): return "transfer_out" in a or "transfer out" in a
 
 def net_transfers(evs):
     """An inter-broker custody move within a bucket gets logged on both sides and

@@ -13,6 +13,7 @@ import csv, glob, os, re
 from collections import defaultdict
 from datetime import datetime
 from _csvout import write_csv
+from _ledgercommon import canon, is_transfer_in, is_transfer_out
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -27,11 +28,6 @@ def num(s):
     try: v = float(s)
     except ValueError: return 0.0
     return -v if neg else v
-
-# Holdings.md label  ->  canonical SGX/exchange code used in transaction data
-ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}  # CWBU->SET: SGX counter renamed (Cromwell->Stoneweg)
-def canon(t):
-    return ALIAS.get(t, t)
 
 def norm_ticker(sym, market):
     if not sym: return ""
@@ -49,10 +45,6 @@ def parse_date(s):
         try: return datetime.strptime(s, fmt).date().isoformat()
         except ValueError: pass
     return s  # leave raw if unknown
-
-# transfer-leg action predicates (both underscore and space spellings occur)
-def is_transfer_out(a): return "transfer_out" in a or "transfer out" in a
-def is_transfer_in(a):  return "transfer in" in a or a == "transfer_in"
 
 LEDGER = []
 MARKET_CCY = {"SG": "SGD", "US": "USD", "HK": "HKD", "MY": "MYR"}
