@@ -177,7 +177,7 @@ def _infer_cadence(gaps):
     if not gaps:
         return None
     g = statistics.median(gaps)
-    for cad, nominal in (("weekly", 7), ("monthly", 30), ("quarterly", 91), ("annual", 365)):
+    for cad, nominal in CADENCE_DAYS.items():
         if nominal * 0.7 <= g <= nominal * 1.3:
             return cad
     return None

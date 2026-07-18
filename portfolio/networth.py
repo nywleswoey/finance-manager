@@ -62,6 +62,27 @@ def rate_for(s: Session, ccy: str, on_date: dt.date) -> Decimal:
     return Decimal(str(r))
 
 
+def _active_items(s: Session) -> tuple[dict, dict]:
+    """Active catalogue keyed by code, plus an id index, for resolving supplied entries."""
+    items = {i.code: i for i in s.scalars(select(NwItem).where(NwItem.active)).all()}
+    return items, {i.id: i for i in items.values()}
+
+
+def _resolve_item(items: dict, by_id: dict, v: dict) -> NwItem:
+    """Match a {code|item_id, ...} entry to its catalogue item; raise ValueError on unknown."""
+    it = by_id.get(v.get("item_id")) or items.get(v.get("code"))
+    if it is None:
+        raise ValueError(f"unknown item: {v.get('code') or v.get('item_id')}")
+    return it
+
+
+def _frozen_value(s: Session, it: NwItem, v: dict, on_date: dt.date) -> tuple:
+    """(native, currency, rate) for a supplied entry (or {}), FX frozen at on_date."""
+    native = Decimal(str(v.get("native_value", 0) or 0))
+    ccy = (v.get("currency") or it.currency_default or "SGD").upper()
+    return native, ccy, rate_for(s, ccy, on_date)
+
+
 def catalogue(s: Session | None = None) -> list[dict]:
     with _session(s) as s:
         items = s.scalars(select(NwItem).where(NwItem.active).order_by(NwItem.sort_order)).all()
@@ -155,28 +176,19 @@ def create_snapshot(date: dt.date, values: list[dict], note: str | None = None,
     with _session(s) as s:
         if s.scalar(select(NwSnapshot).where(NwSnapshot.date == date)):
             raise ValueError(f"snapshot for {date} already exists")
-        items = {i.code: i for i in s.scalars(select(NwItem).where(NwItem.active)).all()}
+        items, by_id = _active_items(s)
         if not items:
             # One NwValue is written per catalogue item below, so an empty catalogue produced a
             # snapshot with zero values: metrics all zero, breakdown blank, and no error anywhere.
             # Refuse it. An empty net worth is a seeding failure, not a reading.
             raise ValueError("net-worth catalogue is empty — run scripts/seed_networth.py")
-        by_id = {i.id: i for i in items.values()}
-        supplied = {}
-        for v in values:
-            it = by_id.get(v.get("item_id")) or items.get(v.get("code"))
-            if it is None:
-                raise ValueError(f"unknown item: {v.get('code') or v.get('item_id')}")
-            supplied[it.code] = v
+        supplied = {_resolve_item(items, by_id, v).code: v for v in values}
 
         snap = NwSnapshot(date=date, note=note, portfolio_value_sgd=live_portfolio_sgd(s))
         s.add(snap)
         s.flush()
         for code, it in items.items():
-            v = supplied.get(code, {})
-            native = Decimal(str(v.get("native_value", 0) or 0))
-            ccy = (v.get("currency") or it.currency_default or "SGD").upper()
-            rate = rate_for(s, ccy, date)
+            native, ccy, rate = _frozen_value(s, it, supplied.get(code, {}), date)
             s.add(NwValue(snapshot_id=snap.id, item_id=it.id, native_value=native,
                           currency=ccy, rate_to_sgd=rate, value_sgd=(native * rate)))
         s.commit()
@@ -196,16 +208,11 @@ def update_snapshot(snap_id: int, values: list[dict], note: str | None = None,
         snap = s.get(NwSnapshot, snap_id)
         if snap is None:
             return None
-        items = {i.code: i for i in s.scalars(select(NwItem).where(NwItem.active)).all()}
-        by_id = {i.id: i for i in items.values()}
+        items, by_id = _active_items(s)
         existing = {v.item_id: v for v in snap.values}
         for v in values:
-            it = by_id.get(v.get("item_id")) or items.get(v.get("code"))
-            if it is None:
-                raise ValueError(f"unknown item: {v.get('code') or v.get('item_id')}")
-            native = Decimal(str(v.get("native_value", 0) or 0))
-            ccy = (v.get("currency") or it.currency_default or "SGD").upper()
-            rate = rate_for(s, ccy, snap.date)
+            it = _resolve_item(items, by_id, v)
+            native, ccy, rate = _frozen_value(s, it, v, snap.date)
             row = existing.get(it.id)
             if row is None:                                 # item added after this snapshot
                 s.add(NwValue(snapshot_id=snap.id, item_id=it.id, native_value=native,
