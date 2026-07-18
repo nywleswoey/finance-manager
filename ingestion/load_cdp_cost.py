@@ -11,9 +11,7 @@ import csv
 import os
 from collections import Counter
 
-from sqlalchemy import func, select
-
-from ingestion.load import batch, h, pdate, prune_stale, upsert
+from ingestion.load import batch, count, h, pdate, prune_stale, upsert
 from portfolio.db import SessionLocal
 from portfolio.models import CdpCostLot
 from portfolio.performance import _ALIAS, _num
@@ -55,7 +53,7 @@ def main():
     s = SessionLocal()
     n = load_cdp_cost(s)
     s.commit()
-    total = s.scalar(select(func.count()).select_from(CdpCostLot))
+    total = count(s, CdpCostLot)
     print(f"cdp_cost_lot: +{n} new (total {total})")
     s.close()
 

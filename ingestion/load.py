@@ -197,20 +197,28 @@ def prune_stale(session, model, keep_hashes, **scope):
     session.flush()
 
 
+def count(session, model, where=None):
+    """Row count for `model` (optionally filtered by `where`), used by loaders for the
+    +N-new / total tallies they print."""
+    stmt = select(func.count()).select_from(model)
+    if where is not None:
+        stmt = stmt.where(where)
+    return session.scalar(stmt)
+
+
 def upsert(session, model, payload, update_cols):
     """Idempotent on dedup_hash; mutable fields (amount/price/currency) are refreshed
     so re-ingesting a corrected ledger updates rows in place. Returns count of NEW rows."""
     if not payload:
         return 0
-    before = session.scalar(select(func.count()).select_from(model))
+    before = count(session, model)
     stmt = pg_insert(model).values(payload)
     stmt = stmt.on_conflict_do_update(
         index_elements=["dedup_hash"],
         set_={c: getattr(stmt.excluded, c) for c in update_cols})
     session.execute(stmt)
     session.flush()
-    after = session.scalar(select(func.count()).select_from(model))
-    return after - before
+    return count(session, model) - before
 
 
 def main():
@@ -226,12 +234,12 @@ def main():
     from ingestion.load_cdp_cost import load_cdp_cost
     nc = load_cdp_cost(s)
     s.commit()
-    print(f"txn: +{nt} new (total {s.scalar(select(func.count()).select_from(Txn))})")
-    print(f"dividend: +{nd} new (total {s.scalar(select(func.count()).select_from(Dividend))}), "
+    print(f"txn: +{nt} new (total {count(s, Txn)})")
+    print(f"dividend: +{nd} new (total {count(s, Dividend)}), "
           f"ex_date backfilled on {nx}")
     from portfolio.models import OptionTrade, CdpCostLot
-    print(f"option_trade: +{no} new (total {s.scalar(select(func.count()).select_from(OptionTrade))})")
-    print(f"cdp_cost_lot: +{nc} new (total {s.scalar(select(func.count()).select_from(CdpCostLot))})")
+    print(f"option_trade: +{no} new (total {count(s, OptionTrade)})")
+    print(f"cdp_cost_lot: +{nc} new (total {count(s, CdpCostLot)})")
     s.close()
 
 

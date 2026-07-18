@@ -10,9 +10,7 @@ import csv
 import os
 from collections import Counter
 
-from sqlalchemy import func, select
-
-from ingestion.load import batch, h, num, pdate, prune_stale, upsert
+from ingestion.load import batch, count, h, num, pdate, prune_stale, upsert
 from portfolio.db import SessionLocal
 from portfolio.models import CashTxn
 
@@ -58,8 +56,8 @@ def main():
     s = SessionLocal()
     n = load_cash(s)
     s.commit()
-    total = s.scalar(select(func.count()).select_from(CashTxn))
-    spend = s.scalar(select(func.count()).select_from(CashTxn).where(CashTxn.is_spend.is_(True)))
+    total = count(s, CashTxn)
+    spend = count(s, CashTxn, CashTxn.is_spend.is_(True))
     print(f"cash_txn: +{n} new (total {total}, {spend} counted as spend)")
     s.close()
 

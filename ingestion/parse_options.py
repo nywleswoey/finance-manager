@@ -29,11 +29,9 @@ import sys
 from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import func, select
-
 from portfolio.db import SessionLocal
 from portfolio.models import OptionTrade
-from ingestion.load import ROOT, batch, h, maps, num, pdate, prune_stale, upsert
+from ingestion.load import ROOT, batch, count, h, maps, num, pdate, prune_stale, upsert
 
 TIGER_GLOBS = ["data/tiger-prime/*.csv", "data/tiger-cash-boost/*.csv"]
 IBKR_SRC = os.path.join(ROOT, "data", "ibkr-options", "options.csv")
@@ -255,7 +253,7 @@ def main():
     acct, alias = maps(s)
     n = load_options(s, acct, alias)
     s.commit()
-    total = s.scalar(select(func.count()).select_from(OptionTrade))
+    total = count(s, OptionTrade)
     print(f"option_trade: +{n} new (total {total})")
     s.close()
 
