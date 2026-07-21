@@ -10,6 +10,7 @@ arrives without a txn price (transfer, snapshot-diff open, fund switch) still ca
 basis instead of landing in the terminal value for free.
 Run: PYTHONPATH=. .venv/bin/python -m portfolio.twr
 """
+import bisect
 import datetime as dt
 import json
 import urllib.request
@@ -17,9 +18,13 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
-from .db import SessionLocal
+from .db import SessionLocal, latest_close
 
 UA = {"User-Agent": "Mozilla/5.0"}
+
+
+def _r4(x):
+    return round(x, 4) if x is not None else None
 
 
 def ysym(tk, market):
@@ -93,10 +98,28 @@ def running_units(txns, sids):
 
 
 def units_on(cum, sid, day):
-    import bisect
     d_, u_ = cum[sid]
     i = bisect.bisect_right(d_, day) - 1
     return u_[i] if i >= 0 else 0.0
+
+
+def traded_vwap(txns):
+    """sid -> sorted [(date, vwap)] from priced txn rows.
+
+    Volume-weights same-day priced rows into one price per (security, day), so securities
+    Yahoo has no daily series for (funds, delisted tickers) still get a nearest-dated cost
+    basis. Zero-qty priced rows carry no vwap and are dropped."""
+    day_px, day_qty = defaultdict(float), defaultdict(float)
+    for t in txns:
+        if t["price"] is not None:
+            q = abs(float(t["qty_signed"]))
+            day_px[(t["security_id"], t["trade_date"])] += q * float(t["price"])
+            day_qty[(t["security_id"], t["trade_date"])] += q
+    txn_px = defaultdict(list)
+    for (sid, day), q in sorted(day_qty.items()):
+        if q > 1e-9:
+            txn_px[sid].append((day, day_px[(sid, day)] / q))
+    return txn_px
 
 
 def contributions(txns, sids, px, ccy_of, fx):
@@ -187,9 +210,7 @@ def compute_twr():
         "FROM dividend WHERE pay_date IS NOT NULL AND security_id = ANY(:ids)"),
         {"ids": ids}).mappings().all()
     # last known close per security — covers what Yahoo can't price (funds, delisted tickers)
-    last_px = {sid: float(px) for sid, px in s.execute(text(
-        "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC"
-    )).all()}
+    last_px = latest_close(s)
     s.close()
 
     start = min((t["trade_date"] for t in txns), default=dt.date.today())
@@ -214,16 +235,7 @@ def compute_twr():
     price_sids = [sid for sid, p in prices.items() if p]
 
     # traded price per (security, day), for securities Yahoo has no daily series for
-    day_px, day_qty = defaultdict(float), defaultdict(float)
-    for t in txns:
-        if t["price"] is not None:
-            q = abs(float(t["qty_signed"]))
-            day_px[(t["security_id"], t["trade_date"])] += q * float(t["price"])
-            day_qty[(t["security_id"], t["trade_date"])] += q
-    txn_px = defaultdict(list)                           # sid -> sorted [(date, vwap)]
-    for (sid, day), q in sorted(day_qty.items()):
-        if q > 1e-9:                                    # zero-qty priced rows carry no vwap
-            txn_px[sid].append((day, day_px[(sid, day)] / q))
+    txn_px = traded_vwap(txns)
 
     def px_daily(sid, day):
         """Daily close, forward-filled for a pre-history buy."""
@@ -296,9 +308,9 @@ def compute_twr():
     invested = sum(-a for _, a in flows if a < 0)
     received = sum(a for _, a in flows if a > 0)
     years = max((today - start).days / 365.0, 0.1)
-    return {"xirr_annualised": round(xirr, 4) if xirr is not None else None,
-            "twr_annualised": round(twr_ann, 4) if twr_ann is not None else None,
-            "twr_cumulative": round(twr_cum, 4) if twr_cum is not None else None,
+    return {"xirr_annualised": _r4(xirr),
+            "twr_annualised": _r4(twr_ann),
+            "twr_cumulative": _r4(twr_cum),
             "invested_sgd": round(invested, 0), "value_plus_income_sgd": round(received, 0),
             "years": round(years, 1), "from": str(start),
             "note": "money-weighted (XIRR, pay-date dividends) + time-weighted (TWR, ex-date "

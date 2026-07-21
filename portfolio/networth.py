@@ -18,7 +18,7 @@ from decimal import Decimal
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from .db import SessionLocal
+from .db import session_scope
 from .models import NwItem, NwSnapshot, NwValue
 
 # Catalogue codes auto-pulled from broker/bank statements (see scripts/snapshot_from_statements.py).
@@ -49,15 +49,43 @@ def rate_for(s: Session, ccy: str, on_date: dt.date) -> Decimal:
     return Decimal(str(r))
 
 
+def _active_items(s: Session) -> tuple[dict, dict]:
+    """Active catalogue keyed by code, plus an id index, for resolving supplied entries."""
+    items = {i.code: i for i in s.scalars(select(NwItem).where(NwItem.active)).all()}
+    return items, {i.id: i for i in items.values()}
+
+
+def _resolve_item(items: dict, by_id: dict, v: dict) -> NwItem:
+    """Match a {code|item_id, ...} entry to its catalogue item; raise ValueError on unknown."""
+    it = by_id.get(v.get("item_id")) or items.get(v.get("code"))
+    if it is None:
+        raise ValueError(f"unknown item: {v.get('code') or v.get('item_id')}")
+    return it
+
+
+def _frozen_value(s: Session, it: NwItem, v: dict, on_date: dt.date) -> tuple:
+    """(native, currency, rate) for a supplied entry (or {}), FX frozen at on_date."""
+    native = Decimal(str(v.get("native_value", 0) or 0))
+    ccy = (v.get("currency") or it.currency_default or "SGD").upper()
+    return native, ccy, rate_for(s, ccy, on_date)
+
+
+def _write_value(s: Session, snap_id: int, it: NwItem, native, ccy, rate, existing=None) -> None:
+    """Insert a NwValue for `it` (value_sgd = native*rate), or update its existing row in place.
+    `existing` is an item_id -> NwValue index; None means always insert."""
+    row = existing.get(it.id) if existing else None
+    if row is None:
+        s.add(NwValue(snapshot_id=snap_id, item_id=it.id, native_value=native,
+                      currency=ccy, rate_to_sgd=rate, value_sgd=native * rate))
+    else:
+        row.native_value, row.currency = native, ccy
+        row.rate_to_sgd, row.value_sgd = rate, native * rate
+
+
 def catalogue(s: Session | None = None) -> list[dict]:
-    own = s is None
-    s = s or SessionLocal()
-    try:
+    with session_scope(s) as s:
         items = s.scalars(select(NwItem).where(NwItem.active).order_by(NwItem.sort_order)).all()
         return [_item_dict(i) for i in items]
-    finally:
-        if own:
-            s.close()
 
 
 def _item_dict(i: NwItem) -> dict:
@@ -123,77 +151,47 @@ def snapshot_detail(snap: NwSnapshot) -> dict:
 
 
 def list_snapshots(s: Session | None = None) -> list[dict]:
-    own = s is None
-    s = s or SessionLocal()
-    try:
+    with session_scope(s) as s:
         snaps = s.scalars(select(NwSnapshot).order_by(NwSnapshot.date.desc())).all()
         return [metrics(sn) for sn in snaps]
-    finally:
-        if own:
-            s.close()
 
 
 def get_snapshot(snap_id: int, s: Session | None = None) -> dict | None:
-    own = s is None
-    s = s or SessionLocal()
-    try:
+    with session_scope(s) as s:
         snap = s.get(NwSnapshot, snap_id)
         return snapshot_detail(snap) if snap else None
-    finally:
-        if own:
-            s.close()
 
 
 def latest(s: Session | None = None) -> dict | None:
-    own = s is None
-    s = s or SessionLocal()
-    try:
+    with session_scope(s) as s:
         snap = s.scalars(select(NwSnapshot).order_by(NwSnapshot.date.desc()).limit(1)).first()
         return snapshot_detail(snap) if snap else None
-    finally:
-        if own:
-            s.close()
 
 
 def create_snapshot(date: dt.date, values: list[dict], note: str | None = None,
                     s: Session | None = None) -> dict:
     """Create a dated snapshot. `values` = [{code|item_id, native_value, currency?}].
     Missing catalogue items default to 0 (BR2). Duplicate date rejected (BR1)."""
-    own = s is None
-    s = s or SessionLocal()
-    try:
+    with session_scope(s) as s:
         if s.scalar(select(NwSnapshot).where(NwSnapshot.date == date)):
             raise ValueError(f"snapshot for {date} already exists")
-        items = {i.code: i for i in s.scalars(select(NwItem).where(NwItem.active)).all()}
+        items, by_id = _active_items(s)
         if not items:
             # One NwValue is written per catalogue item below, so an empty catalogue produced a
             # snapshot with zero values: metrics all zero, breakdown blank, and no error anywhere.
             # Refuse it. An empty net worth is a seeding failure, not a reading.
             raise ValueError("net-worth catalogue is empty — run scripts/seed_networth.py")
-        by_id = {i.id: i for i in items.values()}
-        supplied = {}
-        for v in values:
-            it = by_id.get(v.get("item_id")) or items.get(v.get("code"))
-            if it is None:
-                raise ValueError(f"unknown item: {v.get('code') or v.get('item_id')}")
-            supplied[it.code] = v
+        supplied = {_resolve_item(items, by_id, v).code: v for v in values}
 
         snap = NwSnapshot(date=date, note=note, portfolio_value_sgd=live_portfolio_sgd(s))
         s.add(snap)
         s.flush()
         for code, it in items.items():
-            v = supplied.get(code, {})
-            native = Decimal(str(v.get("native_value", 0) or 0))
-            ccy = (v.get("currency") or it.currency_default or "SGD").upper()
-            rate = rate_for(s, ccy, date)
-            s.add(NwValue(snapshot_id=snap.id, item_id=it.id, native_value=native,
-                          currency=ccy, rate_to_sgd=rate, value_sgd=(native * rate)))
+            native, ccy, rate = _frozen_value(s, it, supplied.get(code, {}), date)
+            _write_value(s, snap.id, it, native, ccy, rate)
         s.commit()
         s.refresh(snap)
         return snapshot_detail(snap)
-    finally:
-        if own:
-            s.close()
 
 
 def update_snapshot(snap_id: int, values: list[dict], note: str | None = None,
@@ -204,49 +202,28 @@ def update_snapshot(snap_id: int, values: list[dict], note: str | None = None,
     Only supplied items are changed; their FX rate is re-frozen at the snapshot's OWN date
     (history stays stable) and value_sgd recomputed. Items not supplied and the frozen
     portfolio_value_sgd are left untouched. Returns the detail, or None if the id is unknown."""
-    own = s is None
-    s = s or SessionLocal()
-    try:
+    with session_scope(s) as s:
         snap = s.get(NwSnapshot, snap_id)
         if snap is None:
             return None
-        items = {i.code: i for i in s.scalars(select(NwItem).where(NwItem.active)).all()}
-        by_id = {i.id: i for i in items.values()}
+        items, by_id = _active_items(s)
         existing = {v.item_id: v for v in snap.values}
         for v in values:
-            it = by_id.get(v.get("item_id")) or items.get(v.get("code"))
-            if it is None:
-                raise ValueError(f"unknown item: {v.get('code') or v.get('item_id')}")
-            native = Decimal(str(v.get("native_value", 0) or 0))
-            ccy = (v.get("currency") or it.currency_default or "SGD").upper()
-            rate = rate_for(s, ccy, snap.date)
-            row = existing.get(it.id)
-            if row is None:                                 # item added after this snapshot
-                s.add(NwValue(snapshot_id=snap.id, item_id=it.id, native_value=native,
-                              currency=ccy, rate_to_sgd=rate, value_sgd=(native * rate)))
-            else:
-                row.native_value, row.currency = native, ccy
-                row.rate_to_sgd, row.value_sgd = rate, native * rate
+            it = _resolve_item(items, by_id, v)
+            native, ccy, rate = _frozen_value(s, it, v, snap.date)
+            _write_value(s, snap.id, it, native, ccy, rate, existing)   # insert if added after snapshot
         if note is not None:
             snap.note = note
         s.commit()
         s.refresh(snap)
         return snapshot_detail(snap)
-    finally:
-        if own:
-            s.close()
 
 
 def delete_snapshot(snap_id: int, s: Session | None = None) -> bool:
-    own = s is None
-    s = s or SessionLocal()
-    try:
+    with session_scope(s) as s:
         snap = s.get(NwSnapshot, snap_id)
         if snap is None:
             return False
         s.delete(snap)
         s.commit()
         return True
-    finally:
-        if own:
-            s.close()

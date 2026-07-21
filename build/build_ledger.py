@@ -9,9 +9,11 @@ Normalized row schema:
   date, account, market, ticker, asset_type, action, qty_signed,
   price, amount, currency, fees, source, raw
 """
-import csv, glob, os, re, sys
+import csv, glob, os, re
 from collections import defaultdict
-from datetime import datetime
+from _csvout import write_csv
+from _dates import try_date
+from _ledgercommon import canon, is_transfer_in, is_transfer_out
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -27,11 +29,6 @@ def num(s):
     except ValueError: return 0.0
     return -v if neg else v
 
-# Holdings.md label  ->  canonical SGX/exchange code used in transaction data
-ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}  # CWBU->SET: SGX counter renamed (Cromwell->Stoneweg)
-def canon(t):
-    return ALIAS.get(t, t)
-
 def norm_ticker(sym, market):
     if not sym: return ""
     sym = sym.strip()
@@ -44,10 +41,8 @@ def norm_ticker(sym, market):
 
 def parse_date(s):
     s = (s or "").strip().split("\n")[0].split(",")[0].strip()
-    for fmt in ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y%m%d"):
-        try: return datetime.strptime(s, fmt).date().isoformat()
-        except ValueError: pass
-    return s  # leave raw if unknown
+    d = try_date(s, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y%m%d"))
+    return d.isoformat() if d else s  # leave raw if unknown
 
 LEDGER = []
 MARKET_CCY = {"SG": "SGD", "US": "USD", "HK": "HKD", "MY": "MYR"}
@@ -218,17 +213,6 @@ def load_fsm():
             currency=(r.get("Product Currency") or "").strip(),
             source="fsm/ifast_historical.csv", raw=pn)
 
-# ---------- IBKR (legacy, NAV/MTM only — no trades) ----------
-def load_ibkr_positions():
-    """IBKR yearly files hold no Trades; capture MTM position rows for context."""
-    out = []
-    for f in sorted(glob.glob(os.path.join(DATA, "ibkr/*.csv"))):
-        yr = re.search(r"(\d{4})", f).group(1)
-        for row in csv.reader(open(f, encoding="utf-8-sig")):
-            if row and row[0] == "Mark-to-Market Performance Summary" and len(row) > 3 and row[2] == "Data":
-                out.append((yr, row))
-    return out
-
 # ---------- Moomoo (from parse_moomoo.py snapshot-diff) ----------
 def load_moomoo():
     p = os.path.join(os.path.dirname(__file__), "moomoo_events.csv")
@@ -276,8 +260,7 @@ def synthesize_transfer_ins():
     for r in LEDGER:
         if r["asset_type"] in ("stock", "fund") and r["ticker"]:
             net[(r["account"], canon(r["ticker"]))] += float(r["qty_signed"] or 0)
-    def is_out(a): return "transfer_out" in a or "transfer out" in a
-    outs = [r for r in LEDGER if r["asset_type"] == "stock" and r["ticker"] and is_out(r["action"])]
+    outs = [r for r in LEDGER if r["asset_type"] == "stock" and r["ticker"] and is_transfer_out(r["action"])]
     used = [False] * len(outs)
     for (acct, tk), q in sorted(net.items()):
         if q >= -1e-6 or acct not in REAL_ACCTS:
@@ -302,12 +285,10 @@ def reconcile_transfer_amounts():
     disagrees with the sending record's cost basis. Carry cost basis across so both
     legs show the same amount. Stock legs only — FX cash transfers (no ticker) are
     genuine currency conversions and keep their differing amounts."""
-    def is_in(a):  return "transfer in" in a or a == "transfer_in"
-    def is_out(a): return "transfer_out" in a or "transfer out" in a
     outs = [r for r in LEDGER if r["asset_type"] == "stock" and r["ticker"]
-            and is_out(r["action"]) and str(r["amount"]).strip()]
+            and is_transfer_out(r["action"]) and str(r["amount"]).strip()]
     for i in LEDGER:
-        if not (i["asset_type"] == "stock" and i["ticker"] and is_in(i["action"])):
+        if not (i["asset_type"] == "stock" and i["ticker"] and is_transfer_in(i["action"])):
             continue
         qi = abs(float(i["qty_signed"] or 0))
         m = next((o for o in outs
@@ -328,10 +309,7 @@ LEDGER.sort(key=lambda r: (str(r["date"]), r["account"], r["ticker"]))
 cols = ["date","account","market","ticker","asset_type","action","qty_signed",
         "price","amount","currency","fees","source","raw"]
 out = os.path.join(os.path.dirname(__file__), "ledger.csv")
-with open(out, "w", newline="") as fh:
-    w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore")
-    w.writeheader()
-    for r in LEDGER: w.writerow(r)
+write_csv(out, cols, LEDGER, extrasaction="ignore")
 print(f"ledger rows: {len(LEDGER)} -> {out}")
 
 # coverage / file inventory

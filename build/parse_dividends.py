@@ -10,8 +10,12 @@ Endowus Amundi fund is accumulating -> no distributions.
 
 Schema: date, account, market, ticker, name, kind, gross, currency, source
 """
-import csv, glob, os, re, subprocess
+import csv, glob, os, re
 from collections import defaultdict
+
+from _pdf import raw_text
+from _csvout import write_csv
+from _dates import try_date
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -113,12 +117,8 @@ def _cdp_date(d):
     d = (d or "").strip()
     if re.fullmatch(r"\d{4,6}", d):                       # Excel serial
         return (_XL_EPOCH + _dt.timedelta(days=int(d))).isoformat()
-    for f in ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d-%b-%Y", "%d/%m/%Y"):
-        try:
-            return _dt.datetime.strptime(d, f).date().isoformat()
-        except ValueError:
-            pass
-    return None
+    dd = try_date(d, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d-%b-%Y", "%d/%m/%Y"))
+    return dd.isoformat() if dd else None
 
 def cdp():
     """CDP cash dividends from the maintained tracker. The sheet is broader than CDP —
@@ -168,7 +168,7 @@ def moomoo():
     rx = re.compile(r"([A-Z0-9]{2,6})\s+CASH DIVIDEND\s+@\s+([A-Z]{3})\s*([\d.]+)?")
     for f in sorted(glob.glob(os.path.join(DATA, "moomoo/moomoo_*.pdf"))):
         mo = re.search(r"(\d{6})", f).group(1); ym = f"{mo[:4]}-{mo[4:]}"
-        txt = subprocess.run(["pdftotext", "-layout", f, "-"], capture_output=True, text=True).stdout
+        txt = raw_text(f)
         lines = txt.splitlines()
         for i, ln in enumerate(lines):
             m = rx.search(ln)
@@ -237,9 +237,7 @@ def apply_corrections():
 tiger(); fsm(); moomoo(); cpf_srs(); cdp(); apply_corrections()   # cdp() last: dedups vs the rest
 out = os.path.join(HERE, "dividends.csv")
 cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "units", "rate", "currency", "source"]
-with open(out, "w", newline="") as fh:
-    w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore"); w.writeheader()
-    for d in DIV: w.writerow(d)
+write_csv(out, cols, DIV, extrasaction="ignore")
 
 # ---------- summary ----------
 by_ccy = defaultdict(lambda: defaultdict(float))

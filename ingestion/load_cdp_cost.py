@@ -11,15 +11,29 @@ import csv
 import os
 from collections import Counter
 
-from sqlalchemy import func, select
-
-from ingestion.load import batch, h, pdate, upsert
+from ingestion.load import batch, count, occ_hash, pdate, prune_stale, upsert
 from portfolio.db import SessionLocal
 from portfolio.models import CdpCostLot
-from portfolio.performance import _ALIAS, _num
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 CSV = os.path.join(ROOT, "data", "cdp-stocks", "transactions.csv")
+
+# CDP code -> canonical SGX/exchange code (Holdings.md label aliasing; CWBU->SET is the
+# Cromwell->Stoneweg counter rename).
+_ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}
+
+
+def _num(s):
+    s = str(s or "").replace(",", "").replace("$", "").strip()
+    if not s or s == "-":
+        return 0.0
+    neg = s.startswith("(") and s.endswith(")")
+    s = s.strip("()")
+    try:
+        v = float(s)
+    except ValueError:
+        return 0.0
+    return -v if neg else v
 
 
 def load_cdp_cost(session):
@@ -32,8 +46,7 @@ def load_cdp_cost(session):
         code = (r.get("Code") or "").upper()
         # stable natural key from the raw CSV cells; occ disambiguates identical repeats.
         key = (code, r.get("Date"), r.get("Action"), r.get("Qty"), r.get("Amount"))
-        occ[key] += 1
-        dh = h(*key, occ[key])
+        dh = occ_hash(occ, key)
         payload.append(dict(
             trade_date=pdate(r.get("Date")), code=code, ticker=_ALIAS.get(code, code),
             stock_name=(r.get("Stock Name") or "").strip() or None,
@@ -45,11 +58,7 @@ def load_cdp_cost(session):
             source_file="cdp-stocks/transactions.csv", batch_id=b.id, dedup_hash=dh,
         ))
     # rows dropped from the CSV are pruned from this batch
-    hashes = {p["dedup_hash"] for p in payload}
-    for old in session.scalars(select(CdpCostLot).filter_by(batch_id=b.id)).all():
-        if old.dedup_hash not in hashes:
-            session.delete(old)
-    session.flush()
+    prune_stale(session, CdpCostLot, {p["dedup_hash"] for p in payload}, batch_id=b.id)
     return upsert(session, CdpCostLot, payload,
                   ["ticker", "stock_name", "action", "qty", "unit_price", "amount",
                    "currency", "market", "trade_date"])
@@ -59,7 +68,7 @@ def main():
     s = SessionLocal()
     n = load_cdp_cost(s)
     s.commit()
-    total = s.scalar(select(func.count()).select_from(CdpCostLot))
+    total = count(s, CdpCostLot)
     print(f"cdp_cost_lot: +{n} new (total {total})")
     s.close()
 

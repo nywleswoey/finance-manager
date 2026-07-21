@@ -25,6 +25,11 @@ import os
 
 from sqlalchemy import text
 
+try:
+    from _csvout import write_csv          # script mode: build/ is sys.path[0]
+except ModuleNotFoundError:
+    from build._csvout import write_csv     # package mode: imported as build.export_...
+
 from portfolio.db import SessionLocal
 
 OUT = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "dividends-master.csv")
@@ -117,10 +122,7 @@ def main():
     withex = sum(1 for x in out if x["ex_date"])
     assert_no_ex_date_loss(OUT, withex)
 
-    with open(OUT, "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=COLS)
-        w.writeheader()
-        w.writerows(out)
+    write_csv(OUT, COLS, out)
     tickers = len({x["ticker"] for x in out})
     print(f"dividend-rate master: {len(out)} rows, {tickers} tickers, {withex} with ex_date -> {OUT}")
 

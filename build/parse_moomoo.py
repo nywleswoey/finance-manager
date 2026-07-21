@@ -8,7 +8,10 @@ Each statement has a per-symbol table:
 We emit buy/sell/transfer events from BuyQ/SellQ/TransferIn/TransferOut and also
 record the ending quantity per symbol per month (to confirm current positions).
 """
-import glob, os, re, csv, subprocess, sys
+import glob, os, re
+
+from _pdf import raw_text
+from _csvout import write_csv
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 NUM = r"[+\-]?[\d,]+(?:\.\d+)?"
@@ -24,8 +27,7 @@ def parse(path):
     """Return list of (month, ticker, market, endQ) snapshots."""
     month = re.search(r"(\d{6})", path).group(1)
     ym = f"{month[:4]}-{month[4:]}"
-    txt = subprocess.run(["pdftotext", "-layout", path, "-"],
-                         capture_output=True, text=True).stdout
+    txt = raw_text(path)
     lines = txt.splitlines()
     out = []
     for i, ln in enumerate(lines):
@@ -54,14 +56,14 @@ TRADE = re.compile(
 
 def trades(path):
     """priced trades from the Moomoo 'Transaction Details' section -> per (ym,ticker) totals."""
-    txt = subprocess.run(["pdftotext", "-layout", path, "-"], capture_output=True, text=True).stdout
+    txt = raw_text(path)
     lines = txt.splitlines()
     out = []
     for i, ln in enumerate(lines):
         m = TRADE.match(ln)
         if not m:
             continue
-        direction, exch, ccy, price, qty, amount = m.groups()
+        direction, _, _, price, qty, amount = m.groups()
         tk = ""
         for j in range(i - 2, i + 4):                 # ticker = first token of the time-bearing line
             if 0 <= j < len(lines) and re.search(r"\d\d:\d\d:\d\d", lines[j]):
@@ -131,9 +133,7 @@ def main():
         print(f"  {t:5} last-stmt({last})={end!s:>10}  Holdings={h}{flag}")
     out = os.path.join(os.path.dirname(__file__), "moomoo_events.csv")
     cols = ["date","account","market","ticker","asset_type","action","qty_signed","price","amount","source","raw"]
-    with open(out, "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=cols, extrasaction="ignore"); w.writeheader()
-        for e in ev: w.writerow(e)
+    write_csv(out, cols, ev, extrasaction="ignore")
     print(f"\nwrote {out}")
 
 if __name__ == "__main__":

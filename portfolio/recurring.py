@@ -5,6 +5,7 @@ overdue / amount-drifted charges. Also auto-detects recurring merchants not yet 
 All amounts SGD, positive magnitude (spend). Occurrence = an is_spend cash_txn whose merchant
 contains the recurring's merchant_match (case-insensitive).
 """
+import calendar
 import datetime as dt
 import statistics
 
@@ -14,6 +15,11 @@ from portfolio.db import SessionLocal
 
 # cadence -> nominal period length in days (for next-due + detection buckets)
 CADENCE_DAYS = {"weekly": 7, "monthly": 30, "quarterly": 91, "annual": 365}
+
+
+def _d(x):
+    """x.isoformat() for a truthy date, else None (nullable date -> nullable ISO string)."""
+    return x.isoformat() if x else None
 
 
 def _add_period(d, cadence):
@@ -27,17 +33,11 @@ def _add_period(d, cadence):
     return _add_months(d, 1)                            # monthly (default)
 
 
-def _mdays(y, m):
-    """Days in month m of year y (leap-aware)."""
-    return [31, 29 if y % 4 == 0 and (y % 100 or y % 400 == 0) else 28,
-            31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m - 1]
-
-
 def _add_months(d, n):
     m = d.month - 1 + n
     y = d.year + m // 12
     m = m % 12 + 1
-    return dt.date(y, m, min(d.day, _mdays(y, m)))
+    return dt.date(y, m, min(d.day, calendar.monthrange(y, m)[1]))
 
 
 # ---- business-day handling: GIRO / standing instructions / card charges only post on
@@ -66,7 +66,7 @@ def _infer_shift(occ, nominal_day):
         return "next"
     nxt = prev = 0
     for d, _ in occ:
-        nominal = dt.date(d.year, d.month, min(nominal_day, _mdays(d.year, d.month)))
+        nominal = dt.date(d.year, d.month, min(nominal_day, calendar.monthrange(d.year, d.month)[1]))
         if not _is_weekend(nominal):
             continue
         delta = (d - nominal).days
@@ -102,9 +102,8 @@ def _occurrences(s, match):
 
 def list_recurring():
     """Every registered recurring charge with matched-occurrence timing + status."""
-    s = SessionLocal()
     today = dt.date.today()
-    try:
+    with SessionLocal() as s:
         defs = s.execute(text(
             "SELECT id, name, merchant_match, category, cadence, expected_amount, "
             "expected_day, active, notes FROM recurring_spend ORDER BY name")).mappings().all()
@@ -134,23 +133,20 @@ def list_recurring():
                 "expected_amount": exp, "expected_day": d["expected_day"],
                 "active": d["active"], "notes": d["notes"],
                 "occurrences": len(occ),
-                "last_seen": last_date.isoformat() if last_date else None,
+                "last_seen": _d(last_date),
                 "last_amount": last_amt, "avg_amount": avg_amt,
                 "typical_day": typical_day,
-                "next_due": next_due.isoformat() if next_due else None,
+                "next_due": _d(next_due),
                 "shift": shift,                         # 'prev'|'next' if weekend-adjusted, else None
                 "amount_drift": drift,
                 "status": "inactive" if not d["active"] else _status(next_due, today),
             })
         return out
-    finally:
-        s.close()
 
 
 def add(name, merchant_match=None, category=None, cadence="monthly",
         expected_amount=None, expected_day=None, notes=None):
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         row = s.execute(text(
             "INSERT INTO recurring_spend (name, merchant_match, category, cadence, "
             "expected_amount, expected_day, notes) VALUES "
@@ -160,28 +156,20 @@ def add(name, merchant_match=None, category=None, cadence="monthly",
              "amt": expected_amount, "day": expected_day, "notes": notes}).scalar()
         s.commit()
         return row
-    finally:
-        s.close()
 
 
 def delete(rid):
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         s.execute(text("DELETE FROM recurring_spend WHERE id = :id"), {"id": rid})
         s.commit()
-    finally:
-        s.close()
 
 
 def dismiss(merchant):
     """Mark a detected merchant as a false positive so detect_candidates stops suggesting it."""
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         s.execute(text("INSERT INTO recurring_dismissed (merchant) VALUES (:m) "
                        "ON CONFLICT (merchant) DO NOTHING"), {"m": merchant})
         s.commit()
-    finally:
-        s.close()
 
 
 def _infer_cadence(gaps):
@@ -189,7 +177,7 @@ def _infer_cadence(gaps):
     if not gaps:
         return None
     g = statistics.median(gaps)
-    for cad, nominal in (("weekly", 7), ("monthly", 30), ("quarterly", 91), ("annual", 365)):
+    for cad, nominal in CADENCE_DAYS.items():
         if nominal * 0.7 <= g <= nominal * 1.3:
             return cad
     return None
@@ -204,8 +192,7 @@ def detect_candidates(min_occurrences=3):
     hsbc / trust) and DBS GIRO / standing instructions — so one-off transfers, PayNow, ATM
     withdrawals etc. never surface as suggestions. Merchants the user has dismissed are
     excluded so a rejected suggestion never reappears."""
-    s = SessionLocal()
-    try:
+    with SessionLocal() as s:
         registered = [r[0].lower() for r in s.execute(text(
             "SELECT merchant_match FROM recurring_spend WHERE merchant_match IS NOT NULL")).all()]
         dismissed = {r[0].lower() for r in s.execute(text(
@@ -246,5 +233,3 @@ def detect_candidates(min_occurrences=3):
             })
         out.sort(key=lambda r: r["avg_amount"], reverse=True)
         return out
-    finally:
-        s.close()

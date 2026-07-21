@@ -24,6 +24,9 @@ SGX supplies the authoritative currency per distribution (e.g. IREIT switched SG
 import csv, os, re, time, json, urllib.request, urllib.parse, datetime as dt
 from collections import defaultdict
 
+from _csvout import write_csv
+from _dates import try_date
+
 HERE = os.path.dirname(__file__)
 ROOT = os.path.join(HERE, "..")
 DATA = os.path.join(ROOT, "data")
@@ -53,12 +56,7 @@ def epoch_date(ms):
 
 
 def pdate(s):
-    for f in ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y-%m"):
-        try:
-            return dt.datetime.strptime((s or "").strip(), f).date()
-        except ValueError:
-            pass
-    return None
+    return try_date(s, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y-%m"))
 
 
 def nearest(d, pool, days):
@@ -224,11 +222,7 @@ def main():
                 ))
     rows.sort(key=lambda r: (r["account"], r["ticker"], r["date"]))
     cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "units", "rate", "currency", "source"]
-    with open(OUT, "w", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=cols)
-        w.writeheader()
-        for r in rows:
-            w.writerow(r)
+    write_csv(OUT, cols, rows)
     print(f"{len(rows)} CPF/SRS dividend rows -> {OUT}")
     tot, bysrc = defaultdict(lambda: defaultdict(float)), defaultdict(int)
     for r in rows:

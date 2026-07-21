@@ -22,6 +22,9 @@ import os
 
 import yaml
 
+from _csvout import write_csv
+from _dates import try_date
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW = os.path.join(ROOT, "build", "cash_ledger_raw.csv")
 OUT = os.path.join(ROOT, "build", "cash_ledger.csv")
@@ -85,14 +88,8 @@ def override_for(merchant, overrides, oexcl):
 
 def _iso(s):
     """Spreadsheet apps rewrite ISO dates to D/M/YY on save — normalise back to ISO."""
-    import datetime as _dt
-    s = (s or "").strip()
-    for f in ("%Y-%m-%d", "%d/%m/%y", "%d/%m/%Y"):
-        try:
-            return _dt.datetime.strptime(s, f).date().isoformat()
-        except ValueError:
-            pass
-    return s
+    d = try_date(s, ("%Y-%m-%d", "%d/%m/%y", "%d/%m/%Y"))
+    return d.isoformat() if d else (s or "").strip()
 
 
 def load_record_corrections():
@@ -121,6 +118,21 @@ def _apply_correction(o, target):
     return o
 
 
+def _assign_spend_category(o, r, hay, og, ol, groups, unmatched):
+    """Set category/subcategory on a spend row: a manual override (og/ol) wins, else the
+    keyword category from categories.yaml, else Uncategorized (recording the merchant in
+    `unmatched` for the LLM fallback report)."""
+    if og:
+        o["category"], o["subcategory"] = og, ol or ""
+        return
+    group, leaf = category_for(hay, groups)
+    if group:
+        o["category"], o["subcategory"] = group, leaf
+    else:
+        o["category"], o["subcategory"] = "Uncategorized", ""
+        unmatched[r["merchant"][:60]] = unmatched.get(r["merchant"][:60], 0) + 1
+
+
 def classify(rows, cats, excl, overrides, oexcl, corrections=None):
     corrections = corrections or {}
     groups = cats.get("groups", {})
@@ -143,15 +155,8 @@ def classify(rows, cats, excl, overrides, oexcl, corrections=None):
             if og == "EXCLUDE":
                 o["is_spend"] = "false"
                 o["exclude_reason"], o["category"], o["subcategory"] = "manual", "Excluded", "manual"
-            elif og:
-                o["category"], o["subcategory"] = og, ol or ""
             else:
-                group, leaf = category_for(hay, groups)
-                if group:
-                    o["category"], o["subcategory"] = group, leaf
-                else:
-                    o["category"], o["subcategory"] = "Uncategorized", ""
-                    unmatched[r["merchant"][:60]] = unmatched.get(r["merchant"][:60], 0) + 1
+                _assign_spend_category(o, r, hay, og, ol, groups, unmatched)
             out.append(o)
             continue
         if amt >= 0:  # inflow
@@ -180,15 +185,7 @@ def classify(rows, cats, excl, overrides, oexcl, corrections=None):
             out.append(o)
             continue
         o["is_spend"] = "true"
-        if og:
-            o["category"], o["subcategory"] = og, ol or ""
-        else:
-            group, leaf = category_for(hay, groups)
-            if group:
-                o["category"], o["subcategory"] = group, leaf
-            else:
-                o["category"], o["subcategory"] = "Uncategorized", ""
-                unmatched[r["merchant"][:60]] = unmatched.get(r["merchant"][:60], 0) + 1
+        _assign_spend_category(o, r, hay, og, ol, groups, unmatched)
         out.append(o)
     return out, unmatched
 
@@ -218,10 +215,7 @@ def main():
     watchlist = _load(WATCHLIST, {}) or {}
     corrections = load_record_corrections()
     out, unmatched = classify(rows, cats, excl, overrides, oexcl, corrections)
-    with open(OUT, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=OUT_COLS)
-        w.writeheader()
-        w.writerows(out)
+    write_csv(OUT, OUT_COLS, out)
 
     for d, amt, m, note in watch_alerts(out, watchlist):
         print(f"  ⚠ WATCH {d}  S${amt:,.2f}  {m}  — {note}")

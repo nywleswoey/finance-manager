@@ -11,7 +11,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from portfolio.db import SessionLocal
 from portfolio.models import Account, CorporateAction, Security, SecurityAlias
@@ -141,10 +141,9 @@ def main():
                                   from_ticker=frm, to_ticker=to, ratio_num=rn, ratio_den=rd, notes=note))
 
     s.commit()
-    print(f"accounts: {s.scalar(select(__import__('sqlalchemy').func.count()).select_from(Account))}")
-    print(f"securities: {s.scalar(select(__import__('sqlalchemy').func.count()).select_from(Security))}")
-    print(f"aliases: {s.scalar(select(__import__('sqlalchemy').func.count()).select_from(SecurityAlias))}")
-    print(f"corporate_actions: {s.scalar(select(__import__('sqlalchemy').func.count()).select_from(CorporateAction))}")
+    for label, model in (("accounts", Account), ("securities", Security),
+                         ("aliases", SecurityAlias), ("corporate_actions", CorporateAction)):
+        print(f"{label}: {s.scalar(select(func.count()).select_from(model))}")
     s.close()
 
 

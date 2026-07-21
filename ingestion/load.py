@@ -13,7 +13,7 @@ import sys
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import func, insert, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from portfolio.db import SessionLocal
@@ -39,6 +39,14 @@ SKIP_TICKERS = frozenset({"SGXZ17686775", "SGXZ18842542", "SGXZ87559985"})
 
 def h(*parts):
     return hashlib.sha256("|".join(str(p) for p in parts).encode()).hexdigest()
+
+
+def occ_hash(occ, key):
+    """Occurrence-disambiguated dedup hash. `occ` (a Counter) tracks how many times this exact
+    natural `key` tuple has been seen in the current file, so the nth identical row hashes
+    distinctly (genuine repeats stay distinct) yet stably on re-ingest."""
+    occ[key] += 1
+    return h(*key, occ[key])
 
 
 def pdate(s):
@@ -118,8 +126,7 @@ def load_ledger(session, acct, alias):
         # corrections to those mutable fields update the existing row instead of
         # inserting a duplicate. occ disambiguates genuinely repeated trades.
         key = (r["account"], r["ticker"], r["date"], r["action"], r["qty_signed"])
-        occ[key] += 1                      # nth identical row in this file -> distinct, but stable on re-ingest
-        dh = h(*key, occ[key])
+        dh = occ_hash(occ, key)            # nth identical row in this file -> distinct, but stable on re-ingest
         payload.append(dict(
             account_id=a.id, security_id=sid, trade_date=pdate(r["date"]),
             action=r["action"], qty_signed=num(r["qty_signed"]) or 0,
@@ -144,8 +151,7 @@ def load_dividends(session, acct, alias):
         if not a:
             continue
         key = (r["account"], r["ticker"], r["date"], r["gross"], r["source"])
-        occ[key] += 1
-        dh = h(*key, occ[key])
+        dh = occ_hash(occ, key)
         payload.append(dict(
             account_id=a.id, security_id=sid, pay_date=pdate(r["date"]), kind=r["kind"],
             gross=num(r["gross"]), net=num(r["gross"]), currency=r["currency"],
@@ -153,12 +159,7 @@ def load_dividends(session, acct, alias):
             source_file=r["source"], batch_id=b.id, dedup_hash=dh,
         ))
     # prune dividends that vanished from the CSV (e.g. dateless rows now reparsed with a date)
-    hashes = {p["dedup_hash"] for p in payload}
-    stale = session.scalars(select(Dividend).filter_by(batch_id=b.id)).all()
-    for d in stale:
-        if d.dedup_hash not in hashes:
-            session.delete(d)
-    session.flush()
+    prune_stale(session, Dividend, {p["dedup_hash"] for p in payload}, batch_id=b.id)
     return upsert(session, Dividend, payload, ["gross", "net", "currency", "amount_per_unit", "units"])
 
 
@@ -193,20 +194,37 @@ def backfill_ex_dates(session):
     return n
 
 
+def prune_stale(session, model, keep_hashes, **scope):
+    """Delete `model` rows in `scope` (e.g. batch_id=… or account_id=…) whose dedup_hash isn't
+    in `keep_hashes` — removes entries that vanished from the source on re-ingest. Flushes."""
+    for old in session.scalars(select(model).filter_by(**scope)).all():
+        if old.dedup_hash not in keep_hashes:
+            session.delete(old)
+    session.flush()
+
+
+def count(session, model, where=None):
+    """Row count for `model` (optionally filtered by `where`), used by loaders for the
+    +N-new / total tallies they print."""
+    stmt = select(func.count()).select_from(model)
+    if where is not None:
+        stmt = stmt.where(where)
+    return session.scalar(stmt)
+
+
 def upsert(session, model, payload, update_cols):
     """Idempotent on dedup_hash; mutable fields (amount/price/currency) are refreshed
     so re-ingesting a corrected ledger updates rows in place. Returns count of NEW rows."""
     if not payload:
         return 0
-    before = session.scalar(select(func.count()).select_from(model))
+    before = count(session, model)
     stmt = pg_insert(model).values(payload)
     stmt = stmt.on_conflict_do_update(
         index_elements=["dedup_hash"],
         set_={c: getattr(stmt.excluded, c) for c in update_cols})
     session.execute(stmt)
     session.flush()
-    after = session.scalar(select(func.count()).select_from(model))
-    return after - before
+    return count(session, model) - before
 
 
 def main():
@@ -222,12 +240,12 @@ def main():
     from ingestion.load_cdp_cost import load_cdp_cost
     nc = load_cdp_cost(s)
     s.commit()
-    print(f"txn: +{nt} new (total {s.scalar(select(func.count()).select_from(Txn))})")
-    print(f"dividend: +{nd} new (total {s.scalar(select(func.count()).select_from(Dividend))}), "
+    print(f"txn: +{nt} new (total {count(s, Txn)})")
+    print(f"dividend: +{nd} new (total {count(s, Dividend)}), "
           f"ex_date backfilled on {nx}")
     from portfolio.models import OptionTrade, CdpCostLot
-    print(f"option_trade: +{no} new (total {s.scalar(select(func.count()).select_from(OptionTrade))})")
-    print(f"cdp_cost_lot: +{nc} new (total {s.scalar(select(func.count()).select_from(CdpCostLot))})")
+    print(f"option_trade: +{no} new (total {count(s, OptionTrade)})")
+    print(f"cdp_cost_lot: +{nc} new (total {count(s, CdpCostLot)})")
     s.close()
 
 

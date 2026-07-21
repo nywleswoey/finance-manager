@@ -7,7 +7,10 @@ CDP statements are the authoritative custody record (no fees). Two layouts:
 Both have a NAME then Free, (NIL|qty), Balance, price, mktval. Snapshot-diff the
 Balance per security across months to recover every buy/sell/transfer.
 """
-import glob, os, re, subprocess, csv
+import glob, os, re
+
+from _pdf import raw_text
+from _csvout import write_rows
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "cdp-statements")
 
@@ -38,7 +41,7 @@ def f(s): return float(s.replace(",", ""))
 def parse(path):
     mo = re.search(r"(\d{6})", path).group(1)
     ym = f"{mo[:4]}-{mo[4:]}"
-    txt = subprocess.run(["pdftotext", "-layout", path, "-"], capture_output=True, text=True).stdout
+    txt = raw_text(path)
     out = {}
     inhold = False
     for ln in txt.splitlines():
@@ -98,10 +101,8 @@ def main():
         h, v = HOLD.get(c), snaps[last].get(c)
         print(f"  {c:8} statement={v!s:>8}  Holdings={h}  {'OK' if h==v else ('—' if h is None else 'CHECK')}")
     out = os.path.join(os.path.dirname(__file__), "cdp_events.csv")
-    with open(out, "w", newline="") as fh:
-        w = csv.writer(fh); w.writerow(["date","name","code","action","qty_signed"])
-        for mo, c, act, q in ev:
-            w.writerow([mo + "-28", label.get(c, ""), c, act, q])
+    write_rows(out, ["date", "name", "code", "action", "qty_signed"],
+               [[mo + "-28", label.get(c, ""), c, act, q] for mo, c, act, q in ev])
     print(f"\nwrote {out}")
 
 if __name__ == "__main__":

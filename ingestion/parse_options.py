@@ -29,11 +29,9 @@ import sys
 from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import func, select
-
 from portfolio.db import SessionLocal
 from portfolio.models import OptionTrade
-from ingestion.load import ROOT, batch, h, maps, num, pdate, upsert
+from ingestion.load import ROOT, batch, count, maps, num, occ_hash, pdate, prune_stale, upsert
 
 TIGER_GLOBS = ["data/tiger-prime/*.csv", "data/tiger-cash-boost/*.csv"]
 IBKR_SRC = os.path.join(ROOT, "data", "ibkr-options", "options.csv")
@@ -170,7 +168,6 @@ def _reconcile(legs, a, alias):
             outcome = "open"
             realized = None
         key = (und, typ, str(strike), str(exp), str(open_d))
-        occ[key] += 1
         payload.append(dict(
             account_id=a.id, security_id=alias.get(und), underlying=und,
             market=d["market"], option_type=typ, contracts=oc, strike=strike, multiplier=mult,
@@ -178,7 +175,7 @@ def _reconcile(legs, a, alias):
             premium_open=prem_open, premium_close=prem_close,
             fees_open=d["open_fees"], fees_close=d["close_fees"], realized_pl=realized,
             currency=CCY.get(d["market"], "USD"), outcome=outcome,
-            source_file="tiger-flex/options", dedup_hash=h(*key, occ[key]),
+            source_file="tiger-flex/options", dedup_hash=occ_hash(occ, key),
         ))
     return payload
 
@@ -209,29 +206,19 @@ def _archive_legs(src, a, alias):
         else:
             outcome = "expired"
         key = (ticker, otype, str(strike), str(contracts), str(open_d), str(expiry))
-        occ[key] += 1
         payload.append(dict(
             account_id=a.id, security_id=alias.get(ticker), underlying=ticker,
             market=market or None, option_type=otype, contracts=contracts or 0, strike=strike,
             multiplier=mult, open_date=open_d, expiry_date=expiry, close_date=close_d,
             premium_open=prem_open, premium_close=prem_close, fees_open=fees_open,
             fees_close=fees_close, realized_pl=realized, currency=CCY.get(market, "USD"),
-            outcome=outcome, source_file="ibkr-options/options.csv", dedup_hash=h(*key, occ[key]),
+            outcome=outcome, source_file="ibkr-options/options.csv", dedup_hash=occ_hash(occ, key),
         ))
     return payload
 
 
 _UPSERT_COLS = ["premium_open", "premium_close", "fees_open", "fees_close", "close_date",
                 "contracts", "realized_pl", "outcome", "security_id", "open_date"]
-
-
-def _prune(session, account_id, keep_hashes):
-    """Delete this account's option rows that aren't in the current payload — removes the old
-    archive-sourced rows on cutover and any contract that vanished from the source on re-ingest."""
-    for old in session.scalars(select(OptionTrade).filter_by(account_id=account_id)).all():
-        if old.dedup_hash not in keep_hashes:
-            session.delete(old)
-    session.flush()
 
 
 def load_options(session, acct, alias):
@@ -244,7 +231,8 @@ def load_options(session, acct, alias):
     b = batch(session, "options", "tiger-flex/options", len(flex))
     for p in flex:
         p["batch_id"] = b.id
-    _prune(session, tiger.id, {p["dedup_hash"] for p in flex})
+    # replaces the retired archive rows on this account + any contract gone from the source
+    prune_stale(session, OptionTrade, {p["dedup_hash"] for p in flex}, account_id=tiger.id)
     n += upsert(session, OptionTrade, flex, _UPSERT_COLS)
     # IBKR — pre-reconciled orphan export under the IBKR account
     ibkr = acct.get("IBKR")
@@ -253,7 +241,7 @@ def load_options(session, acct, alias):
         b = batch(session, "options-ibkr", "data/ibkr-options/options.csv", len(arc))
         for p in arc:
             p["batch_id"] = b.id
-        _prune(session, ibkr.id, {p["dedup_hash"] for p in arc})
+        prune_stale(session, OptionTrade, {p["dedup_hash"] for p in arc}, account_id=ibkr.id)
         n += upsert(session, OptionTrade, arc, _UPSERT_COLS)
     return n
 
@@ -263,7 +251,7 @@ def main():
     acct, alias = maps(s)
     n = load_options(s, acct, alias)
     s.commit()
-    total = s.scalar(select(func.count()).select_from(OptionTrade))
+    total = count(s, OptionTrade)
     print(f"option_trade: +{n} new (total {total})")
     s.close()
 

@@ -10,9 +10,7 @@ import csv
 import os
 from collections import Counter
 
-from sqlalchemy import func, select
-
-from ingestion.load import batch, h, num, pdate, upsert
+from ingestion.load import batch, count, num, occ_hash, pdate, prune_stale, upsert
 from portfolio.db import SessionLocal
 from portfolio.models import CashTxn
 
@@ -33,8 +31,7 @@ def load_cash(session):
         # the same row; occ disambiguates genuinely identical lines in one statement.
         key = (r["source"], r["account_label"], r["txn_date"], r["description"][:120],
                r["amount_sgd"])
-        occ[key] += 1
-        dh = h(*key, occ[key])
+        dh = occ_hash(occ, key)
         payload.append(dict(
             source=r["source"], account_label=r["account_label"],
             txn_date=pdate(r["txn_date"]), post_date=pdate(r["post_date"]),
@@ -48,11 +45,7 @@ def load_cash(session):
             source_file=r["source_file"], raw=r["raw"], batch_id=b.id, dedup_hash=dh,
         ))
     # rows that vanished from the CSV (e.g. a fixed parser bug) are pruned from this batch
-    hashes = {p["dedup_hash"] for p in payload}
-    for old in session.scalars(select(CashTxn).filter_by(batch_id=b.id)).all():
-        if old.dedup_hash not in hashes:
-            session.delete(old)
-    session.flush()
+    prune_stale(session, CashTxn, {p["dedup_hash"] for p in payload}, batch_id=b.id)
     return upsert(session, CashTxn, payload,
                   ["amount_sgd", "is_spend", "exclude_reason", "category", "subcategory",
                    "merchant", "description", "post_date", "fcy_amount", "fcy_currency"])
@@ -62,8 +55,8 @@ def main():
     s = SessionLocal()
     n = load_cash(s)
     s.commit()
-    total = s.scalar(select(func.count()).select_from(CashTxn))
-    spend = s.scalar(select(func.count()).select_from(CashTxn).where(CashTxn.is_spend.is_(True)))
+    total = count(s, CashTxn)
+    spend = count(s, CashTxn, CashTxn.is_spend.is_(True))
     print(f"cash_txn: +{n} new (total {total}, {spend} counted as spend)")
     s.close()
 

@@ -22,8 +22,11 @@ import datetime as dt
 import glob
 import os
 import re
-import subprocess
 import unicodedata
+
+from _pdf import raw_text
+from _csvout import write_csv
+from _dates import try_date
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "build", "cash_ledger_raw.csv")
@@ -53,19 +56,12 @@ def _num(s):
 
 
 def _pdate(s):
-    for f in ("%d %b %Y", "%Y-%m-%d", "%d/%m/%Y"):
-        try:
-            return dt.datetime.strptime((s or "").strip(), f).date()
-        except ValueError:
-            pass
-    return None
+    return try_date(s, ("%d %b %Y", "%Y-%m-%d", "%d/%m/%Y"))
 
 
 def pdftext(path):
-    out = subprocess.run(["pdftotext", "-layout", path, "-"],
-                         capture_output=True, text=True).stdout
     # NFKC folds typographic ligatures (Netﬂix -> Netflix) so keyword matching works
-    return unicodedata.normalize("NFKC", out)
+    return unicodedata.normalize("NFKC", raw_text(path))
 
 
 def row(**kw):
@@ -376,10 +372,7 @@ def main():
     rows = [r for r in rows if not _is_suppressed_cc_bill(r, windows)]
     rows = [r for r in rows if r["txn_date"] >= START.isoformat()]
     rows.sort(key=lambda r: (r["txn_date"], r["source"]))
-    with open(OUT, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=COLS)
-        w.writeheader()
-        w.writerows(rows)
+    write_csv(OUT, COLS, rows)
     by_src = {}
     for r in rows:
         by_src[r["source"]] = by_src.get(r["source"], 0) + 1

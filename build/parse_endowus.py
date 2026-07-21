@@ -20,8 +20,11 @@ price/amount: it is internal, not new capital. Its cost carries from the predece
 the `switch` corporate_action (see performance.py / seed.py), so booking it here would
 double-count. Infinity itself stays in cpf-stocks/transactions.csv (authoritative cost).
 """
-import glob, os, re, subprocess, csv
+import glob, os, re
 from datetime import datetime
+
+from _pdf import raw_text
+from _csvout import write_rows
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "endowus statement")
 FUND = "Amundi"                     # the fund Endowus is authoritative for (others come from cpf-stocks)
@@ -40,13 +43,10 @@ def f(s): return float(s.replace(",", ""))
 def isoA(d): return datetime.strptime(d, "%d %b %Y").date().isoformat()
 def isoB(d): return datetime.strptime(d, "%d/%m/%Y").date().isoformat()
 
-def text_of(path):
-    return subprocess.run(["pdftotext", "-layout", path, "-"], capture_output=True, text=True).stdout
-
 def holdings(path):
     """fund unit snapshot from the asset-allocation table — used only to sanity-check units."""
     out = {}
-    for m in re.finditer(r"(.+?Fund)\s+Equity(?:\s+Fund)?\s+(CPF OA|CPF SA|SRS|Cash)\s+([\d,]+\.\d+)\s+S\$", text_of(path)):
+    for m in re.finditer(r"(.+?Fund)\s+Equity(?:\s+Fund)?\s+(CPF OA|CPF SA|SRS|Cash)\s+([\d,]+\.\d+)\s+S\$", raw_text(path)):
         out[(re.sub(r"\s+", " ", m.group(1)).strip(), m.group(2))] = f(m.group(3))
     return out
 
@@ -68,7 +68,7 @@ def main():
     files = sorted(glob.glob(os.path.join(DATA, "endowus_*.pdf")))
     allrows, snaps = [], {}
     for path in files:
-        txt = text_of(path)
+        txt = raw_text(path)
         allrows += parse_txns(txt)
         h = holdings(path)
         if h:
@@ -113,11 +113,8 @@ def main():
     print(f"external cash booked (buys only): S${invested:,.2f}  (switch-in excluded)")
 
     out = os.path.join(os.path.dirname(__file__), "endowus_events.csv")
-    with open(out, "w", newline="") as fh:
-        w = csv.writer(fh)
-        w.writerow(["date", "src", "fund", "action", "qty_signed", "price", "amount"])
-        for date, fund, act, q, price, amt in ev:
-            w.writerow([date, "CPF OA", fund, act, q, price, amt])
+    write_rows(out, ["date", "src", "fund", "action", "qty_signed", "price", "amount"],
+               [[date, "CPF OA", fund, act, q, price, amt] for date, fund, act, q, price, amt in ev])
     print(f"\nwrote {out}")
 
 if __name__ == "__main__":

@@ -13,42 +13,30 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
-from .db import SessionLocal
+from .db import fx_map, latest_close, session_scope
 
 log = logging.getLogger(__name__)
 
-_ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}
 
-
-def _num(s):
-    s = str(s or "").replace(",", "").replace("$", "").strip()
-    if not s or s == "-":
-        return 0.0
-    neg = s.startswith("(") and s.endswith(")")
-    s = s.strip("()")
-    try:
-        v = float(s)
-    except ValueError:
-        return 0.0
-    return -v if neg else v
+def _f(x):
+    """float(x), passing None through unchanged — for nullable numeric fields."""
+    return float(x) if x is not None else None
 
 
 def cdp_transactions(session=None):
     """CDP trades from the cdp_cost_lot table (priced) for the transactions view — the cost
     record the CDP statements omit. Loaded from data/cdp-stocks/transactions.csv by
     ingestion.load_cdp_cost. Returns txn-like dicts."""
-    s = session or SessionLocal()
-    rows = s.execute(text(
-        "SELECT trade_date, ticker, stock_name, action, qty, unit_price, amount, currency "
-        "FROM cdp_cost_lot ORDER BY trade_date")).mappings().all()
-    if session is None:
-        s.close()
+    with session_scope(session) as s:
+        rows = s.execute(text(
+            "SELECT trade_date, ticker, stock_name, action, qty, unit_price, amount, currency "
+            "FROM cdp_cost_lot ORDER BY trade_date")).mappings().all()
     return [{
         "trade_date": r["trade_date"].isoformat() if r["trade_date"] else None, "account": "CDP",
         "ticker": r["ticker"], "name": r["stock_name"] or "", "action": r["action"] or "",
         "qty_signed": float(r["qty"] or 0),
-        "price": float(r["unit_price"]) if r["unit_price"] is not None else None,
-        "gross_amount": float(r["amount"]) if r["amount"] is not None else None,
+        "price": _f(r["unit_price"]),
+        "gross_amount": _f(r["amount"]),
         "currency": r["currency"] or "SGD", "source_file": "cdp-stocks/transactions.csv",
     } for r in rows]
 
@@ -66,11 +54,9 @@ def cdp_cost(session=None):
 
     Transfers are skipped: the position is grouped per (funding_bucket, security), so a CDP->FSM
     move keeps both legs in the same position and the cost carries across on its own."""
-    s = session or SessionLocal()
-    rows = s.execute(text(
-        "SELECT ticker, trade_date, qty, amount, action FROM cdp_cost_lot")).all()
-    if session is None:
-        s.close()
+    with session_scope(session) as s:
+        rows = s.execute(text(
+            "SELECT ticker, trade_date, qty, amount, action FROM cdp_cost_lot")).all()
     out = {}
     for ticker, d, qty, amount, action in rows:
         if (action or "").strip().lower() in CDP_TRANSFER:
@@ -166,95 +152,16 @@ def _xirr(flows, guess=0.1):
     return (lo + hi) / 2
 
 
-def compute(session=None):
-    s = session or SessionLocal()
-    today = dt.date.today()
-    fx = {c: float(r) for c, r in s.execute(text("SELECT currency, rate_to_sgd FROM fx_rate")).all()}
-    price = {(sid): float(px) for sid, px in s.execute(text(
-        "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC")).all()}
+def _fx_and_price(s):
+    """Latest FX (currency -> rate_to_sgd) and latest close per security_id."""
+    fx = fx_map(s)
+    price = latest_close(s)
+    return fx, price
 
-    # group txns + dividends per (account, security)
-    rows = s.execute(text("""
-        SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
-               sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
-               t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount, t.fees
-        FROM txn t JOIN account a ON a.id=t.account_id JOIN security sec ON sec.id=t.security_id
-    """)).mappings().all()
-    divs = s.execute(text("""
-        SELECT account_id, security_id, pay_date, gross, currency FROM dividend
-    """)).mappings().all()
 
-    cdp = cdp_cost(s)
-    # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
-    # together, so a position transferred into FSM still carries its original CDP purchase cost.
-    pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
-                                "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
-                                "uncosted_units": 0.0, "accounts": set()})
-    meta = {}
-    _unknown_actions = set()
-    for r in rows:
-        k = (r["funding_bucket"], r["security_id"])
-        meta[k] = r
-        p = pos[k]
-        p["units"] += float(r["qty_signed"])
-        p["accounts"].add(r["account"])
-        if r["account"] == "CDP":
-            continue                                   # CDP cost comes from cdp-stocks below
-        act = r["action"]
-        px = float(r["price"]) if r["price"] is not None else None
-        fee = abs(float(r["fees"])) if r["fees"] is not None else 0.0   # native ccy, same as px*qty
-        kind = classify(act, px)
-        if kind == "cash":
-            cash = -float(r["qty_signed"]) * px
-            # fees are a real cost: bigger outflow on a buy, smaller net inflow on a sell
-            cash -= fee
-            p["fees"] += fee
-            p["flows"].append((r["trade_date"] or today, cash))
-            if cash < 0:
-                p["invested"] += -cash
-                p["buy_cost"] += -cash
-                p["buy_qty"] += float(r["qty_signed"])
-            else:
-                p["proceeds"] += cash
-        elif kind == "uncosted":
-            if float(r["qty_signed"]) > 0:
-                p["uncosted_units"] += float(r["qty_signed"])
-        elif kind == "unknown":
-            _unknown_actions.add(act)                  # don't silently hand out free units
-
-    if _unknown_actions:
-        log.warning("unclassified txn action(s) %s — treated as zero-cash; units may be uncosted",
-                    sorted(_unknown_actions))
-
-    # CDP cost (cdp-stocks) -> the CASH bucket position for that security
-    sec_by_ticker = {m["canonical_ticker"]: sid for (b, sid), m in meta.items()}
-    for tk, c in cdp.items():
-        sid = sec_by_ticker.get(tk)
-        k = ("cash", sid)
-        if sid is None or k not in pos:
-            continue
-        pos[k]["flows"].extend(c["flows"])
-        pos[k]["invested"] += c["invested"]
-        pos[k]["buy_cost"] += c["buy_cost"]
-        pos[k]["buy_qty"] += c["buy_qty"]
-        pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
-
-    bucket_of_acct = {r["account"]: r["funding_bucket"] for r in rows}
-    for d in divs:
-        # find the bucket this dividend's account belongs to
-        b = None
-        for r in rows:
-            if r["account_id"] == d["account_id"]:
-                b = r["funding_bucket"]; break
-        k = (b, d["security_id"])
-        if k not in pos:
-            continue
-        amt = float(d["gross"] or 0)
-        pos[k]["income"] += amt
-        pos[k]["flows"].append((d["pay_date"] or today, amt))
-
-    # corporate-action cost carryover: a closed predecessor's cost follows to the surviving
-    # security (e.g. C31 -> 9CI on the 2021 CapitaLand restructuring; rename/split/consolidation)
+def _carry_corporate_actions(s, pos, meta):
+    """Carry a closed predecessor's cost onto the surviving security (e.g. C31 -> 9CI on the
+    2021 CapitaLand restructuring; rename/split/consolidation/merger/switch). Mutates pos."""
     ca = s.execute(text("SELECT from_ticker, to_ticker, type FROM corporate_action "
                         "WHERE type IN ('rename','split','consolidation','merger','switch')")).all()
     # match predecessor/successor within the SAME funding bucket (corp actions are bucket-agnostic)
@@ -294,52 +201,154 @@ def compute(session=None):
             pos[k]["buy_cost"] = pos[k]["invested"]
             pos[k]["buy_qty"] = pos[k]["units"]
 
+
+def _apply_txn(p, r, today):
+    """Fold one non-CDP txn row into its position accumulator `p`. Returns the action
+    string if it couldn't be classified (caller should warn), else None."""
+    act = r["action"]
+    px = _f(r["price"])
+    fee = abs(float(r["fees"])) if r["fees"] is not None else 0.0   # native ccy, same as px*qty
+    kind = classify(act, px)
+    if kind == "cash":
+        # fees are a real cost: bigger outflow on a buy, smaller net inflow on a sell
+        cash = -float(r["qty_signed"]) * px - fee
+        p["fees"] += fee
+        p["flows"].append((r["trade_date"] or today, cash))
+        if cash < 0:
+            p["invested"] += -cash
+            p["buy_cost"] += -cash
+            p["buy_qty"] += float(r["qty_signed"])
+        else:
+            p["proceeds"] += cash
+    elif kind == "uncosted":
+        if float(r["qty_signed"]) > 0:
+            p["uncosted_units"] += float(r["qty_signed"])
+    elif kind == "unknown":
+        return act                                     # don't silently hand out free units
+    return None
+
+
+def _rn(x, n, mult=1.0):
+    """round(x * mult, n), passing None through unchanged — for nullable output fields.
+    The None-check is on the base `x` (before multiplying) so a None never hits the *mult."""
+    return round(x * mult, n) if x is not None else None
+
+
+def _build_row(k, p, m, fx, price, today):
+    """Assemble one position's output dict (native ccy + SGD) from its accumulated flows/units."""
+    ccy = m["currency"] or "SGD"
+    rate = fx.get(ccy, 1.0)
+    px = price.get(k[1])
+    mv = (p["units"] * px) if px else 0.0
+    flows = list(p["flows"])
+    if p["units"] > 1e-6 and px:
+        flows.append((today, mv))
+    cost_known = p["invested"] > 1e-6
+    # XIRR is only meaningful when every unit that entered has a known cost and the flows
+    # span long enough for annualisation to mean something.
+    span = (max(d for d, _ in flows) - min(d for d, _ in flows)).days if flows else 0
+    xirr_ok = cost_known and p["uncosted_units"] < 1e-6 and span >= MIN_XIRR_DAYS
+    xirr = _xirr(flows) if xirr_ok else None
+    total_pl = (mv + p["proceeds"] + p["income"] - p["invested"]) if cost_known else None
+    simple = (total_pl / p["invested"]) if cost_known else None
+    # cost basis of CURRENT holding (avg cost × held units) + unrealised P/L
+    avg_cost = (p["buy_cost"] / p["buy_qty"]) if p["buy_qty"] > 1e-6 else None
+    cost_basis = (avg_cost * p["units"]) if (avg_cost and p["units"] > 1e-6) else None
+    unreal = (mv - cost_basis) if cost_basis is not None else None
+    # realised stock P/L = sell proceeds − cost of the shares sold (buy_cost minus the
+    # cost still tied up in the current holding). Closed positions: cost_basis None -> all sold.
+    realised = (p["proceeds"] - p["buy_cost"] + (cost_basis or 0.0)) if cost_known else None
+    return {
+        "bucket": k[0], "accounts": sorted(p["accounts"]), "ticker": m["canonical_ticker"],
+        "name": m["name"], "market": m["market"], "asset_type": m["asset_type"], "currency": ccy,
+        "units": round(p["units"], 4), "price": px, "mv_native": round(mv, 2),
+        "avg_cost": round(avg_cost, 4) if avg_cost else None,
+        "cost_basis_native": _rn(cost_basis, 2),
+        "cost_basis_sgd": _rn(cost_basis, 2, rate),
+        "unrealised_pl_sgd": _rn(unreal, 2, rate),
+        "realised_pl_sgd": _rn(realised, 2, rate),
+        "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
+        "fees_sgd": round(p["fees"] * rate, 2), "cost_known": cost_known,
+        "uncosted_units": round(p["uncosted_units"], 4),
+        "total_pl_native": round(total_pl, 2) if cost_known else None,
+        "invested_sgd": round(p["invested"] * rate, 2) if cost_known else 0.0,
+        "mv_sgd": round(mv * rate, 2), "income_sgd": round(p["income"] * rate, 2),
+        "pl_sgd": round(total_pl * rate, 2) if cost_known else None,
+        "xirr": _rn(xirr, 4),
+        "simple_return": round(simple, 4) if cost_known else None,
+    }
+
+
+def compute(session=None):
+    today = dt.date.today()
+    with session_scope(session) as s:
+        fx, price = _fx_and_price(s)
+
+        # group txns + dividends per (account, security)
+        rows = s.execute(text("""
+            SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
+                   sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
+                   t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount, t.fees
+            FROM txn t JOIN account a ON a.id=t.account_id JOIN security sec ON sec.id=t.security_id
+        """)).mappings().all()
+        divs = s.execute(text("""
+            SELECT account_id, security_id, pay_date, gross, currency FROM dividend
+        """)).mappings().all()
+
+        cdp = cdp_cost(s)
+        # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
+        # together, so a position transferred into FSM still carries its original CDP purchase cost.
+        pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
+                                    "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
+                                    "uncosted_units": 0.0, "accounts": set()})
+        meta = {}
+        _unknown_actions = set()
+        for r in rows:
+            k = (r["funding_bucket"], r["security_id"])
+            meta[k] = r
+            p = pos[k]
+            p["units"] += float(r["qty_signed"])
+            p["accounts"].add(r["account"])
+            if r["account"] == "CDP":
+                continue                                   # CDP cost comes from cdp-stocks below
+            unk = _apply_txn(p, r, today)
+            if unk is not None:
+                _unknown_actions.add(unk)
+
+        if _unknown_actions:
+            log.warning("unclassified txn action(s) %s — treated as zero-cash; units may be uncosted",
+                        sorted(_unknown_actions))
+
+        # CDP cost (cdp-stocks) -> the CASH bucket position for that security
+        sec_by_ticker = {m["canonical_ticker"]: sid for (_, sid), m in meta.items()}
+        for tk, c in cdp.items():
+            sid = sec_by_ticker.get(tk)
+            k = ("cash", sid)
+            if sid is None or k not in pos:
+                continue
+            pos[k]["flows"].extend(c["flows"])
+            pos[k]["invested"] += c["invested"]
+            pos[k]["buy_cost"] += c["buy_cost"]
+            pos[k]["buy_qty"] += c["buy_qty"]
+            pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
+
+        bucket_by_acct_id = {r["account_id"]: r["funding_bucket"] for r in rows}
+        for d in divs:
+            k = (bucket_by_acct_id.get(d["account_id"]), d["security_id"])
+            if k not in pos:
+                continue
+            amt = float(d["gross"] or 0)
+            pos[k]["income"] += amt
+            pos[k]["flows"].append((d["pay_date"] or today, amt))
+
+        _carry_corporate_actions(s, pos, meta)
+
     out = []
     for k, p in pos.items():
         m = meta.get(k)
         if not m:
             continue
-        ccy = m["currency"] or "SGD"
-        rate = fx.get(ccy, 1.0)
-        px = price.get(k[1])
-        mv = (p["units"] * px) if px else 0.0
-        flows = list(p["flows"])
-        if p["units"] > 1e-6 and px:
-            flows.append((today, mv))
-        cost_known = p["invested"] > 1e-6
-        # XIRR is only meaningful when every unit that entered has a known cost and the flows
-        # span long enough for annualisation to mean something.
-        span = (max(d for d, _ in flows) - min(d for d, _ in flows)).days if flows else 0
-        xirr_ok = cost_known and p["uncosted_units"] < 1e-6 and span >= MIN_XIRR_DAYS
-        xirr = _xirr(flows) if xirr_ok else None
-        total_pl = (mv + p["proceeds"] + p["income"] - p["invested"]) if cost_known else None
-        simple = (total_pl / p["invested"]) if cost_known else None
-        # cost basis of CURRENT holding (avg cost × held units) + unrealised P/L
-        avg_cost = (p["buy_cost"] / p["buy_qty"]) if p["buy_qty"] > 1e-6 else None
-        cost_basis = (avg_cost * p["units"]) if (avg_cost and p["units"] > 1e-6) else None
-        unreal = (mv - cost_basis) if cost_basis is not None else None
-        # realised stock P/L = sell proceeds − cost of the shares sold (buy_cost minus the
-        # cost still tied up in the current holding). Closed positions: cost_basis None -> all sold.
-        realised = (p["proceeds"] - p["buy_cost"] + (cost_basis or 0.0)) if cost_known else None
-        out.append({
-            "bucket": k[0], "accounts": sorted(p["accounts"]), "ticker": m["canonical_ticker"],
-            "name": m["name"], "market": m["market"], "asset_type": m["asset_type"], "currency": ccy,
-            "units": round(p["units"], 4), "price": px, "mv_native": round(mv, 2),
-            "avg_cost": round(avg_cost, 4) if avg_cost else None,
-            "cost_basis_native": round(cost_basis, 2) if cost_basis is not None else None,
-            "cost_basis_sgd": round(cost_basis * rate, 2) if cost_basis is not None else None,
-            "unrealised_pl_sgd": round(unreal * rate, 2) if unreal is not None else None,
-            "realised_pl_sgd": round(realised * rate, 2) if realised is not None else None,
-            "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
-            "fees_sgd": round(p["fees"] * rate, 2), "cost_known": cost_known,
-            "uncosted_units": round(p["uncosted_units"], 4),
-            "total_pl_native": round(total_pl, 2) if cost_known else None,
-            "invested_sgd": round(p["invested"] * rate, 2) if cost_known else 0.0,
-            "mv_sgd": round(mv * rate, 2), "income_sgd": round(p["income"] * rate, 2),
-            "pl_sgd": round(total_pl * rate, 2) if cost_known else None,
-            "xirr": round(xirr, 4) if xirr is not None else None,
-            "simple_return": round(simple, 4) if cost_known else None,
-        })
+        out.append(_build_row(k, p, m, fx, price, today))
     # fold in the options income stream per underlying (realized, SGD). Options trade on the
     # cash account, so attach to the cash-bucket row for that security; orphan underlyings
     # (no stock position) are still counted in the Performance rollup via options.realized_by().
@@ -348,21 +357,15 @@ def compute(session=None):
     for r in out:
         o = opt.get(r["ticker"]) if r["bucket"] == "cash" else None
         r["options_pl_sgd"] = o["pl_sgd"] if o else 0.0
-    if session is None:
-        s.close()
     return out
 
 
 def alloc_by_account(session=None):
     """market value per account (SGD) — for allocation charts (no cost needed)."""
-    s = session or SessionLocal()
-    fx = {c: float(r) for c, r in s.execute(text("SELECT currency, rate_to_sgd FROM fx_rate")).all()}
-    price = {sid: float(px) for sid, px in s.execute(text(
-        "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC")).all()}
-    rows = s.execute(text(
-        "SELECT account, security_id, currency, units FROM current_position WHERE units > 0")).all()
-    if session is None:
-        s.close()
+    with session_scope(session) as s:
+        fx, price = _fx_and_price(s)
+        rows = s.execute(text(
+            "SELECT account, security_id, currency, units FROM current_position WHERE units > 0")).all()
     agg = defaultdict(float)
     for acct, sid, ccy, u in rows:
         px = price.get(sid)
@@ -371,10 +374,16 @@ def alloc_by_account(session=None):
     return {k: {"mv_sgd": round(v, 2)} for k, v in agg.items()}
 
 
+def empty_group():
+    """Zeroed rollup-group accumulator. Shared with server.main so the groups it
+    synthesises for orphan option underlyings match rollup()'s schema exactly."""
+    return {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0,
+            "capital_sgd": 0.0, "invested_sgd": 0.0,
+            "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0}
+
+
 def rollup(rows, by):
-    agg = defaultdict(lambda: {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0,
-                               "capital_sgd": 0.0, "invested_sgd": 0.0,
-                               "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0})
+    agg = defaultdict(empty_group)
     for r in rows:
         # include closed positions (units≈0): they still carry realised P/L + dividends.
         if r["units"] <= 1e-6 and not r["cost_known"] and abs(r["income_sgd"]) < 1e-6:
