@@ -19,9 +19,10 @@ from sqlalchemy import text
 from portfolio.config import settings
 
 from server import auth
-from portfolio.db import SessionLocal, fx_map
+from portfolio.db import SessionLocal
 from portfolio.performance import alloc_by_account, compute, empty_group, rollup
 from portfolio import spending
+from portfolio import dividends
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s %(message)s")  # SECURITY-03
@@ -258,15 +259,16 @@ def holding(ticker: str, bucket: str = "cash"):
         t["balance"] = round(bal, 4)
     # enrich each dividend with qty held at pay date + declared rate per unit.
     # prefer statement-stated values; fall back to ledger replay / implied (gross/qty).
+    # units_at / implied_rate are the shared pay_date attribution primitives (see dividends.py).
     for x in divs:
         units = _f(x["units"])
-        if units is None and x["pay_date"] is not None:
-            units = round(sum(float(t["qty_signed"] or 0) for t in txns
-                              if t["account"] == x["account"] and t["trade_date"] is not None
-                              and str(t["trade_date"]) <= str(x["pay_date"])), 4)
+        if units is None:
+            pairs = [(t["trade_date"], float(t["qty_signed"] or 0)) for t in txns
+                     if t["account"] == x["account"]]
+            units = dividends.units_at(x["pay_date"], pairs)
         rate = _f(x["amount_per_unit"])
-        if rate is None and units and units > 1e-6:
-            rate = round(float(x["gross"] or 0) / units, 6)
+        if rate is None:
+            rate = dividends.implied_rate(x["gross"], units)
         x["units"] = units
         x["rate"] = rate
     # option trades on this underlying (wheel income), only for the cash bucket
@@ -278,104 +280,18 @@ def holding(ticker: str, bucket: str = "cash"):
 
 
 @app.get("/api/dividends")
-def dividends():
-    s = SessionLocal()
-    by = _dicts(s,
-        "SELECT s.market, d.currency, round(sum(d.gross)) gross, count(*) n "
-        "FROM dividend d LEFT JOIN security s ON s.id=d.security_id "
-        "GROUP BY s.market, d.currency ORDER BY gross DESC NULLS LAST")
-    recent = _dicts(s,
-        "SELECT d.pay_date, a.name account, COALESCE(s.name,'?') name, "
-        "s.canonical_ticker ticker, d.gross, d.currency "
-        "FROM dividend d JOIN account a ON a.id=d.account_id "
-        "LEFT JOIN security s ON s.id=d.security_id "
-        "WHERE d.pay_date IS NOT NULL ORDER BY d.pay_date DESC LIMIT 50")
-    s.close()
-    return {"by_market": by, "recent": recent}
+def dividends_by_market():
+    return dividends.summary()
 
 
 @app.get("/api/dividend-details")
 def dividend_details():
-    """Per-dividend detail: declared per-share rate + units held at pay date (replayed
-    from the ledger) + implied rate (gross/units). Flags rows where the rate can't be
-    determined (no position data, missing date, or unmapped ticker) for manual input."""
-    from collections import defaultdict
-    s = SessionLocal()
-    divs = _dicts(s,
-        "SELECT d.id, d.pay_date, a.id account_id, a.name account, a.funding_bucket bucket, "
-        "d.security_id, COALESCE(sec.name, d.source_file) name, sec.canonical_ticker ticker, "
-        "d.gross, d.currency, d.amount_per_unit declared_rate, d.units stated_units "
-        "FROM dividend d JOIN account a ON a.id=d.account_id "
-        "LEFT JOIN security sec ON sec.id=d.security_id")
-    # txns grouped per (account, security) for point-in-time qty replay
-    by = defaultdict(list)
-    for aid, sid, td, q in s.execute(text(
-            "SELECT account_id, security_id, trade_date, qty_signed FROM txn "
-            "WHERE security_id IS NOT NULL")).all():
-        by[(aid, sid)].append((td, float(q)))
-    s.close()
-
-    out = []
-    for d in divs:
-        gross = float(d["gross"] or 0)
-        declared = _f(d["declared_rate"])
-        stated = _f(d["stated_units"])
-        held = None
-        if d["pay_date"] is not None and d["security_id"] is not None:
-            held = round(sum(q for td, q in by.get((d["account_id"], d["security_id"]), [])
-                             if td is not None and td <= d["pay_date"]), 4)
-        qty = stated if stated else held              # prefer statement-stated qty
-        implied = round(gross / qty, 6) if qty and qty > 1e-6 else None
-        flags = []
-        if d["ticker"] is None:
-            flags.append("unmapped ticker")
-        if d["pay_date"] is None:
-            flags.append("no date")
-        if declared is None and implied is None:
-            flags.append("qty unknown — needs manual input")
-        out.append({
-            "id": d["id"], "pay_date": d["pay_date"], "account": d["account"],
-            "name": d["name"], "ticker": d["ticker"], "gross": gross, "currency": d["currency"],
-            "qty": qty, "qty_source": ("statement" if stated else ("ledger" if held else None)),
-            "declared_rate": declared, "implied_rate": implied,
-            "rate": declared if declared is not None else implied,
-            "rate_source": ("declared" if declared is not None else ("implied" if implied is not None else None)),
-            "flags": flags,
-        })
-    out.sort(key=_date_key("pay_date"), reverse=True)
-    return {"rows": out, "flagged": sum(1 for r in out if r["flags"]), "total": len(out)}
+    return dividends.details()
 
 
 @app.get("/api/dividends-annual")
 def dividends_annual():
-    """Annual dividend income by funding bucket, converted to SGD at latest FX.
-    Historical FX is not stored, so prior years use today's rate (an approximation)."""
-    from collections import defaultdict
-    s = SessionLocal()
-    fx = fx_map(s)
-    rows = s.execute(text(
-        "SELECT EXTRACT(YEAR FROM d.pay_date)::int yr, "
-        "COALESCE(a.funding_bucket, 'cash') bucket, d.currency, sum(d.gross) gross "
-        "FROM dividend d JOIN account a ON a.id=d.account_id "
-        "WHERE d.pay_date IS NOT NULL "
-        "GROUP BY yr, bucket, d.currency")).mappings().all()
-    s.close()
-    matrix = defaultdict(lambda: defaultdict(float))   # bucket -> year -> sgd
-    totals = defaultdict(float)                         # year -> sgd
-    years, buckets = set(), set()
-    for r in rows:
-        sgd = float(r["gross"] or 0) * fx.get(r["currency"], 1.0)
-        matrix[r["bucket"]][r["yr"]] += sgd
-        totals[r["yr"]] += sgd
-        years.add(r["yr"]); buckets.add(r["bucket"])
-    order = {"cash": 0, "srs": 1, "cpf": 2}
-    return {
-        "currency": "SGD",
-        "years": sorted(years, reverse=True),
-        "buckets": sorted(buckets, key=lambda b: order.get(b, 9)),
-        "matrix": {b: {y: round(v, 2) for y, v in yr.items()} for b, yr in matrix.items()},
-        "totals": {y: round(v, 2) for y, v in totals.items()},
-    }
+    return dividends.annual()
 
 
 @app.get("/api/transactions")
