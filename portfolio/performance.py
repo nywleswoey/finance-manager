@@ -14,6 +14,7 @@ from collections import defaultdict
 from sqlalchemy import text
 
 from .db import fx_map, latest_close, session_scope
+from .money import rate_to_sgd
 
 log = logging.getLogger(__name__)
 
@@ -237,7 +238,7 @@ def _rn(x, n, mult=1.0):
 def _build_row(k, p, m, fx, price, today):
     """Assemble one position's output dict (native ccy + SGD) from its accumulated flows/units."""
     ccy = m["currency"] or "SGD"
-    rate = fx.get(ccy, 1.0)
+    rate = rate_to_sgd(ccy, fx)
     px = price.get(k[1])
     mv = (p["units"] * px) if px else 0.0
     flows = list(p["flows"])
@@ -370,7 +371,7 @@ def alloc_by_account(session=None):
     for acct, sid, ccy, u in rows:
         px = price.get(sid)
         if px:
-            agg[acct] += float(u) * px * fx.get(ccy or "SGD", 1.0)
+            agg[acct] += float(u) * px * rate_to_sgd(ccy, fx)
     return {k: {"mv_sgd": round(v, 2)} for k, v in agg.items()}
 
 
