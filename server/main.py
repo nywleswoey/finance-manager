@@ -21,6 +21,7 @@ from portfolio.config import settings
 from server import auth
 from portfolio.db import SessionLocal, fx_map
 from portfolio.performance import alloc_by_account, compute, empty_group, rollup
+from portfolio import spending
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s %(message)s")  # SECURITY-03
@@ -514,63 +515,19 @@ def nw_delete(snap_id: int):
 
 
 # ---------------- spending (cash-flow ledger) ----------------
-# All amounts SGD. Spend is the positive magnitude of counted outflows
-# (-amount_sgd where is_spend). Excluded rows (transfers, card-bill payments, income)
-# are filtered out of every spend metric but inspectable via /transactions.
-
-def _spend_where(frm, to, extra=""):
-    w = ["is_spend"]
-    p = {}
-    if frm:
-        w.append("txn_date >= :frm"); p["frm"] = frm
-    if to:
-        w.append("txn_date <= :to"); p["to"] = to
-    return " AND ".join(w) + extra, p
-
+# Thin pass-throughs to portfolio.spending, which owns the cash_txn domain (the shared
+# WHERE builder, the spend/exclude rule, and the month/category rollups).
 
 @app.get("/api/spending/summary")
 def spending_summary(frm: str | None = Query(None, alias="from"),
                      to: str | None = Query(None, alias="to")):
-    where, p = _spend_where(frm, to)
-    with SessionLocal() as s:
-        total = s.execute(text(f"SELECT COALESCE(SUM(-amount_sgd),0) FROM cash_txn WHERE {where}"),
-                          p).scalar()
-        by_group = _dicts(s,
-            f"SELECT category, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n FROM cash_txn "
-            f"WHERE {where} GROUP BY category ORDER BY v DESC", p)
-        by_sub = _dicts(s,
-            f"SELECT category, subcategory, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n FROM cash_txn "
-            f"WHERE {where} GROUP BY category, subcategory ORDER BY v DESC", p)
-        by_month = _dicts(s,
-            f"SELECT to_char(txn_date,'YYYY-MM') ym, ROUND(SUM(-amount_sgd),2) v FROM cash_txn "
-            f"WHERE {where} GROUP BY ym ORDER BY ym", p)
-        months = len(by_month) or 1
-        return {
-            "total_sgd": round(float(total), 2),
-            "avg_month_sgd": round(float(total) / months, 2),
-            "months": months,
-            "by_group": by_group,
-            "by_subcategory": by_sub,
-            "by_month": by_month,
-        }
+    return spending.summary(frm, to)
 
 
 @app.get("/api/spending/trends")
 def spending_trends(frm: str | None = Query(None, alias="from"),
                     to: str | None = Query(None, alias="to")):
-    """Monthly spend split by group — a stacked time series (one key per group)."""
-    where, p = _spend_where(frm, to)
-    with SessionLocal() as s:
-        rows = s.execute(text(
-            f"SELECT to_char(txn_date,'YYYY-MM') ym, category, ROUND(SUM(-amount_sgd),2) v "
-            f"FROM cash_txn WHERE {where} GROUP BY ym, category ORDER BY ym"), p).mappings().all()
-        groups = sorted({r["category"] for r in rows})
-        series: dict[str, dict] = {}
-        for r in rows:
-            m = series.setdefault(r["ym"], {"ym": r["ym"]})
-            m[r["category"]] = float(r["v"])
-        out = [{**{g: 0 for g in groups}, **m} for m in series.values()]
-        return {"groups": groups, "series": sorted(out, key=lambda x: x["ym"])}
+    return spending.trends(frm, to)
 
 
 @app.get("/api/spending/transactions")
@@ -579,34 +536,12 @@ def spending_transactions(frm: str | None = Query(None, alias="from"),
                           group: str | None = None, subcategory: str | None = None,
                           source: str | None = None, include_excluded: bool = False,
                           limit: int = 500):
-    w = ["1=1"]
-    p: dict = {"lim": min(limit, 2000)}
-    if not include_excluded:
-        w.append("is_spend")
-    if frm:
-        w.append("txn_date >= :frm"); p["frm"] = frm
-    if to:
-        w.append("txn_date <= :to"); p["to"] = to
-    if group:
-        w.append("category = :g"); p["g"] = group
-    if subcategory:
-        w.append("subcategory = :sub"); p["sub"] = subcategory
-    if source:
-        w.append("source = :src"); p["src"] = source
-    with SessionLocal() as s:
-        return _dicts(s,
-            f"SELECT txn_date, source, account_label, merchant, description, amount_sgd, "
-            f"direction, is_spend, exclude_reason, category, subcategory "
-            f"FROM cash_txn WHERE {' AND '.join(w)} "
-            f"ORDER BY txn_date DESC, id DESC LIMIT :lim", p)
+    return spending.transactions(frm, to, group, subcategory, source, include_excluded, limit)
 
 
 @app.get("/api/spending/categories")
 def spending_categories():
-    with SessionLocal() as s:
-        return _dicts(s,
-            "SELECT category, subcategory, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n "
-            "FROM cash_txn WHERE is_spend GROUP BY category, subcategory ORDER BY category, v DESC")
+    return spending.categories()
 
 
 # ---------------- recurring spends ----------------
