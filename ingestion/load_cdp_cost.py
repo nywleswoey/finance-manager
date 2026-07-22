@@ -11,30 +11,13 @@ import csv
 import os
 from collections import Counter
 
+from build._ledgercommon import canon, num
 from ingestion.load import batch, count, occ_hash, pdate, prune_stale, upsert
 from portfolio.db import SessionLocal
 from portfolio.models import CdpCostLot
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 CSV = os.path.join(ROOT, "data", "cdp-stocks", "transactions.csv")
-
-# CDP code -> canonical SGX/exchange code (Holdings.md label aliasing; CWBU->SET is the
-# Cromwell->Stoneweg counter rename).
-_ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}
-
-
-def _num(s):
-    s = str(s or "").replace(",", "").replace("$", "").strip()
-    if not s or s == "-":
-        return 0.0
-    neg = s.startswith("(") and s.endswith(")")
-    s = s.strip("()")
-    try:
-        v = float(s)
-    except ValueError:
-        return 0.0
-    return -v if neg else v
-
 
 def load_cdp_cost(session):
     if not os.path.exists(CSV):
@@ -48,11 +31,11 @@ def load_cdp_cost(session):
         key = (code, r.get("Date"), r.get("Action"), r.get("Qty"), r.get("Amount"))
         dh = occ_hash(occ, key)
         payload.append(dict(
-            trade_date=pdate(r.get("Date")), code=code, ticker=_ALIAS.get(code, code),
+            trade_date=pdate(r.get("Date")), code=code, ticker=canon(code),
             stock_name=(r.get("Stock Name") or "").strip() or None,
             action=(r.get("Action") or "").strip() or None,
-            qty=_num(r.get("Qty")), unit_price=_num(r.get("Unit Price")) or None,
-            amount=_num(r.get("Amount")),
+            qty=num(r.get("Qty")), unit_price=num(r.get("Unit Price")) or None,
+            amount=num(r.get("Amount")),
             currency=(r.get("Currency") or "").strip() or "SGD",
             market=(r.get("Market") or "").strip() or None,
             source_file="cdp-stocks/transactions.csv", batch_id=b.id, dedup_hash=dh,
