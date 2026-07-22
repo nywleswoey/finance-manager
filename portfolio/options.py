@@ -14,6 +14,7 @@ from sqlalchemy import select
 
 from portfolio.db import SessionLocal, fx_map
 from portfolio.models import OptionTrade
+from portfolio.money import rate_to_sgd
 
 
 def _fx(s):
@@ -23,9 +24,9 @@ def _fx(s):
 
 
 def _sgd(v, ccy, fx):
-    if v is None:
-        return 0.0
-    return float(v) * fx.get(ccy or "SGD", 1.0)
+    # None premium/realized -> 0.0 (this book's convention); otherwise convert through the
+    # one money policy, which raises on a missing foreign rate instead of silently using 1.0.
+    return 0.0 if v is None else float(v) * rate_to_sgd(ccy, fx)
 
 
 def _f(x):
