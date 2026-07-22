@@ -92,7 +92,9 @@ def test_user_from_request_garbage_cookie():
 @pytest.fixture
 def client():
     from server.main import app
-    return TestClient(app)
+    # raise_server_exceptions=False so a DB-less handler surfaces as a 500 instead of
+    # re-raising: these tests only assert the gate's decision (!= 401), never the DB path.
+    return TestClient(app, raise_server_exceptions=False)
 
 
 def test_health_is_public(client):
