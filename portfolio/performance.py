@@ -160,16 +160,17 @@ def _fx_and_price(s):
     return fx, price
 
 
-def _carry_corporate_actions(s, pos, meta):
+def _carry_corporate_actions(corp_actions, pos, meta):
     """Carry a closed predecessor's cost onto the surviving security (e.g. C31 -> 9CI on the
-    2021 CapitaLand restructuring; rename/split/consolidation/merger/switch). Mutates pos."""
-    ca = s.execute(text("SELECT from_ticker, to_ticker, type FROM corporate_action "
-                        "WHERE type IN ('rename','split','consolidation','merger','switch')")).all()
+    2021 CapitaLand restructuring; rename/split/consolidation/merger/switch). Mutates pos.
+
+    `corp_actions`: iterable of (from_ticker, to_ticker, type) — already filtered to the carry
+    types; passed in as data (not queried here) so the fold stays session-free."""
     # match predecessor/successor within the SAME funding bucket (corp actions are bucket-agnostic)
     tk_k = {(b, m["canonical_ticker"]): (b, sid) for (b, sid), m in meta.items()}
     buckets = {b for (b, _) in pos}
     switched = set()                       # successor keys whose cost carried through a cash switch
-    for frm, to, typ in ca:
+    for frm, to, typ in corp_actions:
         for b in buckets:
             kf, kt = tk_k.get((b, frm)), tk_k.get((b, to))
             if not (kf and kt):
@@ -280,69 +281,67 @@ def _build_row(k, p, m, fx, price, today):
     }
 
 
-def compute(session=None):
-    today = dt.date.today()
-    with session_scope(session) as s:
-        fx, price = _fx_and_price(s)
+def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None):
+    """Pure fold: accumulate per-(funding_bucket, security) positions from already-fetched
+    inputs and emit one output row each. No DB or session — every input is plain data, so the
+    cost-basis rules (transfer double-count, CDP cost attach, dividend income, corporate-action
+    carry, switch rebasing, options income) are all testable with fabricated rows.
 
-        # group txns + dividends per (account, security)
-        rows = s.execute(text("""
-            SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
-                   sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
-                   t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount, t.fees
-            FROM txn t JOIN account a ON a.id=t.account_id JOIN security sec ON sec.id=t.security_id
-        """)).mappings().all()
-        divs = s.execute(text("""
-            SELECT account_id, security_id, pay_date, gross, currency FROM dividend
-        """)).mappings().all()
+      txns  — mapping rows: account_id, account, funding_bucket, security_id, canonical_ticker,
+              name, market, asset_type, currency, trade_date, action, qty_signed, price, fees.
+      divs  — mapping rows: account_id, security_id, pay_date, gross.
+      cdp   — {ticker: {flows, invested, buy_cost, buy_qty}} from cdp_cost().
+      corp_actions — iterable of (from_ticker, to_ticker, type) (carry types only).
+      options — {ticker: {pl_sgd, ...}} realized options income per underlying.
+      fx / price — latest FX map and latest close per security_id. today defaults to today.
+    """
+    today = today or dt.date.today()
+    # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
+    # together, so a position transferred into FSM still carries its original CDP purchase cost.
+    pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
+                                "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
+                                "uncosted_units": 0.0, "accounts": set()})
+    meta = {}
+    _unknown_actions = set()
+    for r in txns:
+        k = (r["funding_bucket"], r["security_id"])
+        meta[k] = r
+        p = pos[k]
+        p["units"] += float(r["qty_signed"])
+        p["accounts"].add(r["account"])
+        if r["account"] == "CDP":
+            continue                                   # CDP cost comes from cdp-stocks below
+        unk = _apply_txn(p, r, today)
+        if unk is not None:
+            _unknown_actions.add(unk)
 
-        cdp = cdp_cost(s)
-        # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
-        # together, so a position transferred into FSM still carries its original CDP purchase cost.
-        pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
-                                    "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
-                                    "uncosted_units": 0.0, "accounts": set()})
-        meta = {}
-        _unknown_actions = set()
-        for r in rows:
-            k = (r["funding_bucket"], r["security_id"])
-            meta[k] = r
-            p = pos[k]
-            p["units"] += float(r["qty_signed"])
-            p["accounts"].add(r["account"])
-            if r["account"] == "CDP":
-                continue                                   # CDP cost comes from cdp-stocks below
-            unk = _apply_txn(p, r, today)
-            if unk is not None:
-                _unknown_actions.add(unk)
+    if _unknown_actions:
+        log.warning("unclassified txn action(s) %s — treated as zero-cash; units may be uncosted",
+                    sorted(_unknown_actions))
 
-        if _unknown_actions:
-            log.warning("unclassified txn action(s) %s — treated as zero-cash; units may be uncosted",
-                        sorted(_unknown_actions))
+    # CDP cost (cdp-stocks) -> the CASH bucket position for that security
+    sec_by_ticker = {m["canonical_ticker"]: sid for (_, sid), m in meta.items()}
+    for tk, c in cdp.items():
+        sid = sec_by_ticker.get(tk)
+        k = ("cash", sid)
+        if sid is None or k not in pos:
+            continue
+        pos[k]["flows"].extend(c["flows"])
+        pos[k]["invested"] += c["invested"]
+        pos[k]["buy_cost"] += c["buy_cost"]
+        pos[k]["buy_qty"] += c["buy_qty"]
+        pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
 
-        # CDP cost (cdp-stocks) -> the CASH bucket position for that security
-        sec_by_ticker = {m["canonical_ticker"]: sid for (_, sid), m in meta.items()}
-        for tk, c in cdp.items():
-            sid = sec_by_ticker.get(tk)
-            k = ("cash", sid)
-            if sid is None or k not in pos:
-                continue
-            pos[k]["flows"].extend(c["flows"])
-            pos[k]["invested"] += c["invested"]
-            pos[k]["buy_cost"] += c["buy_cost"]
-            pos[k]["buy_qty"] += c["buy_qty"]
-            pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
+    bucket_by_acct_id = {r["account_id"]: r["funding_bucket"] for r in txns}
+    for d in divs:
+        k = (bucket_by_acct_id.get(d["account_id"]), d["security_id"])
+        if k not in pos:
+            continue
+        amt = float(d["gross"] or 0)
+        pos[k]["income"] += amt
+        pos[k]["flows"].append((d["pay_date"] or today, amt))
 
-        bucket_by_acct_id = {r["account_id"]: r["funding_bucket"] for r in rows}
-        for d in divs:
-            k = (bucket_by_acct_id.get(d["account_id"]), d["security_id"])
-            if k not in pos:
-                continue
-            amt = float(d["gross"] or 0)
-            pos[k]["income"] += amt
-            pos[k]["flows"].append((d["pay_date"] or today, amt))
-
-        _carry_corporate_actions(s, pos, meta)
+    _carry_corporate_actions(corp_actions, pos, meta)
 
     out = []
     for k, p in pos.items():
@@ -353,12 +352,36 @@ def compute(session=None):
     # fold in the options income stream per underlying (realized, SGD). Options trade on the
     # cash account, so attach to the cash-bucket row for that security; orphan underlyings
     # (no stock position) are still counted in the Performance rollup via options.realized_by().
-    from .options import realized_by_ticker
-    opt = realized_by_ticker()
     for r in out:
-        o = opt.get(r["ticker"]) if r["bucket"] == "cash" else None
+        o = options.get(r["ticker"]) if r["bucket"] == "cash" else None
         r["options_pl_sgd"] = o["pl_sgd"] if o else 0.0
     return out
+
+
+def compute(session=None):
+    """Fetch adapter: pull every input the fold needs from the DB, then hand off to the pure
+    fold_positions(). The heavy SQL lives here; the cost-basis arithmetic lives in the fold."""
+    today = dt.date.today()
+    with session_scope(session) as s:
+        fx, price = _fx_and_price(s)
+        # group txns + dividends per (account, security)
+        txns = [dict(r) for r in s.execute(text("""
+            SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
+                   sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
+                   t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount, t.fees
+            FROM txn t JOIN account a ON a.id=t.account_id JOIN security sec ON sec.id=t.security_id
+        """)).mappings().all()]
+        divs = [dict(r) for r in s.execute(text("""
+            SELECT account_id, security_id, pay_date, gross, currency FROM dividend
+        """)).mappings().all()]
+        cdp = cdp_cost(s)
+        corp_actions = s.execute(text(
+            "SELECT from_ticker, to_ticker, type FROM corporate_action "
+            "WHERE type IN ('rename','split','consolidation','merger','switch')")).all()
+    # options open their own session (see realized_by_ticker); fetched outside the DB block above.
+    from .options import realized_by_ticker
+    options = realized_by_ticker()
+    return fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today)
 
 
 def alloc_by_account(session=None):
