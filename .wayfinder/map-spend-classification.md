@@ -47,6 +47,7 @@ table (`portfolio/spending.py` reads it; `ingestion/load_cash.py` loads it). `ca
 
 - [NL→predicate compilation — approach research](tickets/004-nl-predicate-compilation-research.md) — compile **server-side, once per rule**, via Claude **structured outputs** (`messages.parse` + Pydantic, default `claude-haiku-4-5`); ambiguity is a schema `anyOf` outcome resolved by **ask-back**; cost/latency negligible. Gotcha: `amount_sgd` is signed → "under $30" must match spend **magnitude**. Full: [findings](research/nl-predicate-compilation.md).
 - [Category & subcategory reference](tickets/001-category-subcategory-reference.md) — 19 pairs across **Personal / Housing / Transport** (each with a catch-all). Source of truth = a seeded **`spend_category`** reference table; `cash_txn` keeps denormalized string columns (spend queries untouched); **subcategory always required**; validation in **app code** at rule-authoring + manual-classify.
+- [Rule conflict & ordering](tickets/002-rule-conflict-ordering.md) — multi-match resolved by **explicit priority** (highest wins); new rules auto-placed by **specificity** (predicate count; ties → newer-higher), drag to override; conflict only bites on future imports; **no** authoring-time overlap warnings. Needs a `priority` column on the rule.
 
 ## Not yet specified
 
