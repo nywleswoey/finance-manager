@@ -16,28 +16,19 @@ from collections import defaultdict
 from _pdf import raw_text
 from _csvout import write_csv
 from _dates import try_date
+from _ledgercommon import canon, norm_ticker, num
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
-ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}
-def canon(t): return ALIAS.get(t, t)
+
 
 def norm(sym, market):
-    sym = (sym or "").strip()
-    m = re.search(r"\(([^)]+)\)\s*$", sym)
-    if m: sym = m.group(1).strip()
-    sym = re.sub(r"\.(SI|US|HK)$", "", sym, flags=re.I)
-    if market == "HK" and re.fullmatch(r"\d+", sym): sym = sym.zfill(5)
-    return canon(sym.upper())
+    return canon(norm_ticker(sym, market))
 
 def market_of(sym):
     if ".SI" in sym: return "SG"
     inner = sym.split("(")[-1].strip(") ")
     return "HK" if (inner.isdigit() or sym.strip().isdigit()) else "US"
-
-def num(s):
-    try: return float(str(s).replace(",", "").replace("$", ""))
-    except ValueError: return 0.0
 
 CCY = {"HK": "HKD", "SG": "SGD", "US": "USD"}
 DIV = []

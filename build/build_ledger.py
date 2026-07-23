@@ -13,32 +13,12 @@ import csv, glob, os, re
 from collections import defaultdict
 from _csvout import write_csv
 from _dates import try_date
-from _ledgercommon import canon, is_transfer_in, is_transfer_out
+from _ledgercommon import canon, is_transfer_in, is_transfer_out, norm_ticker, num
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 
 # ---------- helpers ----------
-def num(s):
-    if s is None: return 0.0
-    s = str(s).strip().replace(",", "").replace("$", "")
-    if s in ("", "-", "--"): return 0.0
-    neg = s.startswith("(") and s.endswith(")")
-    s = s.strip("()")
-    try: v = float(s)
-    except ValueError: return 0.0
-    return -v if neg else v
-
-def norm_ticker(sym, market):
-    if not sym: return ""
-    sym = sym.strip()
-    m = re.search(r"\(([^)]+)\)\s*$", sym)          # "Link Reit (00823)" -> 00823
-    if m: sym = m.group(1).strip()
-    sym = re.sub(r"\.(SI|US|HK)$", "", sym, flags=re.I)
-    if market == "HK" and re.fullmatch(r"\d+", sym):
-        sym = sym.zfill(5)
-    return sym.upper()
-
 def parse_date(s):
     s = (s or "").strip().split("\n")[0].split(",")[0].strip()
     d = try_date(s, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y%m%d"))
