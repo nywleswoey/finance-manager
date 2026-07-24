@@ -49,12 +49,12 @@ table (`portfolio/spending.py` reads it; `ingestion/load_cash.py` loads it). `ca
 - [Category & subcategory reference](tickets/001-category-subcategory-reference.md) — 19 pairs across **Personal / Housing / Transport** (each with a catch-all). Source of truth = a seeded **`spend_category`** reference table; `cash_txn` keeps denormalized string columns (spend queries untouched); **subcategory always required**; validation in **app code** at rule-authoring + manual-classify.
 - [Rule conflict & ordering](tickets/002-rule-conflict-ordering.md) — multi-match resolved by **explicit priority** (highest wins); new rules auto-placed by **specificity** (predicate count; ties → newer-higher), drag to override; conflict only bites on future imports; **no** authoring-time overlap warnings. Needs a `priority` column on the rule.
 - [Rule vs. manual precedence](tickets/003-rule-vs-manual-precedence.md) — **manual is a hard lock** (rule pass skips manual rows); manual override + un-classify (→ null) always allowed; **rule edit re-evaluates** via the create preview-confirm loop (still-match update, no-longer-match release to unclassified, newly-match claimed). Provenance must record the classifying **rule id**.
+- [Provenance & rule data model](tickets/005-provenance-rule-data-model.md) — new **`classification_rule`** (`nl_text`, `predicates` JSONB, `category_id` FK, `priority`, `active`, timestamps); `cash_txn` gains **`classification_source`** (null/`rule`/`manual`) + `classified_by_rule_id` FK + `classified_at`; unclassified = `category NULL`; amount predicates carry **positive magnitude** matched against `-amount_sgd`; whole subsystem scoped to **`is_spend`** rows.
 
 ## Not yet specified
 
-- **Backend API surface** — endpoints for list-unclassified, compile-and-preview a proposed rule,
-  confirm-and-apply a rule, manual classify, list/edit/deactivate rules. Falls out once the data model
-  (Provenance & rule data model) and conflict rules land; ticket it then.
+<!-- empty — the frontier is fully ticketed toward the destination -->
+_(none)_
 
 ## Out of scope
 
