@@ -17,6 +17,12 @@ from portfolio.models import CashTxn
 ROOT = os.path.dirname(os.path.dirname(__file__))
 CSV = os.path.join(ROOT, "build", "cash_ledger.csv")
 
+# Columns refreshed on re-import (ON CONFLICT DO UPDATE). Deliberately EXCLUDES
+# category/subcategory + provenance: classification is DB-owned, so a re-import of the same
+# statement refreshes only parse-derived columns and never clobbers a rule/manual result.
+REFRESH_COLS = ["amount_sgd", "is_spend", "exclude_reason",
+                "merchant", "description", "post_date", "fcy_amount", "fcy_currency"]
+
 
 def _bool(s):
     return str(s).strip().lower() in ("true", "1", "yes")
@@ -41,14 +47,14 @@ def load_cash(session):
             fcy_currency=(r["fcy_currency"] or None),
             direction=r["direction"], is_spend=_bool(r["is_spend"]),
             exclude_reason=(r["exclude_reason"] or None),
-            category=(r["category"] or None), subcategory=(r["subcategory"] or None),
+            # classification is DB-owned now: new rows land unclassified and the CSV's
+            # category/subcategory columns (+ build/classify_cash.py) are ignored. Rules
+            # (portfolio.classify) own category going forward.
             source_file=r["source_file"], raw=r["raw"], batch_id=b.id, dedup_hash=dh,
         ))
     # rows that vanished from the CSV (e.g. a fixed parser bug) are pruned from this batch
     prune_stale(session, CashTxn, {p["dedup_hash"] for p in payload}, batch_id=b.id)
-    return upsert(session, CashTxn, payload,
-                  ["amount_sgd", "is_spend", "exclude_reason", "category", "subcategory",
-                   "merchant", "description", "post_date", "fcy_amount", "fcy_currency"])
+    return upsert(session, CashTxn, payload, REFRESH_COLS)
 
 
 def main():

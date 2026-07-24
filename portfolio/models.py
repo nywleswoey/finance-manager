@@ -9,10 +9,15 @@ import datetime as dt
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric,
+    JSON, Boolean, CheckConstraint, Date, DateTime, ForeignKey, Integer, Numeric,
     String, Text, UniqueConstraint, func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+# JSONB on Postgres (indexable, native), plain JSON on SQLite so the model builds under the
+# in-memory test DB (tests/test_spending.py et al.).
+JSON_B = JSON().with_variant(JSONB, "postgresql")
 
 QTY = Numeric(20, 8)
 MONEY = Numeric(20, 4)
@@ -152,13 +157,48 @@ class CashTxn(Base):
     direction: Mapped[str] = mapped_column(String(6))                # debit | credit
     is_spend: Mapped[bool] = mapped_column(Boolean, default=False)
     exclude_reason: Mapped[str | None] = mapped_column(String(24))   # cc_payment|brokerage_transfer|internal_transfer|income|refund|investment
-    category: Mapped[str | None] = mapped_column(String(48))
+    category: Mapped[str | None] = mapped_column(String(48))         # denormalized; owned by classification
     subcategory: Mapped[str | None] = mapped_column(String(48))
+    # provenance (rule-based spend classification). unclassified = category IS NULL AND
+    # classification_source IS NULL. classified_by_rule_id set iff source = 'rule'.
+    classification_source: Mapped[str | None] = mapped_column(String(6))  # NULL | rule | manual
+    classified_by_rule_id: Mapped[int | None] = mapped_column(ForeignKey("classification_rule.id"))
+    classified_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True))
     source_file: Mapped[str | None] = mapped_column(String(256))
     raw: Mapped[str | None] = mapped_column(Text)
     batch_id: Mapped[int | None] = mapped_column(ForeignKey("import_batch.id"))
     dedup_hash: Mapped[str] = mapped_column(String(64))
     __table_args__ = (UniqueConstraint("dedup_hash", name="uq_cash_dedup"),)
+
+
+# ---------------- spend classification (rule-based) ----------------
+class SpendCategory(Base):
+    """The fixed personal taxonomy of (category, subcategory) pairs — the single source of
+    truth that drives the classify dropdown and validates rules + manual classifications.
+    Seeded from portfolio.spend_categories. `cash_txn` keeps denormalized string columns
+    (not FK'd here) so existing spend queries stay untouched."""
+    __tablename__ = "spend_category"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category: Mapped[str] = mapped_column(String(48))
+    subcategory: Mapped[str] = mapped_column(String(48))
+    __table_args__ = (UniqueConstraint("category", "subcategory", name="uq_spend_category"),)
+
+
+class ClassificationRule(Base):
+    """A persistent spend-classification rule. Authored in natural language (`nl_text`),
+    compiled once to deterministic ANDed predicates (`predicates` JSONB) targeting one
+    `spend_category`. Highest `priority` wins a multi-match; `active` gates whether it fires
+    on future imports. Applied by portfolio.classify.apply_rules."""
+    __tablename__ = "classification_rule"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    nl_text: Mapped[str] = mapped_column(Text)                        # human identity + provenance
+    predicates: Mapped[dict] = mapped_column(JSON_B)                  # {"conditions": [...]}, ANDed
+    category_id: Mapped[int] = mapped_column(ForeignKey("spend_category.id"))  # target pair
+    priority: Mapped[int] = mapped_column(Integer, default=0)         # explicit order; highest wins
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[dt.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 
 class RecurringSpend(Base):
