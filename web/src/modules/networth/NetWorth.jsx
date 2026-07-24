@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import posthog from "posthog-js";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { get, post, patch, del, sgd, money, fmt, cls } from "../../api.js";
 
@@ -48,7 +49,11 @@ export default function NetWorth() {
                  setErr={setErr} />
       <History snaps={snaps}
                onSelect={async (id) => setDetail(await get(`/api/networth/snapshots/${id}`))}
-               onDelete={async (id) => { await del(`/api/networth/snapshots/${id}`); reload(); }} />
+               onDelete={async (id) => {
+                 await del(`/api/networth/snapshots/${id}`);
+                 posthog.capture("net_worth_snapshot_deleted");
+                 reload();
+               }} />
     </div>
   );
 }
@@ -134,6 +139,7 @@ function SnapshotForm({ items, prefill, onSaved, setErr }) {
         currency: rows[it.code].currency,
       }));
       await post("/api/networth/snapshots", { date, note: note || null, values });
+      posthog.capture("net_worth_snapshot_saved", { has_note: Boolean(note) });
       setNote("");
       onSaved();
     } catch (e) {
@@ -204,6 +210,7 @@ function Breakdown({ detail, onSaved, setErr }) {
         code, native_value: parseFloat(r.native_value) || 0, currency: r.currency,
       }));
       const upd = await patch(`/api/networth/snapshots/${detail.id}`, { values });
+      posthog.capture("net_worth_breakdown_saved", { fields_edited: values.length });
       setEdits({});
       onSaved(upd);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }

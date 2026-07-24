@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from "react";
+import posthog from "posthog-js";
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
 const GIS_SRC = "https://accounts.google.com/gsi/client";
@@ -69,8 +70,12 @@ export default function AuthGate({ children }) {
   async function check() {
     try {
       const r = await fetch("/api/auth/me", { credentials: "include" });
-      if (r.ok) { setUser(await r.json()); setState("in"); }
-      else { setUser(null); setState("out"); }
+      if (r.ok) {
+        const u = await r.json();
+        setUser(u);
+        setState("in");
+        if (u?.sub) posthog.identify(u.sub, { email: u.email });
+      } else { setUser(null); setState("out"); }
     } catch {
       setUser(null); setState("out");
     }
@@ -93,17 +98,26 @@ export default function AuthGate({ children }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ credential }),
       });
-      if (r.ok) { await check(); return; }
+      if (r.ok) {
+        await check();
+        posthog.capture("user_signed_in", { method: "google" });
+        return;
+      }
+      const reason = r.status === 403 ? "unauthorized" : "server_error";
+      posthog.capture("sign_in_failed", { method: "google", reason });
       if (r.status === 403) setError("This account is not authorized.");
       else setError("Sign-in failed. Try again.");
     } catch {
+      posthog.capture("sign_in_failed", { method: "google", reason: "network_error" });
       setError("Sign-in failed. Try again.");
     }
   }
 
   async function logout() {
+    posthog.capture("user_signed_out");
     try { await fetch("/api/auth/logout", { method: "POST", credentials: "include" }); } catch {}
     window.google?.accounts?.id?.disableAutoSelect?.();
+    posthog.reset();
     setUser(null); setState("out");
   }
 
