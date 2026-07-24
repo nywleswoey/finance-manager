@@ -2,11 +2,37 @@
 id: 7
 title: The /classify screen UX
 type: prototype
-status: open
-assignee:
+status: closed
+assignee: nywleswoey
 blocked_by: [2, 3, 5, 6]
 parent: map-spend-classification
 ---
+
+## Resolution
+
+**Prototype** (primary source): [`web/prototypes/classify-prototype.html`](../../web/prototypes/classify-prototype.html)
+— 3 structurally-different variants (A Split workbench · B Triage inbox · C Rules dashboard), switchable via
+`?variant=`, mock spends + a fake in-browser compiler. Also published as an Artifact for review.
+
+**Verdict: Variant C — the rules dashboard — wins, with the spending breakdown removed.** The `/classify`
+screen is **solely for managing rules and draining the unclassified queue**; any category/spend analytics live
+on a separate page, not here. Chosen shape:
+
+- **Rules, priority-ordered, front and centre** — the ruleset is the primary object. Each row shows `nl_text`,
+  its parsed condition chips, and target `category/subcategory`; **drag to reorder** priority (from #2); a
+  per-rule menu to **edit / deactivate** (edit reuses the propose flow → re-evaluate preview, per #3 and #8).
+- **Unclassified pool as a draining funnel** — a headline count + progress toward fully-classified, and a
+  table of the unclassified `is_spend` rows with **inline manual-classify** (and un-classify to release, #3).
+- **"Propose a rule" → modal preview-confirm** — describe in natural language → **Parse & preview** shows the
+  parsed conditions *and* the affected unclassified rows → pick `(category, subcategory)` → **Create & apply**.
+  This is the core loop (the user's steps 2–4). Editing a rule enters the same modal.
+- **Provenance reads at a glance** — an unclassified/rule/manual pill per spend.
+- **Ask-back on unmappable NL** — the compiler returning `unmappable` surfaces its clarifying question inline
+  rather than guessing (from #4).
+- **Dropped:** the "where spend landed" category rollup (out of scope for this screen — handled elsewhere).
+
+**Unblocks:** *Backend API surface* (#9). Confirms the endpoints it needs: list-unclassified, compile+preview,
+confirm+apply, manual/un-classify, list/edit/reorder/deactivate rules — but **no** analytics/rollup endpoint here.
 
 ## Question
 
