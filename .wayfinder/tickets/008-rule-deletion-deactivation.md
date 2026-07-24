@@ -2,11 +2,33 @@
 id: 8
 title: Rule deletion & deactivation
 type: grilling
-status: open
-assignee:
+status: closed
+assignee: nywleswoey
 blocked_by: [5]
 parent: map-spend-classification
 ---
+
+## Resolution
+
+Framed by #5's live FK (`cash_txn.classified_by_rule_id → classification_rule`) + the rule's `active` flag.
+
+- **Deactivate is the primary mechanism; hard-delete is narrow.** "Retire" a rule = set `active = false` — it
+  stays in the DB so every `classified_by_rule_id` provenance stays valid and auditable. A true row-**delete**
+  is allowed **only** when the rule has **zero referencing spends** (nothing to orphan) — the "I created a rule
+  that matched nothing, erase it" case. A rule with classified rows is never hard-deleted.
+- **Deactivate = freeze + stop future.** The rule's already-classified spends **keep** their category and
+  provenance (now pointing at an inactive rule); deactivation only stops the rule matching **future** imports
+  and drops it from the priority order for new matches. **Reversible** — reactivating re-enables future matching
+  (it does not retroactively re-claim; the next sweep claims only currently-unclassified matches).
+- **Want a rule's work undone?** Use the paths that already do it (from #3): **edit** the rule so it no longer
+  matches (its rows release to unclassified + re-sweep), or **manually un-classify** individual rows. Deactivate
+  deliberately does *not* retract — "suspend", not "retract".
+- **Provenance integrity** is preserved for free: deactivate keeps the FK; hard-delete only touches rules with
+  no FK references. No orphaned "classified by rule X" trail is ever possible.
+- **Confirm:** the `apply_rules` sweep (import-time and authoring-time, from #6) filters to `active = true`
+  rules only, so a deactivated rule never fires.
+
+No new tickets or fog surfaced.
 
 ## Question
 
