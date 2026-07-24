@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import posthog from "posthog-js";
 import { post } from "./api.js";
 import { useAuth } from "./auth.jsx";
 import Overview from "./modules/portfolio/Overview.jsx";
@@ -51,8 +52,10 @@ export default function App() {
       if (r.fail) m += `, ${r.fail} failed` + (r.failed?.length ? ` (${r.failed.join(", ")})` : "");
       setMsg(m);
       setVer((v) => v + 1);                      // refetch with fresh prices
+      posthog.capture("prices_refreshed", { updated: r.ok, failed: r.fail || 0 });
     } catch (e) {
       setMsg("refresh failed: " + e.message);
+      posthog.capture("prices_refreshed", { updated: 0, failed: 1 });
     } finally {
       setBusy(false);
     }
@@ -60,7 +63,10 @@ export default function App() {
 
   const navItem = (name, testid) => (
     <div className={"navitem" + (activeSection === name ? " on" : "")}
-         data-testid={testid} onClick={() => setSection(name)}>{name}</div>
+         data-testid={testid} onClick={() => {
+           setSection(name);
+           posthog.capture("section_navigated", { section: name });
+         }}>{name}</div>
   );
 
   return (
@@ -83,7 +89,10 @@ export default function App() {
           <>
             <div className="tabs">
               {Object.keys(TABS).map((t) => (
-                <div key={t} className={"tab" + (t === tab ? " on" : "")} onClick={() => setTab(t)}>
+                <div key={t} className={"tab" + (t === tab ? " on" : "")} onClick={() => {
+                  setTab(t);
+                  posthog.capture("portfolio_tab_changed", { tab: t });
+                }}>
                   {t}
                 </div>
               ))}

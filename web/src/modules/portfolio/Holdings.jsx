@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import posthog from "posthog-js";
 import { get, fmt, sgd, money, pct, cls } from "../../api.js";
 import SecurityDetail from "./SecurityDetail.jsx";
 
@@ -112,7 +113,10 @@ export default function Holdings() {
 
   const flat = by === "none";
   const toggle = (k) => setCollapsed((c) => ({ ...c, [k]: !c[k] }));
-  const open = (r) => setSel({ ticker: r.ticker, bucket: r.bucket });
+  const open = (r) => {
+    setSel({ ticker: r.ticker, bucket: r.bucket });
+    posthog.capture("security_detail_viewed", { bucket: r.bucket });
+  };
 
   return (
     <div className="card">
@@ -120,7 +124,7 @@ export default function Holdings() {
         <h3 style={{ margin: 0 }}>Holdings ({rows.length})</h3>
         <label className="mut" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
           Group by
-          <select value={by} onChange={(e) => setBy(e.target.value)}>
+          <select value={by} onChange={(e) => { setBy(e.target.value); posthog.capture("holdings_grouped", { group_by: e.target.value }); }}>
             {Object.entries(GROUPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </label>
