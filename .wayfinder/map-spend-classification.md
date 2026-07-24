@@ -2,7 +2,7 @@
 label: wayfinder:map
 slug: map-spend-classification
 title: Rule-based spend classification
-status: open
+status: complete
 ---
 
 # Rule-based spend classification
@@ -53,6 +53,13 @@ table (`portfolio/spending.py` reads it; `ingestion/load_cash.py` loads it). `ca
 - [Reset & re-import](tickets/006-reset-reimport-interaction.md) — reset folded into the #5 migration (`NULL` all categories, no archive); `load_cash` **drops classification/provenance from the upsert refresh set** so the DB owns classification and re-import can't clobber it (key-field parser changes drop it, accepted); import ends with a **full unclassified-`is_spend` sweep** by `apply_rules`, the same function rule-authoring uses.
 - [The /classify screen UX](tickets/007-classify-screen-ux.md) — **rules-dashboard** shape (prototype variant C): priority-ordered ruleset front and centre (drag-reorder, edit/deactivate), unclassified pool as a **draining funnel** with inline manual-classify, **"Propose a rule" → NL → parse & preview → confirm** modal, provenance pills, ask-back on unmappable. **No analytics/breakdown** on this screen (lives elsewhere). Prototype: `web/prototypes/classify-prototype.html`.
 - [Rule deletion & deactivation](tickets/008-rule-deletion-deactivation.md) — **deactivate = freeze + stop future** (`active=false`, existing classifications stand, reversible); **hard-delete only for rules with zero classified spends** (provenance FK never orphaned); undo-a-rule's-work is served by edit/un-classify (#3); `apply_rules` filters to `active` rules.
+- [Backend API surface](tickets/009-backend-api-surface.md) — new **`portfolio/classify.py`** behind thin `/api/spending/classify/*` + `/rules/*` handlers; **stateless** preview→confirm (server re-matches at commit); create & edit both **preview-then-apply**; reorder via full ordered-id list; deactivate/activate + guarded hard-delete; batch manual/un-classify; shared **`apply_rules(session)`** engine called by `load_cash` on import.
+
+---
+
+**🏁 Map complete.** All 9 tickets closed; nothing in fog or out of scope. The spec — data model, matching &
+provenance semantics, reset/re-import, `/classify` UX (prototype), and API surface — is ready to hand to a build
+session (or `/prd-to-issues`).
 
 ## Not yet specified
 
