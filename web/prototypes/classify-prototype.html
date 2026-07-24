@@ -1,0 +1,538 @@
+<!--
+  PROTOTYPE — throwaway. /classify screen UX, 3 structurally-different variants.
+  Switch via the floating bar or ?variant=A|B|C. Mock data + fake in-browser
+  "compiler" (keyword heuristic) so the rule -> preview loop actually reacts.
+  Answers wayfinder ticket "The /classify screen UX". Not production code.
+-->
+<title>/classify — UX prototype</title>
+<style>
+  :root {
+    --bg:#f5f7f9; --surface:#ffffff; --surface-2:#eceff3; --surface-3:#e2e7ee;
+    --border:#d6dce4; --border-strong:#b9c2ce;
+    --text:#182230; --text-dim:#5a6675; --text-faint:#8a95a3;
+    --accent:#0f766e; --accent-ink:#ffffff; --accent-soft:#d4efe9;
+    --unclassified:#b45309; --unclassified-soft:#fbe6cf;
+    --rule:#4338ca; --rule-soft:#e2e0fb;
+    --manual:#be185d; --manual-soft:#fbd9e8;
+    --shadow:0 1px 2px rgba(20,30,45,.06),0 6px 20px rgba(20,30,45,.08);
+    --font-ui:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    --font-mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --r:10px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0e1218; --surface:#161b22; --surface-2:#1d232c; --surface-3:#252d38;
+      --border:#2a323d; --border-strong:#3a4552;
+      --text:#e7ecf2; --text-dim:#98a3b2; --text-faint:#6c7787;
+      --accent:#2dd4bf; --accent-ink:#06231f; --accent-soft:#123330;
+      --unclassified:#f2a24a; --unclassified-soft:#3a2a12;
+      --rule:#a6a0f5; --rule-soft:#22203f;
+      --manual:#f472b6; --manual-soft:#3a1526;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#f5f7f9; --surface:#ffffff; --surface-2:#eceff3; --surface-3:#e2e7ee;
+    --border:#d6dce4; --border-strong:#b9c2ce;
+    --text:#182230; --text-dim:#5a6675; --text-faint:#8a95a3;
+    --accent:#0f766e; --accent-ink:#ffffff; --accent-soft:#d4efe9;
+    --unclassified:#b45309; --unclassified-soft:#fbe6cf;
+    --rule:#4338ca; --rule-soft:#e2e0fb;
+    --manual:#be185d; --manual-soft:#fbd9e8;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1218; --surface:#161b22; --surface-2:#1d232c; --surface-3:#252d38;
+    --border:#2a323d; --border-strong:#3a4552;
+    --text:#e7ecf2; --text-dim:#98a3b2; --text-faint:#6c7787;
+    --accent:#2dd4bf; --accent-ink:#06231f; --accent-soft:#123330;
+    --unclassified:#f2a24a; --unclassified-soft:#3a2a12;
+    --rule:#a6a0f5; --rule-soft:#22203f;
+    --manual:#f472b6; --manual-soft:#3a1526;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+    font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased;padding-bottom:72px}
+  h1,h2,h3{margin:0;text-wrap:balance}
+  .mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+  .amt{font-family:var(--font-mono);font-variant-numeric:tabular-nums;font-weight:600}
+  button{font-family:inherit;font-size:inherit;cursor:pointer}
+  .wrap{max-width:1180px;margin:0 auto;padding:22px}
+  /* top bar */
+  .top{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+  .top h1{font-size:19px;letter-spacing:-.01em}
+  .top .path{font-family:var(--font-mono);color:var(--accent);font-weight:600}
+  .top .sub{color:var(--text-dim);font-size:13px}
+  .spacer{flex:1}
+  .metric{display:flex;gap:18px;align-items:baseline}
+  .metric b{font-size:22px;font-variant-numeric:tabular-nums}
+  .metric span{color:var(--text-dim);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+  /* pills */
+  .pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;
+    font-size:11.5px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+  .pill.un{background:var(--unclassified-soft);color:var(--unclassified)}
+  .pill.rule{background:var(--rule-soft);color:var(--rule)}
+  .pill.manual{background:var(--manual-soft);color:var(--manual)}
+  .dot{width:7px;height:7px;border-radius:50%;flex:none}
+  .dot.un{background:var(--unclassified)} .dot.rule{background:var(--rule)} .dot.manual{background:var(--manual)}
+  /* generic surfaces */
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow)}
+  .btn{border:1px solid var(--border-strong);background:var(--surface);color:var(--text);
+    padding:7px 13px;border-radius:8px;font-weight:600;transition:.12s}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+  .btn.primary:hover{filter:brightness(1.06);color:var(--accent-ink)}
+  .btn.ghost{border-color:transparent;background:transparent;color:var(--text-dim);padding:6px 8px}
+  .btn.ghost:hover{color:var(--accent)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  input,select,textarea{font-family:inherit;font-size:14px;color:var(--text);background:var(--surface);
+    border:1px solid var(--border-strong);border-radius:8px;padding:8px 10px;width:100%}
+  input:focus,textarea:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  label.fld{display:block;font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--text-dim);margin:0 0 5px;font-weight:600}
+  table{width:100%;border-collapse:collapse}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint);
+    text-align:left;font-weight:600;padding:8px 10px;border-bottom:1px solid var(--border)}
+  td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+  tr:last-child td{border-bottom:none}
+  .num{text-align:right}
+  .merch{font-weight:600}
+  .desc{color:var(--text-dim);font-size:12.5px}
+  .muted{color:var(--text-dim)}
+  .hit{background:var(--accent-soft) !important}
+  .hitrow td{background:var(--accent-soft)}
+  .chip{display:inline-flex;gap:6px;align-items:center;background:var(--surface-2);
+    border:1px solid var(--border);border-radius:7px;padding:4px 8px;font-size:12.5px;
+    font-family:var(--font-mono);margin:0 6px 6px 0}
+  .chip b{color:var(--accent)}
+  .warn{background:var(--unclassified-soft);color:var(--unclassified);border:1px solid transparent;
+    padding:10px 12px;border-radius:8px;font-size:13px}
+  .empty{color:var(--text-dim);text-align:center;padding:40px 20px;font-size:14px}
+  .flow-note{font-size:12px;color:var(--text-faint);margin-top:2px}
+  /* switcher */
+  .switch{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:50;
+    display:flex;align-items:center;gap:2px;background:var(--text);color:var(--bg);
+    border-radius:999px;padding:5px 6px;box-shadow:0 8px 30px rgba(0,0,0,.35)}
+  .switch button{background:transparent;border:none;color:var(--bg);width:30px;height:30px;
+    border-radius:50%;font-size:16px;display:flex;align-items:center;justify-content:center}
+  .switch button:hover{background:rgba(127,127,127,.35)}
+  .switch .lbl{padding:0 12px;font-size:12.5px;font-weight:600;white-space:nowrap}
+  .switch .lbl small{opacity:.6;font-weight:500}
+  /* layout helpers */
+  .split{display:grid;grid-template-columns:1.3fr 1fr;gap:18px;align-items:start}
+  .stack{display:flex;flex-direction:column;gap:14px}
+  .row{display:flex;gap:10px;align-items:center}
+  .pad{padding:16px}
+  .hd{padding:13px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+  .hd h3{font-size:14px;letter-spacing:.01em}
+  .hd .spacer{flex:1}
+  @media(max-width:920px){.split{grid-template-columns:1fr}}
+  /* variant B inbox */
+  .focus{max-width:640px;margin:0 auto}
+  .focus .bigcard{padding:22px}
+  .focus .merchbig{font-size:24px;font-weight:700;letter-spacing:-.02em}
+  .focus .amtbig{font-size:30px}
+  .queue-strip{display:flex;gap:6px;flex-wrap:wrap;margin:14px 0}
+  .qtick{width:26px;height:6px;border-radius:3px;background:var(--border-strong)}
+  .qtick.done{background:var(--accent)}
+  .qtick.cur{background:var(--unclassified);height:8px;margin-top:-1px}
+  .kbd{font-family:var(--font-mono);font-size:11px;background:var(--surface-2);
+    border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;color:var(--text-dim)}
+  /* variant C dashboard */
+  .rulecard{display:grid;grid-template-columns:auto 1fr auto auto;gap:14px;align-items:center;
+    padding:12px 14px;border-bottom:1px solid var(--border)}
+  .rulecard:last-child{border-bottom:none}
+  .prio{font-family:var(--font-mono);font-weight:700;color:var(--text-faint);width:22px;text-align:center}
+  .funnel{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .funnel .big{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--unclassified)}
+  .bar{height:9px;border-radius:5px;background:var(--surface-3);overflow:hidden;flex:1;min-width:160px}
+  .bar i{display:block;height:100%;background:var(--accent)}
+  .grid-cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
+  .catcell{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:9px 11px}
+  .catcell b{font-size:16px;font-variant-numeric:tabular-nums}
+  .catcell span{display:block;font-size:11.5px;color:var(--text-dim)}
+  /* modal */
+  .scrim{position:fixed;inset:0;background:rgba(10,15,22,.5);z-index:40;display:flex;
+    align-items:center;justify-content:center;padding:20px}
+  .modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;
+    box-shadow:0 20px 60px rgba(0,0,0,.4);max-width:560px;width:100%;max-height:86vh;overflow:auto}
+  .modal .hd{position:sticky;top:0;background:var(--surface)}
+</style>
+
+<div id="app"></div>
+
+<div class="switch" id="switch"></div>
+
+<script>
+//=== shared mock domain ===========================================================
+const CATS = {
+  Personal:["Dining Out","Shopping","Entertainment","Mobile Phone","Life/Health/Surgical Insurance",
+    "Personal Taxes","Interest Expenses","Family Allowance","Childcare","Others"],
+  Housing:["Mortgage","Utilities","Conservancy Charges","Domestic Helper","Groceries",
+    "Property Taxes","Mortgage Insurance"],
+  Transport:["Other Transport","Public Transport"],
+};
+// amounts are POSITIVE MAGNITUDE (spend). is_spend rows only.
+let spends = [
+  {id:1, date:"2026-07-02", merchant:"GRAB", desc:"GRAB *TRIP 4821 SG", amt:14.20, src:"DBS", cat:null, sub:null, prov:null},
+  {id:2, date:"2026-07-03", merchant:"COLD STORAGE", desc:"COLD STORAGE TAKASHIMAYA", amt:86.55, src:"DBS", cat:null, sub:null, prov:null},
+  {id:3, date:"2026-07-03", merchant:"GRAB", desc:"GRAB *FOOD SG", amt:22.90, src:"DBS", cat:null, sub:null, prov:null},
+  {id:4, date:"2026-07-05", merchant:"SP GROUP", desc:"SP UTILITIES GIRO", amt:214.30, src:"UOB", cat:null, sub:null, prov:null},
+  {id:5, date:"2026-07-06", merchant:"NETFLIX", desc:"NETFLIX.COM", amt:22.98, src:"AMEX", cat:null, sub:null, prov:null},
+  {id:6, date:"2026-07-08", merchant:"GRAB", desc:"GRAB *TRIP 5567 SG", amt:41.10, src:"DBS", cat:null, sub:null, prov:null},
+  {id:7, date:"2026-07-09", merchant:"SINGTEL", desc:"SINGTEL MOBILE BILL", amt:48.00, src:"UOB", cat:null, sub:null, prov:null},
+  {id:8, date:"2026-07-10", merchant:"NTUC FAIRPRICE", desc:"FAIRPRICE FINEST", amt:53.40, src:"DBS", cat:null, sub:null, prov:null},
+  {id:9, date:"2026-07-11", merchant:"SHOPEE", desc:"SHOPEE SG PTE", amt:31.75, src:"AMEX", cat:null, sub:null, prov:null},
+  {id:10, date:"2026-07-12", merchant:"COLD STORAGE", desc:"COLD STORAGE JELITA", amt:44.05, src:"DBS", cat:null, sub:null, prov:null},
+  {id:11, date:"2026-07-01", merchant:"MAID AGENCY", desc:"HELPER SALARY JUL", amt:650.00, src:"DBS",
+    cat:"Housing", sub:"Domestic Helper", prov:{type:"manual"}},
+  {id:12, date:"2026-06-30", merchant:"GRAB", desc:"GRAB *TRIP 3390 SG", amt:9.80, src:"DBS",
+    cat:"Transport", sub:"Other Transport", prov:{type:"rule", name:'"Grab rides → Transport"'}},
+];
+let rules = [
+  {id:1, nl:"Grab rides → Transport / Other Transport", conds:[{f:"merchant",op:"contains",v:"grab"}],
+   cat:"Transport", sub:"Other Transport", prio:2, active:true},
+];
+let ruleSeq = 2;
+
+//=== fake compiler: NL -> predicate conditions (keyword heuristic) =================
+const KNOWN_MERCH = ["grab","cold storage","ntuc","fairprice","singtel","netflix","sp group",
+  "shopee","spotify","amazon"];
+function compile(nl){
+  const t = (nl||"").toLowerCase().trim();
+  if(!t) return {status:"empty"};
+  const conds=[];
+  for(const m of KNOWN_MERCH){ if(t.includes(m)) conds.push({f:"merchant",op:"contains",v:m}); }
+  // descriptor fallback: quoted-ish token
+  let mAmt;
+  if((mAmt=t.match(/(under|below|less than|<)\s*\$?(\d+(?:\.\d+)?)/))) conds.push({f:"amount_sgd",op:"<",v:+mAmt[2]});
+  else if((mAmt=t.match(/(over|above|more than|>)\s*\$?(\d+(?:\.\d+)?)/))) conds.push({f:"amount_sgd",op:">",v:+mAmt[2]});
+  if(conds.length===0)
+    return {status:"unmappable",
+      reason:"Couldn't map that to a known merchant or amount.",
+      ask:"Which merchant name or amount should this match? e.g. “Singtel is Mobile Phone”."};
+  return {status:"ok",conds};
+}
+function matches(sp,conds){
+  return conds.every(c=>{
+    if(c.f==="merchant") return (sp.merchant||"").toLowerCase().includes(c.v)|| (sp.desc||"").toLowerCase().includes(c.v);
+    if(c.f==="amount_sgd"){ const a=sp.amt; return c.op==="<"?a<c.v:c.op===">"?a>c.v:c.op==="<="?a<=c.v:a>=c.v; }
+    if(c.f==="source") return (sp.src||"").toLowerCase()===c.v;
+    return false;
+  });
+}
+const OPSYM={contains:"contains","<":"<",">":">","<=":"≤",">=":"≥"};
+const unclassified = ()=>spends.filter(s=>s.cat===null);
+const money = n=>"$"+n.toLocaleString("en-SG",{minimumFractionDigits:2,maximumFractionDigits:2});
+function provPill(sp){
+  if(sp.cat===null) return `<span class="pill un"><span class="dot un"></span>Unclassified</span>`;
+  if(sp.prov?.type==="manual") return `<span class="pill manual"><span class="dot manual"></span>Manual</span>`;
+  return `<span class="pill rule"><span class="dot rule"></span>Rule</span>`;
+}
+
+//=== apply / manual mutations (in-memory only) ====================================
+function applyRule(conds,cat,sub,nl){
+  const r={id:ruleSeq++,nl,conds,cat,sub,prio:(Math.max(0,...rules.map(x=>x.prio))+1),active:true};
+  rules.push(r);
+  let n=0; for(const s of unclassified()){ if(matches(s,conds)){ s.cat=cat;s.sub=sub;s.prov={type:"rule",name:'"'+nl+'"'}; n++; } }
+  return n;
+}
+function manualClassify(id,cat,sub){ const s=spends.find(x=>x.id===id); if(s){s.cat=cat;s.sub=sub;s.prov={type:"manual"};} }
+function unclassify(id){ const s=spends.find(x=>x.id===id); if(s){s.cat=null;s.sub=null;s.prov=null;} }
+
+//=== category <datalist>/<select> builder =========================================
+function catOptions(selCat,selSub){
+  let o='<option value="">— pick —</option>';
+  for(const c in CATS) for(const s of CATS[c]){
+    const val=c+" / "+s; o+=`<option value="${val}"${(selCat===c&&selSub===s)?" selected":""}>${val}</option>`;
+  }
+  return o;
+}
+function splitCat(v){ const [c,s]=v.split(" / "); return [c,s]; }
+
+//========================= VARIANT A — Split workbench ============================
+// Queue table (left) + live rule composer (right). Composer preview highlights the
+// affected rows in the left table in real time. Manual classify inline per row.
+function VariantA(){
+  const st=window._A||(window._A={nl:"",cat:"",compiled:null});
+  const c=st.compiled;
+  const hits = c&&c.status==="ok" ? unclassified().filter(s=>matches(s,c.conds)).map(s=>s.id) : [];
+  const el=document.createElement("div"); el.className="wrap";
+  el.innerHTML=`
+   ${topBar("A","Split workbench","Queue on the left, rule composer on the right — the preview lights up matching rows live.")}
+   <div class="split">
+     <div class="card">
+       <div class="hd"><h3>Unclassified queue</h3><div class="spacer"></div>
+         <span class="muted">${unclassified().length} left</span></div>
+       <div style="overflow-x:auto"><table>
+         <thead><tr><th>Date</th><th>Merchant / description</th><th class="num">Spend</th><th>Src</th><th>Manual</th></tr></thead>
+         <tbody>
+         ${spends.map(s=>`
+           <tr class="${hits.includes(s.id)?'hitrow':''}">
+             <td class="mono muted">${s.date.slice(5)}</td>
+             <td><div class="merch">${s.merchant}</div><div class="desc">${s.desc}</div>
+                 ${s.cat?`<div style="margin-top:4px">${provPill(s)} <span class="muted">${s.cat} / ${s.sub}</span></div>`:''}</td>
+             <td class="num amt">${money(s.amt)}</td>
+             <td class="mono muted">${s.src}</td>
+             <td>${s.cat===null
+               ? `<select data-manual="${s.id}" style="min-width:150px;padding:5px 7px;font-size:12.5px">${catOptions()}</select>`
+               : (s.prov?.type==="manual"?`<button class="btn ghost" data-un="${s.id}">clear</button>`:`<span class="muted" style="font-size:12px">rule-set</span>`)}</td>
+           </tr>`).join("")}
+         </tbody></table></div>
+     </div>
+
+     <div class="card" style="position:sticky;top:16px">
+       <div class="hd"><h3>Compose a rule</h3></div>
+       <div class="pad stack">
+         <div>
+           <label class="fld">Describe it in plain English</label>
+           <textarea id="A-nl" rows="2" placeholder="e.g. Grab rides under $30 are transport">${st.nl}</textarea>
+           <div class="flow-note">The parse is shown below — you verify it before anything is saved.</div>
+         </div>
+         <div class="row"><button class="btn primary" id="A-parse">Parse</button>
+           <button class="btn ghost" id="A-clear">Reset</button></div>
+         ${c?renderParse(c,hits.length,"A"):`<div class="muted" style="font-size:13px">No rule parsed yet.</div>`}
+       </div>
+     </div>
+   </div>`;
+  // wire
+  el.querySelector("#A-parse").onclick=()=>{st.nl=el.querySelector("#A-nl").value;st.compiled=compile(st.nl);render();};
+  el.querySelector("#A-nl").oninput=e=>{st.nl=e.target.value;};
+  el.querySelector("#A-clear").onclick=()=>{window._A={nl:"",cat:"",compiled:null};render();};
+  el.querySelectorAll("[data-manual]").forEach(sel=>sel.onchange=e=>{
+    if(e.target.value){const[cc,ss]=splitCat(e.target.value);manualClassify(+e.target.dataset.manual,cc,ss);render();}});
+  el.querySelectorAll("[data-un]").forEach(b=>b.onclick=()=>{unclassify(+b.dataset.un);render();});
+  if(c&&c.status==="ok"){
+    const cs=el.querySelector("#A-catsel"), cf=el.querySelector("#A-confirm");
+    if(cf) cf.onclick=()=>{
+      if(!cs.value){cs.focus();return;}
+      const[cc,ss]=splitCat(cs.value); const n=applyRule(c.conds,cc,ss,st.nl.trim());
+      window._A={nl:"",cat:"",compiled:null}; toast(`Rule created — ${n} spend${n!==1?'s':''} classified`); render();
+    };
+  }
+  return el;
+}
+function renderParse(c,hitN,V){
+  if(c.status==="empty") return `<div class="muted">Type a description, then Parse.</div>`;
+  if(c.status==="unmappable")
+    return `<div class="warn"><b>Can't map that yet.</b><br>${c.reason}<div style="margin-top:8px;color:var(--text)">${c.ask}</div></div>`;
+  return `
+    <div>
+      <label class="fld">Parsed conditions (all must match)</label>
+      <div>${c.conds.map(x=>`<span class="chip">${x.f} <b>${OPSYM[x.op]}</b> ${x.v}</span>`).join("")}</div>
+    </div>
+    <div>
+      <label class="fld">Classify matches as</label>
+      <select id="${V}-catsel">${catOptions()}</select>
+    </div>
+    <div class="row" style="justify-content:space-between">
+      <span class="pill ${hitN?'rule':'un'}"><span class="dot ${hitN?'rule':'un'}"></span>${hitN} unclassified match${hitN!==1?'es':''}</span>
+      <button class="btn primary" id="${V}-confirm" ${hitN?'':'disabled'}>Create &amp; apply</button>
+    </div>
+    ${hitN?'':`<div class="flow-note">No unclassified rows match — refine the description.</div>`}`;
+}
+
+//========================= VARIANT B — Triage inbox ==============================
+// One spend at a time. Suggest a rule from THIS row, or classify just this one.
+// Keyboard-first. Rules live in a side drawer.
+function VariantB(){
+  const q=unclassified();
+  const st=window._B||(window._B={i:0,drawer:false});
+  if(st.i>=q.length) st.i=Math.max(0,q.length-1);
+  const cur=q[st.i];
+  const el=document.createElement("div"); el.className="wrap";
+  const done=spends.filter(s=>s.cat!==null).length;
+  el.innerHTML=`
+   ${topBar("B","Triage inbox","One spend at a time — turn it into a rule, or just classify this one. Try the ← → and keys.")}
+   <div class="focus">
+     <div class="queue-strip">
+       ${spends.map(s=>`<span class="qtick ${s.cat!==null?'done':''} ${cur&&s.id===cur.id?'cur':''}"></span>`).join("")}
+     </div>
+     ${cur?`
+     <div class="card bigcard">
+       <div class="row" style="justify-content:space-between">
+         <div><div class="merchbig">${cur.merchant}</div><div class="desc" style="font-size:13.5px">${cur.desc}</div></div>
+         <div style="text-align:right"><div class="amt amtbig">${money(cur.amt)}</div>
+           <div class="mono muted" style="font-size:12px">${cur.date} · ${cur.src}</div></div>
+       </div>
+       <div style="height:1px;background:var(--border);margin:18px 0"></div>
+
+       <label class="fld">Make a rule from this spend</label>
+       <textarea id="B-nl" rows="2" placeholder="e.g. anything from ${cur.merchant} is …">${'Anything from '+cur.merchant+' is '}</textarea>
+       <div class="row" style="margin:8px 0 4px"><button class="btn primary" id="B-parse">Parse rule</button>
+         <span class="flow-note">applies to every matching unclassified spend, now and on future imports</span></div>
+       <div id="B-parsed"></div>
+
+       <div style="height:1px;background:var(--border);margin:16px 0"></div>
+       <label class="fld">…or just classify this one <span class="muted" style="text-transform:none;letter-spacing:0">(manual — locks it)</span></label>
+       <div class="row"><select id="B-manual" style="flex:1">${catOptions()}</select>
+         <button class="btn" id="B-mdo">Set</button></div>
+     </div>
+     <div class="row" style="justify-content:space-between;margin-top:14px">
+       <button class="btn ghost" id="B-prev">← <span class="kbd">←</span></button>
+       <span class="muted">${q.length? (st.i+1)+' of '+q.length+' unclassified' : ''} · ${done} classified</span>
+       <button class="btn ghost" id="B-next"><span class="kbd">→</span> →</button>
+     </div>`
+     :`<div class="card"><div class="empty">🎉 Nothing left unclassified.<br><span style="font-size:13px">New imports land here automatically.</span></div></div>`}
+     <div style="text-align:center;margin-top:14px">
+       <button class="btn ghost" id="B-openrules">View ${rules.length} rule${rules.length!==1?'s':''} →</button>
+     </div>
+   </div>
+   ${st.drawer?rulesDrawer():""}`;
+  const rerender=()=>render();
+  if(cur){
+    const nlc=el.querySelector("#B-nl");
+    el.querySelector("#B-parse").onclick=()=>{st.nl=nlc.value;st.compiled=compile(nlc.value);paintB(el,st,rerender);};
+    el.querySelector("#B-mdo").onclick=()=>{const v=el.querySelector("#B-manual").value;
+      if(v){const[c,s]=splitCat(v);manualClassify(cur.id,c,s);render();}};
+    el.querySelector("#B-prev").onclick=()=>{st.i=(st.i-1+q.length)%q.length;st.compiled=null;render();};
+    el.querySelector("#B-next").onclick=()=>{st.i=(st.i+1)%q.length;st.compiled=null;render();};
+    if(st.compiled) paintB(el,st,rerender);
+  }
+  el.querySelector("#B-openrules").onclick=()=>{st.drawer=true;render();};
+  const close=el.querySelector("#B-closedrawer"); if(close) close.onclick=()=>{st.drawer=false;render();};
+  return el;
+}
+function paintB(el,st,rerender){
+  const box=el.querySelector("#B-parsed"); const c=st.compiled; if(!box) return;
+  const hits=c.status==="ok"?unclassified().filter(s=>matches(s,c.conds)):[];
+  box.innerHTML=renderParse(c,hits.length,"B");
+  const cs=box.querySelector("#B-catsel"), cf=box.querySelector("#B-confirm");
+  if(cf) cf.onclick=()=>{ if(!cs.value){cs.focus();return;} const[cc,ss]=splitCat(cs.value);
+    const n=applyRule(c.conds,cc,ss,st.nl.trim()); window._B.compiled=null; toast(`Rule created — ${n} classified`); rerender();};
+}
+function rulesDrawer(){
+  return `<div class="scrim" id="B-closedrawer"><div class="modal" onclick="event.stopPropagation()">
+    <div class="hd"><h3>Rules · priority order</h3><div class="spacer"></div>
+      <button class="btn ghost" onclick="window._B.drawer=false;render()">✕</button></div>
+    <div>${rules.slice().sort((a,b)=>b.prio-a.prio).map(r=>`
+      <div class="rulecard"><span class="prio">${r.prio}</span>
+        <div><div style="font-weight:600">${r.nl}</div>
+          <div>${r.conds.map(x=>`<span class="chip">${x.f} <b>${OPSYM[x.op]}</b> ${x.v}</span>`).join("")}</div></div>
+        <span class="muted mono" style="font-size:12px">${r.cat}/${r.sub}</span>
+        <span class="pill rule">active</span></div>`).join("")}</div>
+  </div></div>`;
+}
+
+//========================= VARIANT C — Rules dashboard ===========================
+// Rules-first. Manage the ruleset (priority-ordered); the unclassified pool is a
+// shrinking funnel. "Propose rule" opens a modal preview-confirm.
+function VariantC(){
+  const st=window._C||(window._C={modal:false,nl:"",compiled:null});
+  const un=unclassified(); const total=spends.length; const pct=Math.round((total-un.length)/total*100);
+  const el=document.createElement("div"); el.className="wrap";
+  // category rollup
+  const roll={}; for(const s of spends) if(s.cat){const k=s.cat;roll[k]=(roll[k]||0)+s.amt;}
+  el.innerHTML=`
+   ${topBar("C","Rules dashboard","Manage the ruleset; watch the unclassified pool drain. Propose rules from the pool.")}
+   <div class="stack">
+     <div class="card pad">
+       <div class="funnel">
+         <div><div class="big">${un.length}</div><div class="muted" style="font-size:12px;text-transform:uppercase;letter-spacing:.06em">unclassified</div></div>
+         <div class="bar"><i style="width:${pct}%"></i></div>
+         <div class="muted mono">${pct}% classified · ${total-un.length}/${total}</div>
+         <button class="btn primary" id="C-propose">Propose a rule</button>
+       </div>
+     </div>
+
+     <div class="split">
+       <div class="card">
+         <div class="hd"><h3>Rules</h3><div class="spacer"></div><span class="muted">${rules.length} · drag to reorder</span></div>
+         <div>${rules.slice().sort((a,b)=>b.prio-a.prio).map(r=>`
+           <div class="rulecard"><span class="prio">≡ ${r.prio}</span>
+             <div><div style="font-weight:600">${r.nl}</div>
+               <div style="margin-top:3px">${r.conds.map(x=>`<span class="chip">${x.f} <b>${OPSYM[x.op]}</b> ${x.v}</span>`).join("")}</div></div>
+             <span class="pill rule mono" style="font-size:11px">${r.cat}/${r.sub}</span>
+             <button class="btn ghost" title="deactivate">⋯</button></div>`).join("")}
+           ${rules.length?'':'<div class="empty">No rules yet.</div>'}</div>
+       </div>
+       <div class="card">
+         <div class="hd"><h3>Where spend landed</h3></div>
+         <div class="pad grid-cats">
+           ${Object.keys(CATS).map(c=>`<div class="catcell"><b>${money(roll[c]||0)}</b><span>${c}</span></div>`).join("")}
+         </div>
+         <div class="pad" style="padding-top:0"><div class="flow-note">Only classified spend is counted. ${un.length} row${un.length!==1?'s':''} still uncounted.</div></div>
+       </div>
+     </div>
+
+     <div class="card">
+       <div class="hd"><h3>Unclassified pool</h3><div class="spacer"></div><span class="muted">the drain</span></div>
+       <div style="overflow-x:auto"><table>
+         <thead><tr><th>Date</th><th>Merchant</th><th class="num">Spend</th><th>Src</th><th></th></tr></thead>
+         <tbody>${un.map(s=>`<tr><td class="mono muted">${s.date.slice(5)}</td>
+           <td><span class="merch">${s.merchant}</span> <span class="desc">${s.desc}</span></td>
+           <td class="num amt">${money(s.amt)}</td><td class="mono muted">${s.src}</td>
+           <td><select data-cman="${s.id}" style="font-size:12px;padding:4px 6px;min-width:130px">${catOptions()}</select></td></tr>`).join("")
+           || '<tr><td colspan="5"><div class="empty">Pool empty — every spend is classified.</div></td></tr>'}</tbody></table></div>
+     </div>
+   </div>
+   ${st.modal?proposeModal(st):""}`;
+  el.querySelector("#C-propose").onclick=()=>{st.modal=true;st.nl="";st.compiled=null;render();};
+  el.querySelectorAll("[data-cman]").forEach(sel=>sel.onchange=e=>{
+    if(e.target.value){const[c,s]=splitCat(e.target.value);manualClassify(+e.target.dataset.cman,c,s);render();}});
+  if(st.modal){
+    const close=el.querySelector("#C-close"); if(close)close.onclick=()=>{st.modal=false;render();};
+    const p=el.querySelector("#C-parse"); if(p)p.onclick=()=>{st.nl=el.querySelector("#C-nl").value;st.compiled=compile(st.nl);render();};
+    const c=st.compiled;
+    if(c&&c.status==="ok"){const cs=el.querySelector("#C-catsel"),cf=el.querySelector("#C-confirm");
+      if(cf)cf.onclick=()=>{if(!cs.value){cs.focus();return;}const[cc,ss]=splitCat(cs.value);
+        const n=applyRule(c.conds,cc,ss,st.nl.trim());st.modal=false;window._C.compiled=null;toast(`Rule created — ${n} classified`);render();};}
+  }
+  return el;
+}
+function proposeModal(st){
+  const c=st.compiled;
+  const hits=c&&c.status==="ok"?unclassified().filter(s=>matches(s,c.conds)):[];
+  return `<div class="scrim"><div class="modal">
+    <div class="hd"><h3>Propose a rule</h3><div class="spacer"></div><button class="btn ghost" id="C-close">✕</button></div>
+    <div class="pad stack">
+      <div><label class="fld">Describe the rule</label>
+        <textarea id="C-nl" rows="2" placeholder="e.g. Cold Storage and Fairprice are groceries">${st.nl||""}</textarea></div>
+      <div class="row"><button class="btn primary" id="C-parse">Parse &amp; preview</button></div>
+      ${c?renderParse(c,hits.length,"C"):""}
+      ${c&&c.status==="ok"&&hits.length?`
+        <div><label class="fld">Affected unclassified rows</label>
+        <div class="card" style="box-shadow:none"><table><tbody>
+        ${hits.map(s=>`<tr><td><span class="merch">${s.merchant}</span> <span class="desc">${s.desc}</span></td>
+          <td class="num amt">${money(s.amt)}</td></tr>`).join("")}
+        </tbody></table></div></div>`:""}
+    </div></div></div>`;
+}
+
+//=== chrome: top bar, toast, switcher, router =====================================
+function topBar(v,name,sub){
+  return `<div class="top">
+    <h1><span class="path">/classify</span></h1>
+    <div class="sub">${sub}</div><div class="spacer"></div>
+    <div class="metric"><span>variant ${v}</span><b>${unclassified().length}</b><span>unclassified</span></div>
+  </div>`;
+}
+let toastT;
+function toast(msg){
+  let t=document.getElementById("toast");
+  if(!t){t=document.createElement("div");t.id="toast";
+    t.style.cssText="position:fixed;bottom:64px;left:50%;transform:translateX(-50%);background:var(--accent);color:var(--accent-ink);padding:9px 16px;border-radius:999px;font-weight:600;font-size:13px;z-index:60;box-shadow:var(--shadow)";
+    document.body.appendChild(t);}
+  t.textContent=msg; t.style.opacity="1"; clearTimeout(toastT);
+  toastT=setTimeout(()=>t.style.opacity="0",1700);
+}
+const VARIANTS={A:["Split workbench",VariantA],B:["Triage inbox",VariantB],C:["Rules dashboard",VariantC]};
+function curVar(){const v=(new URLSearchParams(location.search)).get("variant");return VARIANTS[v]?v:"A";}
+function setVar(v){const u=new URL(location);u.searchParams.set("variant",v);history.replaceState(0,"",u);render();}
+function render(){
+  const v=curVar(); const app=document.getElementById("app");
+  app.innerHTML=""; app.appendChild(VARIANTS[v][1]());
+  const keys=Object.keys(VARIANTS); const i=keys.indexOf(v);
+  document.getElementById("switch").innerHTML=
+    `<button id="sw-prev">‹</button><span class="lbl">${v} — ${VARIANTS[v][0]} <small>· prototype</small></span><button id="sw-next">›</button>`;
+  document.getElementById("sw-prev").onclick=()=>setVar(keys[(i-1+keys.length)%keys.length]);
+  document.getElementById("sw-next").onclick=()=>setVar(keys[(i+1)%keys.length]);
+}
+document.addEventListener("keydown",e=>{
+  const tag=(e.target.tagName||"").toLowerCase();
+  if(tag==="input"||tag==="textarea"||tag==="select"||e.target.isContentEditable) return;
+  const keys=Object.keys(VARIANTS); const i=keys.indexOf(curVar());
+  if(e.key==="ArrowLeft") setVar(keys[(i-1+keys.length)%keys.length]);
+  if(e.key==="ArrowRight") setVar(keys[(i+1)%keys.length]);
+});
+render();
+</script>
