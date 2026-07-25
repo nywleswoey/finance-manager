@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from "react";
 import {
-  PieChart, Pie, Cell, ResponsiveContainer, Tooltip,
+  ResponsiveContainer, Tooltip,
   BarChart, Bar, XAxis, YAxis, Legend, CartesianGrid,
 } from "recharts";
 import { get, sgd, fmt } from "../../api.js";
-
-const COLORS = ["#388bfd", "#2ea043", "#d29922", "#8957e5", "#f85149", "#39c5cf", "#db61a2", "#6e7681"];
+import { COLORS, Donut } from "./charts.jsx";
 
 export default function SpendOverview() {
   const [sum, setSum] = useState(null);
@@ -75,32 +74,6 @@ function Tile({ lbl, val, sub }) {
       <div className="lbl">{lbl}</div>
       <div className="val">{val}</div>
       {sub ? <div className="mut" style={{ fontSize: 12 }}>{sub}</div> : null}
-    </div>
-  );
-}
-
-function Donut({ title, data }) {
-  const total = data.reduce((a, b) => a + b.value, 0);
-  return (
-    <div className="card">
-      <h3>{title}</h3>
-      <ResponsiveContainer width="100%" height={240}>
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>
-            {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-          </Pie>
-          <Tooltip formatter={(v) => sgd(v)} contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }} itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div>
-        {data.map((x, i) => (
-          <div className="barrow" key={x.name}>
-            <span className="nm">{x.name}</span>
-            <div className="bar" style={{ width: (x.value / total) * 220, background: COLORS[i % COLORS.length] }} />
-            <span className="mut">{sgd(x.value)} · {fmt((x.value / total) * 100, 0)}%</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

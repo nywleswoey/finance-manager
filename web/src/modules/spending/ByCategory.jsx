@@ -1,43 +1,62 @@
-import React, { useEffect, useState } from "react";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
+import React, { useEffect, useRef, useState } from "react";
 import { get, sgd, fmt } from "../../api.js";
-
-const COLORS = ["#388bfd", "#2ea043", "#d29922", "#8957e5", "#f85149", "#39c5cf", "#db61a2", "#6e7681"];
+import { COLORS, Donut } from "./charts.jsx";
 
 // Expenses for a single calendar year, broken down by category. The year selector loads that
 // year's window (from=YYYY-01-01, to=YYYY-12-31) through the existing spending endpoints;
 // clicking a category drills into its transactions for the same window.
 export default function SpendByCategory() {
   const [years, setYears] = useState(null);   // null=loading, []=no data
+  const [yearsErr, setYearsErr] = useState(false);
   const [year, setYear] = useState(null);
   const [sum, setSum] = useState(null);
   const [open, setOpen] = useState(null);     // expanded category name
   const [rows, setRows] = useState(null);     // transactions for `open`
+  const [undated, setUndated] = useState(null);
+  // Request generation: every year switch / category click bumps it, and a response may only
+  // land if it is still the newest one. Without it a slow earlier fetch resolves last and
+  // paints its numbers under the newly selected year's label.
+  const gen = useRef(0);
 
   // load the list of years once, default to the newest.
   useEffect(() => {
     get("/api/spending/years")
       .then((ys) => { setYears(ys); if (ys.length) setYear(ys[0]); })
-      .catch(() => setYears([]));
+      .catch(() => { setYearsErr(true); setYears([]); });
+  }, []);
+
+  // counted spend with no txn_date falls outside every year window, so name it once here —
+  // otherwise the per-year totals silently undershoot the all-time Overview total.
+  useEffect(() => {
+    get("/api/spending/undated").then(setUndated).catch(() => setUndated(null));
   }, []);
 
   // (re)load the year's category summary whenever the year changes.
   useEffect(() => {
     if (year == null) return;
+    let stale = false;
+    gen.current += 1;                         // invalidates any drill-in still in flight
     setSum(null); setOpen(null); setRows(null);
     const q = `from=${year}-01-01&to=${year}-12-31`;
-    get("/api/spending/summary?" + q).then(setSum).catch(() => setSum({ error: true }));
+    get("/api/spending/summary?" + q)
+      .then((d) => { if (!stale) setSum(d); })
+      .catch(() => { if (!stale) setSum({ error: true }); });
+    return () => { stale = true; };
   }, [year]);
 
   // drill-in: load transactions for the clicked category (same year window).
   function toggle(cat) {
+    const mine = ++gen.current;
     if (open === cat) { setOpen(null); setRows(null); return; }
     setOpen(cat); setRows(null);
     const q = `from=${year}-01-01&to=${year}-12-31&group=${encodeURIComponent(cat)}&limit=1000`;
-    get("/api/spending/transactions?" + q).then(setRows).catch(() => setRows([]));
+    get("/api/spending/transactions?" + q)
+      .then((d) => { if (gen.current === mine) setRows(d); })
+      .catch(() => { if (gen.current === mine) setRows([]); });
   }
 
   if (years == null) return <div className="loading">Loading…</div>;
+  if (yearsErr) return <div className="loading">API not reachable.</div>;
   if (!years.length) return <div className="loading">No spending data yet.</div>;
 
   // null category (unclassified spend) -> shown as "Uncategorized"; it isn't drillable because
@@ -97,6 +116,13 @@ export default function SpendByCategory() {
           </div>
         </>
       )}
+
+      {undated && undated.n > 0 && (
+        <div className="mut" style={{ fontSize: 12, marginTop: 10 }}>
+          Excludes {sgd(undated.total_sgd)} across {undated.n} undated transaction{undated.n === 1 ? "" : "s"},
+          which carry no date and so fall in no year.
+        </div>
+      )}
     </div>
   );
 }
@@ -126,32 +152,6 @@ function Tile({ lbl, val, sub }) {
       <div className="lbl">{lbl}</div>
       <div className="val">{val}</div>
       {sub ? <div className="mut" style={{ fontSize: 12 }}>{sub}</div> : null}
-    </div>
-  );
-}
-
-function Donut({ title, data }) {
-  const total = data.reduce((a, b) => a + b.value, 0);
-  return (
-    <div className="card">
-      <h3>{title}</h3>
-      <ResponsiveContainer width="100%" height={240}>
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>
-            {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-          </Pie>
-          <Tooltip formatter={(v) => sgd(v)} contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }} itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
-        </PieChart>
-      </ResponsiveContainer>
-      <div>
-        {data.map((x, i) => (
-          <div className="barrow" key={x.name}>
-            <span className="nm">{x.name}</span>
-            <div className="bar" style={{ width: (x.value / total) * 220, background: COLORS[i % COLORS.length] }} />
-            <span className="mut">{sgd(x.value)} · {fmt((x.value / total) * 100, 0)}%</span>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
