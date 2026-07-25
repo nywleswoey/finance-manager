@@ -103,6 +103,21 @@ def transactions(frm=None, to=None, group=None, subcategory=None, source=None,
             f"ORDER BY txn_date DESC, id DESC LIMIT :lim", p)
 
 
+def years(s=None):
+    """Calendar years spanned by counted spend, newest first — drives the year selector.
+    Portable (MIN/MAX only, no date-formatting SQL): returns the contiguous range from the
+    earliest to the latest spend date, so a gap year still selectable (shows zero, harmless)."""
+    where, p = _where()
+    with session_scope(s) as s:
+        lo, hi = s.execute(
+            text(f"SELECT MIN(txn_date), MAX(txn_date) FROM cash_txn WHERE {where}"), p).one()
+    if not lo or not hi:
+        return []
+    lo_y = lo.year if hasattr(lo, "year") else int(str(lo)[:4])
+    hi_y = hi.year if hasattr(hi, "year") else int(str(hi)[:4])
+    return list(range(hi_y, lo_y - 1, -1))
+
+
 def categories(s=None):
     """Every (category, subcategory) with its counted spend and line count."""
     where, p = _where()

@@ -113,6 +113,17 @@ class TestReads(unittest.TestCase):
         self.assertEqual(by_sub["Groceries"], (7.0, 1))
         self.assertNotIn(None, by_sub)                       # the excluded income row is gone
 
+    def test_years_span_newest_first_and_fill_gaps(self):
+        self._add(D(2022, 3, 1), -10)
+        self._add(D(2024, 6, 1), -20)                        # 2023 has no spend -> still listed
+        self._add(D(2024, 8, 1), -30)
+        self.assertEqual(spending.years(s=self.s), [2024, 2023, 2022])
+
+    def test_years_ignores_excluded_and_empty_is_empty(self):
+        self.assertEqual(spending.years(s=self.s), [])       # no rows at all
+        self._add(D(2024, 1, 1), -99, is_spend=False, exclude_reason="income")
+        self.assertEqual(spending.years(s=self.s), [])       # only excluded -> no spend years
+
 
 if __name__ == "__main__":
     unittest.main()
