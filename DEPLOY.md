@@ -59,6 +59,26 @@ API and the built SPA (same origin → first-party session cookie). There is no
 
 Push to `main` (or Redeploy) to build.
 
+### Commit author must be an authorised email
+Vercel authorises each deployment against the **commit author's email**, before the build
+runs. An unrecognised author email gives a `BLOCKED` deployment — GitHub shows
+`Vercel — Deployment was blocked`, `buildSkipped: true`, and no build log at all (nothing
+was built, so this is never a code or build error). The author email must be one listed
+under Vercel **Account Settings → Emails**: `sgfjords@gmail.com`.
+
+The trap is git's fallback identity: with no `user.email` configured, git invents one from
+the machine hostname (e.g. `selwynyeow@Personal-MacBook-Air.local`) and every commit made
+from that clone is undeployable. Set the identity once per clone/worktree — including
+throwaway agent worktrees, which do not inherit it:
+
+```sh
+git config user.name  nywleswoey
+git config user.email sgfjords@gmail.com
+```
+
+Already-pushed commits keep their author, so a blocked commit stays blocked: push a new
+commit (or re-author it) with the right identity to get a fresh deployment.
+
 ## 5. Revoking access
 Remove the email from `ALLOWED_EMAILS` and redeploy (or update the env var). The gate
 re-checks the allowlist on **every** request, so access dies immediately — no waiting
