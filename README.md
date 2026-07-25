@@ -64,8 +64,10 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
   MMF, DBS consolidated PDF Multiplier + SRS cash; other items carried forward; FX
   auto-backfilled). Dry-run by default; `--commit` writes; `--all-new --commit` ingests each
   DBS month newer than the latest snapshot (forward-delta, month-end dated).
-- **App** (`web/`) — Overview (tiles + allocation donuts), Holdings, Performance, Dividends,
-  Options, Transactions. Modular shell so other modules (Net Worth, Budget…) slot in.
+- **App** (`web/`) — three modules behind a shared shell: **Portfolio** (Overview with tiles +
+  allocation donuts, Holdings, Performance, Dividends, Options, Transactions), **Net Worth**
+  (snapshots + trend), and **Spending** (Overview, By Category, Classify, Recurring,
+  Transactions). Spending is gated per-user server-side; the shell keeps room for further modules.
 
 ## Layout
 
