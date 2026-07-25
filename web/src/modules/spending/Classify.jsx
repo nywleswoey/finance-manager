@@ -101,7 +101,7 @@ export default function Classify() {
   const progress = q.total_spend ? Math.round((classified / q.total_spend) * 100) : 0;
 
   return (
-    <div>
+    <div className="fillpane">
       <div className="tiles">
         <Tile lbl="Spends" val={q.total_spend} />
         <Tile lbl="Unclassified" val={q.unclassified} cls={q.unclassified ? "neg" : ""} />
@@ -150,10 +150,11 @@ export default function Classify() {
         )}
       </div>
 
-      {/* ---- unclassified funnel ---- */}
-      <div className="card">
+      {/* ---- unclassified funnel — grows to fill the pane and owns the vertical scroll ---- */}
+      <div className="card grow">
         <h3>Unclassified&nbsp;<span className="pill">{q.unclassified} to go</span></h3>
         {q.spends.length === 0 ? <div className="mut">Nothing unclassified. 🎉</div> : (
+          <div className="scroll">
           <table>
             <thead><tr>
               <th className="l">Date</th><th className="l">Merchant</th><th className="l">Description</th>
@@ -184,6 +185,7 @@ export default function Classify() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

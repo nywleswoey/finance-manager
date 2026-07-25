@@ -5,13 +5,17 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--txt);
   font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
-.app { display: flex; min-height: 100vh; }
+.app { display: flex; height: 100vh; }
 .side { width: 200px; flex: none; border-right: 1px solid var(--line); padding: 16px 0; background: var(--panel); }
 .brand { font-weight: 700; padding: 4px 18px 16px; font-size: 16px; }
 .navitem { padding: 9px 18px; cursor: pointer; color: var(--mut); font-weight: 600; }
 .navitem.on { color: var(--txt); background: var(--panel2); border-left: 3px solid var(--acc); }
 .navitem.dim { opacity: .4; cursor: default; font-weight: 500; font-size: 13px; }
-.main { flex: 1; padding: 22px 28px; overflow: auto; }
+.main { flex: 1; padding: 22px 28px; overflow: auto; display: flex; flex-direction: column; min-width: 0; }
+/* A view that fills the main pane so a section inside it can own the vertical scroll. */
+.fillpane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.fillpane > .grow { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.fillpane > .grow > .scroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
 .tab { padding: 8px 14px; cursor: pointer; color: var(--mut); font-weight: 600; border-bottom: 2px solid transparent; }
 .tab.on { color: var(--txt); border-bottom-color: var(--acc); }
