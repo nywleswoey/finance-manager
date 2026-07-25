@@ -52,7 +52,7 @@ export default function Classify() {
   const [ov, setOv] = useState({});          // per-row provenance overlay (post-action, pre-refetch)
   const [pick, setPick] = useState({});      // per-row category-select index
   const [modal, setModal] = useState(null);  // rule propose/edit modal state
-  const [dragId, setDragId] = useState(null);
+  const [reordering, setReordering] = useState(false); // reorder-rules modal
   const [msg, setMsg] = useState("");
 
   useEffect(() => { get("/api/spending/classify/unclassified").then(setQ).catch(() => setQ({ total_spend: 0, unclassified: 0, spends: [] })); }, [ver]);
@@ -89,18 +89,6 @@ export default function Classify() {
     }
   }
 
-  async function onDrop(targetId) {
-    if (dragId == null || dragId === targetId) return;
-    // insert the dragged rule immediately before the drop target (recompute the target index
-    // AFTER removal so dragging downward doesn't land one slot past it).
-    const ids = rules.map((r) => r.id);
-    ids.splice(ids.indexOf(dragId), 1);
-    ids.splice(ids.indexOf(targetId), 0, dragId);
-    setDragId(null);
-    await post("/api/spending/classify/rules/reorder", { ordered_ids: ids });
-    refetch();
-  }
-
   async function reapply() {
     const r = await post("/api/spending/classify/apply");
     setMsg(`${r.classified_count} newly classified`);
@@ -124,42 +112,41 @@ export default function Classify() {
       {/* ---- rules dashboard ---- */}
       <div className="card">
         <h3>
-          Rules&nbsp;<span className="pill">priority order · drag to reorder</span>
+          Rules&nbsp;<span className="pill">priority order</span>
           <span style={{ float: "right", display: "flex", gap: 8, alignItems: "center" }}>
             {msg && <span className="mut" style={{ fontSize: 12 }}>{msg}</span>}
             <button className="link-btn" onClick={reapply} title="Re-sweep unclassified with active rules">↻ Re-apply</button>
+            <button className="link-btn" onClick={() => setReordering(true)} disabled={rules.length < 2} title="Reorder rule priority">⇅ Reorder</button>
             <button onClick={() => setModal(newModal())}>+ Propose a rule</button>
           </span>
         </h3>
         {rules.length === 0 ? <div className="mut">No rules yet. Describe one with “Propose a rule”.</div> : (
-          <table>
-            <thead><tr>
-              <th className="l"></th><th className="l">Rule</th><th className="l">Conditions</th>
-              <th className="l">Target</th><th>Priority</th><th className="l">State</th><th></th>
-            </tr></thead>
-            <tbody>
-              {rules.map((r) => (
-                <tr key={r.id}
-                    draggable
-                    onDragStart={() => setDragId(r.id)}
-                    onDragOver={(e) => e.preventDefault()}
-                    onDrop={() => onDrop(r.id)}
-                    style={r.active ? { cursor: "grab" } : { opacity: 0.5, cursor: "grab" }}>
-                  <td className="l mut" title="drag">⠿</td>
-                  <td className="l" style={{ fontWeight: 600 }}>{r.nl_text}</td>
-                  <td className="l"><Chips conditions={r.conditions} /></td>
-                  <td className="l">{r.category} · {r.subcategory}</td>
-                  <td>{r.priority}</td>
-                  <td className="l"><Pill source={r.active ? "rule" : null} />{!r.active && <span className="mut" style={{ fontSize: 11 }}>&nbsp;(inactive)</span>}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <button className="link-btn" onClick={() => setModal(editModal(r))}>Edit</button>&nbsp;
-                    <button className="link-btn mut" onClick={() => toggleActive(r)}>{r.active ? "Deactivate" : "Activate"}</button>&nbsp;
-                    <button className="link-btn" onClick={() => removeRule(r)} title="Delete (only if no classified spends)">✕</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          // Cap the rules list to ~5 rows so the unclassified funnel below stays in view.
+          // The sticky <th> keeps the header pinned while the body scrolls.
+          <div style={{ maxHeight: 232, overflowY: "auto" }}>
+            <table>
+              <thead><tr>
+                <th className="l">Rule</th><th className="l">Conditions</th>
+                <th className="l">Target</th><th>Priority</th><th className="l">State</th><th></th>
+              </tr></thead>
+              <tbody>
+                {rules.map((r) => (
+                  <tr key={r.id} style={r.active ? null : { opacity: 0.5 }}>
+                    <td className="l" style={{ fontWeight: 600 }}>{r.nl_text}</td>
+                    <td className="l"><Chips conditions={r.conditions} /></td>
+                    <td className="l">{r.category} · {r.subcategory}</td>
+                    <td>{r.priority}</td>
+                    <td className="l"><Pill source={r.active ? "rule" : null} />{!r.active && <span className="mut" style={{ fontSize: 11 }}>&nbsp;(inactive)</span>}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button className="link-btn" onClick={() => setModal(editModal(r))}>Edit</button>&nbsp;
+                      <button className="link-btn mut" onClick={() => toggleActive(r)}>{r.active ? "Deactivate" : "Activate"}</button>&nbsp;
+                      <button className="link-btn" onClick={() => removeRule(r)} title="Delete (only if no classified spends)">✕</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -203,6 +190,70 @@ export default function Classify() {
       {modal && (
         <RuleModal modal={modal} setModal={setModal} cats={cats} onDone={refetch} />
       )}
+
+      {reordering && (
+        <ReorderModal rules={rules} setReordering={setReordering} onDone={refetch} />
+      )}
+    </div>
+  );
+}
+
+// Dedicated ordering interface: the full rule list is shown here (not height-capped),
+// so drag-to-reorder works reliably — you never drag toward a row scrolled out of view.
+function ReorderModal({ rules, setReordering, onDone }) {
+  const [order, setOrder] = useState(rules);
+  const [dragId, setDragId] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  function onDrop(targetId) {
+    if (dragId == null || dragId === targetId) return;
+    // remove the dragged rule, then insert it immediately before the drop target
+    // (recompute the target index AFTER removal so dragging downward lands correctly).
+    const arr = order.slice();
+    arr.splice(arr.findIndex((r) => r.id === dragId), 1);
+    arr.splice(arr.findIndex((r) => r.id === targetId), 0, order.find((r) => r.id === dragId));
+    setDragId(null);
+    setOrder(arr);
+  }
+
+  async function save() {
+    setBusy(true);
+    await post("/api/spending/classify/rules/reorder", { ordered_ids: order.map((r) => r.id) });
+    setBusy(false);
+    setReordering(false);
+    onDone();
+  }
+
+  return (
+    <div style={overlay} onClick={() => setReordering(false)}>
+      <div style={sheet} onClick={(e) => e.stopPropagation()}>
+        <h3 style={{ marginTop: 0 }}>Reorder rules&nbsp;<span className="pill">drag to set priority · top = highest</span></h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          {order.map((r, i) => (
+            <div key={r.id}
+                 draggable
+                 onDragStart={() => setDragId(r.id)}
+                 onDragOver={(e) => e.preventDefault()}
+                 onDrop={() => onDrop(r.id)}
+                 style={{
+                   display: "flex", gap: 8, alignItems: "center", cursor: "grab",
+                   padding: "7px 8px", borderRadius: 6, border: "1px solid var(--line)",
+                   background: dragId === r.id ? "var(--panel2)" : "var(--panel)",
+                   opacity: r.active ? 1 : 0.5,
+                 }}>
+              <span className="mut" title="drag">⠿</span>
+              <span className="mut" style={{ width: 18, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{i + 1}</span>
+              <span style={{ fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.nl_text}</span>
+              <span className="mut" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{r.category} · {r.subcategory}</span>
+              {!r.active && <span className="pill">inactive</span>}
+            </div>
+          ))}
+        </div>
+        <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end", gap: 8 }}>
+          <button className="link-btn mut" onClick={() => setReordering(false)}>Cancel</button>
+          <button onClick={save} disabled={busy}>{busy ? "…" : "Save order"}</button>
+        </div>
+      </div>
     </div>
   );
 }
