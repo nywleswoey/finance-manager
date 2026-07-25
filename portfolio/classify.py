@@ -14,7 +14,7 @@ import datetime as dt
 
 from sqlalchemy import select
 
-from portfolio.db import SessionLocal, session_scope
+from portfolio.db import session_scope
 from portfolio.models import CashTxn, ClassificationRule, SpendCategory
 
 # field taxonomy — determines how an operator is interpreted (text is case-insensitive,
@@ -189,12 +189,21 @@ def list_rules(session=None):
         } for r in rules]
 
 
+def apply_all(session=None):
+    """Re-sweep every currently-unclassified spend with the stored active rules and return
+    {classified_count}. Backs the on-demand dashboard re-apply; import-time auto-apply instead
+    calls apply_rules directly on its own load session so the sweep shares that transaction."""
+    with session_scope(session) as s:
+        n = apply_rules(s)
+        if session is None:
+            s.commit()
+        return {"classified_count": n}
+
+
 def main():
     """Re-sweep all unclassified spends with the stored active rules (manual utility)."""
-    with SessionLocal() as s:
-        n = apply_rules(s)
-        s.commit()
-        print(f"classify: {n} spend(s) newly classified")
+    out = apply_all()
+    print(f"classify: {out['classified_count']} spend(s) newly classified")
 
 
 if __name__ == "__main__":

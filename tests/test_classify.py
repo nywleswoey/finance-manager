@@ -279,5 +279,17 @@ class TestCreateRule(unittest.TestCase):
         self.assertEqual(s.scalars(select(ClassificationRule)).all(), [])
 
 
+# ---------------- apply_all (re-sweep wrapper; backs import auto-apply + endpoint) ----------------
+class TestApplyAll(unittest.TestCase):
+    def test_apply_all_sweeps_and_reports_count(self):
+        s = make_session()
+        cid = _cat(s, "Transport", "Other Transport")
+        _rule(s, [cond("merchant", "contains", value="grab")], cid, priority=1)
+        _spend(s, "h1", merchant="GRAB")
+        _spend(s, "h2", merchant="COMFORT")               # unmatched -> stays unclassified
+        out = classify.apply_all(session=s)
+        self.assertEqual(out, {"classified_count": 1})
+
+
 if __name__ == "__main__":
     unittest.main()

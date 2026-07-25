@@ -550,6 +550,14 @@ def classify_rule_create(body: RuleCreateIn):
         raise HTTPException(400, str(e))                        # bad conditions / unknown pair
 
 
+@app.post("/api/spending/classify/apply")
+def classify_apply():
+    """Re-sweep every unclassified spend with the stored active rules (on-demand from the
+    dashboard). Import auto-applies the same engine — this is the manual re-run."""
+    from portfolio.classify import apply_all
+    return apply_all()
+
+
 # serve the built frontend (web/dist) if present
 _dist = os.path.join(os.path.dirname(os.path.dirname(__file__)), "web", "dist")
 if os.path.isdir(_dist):

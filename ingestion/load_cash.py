@@ -60,10 +60,16 @@ def load_cash(session):
 def main():
     s = SessionLocal()
     n = load_cash(s)
+    # auto-apply stored rules to every still-unclassified is_spend row in the SAME transaction,
+    # so a fresh import lands classified (decision #6). Same engine rule-authoring uses: active
+    # rules only, priority order, manual rows skipped. A failed sweep rolls back the whole import.
+    from portfolio.classify import apply_rules
+    classified = apply_rules(s)
     s.commit()
     total = count(s, CashTxn)
     spend = count(s, CashTxn, CashTxn.is_spend.is_(True))
-    print(f"cash_txn: +{n} new (total {total}, {spend} counted as spend)")
+    print(f"cash_txn: +{n} new (total {total}, {spend} counted as spend); "
+          f"{classified} newly classified by rules")
     s.close()
 
 
