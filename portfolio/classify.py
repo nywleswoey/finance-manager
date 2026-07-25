@@ -512,19 +512,21 @@ def _parse_nl_ollama(nl_text) -> CompileResult:
 
 
 def _parse_nl_openai(nl_text) -> CompileResult:
-    """Compile via any OpenAI-compatible chat endpoint (Groq / Gemini / OpenRouter free tiers)
-    using json_schema structured outputs. Free-tier accounts run large, reliable models."""
+    """Compile via any OpenAI-compatible chat endpoint (Groq / Gemini / OpenRouter free tiers).
+    Uses json_object mode (portable across providers; strict json_schema isn't universal) — the
+    schema + example live in the prompt, and _to_result degrades unusable output to unmappable.
+    Free-tier accounts run large, reliable models, so json_object is enough."""
     import requests
 
     from portfolio.config import settings
     r = requests.post(f"{settings.openai_base_url.rstrip('/')}/chat/completions", timeout=120,
                       headers={"Authorization": f"Bearer {settings.openai_api_key}"}, json={
         "model": settings.openai_model,
-        "messages": [{"role": "system", "content": _COMPILE_SYSTEM},
-                     {"role": "user", "content": nl_text}],
+        "messages": [
+            {"role": "system", "content": _COMPILE_SYSTEM + " Respond with ONLY the JSON object."},
+            {"role": "user", "content": nl_text}],
         "temperature": 0,
-        "response_format": {"type": "json_schema", "json_schema": {
-            "name": "compile_result", "schema": CompileResult.model_json_schema(), "strict": True}},
+        "response_format": {"type": "json_object"},
     })
     r.raise_for_status()
     content = r.json()["choices"][0]["message"]["content"]

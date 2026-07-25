@@ -379,7 +379,7 @@ class TestCompilePreview(unittest.TestCase):
             res = classify._parse_nl_openai("grab rides")
             self.assertEqual(res.result.status, "ok")
             self.assertTrue(cap["url"].endswith("/chat/completions"))
-            self.assertEqual(cap["body"]["response_format"]["type"], "json_schema")
+            self.assertEqual(cap["body"]["response_format"]["type"], "json_object")
         finally:
             requests.post = orig
             settings.openai_base_url = ""
