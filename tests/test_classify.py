@@ -348,5 +348,139 @@ class TestApplyAll(unittest.TestCase):
         self.assertEqual(out, {"classified_count": 1})
 
 
+# ---------------- queue + manual classify / un-classify ----------------
+class TestQueueAndManual(unittest.TestCase):
+    def test_list_unclassified_totals_and_rows(self):
+        s = make_session()
+        _spend(s, "h1", merchant="A")
+        _spend(s, "h2", merchant="B", category="Personal", subcategory="Shopping",
+               classification_source="manual")            # classified -> counts, not in queue
+        _spend(s, "h3", merchant="C", is_spend=False)     # not a spend at all
+        out = classify.list_unclassified(session=s)
+        self.assertEqual(out["total_spend"], 2)           # h1 + h2
+        self.assertEqual(out["unclassified"], 1)          # h1
+        self.assertEqual([r["merchant"] for r in out["spends"]], ["A"])
+
+    def test_list_categories_seed_order(self):
+        s = make_session()
+        _cat(s, "Personal", "Shopping")
+        _cat(s, "Housing", "Utilities")
+        out = classify.list_categories(session=s)
+        self.assertEqual([(c["category"], c["subcategory"]) for c in out],
+                         [("Personal", "Shopping"), ("Housing", "Utilities")])
+
+    def test_manual_classify_locks_row(self):
+        s = make_session()
+        _cat(s, "Personal", "Dining Out")
+        t = _spend(s, "h1", merchant="A")
+        self.assertEqual(classify.manual_classify([t.id], "Personal", "Dining Out", session=s),
+                         {"updated": 1})
+        got = s.get(CashTxn, t.id)
+        self.assertEqual(got.classification_source, "manual")
+        self.assertEqual((got.category, got.subcategory), ("Personal", "Dining Out"))
+        self.assertIsNone(got.classified_by_rule_id)
+
+    def test_manual_classify_rejects_unknown_pair(self):
+        s = make_session()
+        _cat(s, "Personal", "Dining Out")
+        t = _spend(s, "h1")
+        with self.assertRaises(ValueError):
+            classify.manual_classify([t.id], "Personal", "Nope", session=s)
+
+    def test_unclassify_releases_manual_lock(self):
+        s = make_session()
+        _cat(s, "Personal", "Shopping")
+        t = _spend(s, "h1", category="Personal", subcategory="Shopping",
+                   classification_source="manual")
+        classify.unclassify([t.id], session=s)
+        got = s.get(CashTxn, t.id)
+        self.assertIsNone(got.category)
+        self.assertIsNone(got.classification_source)
+
+
+# ---------------- rule lifecycle (reorder / deactivate / delete / edit) ----------------
+class TestRuleLifecycle(unittest.TestCase):
+    def test_reorder_first_id_gets_highest_priority(self):
+        s = make_session()
+        c = _cat(s, "Personal", "Shopping")
+        a = _rule(s, [cond("merchant", "contains", value="a")], c, priority=1)
+        b = _rule(s, [cond("merchant", "contains", value="b")], c, priority=1)
+        classify.reorder([b.id, a.id], session=s)
+        self.assertGreater(s.get(ClassificationRule, b.id).priority,
+                           s.get(ClassificationRule, a.id).priority)
+
+    def test_reorder_unknown_id_raises(self):
+        with self.assertRaises(ValueError):
+            classify.reorder([999], session=make_session())
+
+    def test_deactivate_stops_matching_reactivate_resumes(self):
+        s = make_session()
+        c = _cat(s, "Transport", "Other Transport")
+        r = _rule(s, [cond("merchant", "contains", value="grab")], c, priority=1)
+        _spend(s, "h1", merchant="GRAB")
+        classify.set_active(r.id, False, session=s)
+        self.assertEqual(classify.apply_rules(s), 0)      # inactive never fires
+        classify.set_active(r.id, True, session=s)
+        self.assertEqual(classify.apply_rules(s), 1)
+
+    def test_delete_allowed_only_with_zero_references(self):
+        s = make_session()
+        c = _cat(s, "Transport", "Other Transport")
+        empty = _rule(s, [cond("merchant", "contains", value="zzz")], c, priority=1)
+        classify.delete_rule(empty.id, session=s)
+        self.assertIsNone(s.get(ClassificationRule, empty.id))
+
+        r = _rule(s, [cond("merchant", "contains", value="grab")], c, priority=1)
+        _spend(s, "h1", merchant="GRAB")
+        classify.apply_rules(s)
+        with self.assertRaises(classify.RuleInUse):
+            classify.delete_rule(r.id, session=s)
+
+    def test_edit_reevaluates_release_and_claim(self):
+        s = make_session()
+        _cat(s, "Transport", "Other Transport")
+        h1 = _spend(s, "h1", merchant="GRAB RIDE")        # claimed by "grab"
+        h2 = _spend(s, "h2", merchant="GOJEK RIDE")       # unclassified
+        out = classify.create_rule("grab", [cond("merchant", "contains", value="grab")],
+                                   "Transport", "Other Transport", session=s)
+        rid = out["rule_id"]
+        self.assertEqual(s.get(CashTxn, h1.id).classified_by_rule_id, rid)
+
+        pv = classify.edit_preview(rid, conditions=[cond("merchant", "contains", value="go")],
+                                   session=s)
+        self.assertEqual(pv["no_longer_match"]["count"], 1)   # h1 drops
+        self.assertEqual(pv["newly_match"]["count"], 1)       # h2 joins
+
+        res = classify.edit_rule(rid, conditions=[cond("merchant", "contains", value="go")],
+                                 session=s)
+        self.assertEqual((res["no_longer_match"], res["newly_match"]), (1, 1))
+        self.assertIsNone(s.get(CashTxn, h1.id).category)                     # released
+        self.assertEqual(s.get(CashTxn, h2.id).classified_by_rule_id, rid)   # claimed
+
+    def test_edit_target_change_updates_still_matched_rows(self):
+        s = make_session()
+        _cat(s, "Transport", "Other Transport")
+        _cat(s, "Transport", "Public Transport")
+        h1 = _spend(s, "h1", merchant="GRAB")
+        out = classify.create_rule("grab", [cond("merchant", "contains", value="grab")],
+                                   "Transport", "Other Transport", session=s)
+        classify.edit_rule(out["rule_id"], category="Transport", subcategory="Public Transport",
+                           session=s)
+        self.assertEqual(s.get(CashTxn, h1.id).subcategory, "Public Transport")
+
+    def test_edit_manual_rows_untouched(self):
+        s = make_session()
+        _cat(s, "Transport", "Other Transport")
+        h1 = _spend(s, "h1", merchant="GRAB", category="Personal", subcategory="Shopping",
+                    classification_source="manual")        # manual, not owned by any rule
+        out = classify.create_rule("grab", [cond("merchant", "contains", value="grab")],
+                                   "Transport", "Other Transport", session=s)
+        classify.edit_rule(out["rule_id"], conditions=[cond("merchant", "contains", value="grab")],
+                           session=s)
+        got = s.get(CashTxn, h1.id)
+        self.assertEqual(got.classification_source, "manual")
+        self.assertEqual((got.category, got.subcategory), ("Personal", "Shopping"))
+
+
 if __name__ == "__main__":
     unittest.main()

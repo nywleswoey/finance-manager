@@ -14,10 +14,15 @@ import datetime as dt
 from typing import Literal, Union
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from portfolio.db import session_scope
 from portfolio.models import CashTxn, ClassificationRule, SpendCategory
+
+
+class RuleInUse(Exception):
+    """Raised when a hard-delete is attempted on a rule that still has classified spends
+    (its provenance FK would be orphaned). Endpoint maps this to 409; deactivate instead."""
 
 # field taxonomy — determines how an operator is interpreted (text is case-insensitive,
 # amount reasons over magnitude, enum is an exact membership test).
@@ -189,6 +194,206 @@ def list_rules(session=None):
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
         } for r in rules]
+
+
+# ---------------- queue + manual classification ----------------
+def _spend_row(r):
+    """The shape the /classify screen renders for one spend (funnel row / preview row)."""
+    return {
+        "id": r.id,
+        "txn_date": r.txn_date.isoformat() if r.txn_date else None,
+        "merchant": r.merchant,
+        "description": r.description,
+        "amount_sgd": float(r.amount_sgd) if r.amount_sgd is not None else None,
+        "category": r.category,
+        "subcategory": r.subcategory,
+        "classification_source": r.classification_source,
+        "classified_by_rule_id": r.classified_by_rule_id,
+    }
+
+
+def list_unclassified(limit=200, session=None):
+    """The draining-funnel payload: totals for the progress headline + the unclassified
+    is_spend queue (newest first), capped at `limit`."""
+    with session_scope(session) as s:
+        total = s.scalar(select(func.count()).select_from(CashTxn)
+                         .where(CashTxn.is_spend.is_(True)))
+        unclassified = s.scalar(select(func.count()).select_from(CashTxn)
+                                .where(CashTxn.is_spend.is_(True), CashTxn.category.is_(None)))
+        rows = s.scalars(
+            select(CashTxn)
+            .where(CashTxn.is_spend.is_(True), CashTxn.category.is_(None))
+            .order_by(CashTxn.txn_date.desc(), CashTxn.id.desc())
+            .limit(limit)).all()
+        return {"total_spend": total or 0, "unclassified": unclassified or 0,
+                "spends": [_spend_row(r) for r in rows]}
+
+
+def list_categories(session=None):
+    """The (category, subcategory) reference pairs, seed order — drives the dropdown."""
+    with session_scope(session) as s:
+        cats = s.scalars(select(SpendCategory).order_by(SpendCategory.id)).all()
+        return [{"id": c.id, "category": c.category, "subcategory": c.subcategory} for c in cats]
+
+
+def manual_classify(spend_ids, category, subcategory, session=None):
+    """Hard-lock a batch of spends to a manual (category, subcategory) — rules skip them
+    afterwards (#3). Validates the pair against the reference table (raises ValueError -> 400)."""
+    with session_scope(session) as s:
+        _resolve_category(s, category, subcategory)     # validate the pair exists
+        rows = s.scalars(select(CashTxn).where(
+            CashTxn.id.in_(spend_ids), CashTxn.is_spend.is_(True))).all()
+        now = dt.datetime.now(dt.timezone.utc)
+        for r in rows:
+            r.category, r.subcategory = category, subcategory
+            r.classification_source = "manual"
+            r.classified_by_rule_id = None
+            r.classified_at = now
+        if session is None:
+            s.commit()
+        return {"updated": len(rows)}
+
+
+def unclassify(spend_ids, session=None):
+    """Release a batch of spends back to unclassified (the escape hatch that frees a locked
+    manual row back to the rule pool, #3). null is null — no 'unclassified-by-human' flavour."""
+    with session_scope(session) as s:
+        rows = s.scalars(select(CashTxn).where(CashTxn.id.in_(spend_ids))).all()
+        for r in rows:
+            r.category = r.subcategory = None
+            r.classification_source = None
+            r.classified_by_rule_id = None
+            r.classified_at = None
+        if session is None:
+            s.commit()
+        return {"updated": len(rows)}
+
+
+# ---------------- rule lifecycle: reorder / edit / deactivate / delete ----------------
+def reorder(ordered_ids, session=None):
+    """Rewrite priority from a full ordered id list (first = highest). Whole-list write avoids
+    races (#2). Errors if any id is unknown."""
+    with session_scope(session) as s:
+        rules = {r.id: r for r in s.scalars(select(ClassificationRule)
+                                            .where(ClassificationRule.id.in_(ordered_ids)))}
+        missing = [i for i in ordered_ids if i not in rules]
+        if missing:
+            raise ValueError(f"unknown rule id(s): {missing}")
+        n = len(ordered_ids)
+        for idx, rid in enumerate(ordered_ids):
+            rules[rid].priority = n - idx               # first id -> highest priority
+        if session is None:
+            s.commit()
+        return {"reordered": n}
+
+
+def set_active(rule_id, active, session=None):
+    """Deactivate (freeze + stop future matching) or reactivate a rule (#8). Existing
+    classifications stand either way; reactivation doesn't retroactively re-claim."""
+    with session_scope(session) as s:
+        rule = s.get(ClassificationRule, rule_id)
+        if rule is None:
+            raise ValueError(f"unknown rule {rule_id}")
+        rule.active = active
+        if session is None:
+            s.commit()
+        return {"id": rule_id, "active": active}
+
+
+def delete_rule(rule_id, session=None):
+    """Hard-delete a rule ONLY if it has zero classified spends (nothing to orphan, #8);
+    otherwise RuleInUse (-> 409)."""
+    with session_scope(session) as s:
+        rule = s.get(ClassificationRule, rule_id)
+        if rule is None:
+            raise ValueError(f"unknown rule {rule_id}")
+        refs = s.scalar(select(func.count()).select_from(CashTxn)
+                        .where(CashTxn.classified_by_rule_id == rule_id))
+        if refs:
+            raise RuleInUse(f"rule {rule_id} has {refs} classified spend(s); deactivate instead")
+        s.delete(rule)
+        s.flush()
+        if session is None:
+            s.commit()
+        return {"deleted": rule_id}
+
+
+def edit_preview(rule_id, conditions=None, category=None, subcategory=None, nl_text=None,
+                 session=None):
+    """Three-way preview of an edit (#3): rows this rule currently classifies that STILL match
+    the (possibly new) conditions, rows that NO LONGER match (would release to unclassified),
+    and currently-unclassified rows the edit would NEWLY claim. Manual rows never appear."""
+    with session_scope(session) as s:
+        rule = s.get(ClassificationRule, rule_id)
+        if rule is None:
+            raise ValueError(f"unknown rule {rule_id}")
+        new_conditions = conditions if conditions is not None else \
+            (rule.predicates or {}).get("conditions", [])
+        validate_conditions(new_conditions)
+        if category is not None and subcategory is not None:
+            _resolve_category(s, category, subcategory)     # surface a bad target early
+        preds = {"conditions": new_conditions}
+        claimed = s.scalars(select(CashTxn)
+                            .where(CashTxn.classified_by_rule_id == rule_id)).all()
+        still, gone = [], []
+        for r in claimed:
+            (still if matches(preds, r) else gone).append(_spend_row(r))
+        newly = preview_matches(new_conditions, session=s)
+        return {
+            "still_match": {"count": len(still), "rows": still},
+            "no_longer_match": {"count": len(gone), "rows": gone},
+            "newly_match": {"count": len(newly), "rows": newly},
+        }
+
+
+def edit_rule(rule_id, conditions=None, category=None, subcategory=None, nl_text=None,
+              session=None):
+    """Apply an edit and re-evaluate in one txn (#3): still-match rows update to the (possibly
+    new) target, no-longer-match rows release to unclassified, newly-matching unclassified rows
+    are claimed. Manual rows untouched. Priority is preserved (edits don't reset drag order)."""
+    with session_scope(session) as s:
+        rule = s.get(ClassificationRule, rule_id)
+        if rule is None:
+            raise ValueError(f"unknown rule {rule_id}")
+        if nl_text is not None:
+            rule.nl_text = nl_text
+        if category is not None or subcategory is not None:
+            if category is None or subcategory is None:
+                raise ValueError("category and subcategory must both be provided to change target")
+            rule.category_id = _resolve_category(s, category, subcategory)
+        if conditions is not None:
+            validate_conditions(conditions)
+            rule.predicates = {"conditions": list(conditions)}
+        s.flush()
+        cat, sub = s.execute(select(SpendCategory.category, SpendCategory.subcategory)
+                             .where(SpendCategory.id == rule.category_id)).one()
+        preds = rule.predicates
+        now = dt.datetime.now(dt.timezone.utc)
+        still = released = 0
+        for r in s.scalars(select(CashTxn).where(CashTxn.classified_by_rule_id == rule_id)).all():
+            if matches(preds, r):
+                r.category, r.subcategory, r.classified_at = cat, sub, now   # target may have changed
+                still += 1
+            else:
+                r.category = r.subcategory = None
+                r.classification_source = None
+                r.classified_by_rule_id = None
+                r.classified_at = None
+                released += 1
+        s.flush()
+        newly = 0
+        for r in s.scalars(select(CashTxn).where(
+                CashTxn.is_spend.is_(True), CashTxn.category.is_(None),
+                CashTxn.classification_source.is_(None))).all():
+            if matches(preds, r):
+                r.category, r.subcategory = cat, sub
+                r.classification_source = "rule"
+                r.classified_by_rule_id = rule_id
+                r.classified_at = now
+                newly += 1
+        if session is None:
+            s.commit()
+        return {"still_match": still, "no_longer_match": released, "newly_match": newly}
 
 
 # ---------------- NL -> predicate compile (server-side, once per rule) ----------------

@@ -533,6 +533,18 @@ class RuleCreateIn(BaseModel):
     subcategory: str = Field(min_length=1, max_length=48)
 
 
+@app.get("/api/spending/classify/unclassified")
+def classify_unclassified(limit: int = 200):
+    from portfolio.classify import list_unclassified
+    return list_unclassified(limit)
+
+
+@app.get("/api/spending/classify/categories")
+def classify_categories():
+    from portfolio.classify import list_categories
+    return list_categories()
+
+
 @app.get("/api/spending/classify/rules")
 def classify_rules():
     from portfolio.classify import list_rules
@@ -568,6 +580,109 @@ def classify_apply():
     dashboard). Import auto-applies the same engine — this is the manual re-run."""
     from portfolio.classify import apply_all
     return apply_all()
+
+
+# ---- manual classify / un-classify (batch) ----
+class ManualIn(BaseModel):
+    spend_ids: list[int] = Field(min_length=1, max_length=1000)
+    category: str = Field(min_length=1, max_length=48)
+    subcategory: str = Field(min_length=1, max_length=48)
+
+
+@app.post("/api/spending/classify/manual")
+def classify_manual(body: ManualIn):
+    from portfolio.classify import manual_classify
+    try:
+        return manual_classify(body.spend_ids, body.category, body.subcategory)
+    except ValueError as e:
+        raise HTTPException(400, str(e))                        # unknown category pair
+
+
+class UnclassifyIn(BaseModel):
+    spend_ids: list[int] = Field(min_length=1, max_length=1000)
+
+
+@app.post("/api/spending/classify/unclassify")
+def classify_unclassify(body: UnclassifyIn):
+    from portfolio.classify import unclassify
+    return unclassify(body.spend_ids)
+
+
+# ---- rule lifecycle ----
+class ReorderIn(BaseModel):
+    ordered_ids: list[int] = Field(min_length=1, max_length=500)
+
+
+@app.post("/api/spending/classify/rules/reorder")
+def classify_reorder(body: ReorderIn):
+    from portfolio.classify import reorder
+    try:
+        return reorder(body.ordered_ids)
+    except ValueError as e:
+        raise HTTPException(400, str(e))                        # unknown rule id
+
+
+class RuleEditIn(BaseModel):
+    conditions: list[ConditionIn] | None = None
+    category: str | None = Field(default=None, max_length=48)
+    subcategory: str | None = Field(default=None, max_length=48)
+    nl_text: str | None = Field(default=None, max_length=500)
+
+
+def _edit_kwargs(body: RuleEditIn):
+    conds = None if body.conditions is None else \
+        [c.model_dump(exclude_none=True) for c in body.conditions]
+    return dict(conditions=conds, category=body.category,
+                subcategory=body.subcategory, nl_text=body.nl_text)
+
+
+@app.post("/api/spending/classify/rules/{rule_id}/preview")
+def classify_rule_edit_preview(rule_id: int, body: RuleEditIn):
+    """Three-way preview of an edit before applying (still / no-longer / newly match)."""
+    from portfolio.classify import edit_preview
+    try:
+        return edit_preview(rule_id, **_edit_kwargs(body))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.put("/api/spending/classify/rules/{rule_id}")
+def classify_rule_edit(rule_id: int, body: RuleEditIn):
+    """Apply an edit and re-evaluate (still update, no-longer release, newly claim)."""
+    from portfolio.classify import edit_rule
+    try:
+        return edit_rule(rule_id, **_edit_kwargs(body))
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@app.post("/api/spending/classify/rules/{rule_id}/deactivate")
+def classify_rule_deactivate(rule_id: int):
+    from portfolio.classify import set_active
+    try:
+        return set_active(rule_id, False)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.post("/api/spending/classify/rules/{rule_id}/activate")
+def classify_rule_activate(rule_id: int):
+    from portfolio.classify import set_active
+    try:
+        return set_active(rule_id, True)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@app.delete("/api/spending/classify/rules/{rule_id}")
+def classify_rule_delete(rule_id: int):
+    from portfolio.classify import RuleInUse, delete_rule
+    try:
+        return delete_rule(rule_id)
+    except RuleInUse as e:
+        raise HTTPException(409, str(e))                        # has classified spends
+    except ValueError as e:
+        raise HTTPException(404, str(e))
 
 
 # serve the built frontend (web/dist) if present
