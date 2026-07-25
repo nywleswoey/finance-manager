@@ -30,3 +30,6 @@ data/*
 .env*
 
 .scratch
+
+# throwaway agent worktrees
+.claude/worktrees/
