@@ -409,6 +409,23 @@ class TestRuleLifecycle(unittest.TestCase):
         self.assertGreater(s.get(ClassificationRule, b.id).priority,
                            s.get(ClassificationRule, a.id).priority)
 
+    def test_reorder_changes_which_rule_claims_a_spend(self):
+        # two rules both match the same spend, targeting different subcategories; reordering
+        # must flip which one claims it on the next sweep (ticket 07 behavioral AC)
+        s = make_session()
+        shop = _cat(s, "Personal", "Shopping")
+        ent = _cat(s, "Personal", "Entertainment")
+        r_shop = _rule(s, [cond("merchant", "contains", value="amzn")], shop, priority=1)
+        r_ent = _rule(s, [cond("merchant", "contains", value="amzn")], ent, priority=2)
+        t = _spend(s, "h1", merchant="AMZN")
+        classify.apply_rules(s)
+        self.assertEqual(s.get(CashTxn, t.id).classified_by_rule_id, r_ent.id)   # higher wins
+
+        classify.unclassify([t.id], session=s)          # release, then reorder shop above ent
+        classify.reorder([r_shop.id, r_ent.id], session=s)
+        classify.apply_rules(s)
+        self.assertEqual(s.get(CashTxn, t.id).classified_by_rule_id, r_shop.id)  # winner flipped
+
     def test_reorder_unknown_id_raises(self):
         with self.assertRaises(ValueError):
             classify.reorder([999], session=make_session())

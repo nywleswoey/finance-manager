@@ -623,7 +623,7 @@ def classify_reorder(body: ReorderIn):
 
 
 class RuleEditIn(BaseModel):
-    conditions: list[ConditionIn] | None = None
+    conditions: list[ConditionIn] | None = Field(default=None, max_length=10)   # SECURITY-05
     category: str | None = Field(default=None, max_length=48)
     subcategory: str | None = Field(default=None, max_length=48)
     nl_text: str | None = Field(default=None, max_length=500)

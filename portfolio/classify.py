@@ -113,6 +113,24 @@ def validate_conditions(conditions):
 
 
 # ---------------- the sweep + rule CRUD ----------------
+def _unclassified_rows(s):
+    """The unclassified is_spend pool: no category and no provenance (so manual rows, which
+    always carry a category, are excluded). The single definition every sweep/preview shares."""
+    return s.scalars(select(CashTxn).where(
+        CashTxn.is_spend.is_(True),
+        CashTxn.category.is_(None),
+        CashTxn.classification_source.is_(None))).all()
+
+
+def _claim(row, rule_id, category, subcategory, now):
+    """Stamp a row as classified by a rule — the write half of a match, shared by the import
+    sweep and edit re-evaluation so provenance is written one way."""
+    row.category, row.subcategory = category, subcategory
+    row.classification_source = "rule"
+    row.classified_by_rule_id = rule_id
+    row.classified_at = now
+
+
 def apply_rules(session) -> int:
     """Classify every currently-unclassified is_spend row with the highest-priority active
     rule that matches, in one pass. Manual rows carry a category already, so they fall outside
@@ -127,20 +145,13 @@ def apply_rules(session) -> int:
     if not rules:
         return 0
     cats = {c.id: (c.category, c.subcategory) for c in session.scalars(select(SpendCategory))}
-    rows = session.scalars(
-        select(CashTxn).where(
-            CashTxn.is_spend.is_(True),
-            CashTxn.category.is_(None),                 # unclassified: no category yet...
-            CashTxn.classification_source.is_(None))).all()  # ...and no provenance (excl. manual)
     now = dt.datetime.now(dt.timezone.utc)
     n = 0
-    for row in rows:
+    for row in _unclassified_rows(session):
         for rule in rules:                              # priority order -> first match wins
             if matches(rule.predicates, row):
-                row.category, row.subcategory = cats[rule.category_id]
-                row.classification_source = "rule"
-                row.classified_by_rule_id = rule.id
-                row.classified_at = now
+                cat, sub = cats[rule.category_id]
+                _claim(row, rule.id, cat, sub, now)
                 n += 1
                 break
     session.flush()
@@ -382,14 +393,9 @@ def edit_rule(rule_id, conditions=None, category=None, subcategory=None, nl_text
                 released += 1
         s.flush()
         newly = 0
-        for r in s.scalars(select(CashTxn).where(
-                CashTxn.is_spend.is_(True), CashTxn.category.is_(None),
-                CashTxn.classification_source.is_(None))).all():
+        for r in _unclassified_rows(s):
             if matches(preds, r):
-                r.category, r.subcategory = cat, sub
-                r.classification_source = "rule"
-                r.classified_by_rule_id = rule_id
-                r.classified_at = now
+                _claim(r, rule_id, cat, sub, now)
                 newly += 1
         if session is None:
             s.commit()
@@ -474,20 +480,10 @@ def preview_matches(conditions, session=None, limit=200):
     preview. Stateless; the same matcher apply_rules uses, so preview == what a create will do."""
     preds = {"conditions": list(conditions)}
     with session_scope(session) as s:
-        rows = s.scalars(select(CashTxn).where(
-            CashTxn.is_spend.is_(True),
-            CashTxn.category.is_(None),
-            CashTxn.classification_source.is_(None))).all()
         out = []
-        for r in rows:
+        for r in _unclassified_rows(s):
             if matches(preds, r):
-                out.append({
-                    "id": r.id,
-                    "txn_date": r.txn_date.isoformat() if r.txn_date else None,
-                    "merchant": r.merchant,
-                    "description": r.description,
-                    "amount_sgd": float(r.amount_sgd) if r.amount_sgd is not None else None,
-                })
+                out.append(_spend_row(r))
                 if len(out) >= limit:
                     break
         return out

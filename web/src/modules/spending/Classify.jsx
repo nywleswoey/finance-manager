@@ -91,9 +91,11 @@ export default function Classify() {
 
   async function onDrop(targetId) {
     if (dragId == null || dragId === targetId) return;
+    // insert the dragged rule immediately before the drop target (recompute the target index
+    // AFTER removal so dragging downward doesn't land one slot past it).
     const ids = rules.map((r) => r.id);
-    const from = ids.indexOf(dragId), to = ids.indexOf(targetId);
-    ids.splice(to, 0, ids.splice(from, 1)[0]);
+    ids.splice(ids.indexOf(dragId), 1);
+    ids.splice(ids.indexOf(targetId), 0, dragId);
     setDragId(null);
     await post("/api/spending/classify/rules/reorder", { ordered_ids: ids });
     refetch();
