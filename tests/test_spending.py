@@ -1,8 +1,10 @@
 """portfolio.spending — the shared WHERE builder and the portable read shapes.
 
-Stdlib unittest + in-memory SQLite (no pg), matching tests/test_networth.py. summary() and
-trends() bucket by month with Postgres `to_char`, so they aren't exercised here; the WHERE
-consolidation they share is covered via transactions()/categories() and _where directly.
+Stdlib unittest + in-memory SQLite (no pg), matching tests/test_networth.py. Of the six read
+shapes, four are portable and covered here: transactions(), categories(), years() and
+undated(). summary() and trends() bucket by month with Postgres `to_char`, so they aren't
+exercised here; the WHERE consolidation they share is covered via the portable shapes and
+_where directly.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending.py -q
 """
@@ -112,6 +114,35 @@ class TestReads(unittest.TestCase):
         self.assertEqual(by_sub["Dining"], (15.0, 2))
         self.assertEqual(by_sub["Groceries"], (7.0, 1))
         self.assertNotIn(None, by_sub)                       # the excluded income row is gone
+
+    def test_years_span_newest_first_and_fill_gaps(self):
+        self._add(D(2022, 3, 1), -10)
+        self._add(D(2024, 6, 1), -20)                        # 2023 has no spend -> still listed
+        self._add(D(2024, 8, 1), -30)
+        self.assertEqual(spending.years(s=self.s), [2024, 2023, 2022])
+
+    def test_years_ignores_excluded_and_empty_is_empty(self):
+        self.assertEqual(spending.years(s=self.s), [])       # no rows at all
+        self._add(D(2024, 1, 1), -99, is_spend=False, exclude_reason="income")
+        self.assertEqual(spending.years(s=self.s), [])       # only excluded -> no spend years
+
+    def test_undated_counts_only_dateless_counted_spend(self):
+        self.assertEqual(spending.undated(s=self.s), {"n": 0, "total_sgd": 0.0})
+        self._add(D(2024, 1, 1), -10)                        # dated -> lands in a year window
+        self._add(None, -15)                                 # counted but dateless -> the gap
+        self._add(None, -25)
+        self._add(None, -99, is_spend=False, exclude_reason="income")   # excluded -> not spend
+        self.assertEqual(spending.undated(s=self.s), {"n": 2, "total_sgd": 40.0})
+
+    def test_undated_rows_are_in_no_year(self):
+        # the reconciliation the UI note exists for: years() spans only the dated spend, so
+        # the dateless magnitude is exactly what the per-year windows leave out.
+        self._add(D(2024, 1, 1), -10)
+        self._add(None, -15)
+        self.assertEqual(spending.years(s=self.s), [2024])
+        year = spending.transactions(frm="2024-01-01", to="2024-12-31", s=self.s)
+        self.assertEqual([float(r["amount_sgd"]) for r in year], [-10.0])
+        self.assertEqual(spending.undated(s=self.s)["total_sgd"], 15.0)
 
 
 if __name__ == "__main__":

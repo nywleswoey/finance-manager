@@ -461,6 +461,16 @@ def spending_categories():
     return spending.categories()
 
 
+@app.get("/api/spending/years")
+def spending_years():
+    return spending.years()
+
+
+@app.get("/api/spending/undated")
+def spending_undated():
+    return spending.undated()
+
+
 # ---------------- recurring spends ----------------
 class RecurringIn(BaseModel):
     name: str

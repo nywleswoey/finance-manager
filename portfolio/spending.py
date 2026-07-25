@@ -6,11 +6,12 @@ every spend metric but remain inspectable via transactions(include_excluded=True
 
 Every public function accepts an optional Session (`s`) and routes through
 db.session_scope, so it composes inside a larger unit of work or opens its own connection.
-The four read shapes share a single WHERE builder (`_where`) rather than each re-deriving
+The six read shapes share a single WHERE builder (`_where`) rather than each re-deriving
 the same is_spend / date / category filters.
 
 Note: summary() and trends() bucket by month with Postgres `to_char`, so their SQL is
-Postgres-only; transactions() and categories() are portable (covered by tests/test_spending.py).
+Postgres-only; transactions(), categories(), years() and undated() are portable (covered by
+tests/test_spending.py).
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending.py -q
 """
@@ -101,6 +102,36 @@ def transactions(frm=None, to=None, group=None, subcategory=None, source=None,
             f"direction, is_spend, exclude_reason, category, subcategory "
             f"FROM cash_txn WHERE {where} "
             f"ORDER BY txn_date DESC, id DESC LIMIT :lim", p)
+
+
+def years(s=None):
+    """Calendar years spanned by counted spend, newest first — drives the year selector.
+    Portable (MIN/MAX only, no date-formatting SQL): returns the contiguous range from the
+    earliest to the latest spend date, so a gap year still selectable (shows zero, harmless)."""
+    where, p = _where()
+    with session_scope(s) as s:
+        lo, hi = s.execute(
+            text(f"SELECT MIN(txn_date), MAX(txn_date) FROM cash_txn WHERE {where}"), p).one()
+    if not lo or not hi:
+        return []
+    lo_y = lo.year if hasattr(lo, "year") else int(str(lo)[:4])
+    hi_y = hi.year if hasattr(hi, "year") else int(str(hi)[:4])
+    return list(range(hi_y, lo_y - 1, -1))
+
+
+def undated(s=None):
+    """Counted spend carrying no txn_date: {"n": lines, "total_sgd": magnitude}.
+
+    txn_date is nullable, and every date-windowed view drops those rows — years() cannot see
+    them and no `txn_date >= :frm AND txn_date <= :to` window matches them — so per-year totals
+    undershoot the all-time total by exactly this amount. Callers surface it so the gap is
+    visible rather than silent. Portable (no date-formatting SQL)."""
+    where, p = _where()
+    with session_scope(s) as s:
+        n, total = s.execute(text(
+            f"SELECT COUNT(*), COALESCE(SUM(-amount_sgd),0) FROM cash_txn "
+            f"WHERE {where} AND txn_date IS NULL"), p).one()
+    return {"n": int(n), "total_sgd": round(float(total), 2)}
 
 
 def categories(s=None):
