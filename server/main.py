@@ -354,6 +354,7 @@ def accounts():
 
 # ---------------- net worth ----------------
 import datetime as _dt
+from typing import Annotated
 
 from fastapi import HTTPException
 from pydantic import BaseModel, Field
@@ -510,6 +511,43 @@ def recurring_dismiss(body: DismissIn):
     from portfolio.recurring import dismiss
     dismiss(body.merchant.strip())
     return {"ok": True}
+
+
+# ---------------- spend classification (rules) ----------------
+class ConditionIn(BaseModel):
+    # one ANDed predicate; shape varies by field/operator (value | value_min/max | values).
+    # Deep validation lives in portfolio.classify.validate_conditions (knows field types).
+    # Every user-supplied string/list is bounded (SECURITY-05) — incl. the value payloads.
+    field: str = Field(min_length=1, max_length=32)
+    operator: str = Field(min_length=1, max_length=16)
+    value: Annotated[str, Field(max_length=128)] | float | None = None
+    value_min: float | None = None
+    value_max: float | None = None
+    values: Annotated[list[Annotated[str, Field(max_length=128)]], Field(max_length=50)] | None = None
+
+
+class RuleCreateIn(BaseModel):
+    nl_text: str = Field(min_length=1, max_length=500)          # SECURITY-05
+    conditions: list[ConditionIn] = Field(min_length=1, max_length=10)
+    category: str = Field(min_length=1, max_length=48)
+    subcategory: str = Field(min_length=1, max_length=48)
+
+
+@app.get("/api/spending/classify/rules")
+def classify_rules():
+    from portfolio.classify import list_rules
+    return list_rules()
+
+
+@app.post("/api/spending/classify/rules")
+def classify_rule_create(body: RuleCreateIn):
+    """Create a rule from human-verified conditions, then apply it in one transaction."""
+    from portfolio.classify import create_rule
+    conds = [c.model_dump(exclude_none=True) for c in body.conditions]
+    try:
+        return create_rule(body.nl_text.strip(), conds, body.category, body.subcategory)
+    except ValueError as e:
+        raise HTTPException(400, str(e))                        # bad conditions / unknown pair
 
 
 # serve the built frontend (web/dist) if present
