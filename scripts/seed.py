@@ -61,6 +61,26 @@ def markets_from_ledger():
     return m
 
 
+def markets_from_options():
+    """Underlying -> market for every option underlying (Tiger flex legs + IBKR archive).
+
+    Option underlyings that were never traded as stock (e.g. MSCI, GOOG, TLT, LNK) otherwise
+    get no Security row, so their option_trade rows carry NULL security_id and drop out of any
+    security-joined view. Seed them here so load_options can resolve security_id."""
+    from ingestion.parse_options import IBKR_SRC, _flex_option_legs, _und
+    m = {}
+    for lg in _flex_option_legs():
+        u = lg["underlying"]
+        if u and is_security(u):
+            m.setdefault(u, lg["market"] or "US")
+    if os.path.exists(IBKR_SRC):
+        for r in csv.DictReader(open(IBKR_SRC)):
+            u = _und((r.get("Ticker") or "").strip().upper())
+            if u and is_security(u):
+                m.setdefault(u, (r.get("Market") or "US").strip() or "US")
+    return m
+
+
 def names_from_ledger():
     """derive HK/US display names from raw broker symbols (e.g. 'LINK REIT (00823)')."""
     import re
@@ -115,14 +135,15 @@ def main():
         upsert(s, Account, {"name": name}, broker=broker, funding_bucket=bucket, base_currency="SGD")
 
     mkt = markets_from_ledger()
+    opt_mkt = markets_from_options()
     syms = load_symbols()
     raw_names = names_from_ledger()
-    # union of canonicals from symbols + any ledger ticker not in symbols
-    canon = set(syms) | set(mkt) | set(NAME)
+    # union of canonicals from symbols + any ledger ticker not in symbols + option underlyings
+    canon = set(syms) | set(mkt) | set(NAME) | set(opt_mkt)
     canon = {c for c in canon if is_security(c) and not c.startswith("SGXZ")}  # skip options + T-bills
 
     for c in sorted(canon):
-        market = mkt.get(c) or ("HK" if c.isdigit() else "SG")
+        market = mkt.get(c) or opt_mkt.get(c) or ("HK" if c.isdigit() else "SG")
         name = NAME.get(c) or (syms.get(c, {}).get("name")) or raw_names.get(c) or c
         atype = ASSET_TYPE.get(c) or ("reit" if c in REITS else "stock")
         sec = upsert(s, Security, {"canonical_ticker": c},
