@@ -10,6 +10,7 @@ import Options from "./modules/portfolio/Options.jsx";
 import Transactions from "./modules/portfolio/Transactions.jsx";
 import NetWorth from "./modules/networth/NetWorth.jsx";
 import SpendOverview from "./modules/spending/Overview.jsx";
+import SpendByCategory from "./modules/spending/ByCategory.jsx";
 import SpendTransactions from "./modules/spending/Transactions.jsx";
 import SpendRecurring from "./modules/spending/Recurring.jsx";
 import SpendClassify from "./modules/spending/Classify.jsx";
@@ -25,6 +26,7 @@ const TABS = {
 
 const SPEND_TABS = {
   Overview: SpendOverview,
+  "By Category": SpendByCategory,
   Classify: SpendClassify,
   Recurring: SpendRecurring,
   Transactions: SpendTransactions,
