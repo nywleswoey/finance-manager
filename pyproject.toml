@@ -37,9 +37,14 @@ dev = ["ruff>=0.6"]
 extend-exclude = ["migrations"]
 
 [tool.ruff.lint]
-# Keep the default E4/E7/E9/F ruleset (F-codes — undefined names, unused imports — are the
-# high-value correctness checks), minus the compound-statement / import-layout style rules this
-# codebase intentionally violates for its compact aesthetic:
+# Pin the E4/E7/E9/F ruleset explicitly (F-codes — undefined names, unused imports — are the
+# high-value correctness checks). This must be spelled out rather than left to ruff's default
+# `select`: newer ruff versions resolve a much wider default (SIM/I/C4/PLR/FURB/DTZ/BLE…), which
+# floods the compact style this codebase deliberately uses. Explicit select freezes the ruleset
+# across ruff upgrades.
+select = ["E4", "E7", "E9", "F"]
+# Minus the compound-statement / import-layout style rules this codebase intentionally violates
+# for its compact aesthetic:
 #   E401 — multiple imports on one line   (build/ parser scripts)
 #   E402 — module import not at top: handlers use lazy `from ...` imports to break import cycles.
 #   E701 — multiple statements on a line (colon): columnar-aligned branches in build/ parsers.
