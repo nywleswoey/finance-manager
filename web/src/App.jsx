@@ -11,6 +11,7 @@ import NetWorth from "./modules/networth/NetWorth.jsx";
 import SpendOverview from "./modules/spending/Overview.jsx";
 import SpendTransactions from "./modules/spending/Transactions.jsx";
 import SpendRecurring from "./modules/spending/Recurring.jsx";
+import SpendClassify from "./modules/spending/Classify.jsx";
 
 const TABS = {
   Overview: Overview,
@@ -23,6 +24,7 @@ const TABS = {
 
 const SPEND_TABS = {
   Overview: SpendOverview,
+  Classify: SpendClassify,
   Recurring: SpendRecurring,
   Transactions: SpendTransactions,
 };

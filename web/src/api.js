@@ -26,6 +26,7 @@ async function send(method, path, body) {
   return r.json();
 }
 export const post = (path, body) => send("POST", path, body);
+export const put = (path, body) => send("PUT", path, body);
 export const patch = (path, body) => send("PATCH", path, body);
 export async function del(path) {
   const r = on401(await fetch(base + path, { method: "DELETE", ...CREDS }));
