@@ -444,23 +444,38 @@ class CompileResult(BaseModel):
 
 
 _COMPILE_SYSTEM = (
-    "You translate one sentence describing a spend-classification rule into a predicate over "
-    "transaction fields: merchant, description, amount_sgd, source, account_label. Conditions "
-    "are ANDed. Only use fields, operators, and values the sentence actually supports — never "
-    "invent a condition. Text operators (contains, equals) apply to merchant/description and "
-    "are matched case-insensitively. amount_sgd conditions are evaluated against the POSITIVE "
-    "SPEND MAGNITUDE (e.g. \"under $30\" means magnitude < 30), so always express amounts as "
-    "positive numbers. Enum operators (equals, in) apply to source/account_label. If the "
-    "sentence does not clearly map to these fields/operators (ambiguous merchant, unclear "
-    "amount, unsupported comparison), return status=\"unmappable\" with a specific "
-    "clarifying_question instead of guessing."
+    "Translate one sentence describing a spend-classification rule into ANDed conditions over "
+    "these transaction fields:\n"
+    "- merchant, description: text. operators contains | equals (matched case-insensitively — "
+    "just output the value the user gave, lowercase or not).\n"
+    "- amount_sgd: money. operators < | <= | > | >= | between. Output the amount as a plain "
+    "POSITIVE number (write \"under $30\" as {\"field\":\"amount_sgd\",\"operator\":\"<\","
+    "\"value\":30}).\n"
+    "- source, account_label: enum. operators equals | in.\n\n"
+    "Almost every rule naming a merchant and/or an amount IS mappable — map it. Only return "
+    "status=\"unmappable\" (with a one-line clarifying_question) when the sentence names a field "
+    "that does not exist here or asks for a comparison none of these operators can express. "
+    "The category/target is chosen separately by the user — do NOT put it in the conditions.\n\n"
+    "Example — input: \"Grab rides under $30\" -> "
+    "{\"result\":{\"status\":\"ok\",\"conditions\":["
+    "{\"field\":\"merchant\",\"operator\":\"contains\",\"value\":\"grab\"},"
+    "{\"field\":\"amount_sgd\",\"operator\":\"<\",\"value\":30}]}}"
 )
 
 
 def _parse_nl(nl_text) -> CompileResult:
-    """The network boundary: compile NL -> CompileResult via Claude structured outputs.
-    Isolated so tests can stub it without hitting the API. Runs server-side; the key never
-    leaves the process (research #4)."""
+    """The model boundary: compile NL -> CompileResult. Routes to Anthropic (structured
+    outputs) or a local Ollama server (free/offline) per settings.classify_provider_active.
+    Isolated so tests stub it without hitting any model. Runs server-side; no key or NL text
+    reaches the browser."""
+    from portfolio.config import settings
+    return {
+        "ollama": _parse_nl_ollama,
+        "openai": _parse_nl_openai,
+    }.get(settings.classify_provider_active, _parse_nl_anthropic)(nl_text)
+
+
+def _parse_nl_anthropic(nl_text) -> CompileResult:
     import anthropic
 
     from portfolio.config import settings
@@ -473,6 +488,58 @@ def _parse_nl(nl_text) -> CompileResult:
         output_format=CompileResult,
     )
     return resp.parsed_output
+
+
+def _parse_nl_ollama(nl_text) -> CompileResult:
+    """Compile via a local Ollama model using its structured-output endpoint (schema-constrained
+    JSON) — free, offline, no account. A model that returns unusable JSON degrades to
+    `unmappable`; the human verifies the preview before confirming, so a weak local parse is
+    surfaced, never silently stored."""
+    import requests
+
+    from portfolio.config import settings
+    r = requests.post(f"{settings.ollama_host}/api/chat", timeout=120, json={
+        "model": settings.ollama_model,
+        "messages": [{"role": "system", "content": _COMPILE_SYSTEM},
+                     {"role": "user", "content": nl_text}],
+        "format": CompileResult.model_json_schema(),     # constrain output to our schema
+        "stream": False,
+        "options": {"temperature": 0},
+    })
+    r.raise_for_status()
+    content = r.json().get("message", {}).get("content", "")
+    return _to_result(content, "Try rephrasing more specifically, or use a larger Ollama model.")
+
+
+def _parse_nl_openai(nl_text) -> CompileResult:
+    """Compile via any OpenAI-compatible chat endpoint (Groq / Gemini / OpenRouter free tiers)
+    using json_schema structured outputs. Free-tier accounts run large, reliable models."""
+    import requests
+
+    from portfolio.config import settings
+    r = requests.post(f"{settings.openai_base_url.rstrip('/')}/chat/completions", timeout=120,
+                      headers={"Authorization": f"Bearer {settings.openai_api_key}"}, json={
+        "model": settings.openai_model,
+        "messages": [{"role": "system", "content": _COMPILE_SYSTEM},
+                     {"role": "user", "content": nl_text}],
+        "temperature": 0,
+        "response_format": {"type": "json_schema", "json_schema": {
+            "name": "compile_result", "schema": CompileResult.model_json_schema(), "strict": True}},
+    })
+    r.raise_for_status()
+    content = r.json()["choices"][0]["message"]["content"]
+    return _to_result(content, "Try rephrasing more specifically.")
+
+
+def _to_result(content, hint) -> CompileResult:
+    """Validate a model's JSON into CompileResult; unusable output degrades to unmappable so the
+    UI shows an ask-back rather than 500ing (the human verifies the preview before confirming)."""
+    try:
+        return CompileResult.model_validate_json(content)
+    except ValueError:                                   # incl. pydantic ValidationError
+        return CompileResult(result=_Unmappable(
+            status="unmappable", reason="the model returned an unusable result",
+            clarifying_question=hint))
 
 
 def preview_matches(conditions, session=None, limit=200):
