@@ -326,6 +326,64 @@ class TestCompilePreview(unittest.TestCase):
         self.assertEqual(out["clarifying_question"], "Grab rides or Grab food?")
         self.assertNotIn("conditions", out)
 
+    def test_ollama_parse_schema_constrained_and_parsed(self):
+        import requests
+        orig, cap = requests.post, {}
+
+        class FakeResp:
+            def raise_for_status(self): pass
+            def json(self):
+                ok = classify.CompileResult(result=_Compiled(status="ok", conditions=[
+                    _TextCond(field="merchant", operator="contains", value="grab")]))
+                return {"message": {"content": ok.model_dump_json()}}
+
+        requests.post = lambda url, **kw: (cap.update(url=url, body=kw.get("json")), FakeResp())[1]
+        try:
+            res = classify._parse_nl_ollama("grab rides")
+            self.assertEqual(res.result.status, "ok")
+            self.assertIn("/api/chat", cap["url"])
+            self.assertIn("format", cap["body"])          # schema-constrained request
+            self.assertEqual(cap["body"]["stream"], False)
+        finally:
+            requests.post = orig
+
+    def test_ollama_unusable_output_degrades_to_unmappable(self):
+        import requests
+        orig = requests.post
+
+        class FakeResp:
+            def raise_for_status(self): pass
+            def json(self): return {"message": {"content": "not json at all"}}
+
+        requests.post = lambda url, **kw: FakeResp()
+        try:
+            self.assertEqual(classify._parse_nl_ollama("x").result.status, "unmappable")
+        finally:
+            requests.post = orig
+
+    def test_openai_compatible_parse(self):
+        import requests
+        from portfolio.config import settings
+        orig, cap = requests.post, {}
+        settings.openai_base_url = "https://api.groq.com/openai/v1"
+
+        class FakeResp:
+            def raise_for_status(self): pass
+            def json(self):
+                ok = classify.CompileResult(result=_Compiled(status="ok", conditions=[
+                    _TextCond(field="merchant", operator="contains", value="grab")]))
+                return {"choices": [{"message": {"content": ok.model_dump_json()}}]}
+
+        requests.post = lambda url, **kw: (cap.update(url=url, body=kw.get("json")), FakeResp())[1]
+        try:
+            res = classify._parse_nl_openai("grab rides")
+            self.assertEqual(res.result.status, "ok")
+            self.assertTrue(cap["url"].endswith("/chat/completions"))
+            self.assertEqual(cap["body"]["response_format"]["type"], "json_object")
+        finally:
+            requests.post = orig
+            settings.openai_base_url = ""
+
     def test_compile_preview_degrades_malformed_parse_to_unmappable(self):
         # model returns a money 'between' with no bounds -> our validation rejects it,
         # surfaced as ask-back rather than a 500

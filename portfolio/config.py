@@ -32,6 +32,20 @@ class Settings(BaseSettings):
     # narrow, closed extraction task — research #4 deliberately picks Haiku over the Opus
     # default; override via env if compound sentences need Sonnet.
     classify_model: str = "claude-haiku-4-5"
+    # provider for the NL->predicate compile. "" = auto: Anthropic when a key is set, else the
+    # local Ollama server (free + offline). Force with CLASSIFY_PROVIDER=anthropic|ollama|openai.
+    # "openai" targets any OpenAI-compatible endpoint (Groq / Gemini / OpenRouter free tiers).
+    classify_provider: str = ""
+    ollama_host: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2"
+    # OpenAI-compatible provider (e.g. Groq: base https://api.groq.com/openai/v1)
+    openai_base_url: str = ""
+    openai_api_key: str = ""
+    openai_model: str = ""
+
+    @property
+    def classify_provider_active(self) -> str:
+        return self.classify_provider or ("anthropic" if self.anthropic_api_key else "ollama")
 
     @property
     def auth_bypass_active(self) -> bool:
