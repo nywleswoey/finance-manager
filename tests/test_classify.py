@@ -19,6 +19,7 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from portfolio import classify
+from portfolio.classify import _Compiled, _MoneyCond, _TextCond, _Unmappable
 from portfolio.models import Base, CashTxn, ClassificationRule, SpendCategory
 
 
@@ -277,6 +278,62 @@ class TestCreateRule(unittest.TestCase):
         with self.assertRaises(ValueError):
             classify.create_rule("x", [], "Transport", "Other Transport", session=s)
         self.assertEqual(s.scalars(select(ClassificationRule)).all(), [])
+
+
+# ---------------- NL compile + preview (LLM boundary stubbed) ----------------
+class TestCompilePreview(unittest.TestCase):
+    def setUp(self):
+        self._orig_parse = classify._parse_nl
+
+    def tearDown(self):
+        classify._parse_nl = self._orig_parse            # restore the network boundary
+
+    def _stub(self, result_obj):
+        # replace the network boundary with a fixed CompileResult (no API call)
+        classify._parse_nl = lambda nl_text: classify.CompileResult(result=result_obj)
+
+    def test_preview_matches_only_unclassified_spend(self):
+        s = make_session()
+        _spend(s, "h1", merchant="GRAB RIDE")
+        _spend(s, "h2", merchant="COMFORT")                       # not matched
+        _spend(s, "h3", merchant="GRAB EATS", is_spend=False)     # excluded (not is_spend)
+        m = classify.preview_matches([cond("merchant", "contains", value="grab")], session=s)
+        self.assertEqual([r["merchant"] for r in m], ["GRAB RIDE"])
+
+    def test_compile_result_schema_roundtrips_ok(self):
+        # a well-formed 'ok' result parses through the pydantic union
+        r = classify.CompileResult(result={
+            "status": "ok",
+            "conditions": [{"field": "amount_sgd", "operator": "<", "value": 30}]})
+        self.assertEqual(r.result.status, "ok")
+        self.assertEqual(r.result.conditions[0].value, 30)
+
+    def test_compile_preview_ok_returns_conditions_and_matches(self):
+        s = make_session()
+        _spend(s, "h1", merchant="GRAB", amount_sgd=Decimal("-12"))
+        self._stub(_Compiled(status="ok", conditions=[
+            _TextCond(field="merchant", operator="contains", value="grab")]))
+        out = classify.compile_preview("grab rides", session=s)
+        self.assertEqual(out["status"], "ok")
+        self.assertEqual(out["conditions"], [{"field": "merchant", "operator": "contains", "value": "grab"}])
+        self.assertEqual(len(out["matches"]), 1)
+
+    def test_compile_preview_unmappable_passes_through(self):
+        self._stub(_Unmappable(status="unmappable", reason="which grab?",
+                               clarifying_question="Grab rides or Grab food?"))
+        out = classify.compile_preview("grab", session=make_session())
+        self.assertEqual(out["status"], "unmappable")
+        self.assertEqual(out["clarifying_question"], "Grab rides or Grab food?")
+        self.assertNotIn("conditions", out)
+
+    def test_compile_preview_degrades_malformed_parse_to_unmappable(self):
+        # model returns a money 'between' with no bounds -> our validation rejects it,
+        # surfaced as ask-back rather than a 500
+        self._stub(_Compiled(status="ok", conditions=[
+            _MoneyCond(field="amount_sgd", operator="between")]))
+        out = classify.compile_preview("around thirty dollars", session=make_session())
+        self.assertEqual(out["status"], "unmappable")
+        self.assertIn("clarifying_question", out)
 
 
 # ---------------- apply_all (re-sweep wrapper; backs import auto-apply + endpoint) ----------------

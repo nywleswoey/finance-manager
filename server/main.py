@@ -550,6 +550,18 @@ def classify_rule_create(body: RuleCreateIn):
         raise HTTPException(400, str(e))                        # bad conditions / unknown pair
 
 
+class CompilePreviewIn(BaseModel):
+    nl_text: str = Field(min_length=1, max_length=500)         # SECURITY-05
+
+
+@app.post("/api/spending/classify/compile-preview")
+def classify_compile_preview(body: CompilePreviewIn):
+    """NL rule text -> compiled conditions + affected unclassified rows, or an unmappable
+    ask-back. Stateless: nothing is persisted; the confirm step re-sends the conditions."""
+    from portfolio.classify import compile_preview
+    return compile_preview(body.nl_text.strip())
+
+
 @app.post("/api/spending/classify/apply")
 def classify_apply():
     """Re-sweep every unclassified spend with the stored active rules (on-demand from the

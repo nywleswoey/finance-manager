@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     cookie_secure: bool = True           # set false for local http dev
     dev_auth_bypass: bool = False        # skip Google auth — LOCAL dev only (see auth_bypass_active)
 
+    # --- spend classification: NL->predicate compile (server-side, once per rule) ---
+    anthropic_api_key: str = ""          # server-held; never reaches the browser
+    # narrow, closed extraction task — research #4 deliberately picks Haiku over the Opus
+    # default; override via env if compound sentences need Sonnet.
+    classify_model: str = "claude-haiku-4-5"
+
     @property
     def auth_bypass_active(self) -> bool:
         """Whether the auth gate should be bypassed (treat every request as a dev user).

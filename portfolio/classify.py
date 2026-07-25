@@ -11,7 +11,9 @@ Amount convention: cash_txn.amount_sgd is SIGNED (spend negative). Predicate amo
 are POSITIVE MAGNITUDE and matched against -amount_sgd, so "under $30" means magnitude < 30.
 """
 import datetime as dt
+from typing import Literal, Union
 
+from pydantic import BaseModel
 from sqlalchemy import select
 
 from portfolio.db import session_scope
@@ -187,6 +189,121 @@ def list_rules(session=None):
             "created_at": r.created_at.isoformat() if r.created_at else None,
             "updated_at": r.updated_at.isoformat() if r.updated_at else None,
         } for r in rules]
+
+
+# ---------------- NL -> predicate compile (server-side, once per rule) ----------------
+# Structured-outputs schema (research #4): the model returns an anyOf between compiled
+# conditions and an `unmappable` outcome — ambiguity is a schema-level result, not a parse.
+# Conditions only; the human assigns the target (category, subcategory) in the modal after
+# verifying the parse against the preview.
+class _TextCond(BaseModel):
+    field: Literal["merchant", "description"]
+    operator: Literal["contains", "equals"]
+    value: str
+
+
+class _MoneyCond(BaseModel):
+    field: Literal["amount_sgd"]
+    operator: Literal["<", "<=", ">", ">=", "between"]
+    value: float | None = None                          # for </<=/>/>=
+    value_min: float | None = None                      # for between
+    value_max: float | None = None
+
+
+class _EnumCond(BaseModel):
+    field: Literal["source", "account_label"]
+    operator: Literal["equals", "in"]
+    value: str | None = None                            # for equals
+    values: list[str] | None = None                     # for in
+
+
+class _Compiled(BaseModel):
+    status: Literal["ok"]
+    conditions: list[Union[_TextCond, _MoneyCond, _EnumCond]]   # ANDed
+
+
+class _Unmappable(BaseModel):
+    status: Literal["unmappable"]
+    reason: str                                         # short, user-facing
+    clarifying_question: str                            # what to ask instead of guessing
+
+
+class CompileResult(BaseModel):
+    result: Union[_Compiled, _Unmappable]
+
+
+_COMPILE_SYSTEM = (
+    "You translate one sentence describing a spend-classification rule into a predicate over "
+    "transaction fields: merchant, description, amount_sgd, source, account_label. Conditions "
+    "are ANDed. Only use fields, operators, and values the sentence actually supports — never "
+    "invent a condition. Text operators (contains, equals) apply to merchant/description and "
+    "are matched case-insensitively. amount_sgd conditions are evaluated against the POSITIVE "
+    "SPEND MAGNITUDE (e.g. \"under $30\" means magnitude < 30), so always express amounts as "
+    "positive numbers. Enum operators (equals, in) apply to source/account_label. If the "
+    "sentence does not clearly map to these fields/operators (ambiguous merchant, unclear "
+    "amount, unsupported comparison), return status=\"unmappable\" with a specific "
+    "clarifying_question instead of guessing."
+)
+
+
+def _parse_nl(nl_text) -> CompileResult:
+    """The network boundary: compile NL -> CompileResult via Claude structured outputs.
+    Isolated so tests can stub it without hitting the API. Runs server-side; the key never
+    leaves the process (research #4)."""
+    import anthropic
+
+    from portfolio.config import settings
+    client = anthropic.Anthropic(api_key=settings.anthropic_api_key or None)
+    resp = client.messages.parse(
+        model=settings.classify_model,
+        max_tokens=1024,
+        system=_COMPILE_SYSTEM,
+        messages=[{"role": "user", "content": nl_text}],
+        output_format=CompileResult,
+    )
+    return resp.parsed_output
+
+
+def preview_matches(conditions, session=None, limit=200):
+    """Currently-unclassified is_spend rows the given conditions would match — the affected-rows
+    preview. Stateless; the same matcher apply_rules uses, so preview == what a create will do."""
+    preds = {"conditions": list(conditions)}
+    with session_scope(session) as s:
+        rows = s.scalars(select(CashTxn).where(
+            CashTxn.is_spend.is_(True),
+            CashTxn.category.is_(None),
+            CashTxn.classification_source.is_(None))).all()
+        out = []
+        for r in rows:
+            if matches(preds, r):
+                out.append({
+                    "id": r.id,
+                    "txn_date": r.txn_date.isoformat() if r.txn_date else None,
+                    "merchant": r.merchant,
+                    "description": r.description,
+                    "amount_sgd": float(r.amount_sgd) if r.amount_sgd is not None else None,
+                })
+                if len(out) >= limit:
+                    break
+        return out
+
+
+def compile_preview(nl_text, session=None):
+    """Compile a NL rule and preview what it would claim — stateless, persists nothing. Returns
+    {status:"ok", conditions[], matches[]} or {status:"unmappable", reason, clarifying_question}.
+    A parse that violates our own predicate rules degrades to unmappable rather than 500ing."""
+    result = _parse_nl(nl_text).result
+    if result.status == "unmappable":
+        return {"status": "unmappable", "reason": result.reason,
+                "clarifying_question": result.clarifying_question}
+    conditions = [c.model_dump(exclude_none=True) for c in result.conditions]
+    try:
+        validate_conditions(conditions)
+    except ValueError as e:
+        return {"status": "unmappable", "reason": str(e),
+                "clarifying_question": "Could you describe the rule more specifically?"}
+    return {"status": "ok", "conditions": conditions,
+            "matches": preview_matches(conditions, session)}
 
 
 def apply_all(session=None):
