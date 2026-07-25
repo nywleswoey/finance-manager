@@ -446,8 +446,9 @@ class CompileResult(BaseModel):
 _COMPILE_SYSTEM = (
     "Translate one sentence describing a spend-classification rule into ANDed conditions over "
     "these transaction fields:\n"
-    "- merchant, description: text. operators contains | equals (matched case-insensitively — "
-    "just output the value the user gave, lowercase or not).\n"
+    "- merchant, description: text. operators contains | equals (matched case-insensitively). "
+    "For `contains`, use the SHORTEST distinctive keyword — the brand/merchant name only, not the "
+    "surrounding words (e.g. \"Grab rides\" -> value \"grab\"; \"trips on SMRT\" -> value \"smrt\").\n"
     "- amount_sgd: money. operators < | <= | > | >= | between. Output the amount as a plain "
     "POSITIVE number (write \"under $30\" as {\"field\":\"amount_sgd\",\"operator\":\"<\","
     "\"value\":30}).\n"
