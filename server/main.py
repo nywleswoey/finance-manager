@@ -8,6 +8,7 @@ requires a valid session cookie (deny-by-default gate below). See server/auth.py
 import logging
 import os
 import sys
+from http import cookiejar
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import requests
@@ -716,6 +717,18 @@ _PH_ASSETS = _PH_INGEST.replace(".i.posthog.com", "-assets.i.posthog.com")
 _PH_KEEP_HEADERS = {"content-type", "cache-control", "etag", "vary"}
 # reused across invocations for connection pooling — posthog-js fires several calls per page
 _ph_session = requests.Session()
+
+
+class _BlockAllCookies(cookiejar.DefaultCookiePolicy):
+    """Refuse to store or send any cookie. The pooled session is shared by every visitor, so a
+    live jar would replay one caller's PostHog cookies on behalf of all the others."""
+    def set_ok(self, cookie, request): return False
+    def return_ok(self, cookie, request): return False
+    def domain_return_ok(self, domain, request): return False
+    def path_return_ok(self, path, request): return False
+
+
+_ph_session.cookies.set_policy(_BlockAllCookies())
 
 
 @app.api_route("/ingest/{path:path}", methods=["GET", "POST"])
