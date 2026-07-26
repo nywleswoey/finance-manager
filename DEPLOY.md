@@ -43,9 +43,7 @@ Project → Settings → Environment Variables (Production + Preview):
 > `posthog.init()`, so the deploy ships with no analytics *and* no error tracking (uncaught
 > exceptions, unhandled promise rejections, React render errors). `VITE_*` vars are baked into
 > the bundle at build time — adding them takes effect on the next deploy, not on the running
-> one. No CSP change is needed: the SPA posts to the same-origin `/ingest` reverse proxy
-> (`server/main.py`), which `connect-src 'self'` / `script-src 'self'` already cover — see
-> [Security ops → Headers](#security-ops).
+> one. No CSP change is needed — see [Security ops](#security-ops) for why.
 
 > **`SPENDING_EMAILS` fails closed.** Omit it and the Spending section disappears for everyone —
 > the nav item is hidden and `/api/spending/*` returns 403, including for accounts in
@@ -105,8 +103,9 @@ auth work — the endpoint is auth-protected either way.
 - **Dependency scan (SECURITY-10)**: `uv pip install pip-audit && pip-audit -r requirements.txt`
   before each deploy. Lock files (`uv.lock`, pinned `requirements.txt`) are committed.
 - **Local dev**: copy `.env.example` → `.env` (`COOKIE_SECURE=false` for http), and
-  `web/.env.example` → `web/.env.local`. Run API (`uvicorn api.main:app --port 8000`) +
-  `npm run dev` (Vite proxies `/api` → 8000, same-origin cookie works).
+  `web/.env.example` → `web/.env.local`. Run API (`make api`, i.e. `uvicorn server.main:app
+  --port 8000`) + `npm run dev` (Vite proxies `/api` **and** `/ingest` → 8000, so the
+  same-origin cookie works and PostHog traffic takes the same proxy path as production).
 - **Headers**: HTTP security headers (CSP/HSTS/X-Content-Type-Options/X-Frame-Options/
   Referrer-Policy) are set by the FastAPI middleware in `server/main.py`, which serves both
   the API and the static SPA. CSP allows `accounts.google.com` for Google Identity Services
@@ -118,3 +117,7 @@ auth work — the endpoint is auth-protected either way.
   bundles). Because the traffic is first-party, the strict `connect-src 'self'` /
   `script-src 'self'` already cover it — no PostHog origin is added to the CSP. If you ever
   switch back to hitting PostHog directly, you must instead allow the host in `connect-src`.
+  `/ingest` is deliberately **unauthenticated** — it sits outside `/api/`, so the
+  deny-by-default gate lets it through; analytics and error events fire before sign-in. It
+  forwards only to `POSTHOG_HOST`, never follows upstream redirects, and re-emits no
+  `Set-Cookie`/`Access-Control-*`/`Location` headers.
