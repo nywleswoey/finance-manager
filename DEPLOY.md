@@ -36,13 +36,15 @@ Project → Settings → Environment Variables (Production + Preview):
 | `COOKIE_SECURE` | `true` |
 | `DATABASE_URL` | the `sslmode=require` Postgres URL |
 | `VITE_PUBLIC_POSTHOG_KEY` | PostHog project API key (`phc_…`) |
-| `VITE_PUBLIC_POSTHOG_HOST` | PostHog ingestion host, e.g. `https://us.i.posthog.com` |
+| `VITE_PUBLIC_POSTHOG_HOST` | PostHog host, e.g. `https://us.i.posthog.com` — used as `ui_host` (toolbar links) and to gate `posthog.init()`; events go through the same-origin `/ingest` proxy, not here |
+| `POSTHOG_HOST` | Server-side upstream the `/ingest` proxy forwards to — same region host as above (`https://us.i.posthog.com`). Defaults to that if unset |
 
-> **PostHog is all-or-nothing and build-time.** Missing either var skips `posthog.init()`, so
-> the deploy ships with no analytics *and* no error tracking (uncaught exceptions, unhandled
-> promise rejections, React render errors). `VITE_*` vars are baked into the bundle at build
-> time — adding them takes effect on the next deploy, not on the running one. Setting the vars
-> is not sufficient: the same host must also be allowed in the CSP `connect-src` — see
+> **PostHog is all-or-nothing and build-time.** Missing either `VITE_*` var skips
+> `posthog.init()`, so the deploy ships with no analytics *and* no error tracking (uncaught
+> exceptions, unhandled promise rejections, React render errors). `VITE_*` vars are baked into
+> the bundle at build time — adding them takes effect on the next deploy, not on the running
+> one. No CSP change is needed: the SPA posts to the same-origin `/ingest` reverse proxy
+> (`server/main.py`), which `connect-src 'self'` / `script-src 'self'` already cover — see
 > [Security ops → Headers](#security-ops).
 
 > **`SPENDING_EMAILS` fails closed.** Omit it and the Spending section disappears for everyone —
@@ -110,8 +112,9 @@ auth work — the endpoint is auth-protected either way.
   the API and the static SPA. CSP allows `accounts.google.com` for Google Identity Services
   (which ships no SRI hash — origin pin instead) and inline styles for React/GIS;
   `script-src` stays strict.
-- **PostHog needs a CSP allowance (required deploy step)**: `connect-src` in `_CSP`
-  (`server/main.py`) currently lists only `'self' https://accounts.google.com`. Add the
-  `VITE_PUBLIC_POSTHOG_HOST` origin (e.g. `https://us.i.posthog.com`) to `connect-src`, or
-  proxy PostHog same-origin — otherwise the browser blocks every request to it and both
-  product analytics *and* error tracking silently send nothing in production.
+- **PostHog is proxied same-origin (no CSP host needed)**: posthog-js posts to `/ingest`
+  (same origin), which the FastAPI reverse proxy in `server/main.py` forwards to `POSTHOG_HOST`
+  (ingestion) and its `*-assets` host (the lazily-loaded exception-autocapture/recorder
+  bundles). Because the traffic is first-party, the strict `connect-src 'self'` /
+  `script-src 'self'` already cover it — no PostHog origin is added to the CSP. If you ever
+  switch back to hitting PostHog directly, you must instead allow the host in `connect-src`.

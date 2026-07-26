@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     spending_emails: str = ""            # comma-separated; empty => nobody (fail closed)
     allowed_origins: str = "http://localhost:5173,http://localhost:8000"  # CORS
     cookie_secure: bool = True           # set false for local http dev
+    # PostHog ingestion host the /ingest reverse proxy forwards to (server/main.py). The SPA
+    # posts analytics + error events same-origin, so this keeps them off the CSP allow-list.
+    # Match the region of the frontend's VITE_PUBLIC_POSTHOG_HOST.
+    posthog_host: str = "https://us.i.posthog.com"
     dev_auth_bypass: bool = False        # skip Google auth — LOCAL dev only (see auth_bypass_active)
 
     # --- spend classification: NL->predicate compile (server-side, once per rule) ---

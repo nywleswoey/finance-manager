@@ -10,11 +10,13 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from fastapi import FastAPI, Query, Request
+import requests
+from fastapi import FastAPI, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
+from starlette.concurrency import run_in_threadpool
 
 from portfolio.config import settings
 
@@ -694,6 +696,39 @@ def classify_rule_delete(rule_id: int):
         raise HTTPException(409, str(e))                        # has classified spends
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
+# ---------------- PostHog same-origin reverse proxy ----------------
+# posthog-js posts analytics + error-tracking traffic to same-origin "/ingest" instead of the
+# PostHog cloud host, so it is covered by the strict CSP's `connect-src 'self'` /
+# `script-src 'self'` with no third-party origin to allow-list. Ingestion calls go to
+# POSTHOG_HOST; the lazily-loaded JS bundles under /static/ (exception-autocapture, surveys,
+# recorder) go to the matching *-assets host, mirroring PostHog's own proxy guidance.
+# Public by design: /ingest isn't under /api/, so the deny-by-default auth gate lets it through
+# (analytics/error events fire before and without a session).
+_PH_INGEST = settings.posthog_host.rstrip("/")
+_PH_ASSETS = _PH_INGEST.replace(".i.posthog.com", "-assets.i.posthog.com")
+# recomputed by requests/Starlette for the decoded body — copying upstream's would corrupt it
+_PH_DROP_HEADERS = {"content-encoding", "content-length", "transfer-encoding", "connection"}
+
+
+@app.api_route("/ingest/{path:path}", methods=["GET", "POST"])
+async def posthog_proxy(path: str, request: Request):
+    upstream = _PH_ASSETS if path.startswith("static/") else _PH_INGEST
+    body = await request.body()
+    headers = {}
+    if ct := request.headers.get("content-type"):
+        headers["Content-Type"] = ct
+    # preserve the caller's IP so PostHog geoip still resolves through the proxy
+    xff = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")
+    if xff:
+        headers["X-Forwarded-For"] = xff
+    r = await run_in_threadpool(
+        lambda: requests.request(request.method, f"{upstream}/{path}",
+                                 params=request.url.query, data=body or None,
+                                 headers=headers, timeout=10))
+    out = {k: v for k, v in r.headers.items() if k.lower() not in _PH_DROP_HEADERS}
+    return Response(content=r.content, status_code=r.status_code, headers=out)
 
 
 # serve the built frontend (web/dist) if present
