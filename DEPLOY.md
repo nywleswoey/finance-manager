@@ -35,6 +35,13 @@ Project → Settings → Environment Variables (Production + Preview):
 | `ALLOWED_ORIGINS` | `https://<your-app>.vercel.app` |
 | `COOKIE_SECURE` | `true` |
 | `DATABASE_URL` | the `sslmode=require` Postgres URL |
+| `VITE_PUBLIC_POSTHOG_KEY` | PostHog project API key (`phc_…`) |
+| `VITE_PUBLIC_POSTHOG_HOST` | PostHog ingestion host, e.g. `https://us.i.posthog.com` |
+
+> **PostHog is all-or-nothing and build-time.** Missing either var skips `posthog.init()`, so
+> the deploy ships with no analytics *and* no error tracking (uncaught exceptions, unhandled
+> promise rejections, React render errors). `VITE_*` vars are baked into the bundle at build
+> time — adding them takes effect on the next deploy, not on the running one.
 
 > **`SPENDING_EMAILS` fails closed.** Omit it and the Spending section disappears for everyone —
 > the nav item is hidden and `/api/spending/*` returns 403, including for accounts in
