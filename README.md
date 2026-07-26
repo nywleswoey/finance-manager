@@ -80,7 +80,8 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
 | `migrations/` | Alembic schema |
 | `scripts/seed.py` | reference-data seed |
 | `scripts/snapshot_from_statements.py` | net-worth snapshot from statements (`--all-new` delta) |
-| `api/` | FastAPI |
+| `server/` | FastAPI app (`main.py`) — serves `/api/*` and the built SPA |
+| `api/index.py` | Vercel entrypoint — re-exports `server.main:app` |
 | `web/` | React (Vite) app |
 
 ## Status
