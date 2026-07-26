@@ -38,7 +38,8 @@ if settings.auth_bypass_active:
 # under /api/ is denied by default by the gate middleware (SECURITY-08).
 _PUBLIC_PATHS = {"/api/auth/google", "/api/auth/me", "/api/auth/logout", "/api/health"}
 
-# HTML security headers, also set on static responses via vercel.json for prod.
+# HTML security headers for both the API and the static SPA — this middleware is the only
+# place they are set (there is no vercel.json).
 # script-src stays strict (no unsafe-inline) — the XSS-relevant directive. style-src
 # allows inline because React inline styles + the Google button need it (documented
 # exception, SECURITY-04). accounts.google.com is allowed for Google Identity Services

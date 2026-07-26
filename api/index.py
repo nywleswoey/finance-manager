@@ -1,5 +1,6 @@
 """Vercel serverless entrypoint. Vercel's @vercel/python runtime serves the ASGI
-`app` exported here; vercel.json routes all /api/* requests to this function."""
+`app` exported here; framework detection finds this file (there is no vercel.json)
+and every request — /api/* and the static SPA alike — goes through this function."""
 import os
 import sys
 

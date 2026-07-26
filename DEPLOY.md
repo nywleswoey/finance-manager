@@ -41,7 +41,9 @@ Project → Settings → Environment Variables (Production + Preview):
 > **PostHog is all-or-nothing and build-time.** Missing either var skips `posthog.init()`, so
 > the deploy ships with no analytics *and* no error tracking (uncaught exceptions, unhandled
 > promise rejections, React render errors). `VITE_*` vars are baked into the bundle at build
-> time — adding them takes effect on the next deploy, not on the running one.
+> time — adding them takes effect on the next deploy, not on the running one. Setting the vars
+> is not sufficient: the same host must also be allowed in the CSP `connect-src` — see
+> [Security ops → Headers](#security-ops).
 
 > **`SPENDING_EMAILS` fails closed.** Omit it and the Spending section disappears for everyone —
 > the nav item is hidden and `/api/spending/*` returns 403, including for accounts in
@@ -104,6 +106,12 @@ auth work — the endpoint is auth-protected either way.
   `web/.env.example` → `web/.env.local`. Run API (`uvicorn api.main:app --port 8000`) +
   `npm run dev` (Vite proxies `/api` → 8000, same-origin cookie works).
 - **Headers**: HTTP security headers (CSP/HSTS/X-Content-Type-Options/X-Frame-Options/
-  Referrer-Policy) are set by FastAPI middleware (API) and `vercel.json` (static HTML).
-  CSP allows `accounts.google.com` for Google Identity Services (which ships no SRI hash —
-  origin pin instead) and inline styles for React/GIS; `script-src` stays strict.
+  Referrer-Policy) are set by the FastAPI middleware in `server/main.py`, which serves both
+  the API and the static SPA. CSP allows `accounts.google.com` for Google Identity Services
+  (which ships no SRI hash — origin pin instead) and inline styles for React/GIS;
+  `script-src` stays strict.
+- **PostHog needs a CSP allowance (required deploy step)**: `connect-src` in `_CSP`
+  (`server/main.py`) currently lists only `'self' https://accounts.google.com`. Add the
+  `VITE_PUBLIC_POSTHOG_HOST` origin (e.g. `https://us.i.posthog.com`) to `connect-src`, or
+  proxy PostHog same-origin — otherwise the browser blocks every request to it and both
+  product analytics *and* error tracking silently send nothing in production.
