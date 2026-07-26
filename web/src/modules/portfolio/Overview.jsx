@@ -12,7 +12,7 @@ export default function Overview() {
   useEffect(() => { get("/api/return").then(setRet).catch(() => setRet({})); }, []);
   useEffect(() => { get("/api/options").then(setOpt).catch(() => setOpt({})); }, []);
   if (!d) return <div className="loading">Loading…</div>;
-  if (d.error) return <div className="loading">API not reachable. Start: uvicorn api.main:app</div>;
+  if (d.error) return <div className="loading">API not reachable. Start: uvicorn server.main:app</div>;
 
   const pie = (obj) => Object.entries(obj).map(([k, v]) => ({ name: k, value: v.mv_sgd }));
   const mkt = pie(d.by_market), acct = pie(d.by_account).filter((x) => x.value > 0);

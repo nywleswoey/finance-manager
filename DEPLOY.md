@@ -35,6 +35,15 @@ Project → Settings → Environment Variables (Production + Preview):
 | `ALLOWED_ORIGINS` | `https://<your-app>.vercel.app` |
 | `COOKIE_SECURE` | `true` |
 | `DATABASE_URL` | the `sslmode=require` Postgres URL |
+| `VITE_PUBLIC_POSTHOG_KEY` | PostHog project API key (`phc_…`) |
+| `VITE_PUBLIC_POSTHOG_HOST` | PostHog host, e.g. `https://us.i.posthog.com` — used as `ui_host` (toolbar links) and to gate `posthog.init()`; events go through the same-origin `/ingest` proxy, not here |
+| `POSTHOG_HOST` | Server-side upstream the `/ingest` proxy forwards to — same region host as above (`https://us.i.posthog.com`). Defaults to that if unset. Must be a `*.i.posthog.com` region host: the proxy derives the assets host from it, so a custom/self-hosted value logs a startup warning and leaves the lazily-loaded bundles (exception autocapture, surveys, recorder) 404ing — error tracking silently off |
+
+> **PostHog is all-or-nothing and build-time.** Missing either `VITE_*` var skips
+> `posthog.init()`, so the deploy ships with no analytics *and* no error tracking (uncaught
+> exceptions, unhandled promise rejections, React render errors). `VITE_*` vars are baked into
+> the bundle at build time — adding them takes effect on the next deploy, not on the running
+> one. No CSP change is needed — see [Security ops](#security-ops) for why.
 
 > **`SPENDING_EMAILS` fails closed.** Omit it and the Spending section disappears for everyone —
 > the nav item is hidden and `/api/spending/*` returns 403, including for accounts in
@@ -94,9 +103,21 @@ auth work — the endpoint is auth-protected either way.
 - **Dependency scan (SECURITY-10)**: `uv pip install pip-audit && pip-audit -r requirements.txt`
   before each deploy. Lock files (`uv.lock`, pinned `requirements.txt`) are committed.
 - **Local dev**: copy `.env.example` → `.env` (`COOKIE_SECURE=false` for http), and
-  `web/.env.example` → `web/.env.local`. Run API (`uvicorn api.main:app --port 8000`) +
-  `npm run dev` (Vite proxies `/api` → 8000, same-origin cookie works).
+  `web/.env.example` → `web/.env.local`. Run API (`make api`, i.e. `uvicorn server.main:app
+  --port 8000`) + `npm run dev` (Vite proxies `/api` **and** `/ingest` → 8000, so the
+  same-origin cookie works and PostHog traffic takes the same proxy path as production).
 - **Headers**: HTTP security headers (CSP/HSTS/X-Content-Type-Options/X-Frame-Options/
-  Referrer-Policy) are set by FastAPI middleware (API) and `vercel.json` (static HTML).
-  CSP allows `accounts.google.com` for Google Identity Services (which ships no SRI hash —
-  origin pin instead) and inline styles for React/GIS; `script-src` stays strict.
+  Referrer-Policy) are set by the FastAPI middleware in `server/main.py`, which serves both
+  the API and the static SPA. CSP allows `accounts.google.com` for Google Identity Services
+  (which ships no SRI hash — origin pin instead) and inline styles for React/GIS;
+  `script-src` stays strict.
+- **PostHog is proxied same-origin (no CSP host needed)**: posthog-js posts to `/ingest`
+  (same origin), which the FastAPI reverse proxy in `server/main.py` forwards to `POSTHOG_HOST`
+  (ingestion) and its `*-assets` host (the lazily-loaded exception-autocapture/recorder
+  bundles). Because the traffic is first-party, the strict `connect-src 'self'` /
+  `script-src 'self'` already cover it — no PostHog origin is added to the CSP. If you ever
+  switch back to hitting PostHog directly, you must instead allow the host in `connect-src`.
+  `/ingest` is deliberately **unauthenticated** — it sits outside `/api/`, so the
+  deny-by-default gate lets it through; analytics and error events fire before sign-in. It
+  forwards only to `POSTHOG_HOST`, never follows upstream redirects, and re-emits no
+  `Set-Cookie`/`Access-Control-*`/`Location` headers.

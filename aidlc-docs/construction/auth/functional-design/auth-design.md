@@ -34,9 +34,9 @@ Browser                         Vercel /api (FastAPI)               Google
 ## Backend components
 | File | Role |
 |---|---|
-| `api/auth.py` (new) | auth config, Google verify, session mint/verify, `require_user` dep, router, auth-event logging |
-| `api/main.py` (edit) | lock CORS, security-headers mw, deny-by-default auth gate mw, include auth router, generic errors |
-| `api/index.py` (new) | Vercel ASGI entry: `from api.main import app` |
+| `server/auth.py` (new) | auth config, Google verify, session mint/verify, `require_user` dep, router, auth-event logging |
+| `server/main.py` (edit) | lock CORS, security-headers mw, deny-by-default auth gate mw, include auth router, generic errors |
+| `api/index.py` (new) | Vercel ASGI entry: `from server.main import app` |
 
 ### Routes
 - `POST /api/auth/google` — body `{credential: str}` (max-len bound). Verify → set cookie → return `{email,name}`. **Public** (login entry). Rate-limited.
@@ -68,7 +68,7 @@ Browser                         Vercel /api (FastAPI)               Google
 | `DATABASE_URL` | api | managed Postgres, TLS (`sslmode=require`) |
 
 ## Deploy artifacts
-- `vercel.json` — build SPA (`web/`) + python fn (`api/index.py`); route `/api/*`→fn, else SPA fallback.
+- No `vercel.json` — Vercel framework detection picks up `api/index.py` (re-exports `server.main:app`) as the single Python fn; the `[tool.vercel.scripts]` build hook in `pyproject.toml` builds the SPA into `web/dist`, which FastAPI serves same-origin (all routes, `/api/*` and SPA alike, go through the fn).
 - `requirements.txt` — pinned: sqlalchemy, psycopg[binary], fastapi, pydantic-settings, python-dotenv, **google-auth, PyJWT**.
 - Postgres → Neon/Vercel Postgres (TLS + encryption at rest). Set `DATABASE_URL`.
 - Price refresh: blocking external fetch → timeout risk on serverless. Keep endpoint (auth-protected) + document Vercel Cron + `maxDuration`. Out of auth scope.

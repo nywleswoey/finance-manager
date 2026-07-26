@@ -32,7 +32,7 @@ PYTHONPATH=. .venv/bin/python scripts/seed_networth.py
 # tests
 PYTHONPATH=. .venv/bin/python tests/test_networth.py
 # api + web
-PYTHONPATH=. .venv/bin/uvicorn api.main:app --reload --port 8000
+PYTHONPATH=. .venv/bin/uvicorn server.main:app --reload --port 8000
 cd web && npm run dev
 ```
 
