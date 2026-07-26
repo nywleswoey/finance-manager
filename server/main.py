@@ -708,8 +708,14 @@ def classify_rule_delete(rule_id: int):
 # (analytics/error events fire before and without a session).
 _PH_INGEST = settings.posthog_host.rstrip("/")
 _PH_ASSETS = _PH_INGEST.replace(".i.posthog.com", "-assets.i.posthog.com")
-# recomputed by requests/Starlette for the decoded body — copying upstream's would corrupt it
-_PH_DROP_HEADERS = {"content-encoding", "content-length", "transfer-encoding", "connection"}
+# Allow-list, not a deny-list: these are the only upstream response headers safe to re-emit
+# from our own origin. Notably excluded are Set-Cookie (a third party must not set cookies on
+# the session domain), Access-Control-* (would let any cross-origin page read /ingest/*),
+# Location (never redirect our origin to a PostHog-chosen URL) and the framing/length headers
+# that requests+Starlette recompute for the decoded body.
+_PH_KEEP_HEADERS = {"content-type", "cache-control", "etag", "vary"}
+# reused across invocations for connection pooling — posthog-js fires several calls per page
+_ph_session = requests.Session()
 
 
 @app.api_route("/ingest/{path:path}", methods=["GET", "POST"])
@@ -723,11 +729,17 @@ async def posthog_proxy(path: str, request: Request):
     xff = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")
     if xff:
         headers["X-Forwarded-For"] = xff
-    r = await run_in_threadpool(
-        lambda: requests.request(request.method, f"{upstream}/{path}",
-                                 params=request.url.query, data=body or None,
-                                 headers=headers, timeout=10))
-    out = {k: v for k, v in r.headers.items() if k.lower() not in _PH_DROP_HEADERS}
+    try:
+        # allow_redirects=False: an upstream 3xx must not make the server fetch a PostHog-chosen URL
+        r = await run_in_threadpool(
+            lambda: _ph_session.request(request.method, f"{upstream}/{path}",
+                                        params=request.url.query, data=body or None,
+                                        headers=headers, timeout=10, allow_redirects=False))
+    except requests.RequestException as e:
+        # best-effort analytics: a PostHog blip must not become an app 500 / error-level log
+        log.warning("posthog proxy upstream failed path=%s: %s", path, e)
+        return Response(status_code=502)
+    out = {k: v for k, v in r.headers.items() if k.lower() in _PH_KEEP_HEADERS}
     return Response(content=r.content, status_code=r.status_code, headers=out)
 
 

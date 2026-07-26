@@ -15,7 +15,14 @@ export default class ErrorBoundary extends React.Component {
   }
 
   componentDidCatch(error, info) {
-    posthog.captureException(error, { react_component_stack: info?.componentStack });
+    // posthog.init() is skipped when the VITE_PUBLIC_POSTHOG_* vars are absent (normal in
+    // local dev), so reporting is best-effort: never let it throw out of componentDidCatch,
+    // which would unmount the very fallback this boundary exists to show.
+    try {
+      posthog.captureException(error, { react_component_stack: info?.componentStack });
+    } catch {
+      // reporting is optional; the fallback UI is not
+    }
   }
 
   render() {
