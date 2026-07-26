@@ -7,7 +7,7 @@ Tests the API ↔ DB ↔ live-portfolio compute path end to end.
 docker compose up -d db
 PYTHONPATH=. .venv/bin/alembic upgrade head
 PYTHONPATH=. .venv/bin/python scripts/seed_networth.py
-PYTHONPATH=. .venv/bin/uvicorn api.main:app --port 8000
+PYTHONPATH=. .venv/bin/uvicorn server.main:app --port 8000
 ```
 
 ## Scenarios (executed this run, port 8011/8012)

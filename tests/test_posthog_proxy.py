@@ -65,6 +65,14 @@ def test_client_ip_is_forwarded_for_geoip(monkeypatch):
     assert seen["headers"]["X-Forwarded-For"] == "203.0.113.9"
 
 
+def test_browser_user_agent_is_forwarded(monkeypatch):
+    """Otherwise PostHog sees python-requests/... and may drop the event as bot traffic."""
+    seen = _stub(monkeypatch)
+    with TestClient(main.app) as c:
+        c.post("/ingest/e/", headers={"User-Agent": "Mozilla/5.0 (Macintosh) Chrome/140"})
+    assert seen["headers"]["User-Agent"] == "Mozilla/5.0 (Macintosh) Chrome/140"
+
+
 def test_unsafe_upstream_headers_are_not_re_emitted(monkeypatch):
     """Set-Cookie / CORS / Location from PostHog must not become headers of OUR origin."""
     _stub(monkeypatch, _Resp(headers={

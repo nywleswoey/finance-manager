@@ -709,6 +709,11 @@ def classify_rule_delete(rule_id: int):
 # (analytics/error events fire before and without a session).
 _PH_INGEST = settings.posthog_host.rstrip("/")
 _PH_ASSETS = _PH_INGEST.replace(".i.posthog.com", "-assets.i.posthog.com")
+if _PH_ASSETS == _PH_INGEST:
+    # the replace was a no-op (custom or self-hosted POSTHOG_HOST), so /ingest/static/* goes to
+    # the ingestion host and the lazily-loaded bundles 404 — error tracking silently disabled
+    log.warning("POSTHOG_HOST=%s has no matching *-assets host; /ingest/static/* bundles "
+                "(exception-autocapture, surveys, recorder) will likely 404", _PH_INGEST)
 # Allow-list, not a deny-list: these are the only upstream response headers safe to re-emit
 # from our own origin. Notably excluded are Set-Cookie (a third party must not set cookies on
 # the session domain), Access-Control-* (would let any cross-origin page read /ingest/*),
@@ -738,6 +743,9 @@ async def posthog_proxy(path: str, request: Request):
     headers = {}
     if ct := request.headers.get("content-type"):
         headers["Content-Type"] = ct
+    # without this PostHog sees python-requests/... and may filter the event as bot traffic
+    if ua := request.headers.get("user-agent"):
+        headers["User-Agent"] = ua
     # preserve the caller's IP so PostHog geoip still resolves through the proxy
     xff = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")
     if xff:
