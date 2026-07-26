@@ -37,7 +37,7 @@ Project → Settings → Environment Variables (Production + Preview):
 | `DATABASE_URL` | the `sslmode=require` Postgres URL |
 | `VITE_PUBLIC_POSTHOG_KEY` | PostHog project API key (`phc_…`) |
 | `VITE_PUBLIC_POSTHOG_HOST` | PostHog host, e.g. `https://us.i.posthog.com` — used as `ui_host` (toolbar links) and to gate `posthog.init()`; events go through the same-origin `/ingest` proxy, not here |
-| `POSTHOG_HOST` | Server-side upstream the `/ingest` proxy forwards to — same region host as above (`https://us.i.posthog.com`). Defaults to that if unset |
+| `POSTHOG_HOST` | Server-side upstream the `/ingest` proxy forwards to — same region host as above (`https://us.i.posthog.com`). Defaults to that if unset. Must be a `*.i.posthog.com` region host: the proxy derives the assets host from it, so a custom/self-hosted value logs a startup warning and leaves the lazily-loaded bundles (exception autocapture, surveys, recorder) 404ing — error tracking silently off |
 
 > **PostHog is all-or-nothing and build-time.** Missing either `VITE_*` var skips
 > `posthog.init()`, so the deploy ships with no analytics *and* no error tracking (uncaught

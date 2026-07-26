@@ -34,9 +34,9 @@ Browser                         Vercel /api (FastAPI)               Google
 ## Backend components
 | File | Role |
 |---|---|
-| `api/auth.py` (new) | auth config, Google verify, session mint/verify, `require_user` dep, router, auth-event logging |
-| `api/main.py` (edit) | lock CORS, security-headers mw, deny-by-default auth gate mw, include auth router, generic errors |
-| `api/index.py` (new) | Vercel ASGI entry: `from api.main import app` |
+| `server/auth.py` (new) | auth config, Google verify, session mint/verify, `require_user` dep, router, auth-event logging |
+| `server/main.py` (edit) | lock CORS, security-headers mw, deny-by-default auth gate mw, include auth router, generic errors |
+| `api/index.py` (new) | Vercel ASGI entry: `from server.main import app` |
 
 ### Routes
 - `POST /api/auth/google` — body `{credential: str}` (max-len bound). Verify → set cookie → return `{email,name}`. **Public** (login entry). Rate-limited.
