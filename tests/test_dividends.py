@@ -17,7 +17,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from portfolio import dividends
-from portfolio.models import Account, Base, Dividend, Security, Txn
+from portfolio.models import Account, Base, Dividend, FxRate, Security, Txn
 
 D = dt.date
 
@@ -65,13 +65,16 @@ class TestDetails(unittest.TestCase):
     def tearDown(self):
         self.s.close()
 
-    def _div(self, pay, gross, *, sec=1, declared=None, units=None):
+    def _div(self, pay, gross, *, sec=1, declared=None, units=None, ccy="SGD"):
         self._d += 1
         self.s.add(Dividend(account_id=1, security_id=sec, pay_date=pay, kind="cash",
                             gross=Decimal(str(gross)),
                             amount_per_unit=None if declared is None else Decimal(str(declared)),
                             units=None if units is None else Decimal(str(units)),
-                            currency="SGD", source_file="unmapped-src", dedup_hash=f"h{self._d}"))
+                            currency=ccy, source_file="unmapped-src", dedup_hash=f"h{self._d}"))
+
+    def _fx(self, ccy, rate):
+        self.s.add(FxRate(date=D(2024, 6, 1), currency=ccy, rate_to_sgd=Decimal(str(rate))))
 
     def _buy(self, day, qty):
         self._d += 1
@@ -110,6 +113,43 @@ class TestDetails(unittest.TestCase):
         self.assertIn("no date", r["flags"])
         self.assertIn("qty unknown — needs manual input", r["flags"])
         self.assertIsNone(r["rate"])
+
+    def test_foreign_gross_is_converted_to_sgd_alongside_the_native_amount(self):
+        # the rest of the app reports SGD; a native-only dividend column made HKD 1,000 look
+        # like SGD 1,000. Native stays for statement reconciliation.
+        self._fx("HKD", 0.17)
+        self._div(D(2024, 6, 1), 1000, declared=1, units=1000, ccy="HKD")
+        self.s.commit()
+        r = self._by_gross(dividends.details(self.s))[1000.0]
+        self.assertEqual(r["currency"], "HKD")
+        self.assertEqual(r["gross"], 1000.0)                  # untouched
+        self.assertEqual(r["gross_sgd"], 170.0)
+        self.assertEqual(r["rate"], 1.0)                      # declared rate stays native
+        self.assertEqual(r["flags"], [])
+
+    def test_sgd_needs_no_fx_row(self):
+        # SGD is intentionally absent from fx_rate — it must not be flagged as unpriced.
+        self._div(D(2024, 6, 1), 80, declared=1, units=80)
+        self.s.commit()
+        r = self._by_gross(dividends.details(self.s))[80.0]
+        self.assertEqual(r["gross_sgd"], 80.0)
+        self.assertEqual(r["flags"], [])
+
+    def test_currency_with_no_fx_rate_is_flagged_not_silently_passed_through(self):
+        self._div(D(2024, 6, 1), 500, declared=1, units=500, ccy="EUR")   # no EUR fx row
+        self.s.commit()
+        res = dividends.details(self.s)
+        r = self._by_gross(res)[500.0]
+        self.assertIsNone(r["gross_sgd"])                      # never 500 unconverted
+        self.assertIn("no FX rate for EUR", r["flags"])
+        self.assertEqual(res["total_sgd"], 0)                  # excluded, not counted at 1:1
+
+    def test_total_sgd_sums_the_converted_amounts(self):
+        self._fx("HKD", 0.17)
+        self._div(D(2024, 6, 1), 1000, declared=1, units=1000, ccy="HKD")  # 170
+        self._div(D(2024, 7, 1), 30, declared=1, units=30)                 # 30
+        self.s.commit()
+        self.assertEqual(dividends.details(self.s)["total_sgd"], 200.0)
 
     def test_rows_sorted_pay_date_desc_nulls_first(self):
         # newest-first (reverse=True) over _date_key, which sorts null dates last ascending ->

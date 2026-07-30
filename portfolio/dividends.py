@@ -11,7 +11,10 @@ return math; that difference is deliberate and stays there. This module is the p
 attribution view.)
 
 Every public function accepts an optional Session (`s`) and routes through db.session_scope.
-Amounts are native currency until annual(), which converts to SGD through portfolio.money.
+Every read shape carries **both** amounts: `gross` in the payment's native currency (what the
+statement said) and `gross_sgd` converted at latest FX through portfolio.money — the rest of
+the app reports SGD, so dividends must be comparable without mental FX. `annual()` is SGD-only
+(it sums across currencies, so a native figure would be meaningless).
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_dividends.py -q
 """
@@ -59,8 +62,11 @@ def implied_rate(gross, qty):
 # ---------------- read shapes (formerly the /api/dividend* handlers) ----------------
 
 def summary(s=None):
-    """Gross by market/currency, plus the 50 most recent payments — the /api/dividends view."""
+    """Gross by market/currency, plus the 50 most recent payments — the /api/dividends view.
+
+    Each row carries `gross` (native) and `gross_sgd` (latest FX)."""
     with session_scope(s) as s:
+        fx = fx_map(s)
         by = _rows(s,
             "SELECT s.market, d.currency, round(sum(d.gross)) gross, count(*) n "
             "FROM dividend d LEFT JOIN security s ON s.id=d.security_id "
@@ -71,14 +77,24 @@ def summary(s=None):
             "FROM dividend d JOIN account a ON a.id=d.account_id "
             "LEFT JOIN security s ON s.id=d.security_id "
             "WHERE d.pay_date IS NOT NULL ORDER BY d.pay_date DESC LIMIT 50")
+    for r in by + recent:
+        r["gross"] = _f(r["gross"])
+        r["gross_sgd"] = round(to_sgd(r["gross"] or 0, r["currency"], fx), 2)
+    by.sort(key=lambda r: -r["gross_sgd"])              # SGD-comparable ordering
     return {"by_market": by, "recent": recent}
 
 
 def details(s=None):
     """Per-dividend detail: declared per-share rate + units held at pay date (replayed from
     the ledger) + implied rate (gross/units). Flags rows where the rate can't be determined
-    (no position data, missing date, or unmapped ticker) for manual input."""
+    (no position data, missing date, or unmapped ticker) for manual input.
+
+    Gross is reported both native (`gross`) and in SGD (`gross_sgd`, latest FX). Rates stay
+    native — a declared per-unit rate is a statement fact, not a converted figure. A currency
+    with no FX rate becomes a flagged row (gross_sgd=None) rather than an endpoint-wide error,
+    so one unpriced currency can't blank the whole tab."""
     with session_scope(s) as s:
+        fx = fx_map(s)
         divs = _rows(s,
             "SELECT d.id, d.pay_date, a.id account_id, a.name account, a.funding_bucket bucket, "
             "d.security_id, COALESCE(sec.name, d.source_file) name, sec.canonical_ticker ticker, "
@@ -109,9 +125,15 @@ def details(s=None):
             flags.append("no date")
         if declared is None and implied is None:
             flags.append("qty unknown — needs manual input")
+        try:
+            gross_sgd = round(to_sgd(gross, d["currency"], fx), 2)
+        except ValueError:
+            gross_sgd = None
+            flags.append(f"no FX rate for {d['currency']}")
         out.append({
             "id": d["id"], "pay_date": d["pay_date"], "account": d["account"],
-            "name": d["name"], "ticker": d["ticker"], "gross": gross, "currency": d["currency"],
+            "name": d["name"], "ticker": d["ticker"], "gross": gross,
+            "gross_sgd": gross_sgd, "currency": d["currency"],
             "qty": qty, "qty_source": ("statement" if stated else ("ledger" if held else None)),
             "declared_rate": declared, "implied_rate": implied,
             "rate": declared if declared is not None else implied,
@@ -119,7 +141,8 @@ def details(s=None):
             "flags": flags,
         })
     out.sort(key=_date_key("pay_date"), reverse=True)
-    return {"rows": out, "flagged": sum(1 for r in out if r["flags"]), "total": len(out)}
+    return {"rows": out, "flagged": sum(1 for r in out if r["flags"]), "total": len(out),
+            "total_sgd": round(sum(r["gross_sgd"] or 0 for r in out), 2)}
 
 
 def annual(s=None):
