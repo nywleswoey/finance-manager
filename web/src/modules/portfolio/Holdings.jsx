@@ -62,7 +62,10 @@ function DataRow({ r, onClick, max }) {
       <td>{closed ? <span className="mut">—</span> : sgd(r.mv_sgd)}</td>
       <td className={cls(pl)} title={closed ? "realised P/L" : "unrealised P/L"}>
         {pl == null ? <span className="mut">n/a</span> : sgd(pl)}</td>
-      <td className="pos">{r.income_native ? money(r.income_native, r.currency, 0) : "—"}</td>
+      {/* SGD like the Cost/MV/P/L columns it sits between (and like Net, which folds it in);
+          the native amount stays as the tooltip for statement reconciliation. */}
+      <td className="pos" title={r.income_native ? `${money(r.income_native, r.currency, 2)} native` : undefined}>
+        {r.income_sgd ? sgd(r.income_sgd) : "—"}</td>
       <td className={cls(r.options_pl_sgd)} title="realised options (wheel) P/L">
         {r.options_pl_sgd ? sgd(r.options_pl_sgd) : "—"}</td>
       <NetCell net={net} partial={partial} max={max} />
@@ -95,10 +98,11 @@ export default function Holdings() {
     const subtotal = (rs) => rs.reduce((a, r) => {
       a.mv += r.status === "closed" ? 0 : (r.mv_sgd || 0);
       a.pl += plOf(r) || 0;
+      a.inc += r.income_sgd || 0;
       a.opt += r.options_pl_sgd || 0;
       a.net += netOf(r).net;
       return a;
-    }, { mv: 0, pl: 0, opt: 0, net: 0 });
+    }, { mv: 0, pl: 0, inc: 0, opt: 0, net: 0 });
     return [...m.entries()]
       .map(([key, rs]) => ({ key, label: key, rows: rs, ...subtotal(rs) }))
       .sort((a, b) => b.mv - a.mv);
@@ -138,7 +142,9 @@ export default function Holdings() {
         <thead><tr>
           <th className="l">Security</th><th className="l">Bucket</th><th className="l">Mkt</th>
           <th>Units</th><th>Avg Cost</th><th>Price</th>
-          <th>Cost (SGD)</th><th>MV (SGD)</th><th>P/L</th><th>Dividends</th><th>Options P/L</th>
+          <th>Cost (SGD)</th><th>MV (SGD)</th><th>P/L</th>
+          <th title="converted at latest FX; hover a row for the native amount">Dividends (SGD)</th>
+          <th>Options P/L</th>
           <th title="total P/L incl dividends + option premiums">Net</th><th>XIRR</th>
         </tr></thead>
         <tbody>
@@ -155,7 +161,7 @@ export default function Holdings() {
                     </td>
                     <td>{sgd(g.mv)}</td>
                     <td className={cls(g.pl)}>{sgd(g.pl)}</td>
-                    <td></td>
+                    <td className="pos">{g.inc ? sgd(g.inc) : ""}</td>
                     <td className={cls(g.opt)}>{g.opt ? sgd(g.opt) : ""}</td>
                     <td className={cls(g.net)} style={{ fontWeight: 700 }}>{sgd(g.net)}</td>
                     <td></td>

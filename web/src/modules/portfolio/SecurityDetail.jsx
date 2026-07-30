@@ -12,7 +12,9 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
   if (!d) return <div className="loading">Loading {ticker}…</div>;
   if (d.error || !d.summary) return <div className="loading">No data for {ticker}. <a onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)" }}>← back</a></div>;
   const s = d.summary;
-  const divTotal = d.dividends.reduce((a, x) => a + Number(x.gross || 0), 0);
+  // SGD, like every other tile — a native sum would be wrong anyway for a security paid in
+  // more than one currency (e.g. an EUR REIT with SGD-settled lots).
+  const divTotalSgd = d.dividends.reduce((a, x) => a + Number(x.gross_sgd || 0), 0);
   const opts = d.options || [];
   const optPlSgd = opts.reduce((a, t) => a + (t.close_date ? Number(t.realized_sgd || 0) : 0), 0);
 
@@ -35,7 +37,7 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
         <Tile lbl="Cost Basis" val={s.cost_basis_sgd == null ? "n/a" : sgd(s.cost_basis_sgd)} />
         <Tile lbl="Market Value" val={sgd(s.mv_sgd)} />
         <Tile lbl="Unrealised P/L" val={s.unrealised_pl_sgd == null ? "n/a" : sgd(s.unrealised_pl_sgd)} cls={cls(s.unrealised_pl_sgd)} />
-        <Tile lbl="Dividends" val={money(divTotal, d.dividends[0]?.currency || s.currency, 0)} cls="pos" />
+        <Tile lbl="Dividends" val={sgd(divTotalSgd)} cls="pos" />
         {opts.length > 0 && <Tile lbl="Options P/L" val={sgd(optPlSgd)} cls={cls(optPlSgd)} />}
         <Tile lbl="XIRR" val={s.xirr == null ? "—" : pct(s.xirr)} cls={cls(s.xirr)} />
       </div>
@@ -65,12 +67,15 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
       </div>
 
       <div className="card">
-        <h3>Dividend history ({d.dividends.length})</h3>
+        <h3>Dividend history ({d.dividends.length})
+          <span className="pill" style={{ marginLeft: 8 }}>{sgd(divTotalSgd)} · latest FX</span></h3>
         {d.dividends.length === 0 ? <p className="mut">No dividends recorded.</p> : (
           <table>
             <thead><tr>
               <th className="l">Date</th><th className="l">Account</th><th className="l">Kind</th>
-              <th>Qty held</th><th>Rate/unit</th><th>Amount</th>
+              <th>Qty held</th>
+              <th title="per-unit rate as stated on the statement — native currency">Rate/unit</th>
+              <th title="converted at latest FX; native amount shown underneath">Amount (SGD)</th>
             </tr></thead>
             <tbody>
               {d.dividends.map((x, i) => (
@@ -80,7 +85,9 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
                   <td className="l">{x.kind}</td>
                   <td className="mut">{x.units == null ? "—" : fmt(x.units, 2)}</td>
                   <td className="mut">{money(x.rate, x.currency, 4)}</td>
-                  <td className="pos">{money(x.gross, x.currency, 2)}</td>
+                  <td className="pos">{money(x.gross_sgd, "SGD", 2)}
+                    {x.currency !== "SGD" &&
+                      <div className="mut" style={{ fontSize: ".75em" }}>{money(x.gross, x.currency, 2)}</div>}</td>
                 </tr>
               ))}
             </tbody>

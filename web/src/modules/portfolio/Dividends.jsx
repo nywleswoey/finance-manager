@@ -10,10 +10,11 @@ export default function Dividends() {
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   useEffect(() => {
     get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {} }));
-    get("/api/dividend-details").then(setDet).catch(() => setDet({ rows: [], flagged: 0, total: 0 }));
+    get("/api/dividend-details").then(setDet).catch(() => setDet({ rows: [], flagged: 0, total: 0, total_sgd: 0 }));
   }, []);
   if (!ann) return <div className="loading">Loading…</div>;
   const rows = det ? (onlyFlagged ? det.rows.filter((r) => r.flags.length) : det.rows) : [];
+  const shownSgd = rows.reduce((a, r) => a + (r.gross_sgd || 0), 0);
   const years = ann.years;                                   // newest → oldest
   // YoY % vs the next (older) year
   const yoy = (y, i) => {
@@ -75,7 +76,9 @@ export default function Dividends() {
 
       <div className="card">
         <h3>Dividend Detail — qty held &amp; declared rate&nbsp;
-          {det && <span className="pill">{det.total} payments</span>}
+          <span className="pill">SGD · latest FX</span>
+          {det && <span className="pill" style={{ marginLeft: 6 }}>{det.total} payments</span>}
+          {det && <span className="pill" style={{ marginLeft: 6 }}>{sgd(shownSgd)}</span>}
           {det && det.flagged > 0 &&
             <span className="pill" style={{ marginLeft: 6, color: "var(--neg)" }}>{det.flagged} need manual input</span>}
           <label style={{ marginLeft: 12, fontWeight: 400, fontSize: ".8em" }}>
@@ -87,7 +90,11 @@ export default function Dividends() {
           <table>
             <thead><tr>
               <th className="l">Date</th><th className="l">Security</th><th className="l">Acct</th>
-              <th>Qty held</th><th>Declared /unit</th><th>Implied /unit</th><th>Gross</th><th className="l">Status</th>
+              <th>Qty held</th>
+              <th title="per-unit rate as stated on the statement — native currency">Declared /u</th>
+              <th title="gross ÷ qty held — native currency">Implied /u</th>
+              <th title="converted at latest FX; native amount shown underneath">Gross SGD</th>
+              <th className="l">Status</th>
             </tr></thead>
             <tbody>
               {rows.map((r) => (
@@ -97,9 +104,13 @@ export default function Dividends() {
                   <td className="l mut">{r.account}</td>
                   <td>{r.qty == null ? "—" : fmt(r.qty, 0)}
                     {r.qty_source === "ledger" && <span className="mut" style={{ fontSize: ".75em" }}> (led)</span>}</td>
-                  <td className={r.declared_rate == null ? "mut" : "pos"}>{r.declared_rate == null ? "—" : fmt(r.declared_rate, 4)}</td>
-                  <td className="mut">{r.implied_rate == null ? "—" : fmt(r.implied_rate, 4)}</td>
-                  <td>{money(r.gross, r.currency, 2)}</td>
+                  <td className={r.declared_rate == null ? "mut" : "pos"}>{money(r.declared_rate, r.currency, 4)}</td>
+                  <td className="mut">{money(r.implied_rate, r.currency, 4)}</td>
+                  {/* native stacked under the SGD figure, not beside it — inline doubled the
+                      column width and pushed the table into a horizontal scroll */}
+                  <td>{money(r.gross_sgd, "SGD", 2)}
+                    {r.currency !== "SGD" &&
+                      <div className="mut" style={{ fontSize: ".75em" }}>{money(r.gross, r.currency, 2)}</div>}</td>
                   <td className="l">
                     {r.flags.length
                       ? <span className="pill" style={{ color: "var(--neg)" }}>{r.flags.join("; ")}</span>

@@ -22,7 +22,8 @@ from starlette.concurrency import run_in_threadpool
 from portfolio.config import settings
 
 from server import auth
-from portfolio.db import SessionLocal
+from portfolio.db import SessionLocal, fx_map
+from portfolio.money import to_sgd
 from portfolio.performance import alloc_by_account, compute, empty_group, rollup
 from portfolio import spending
 from portfolio import dividends
@@ -252,6 +253,7 @@ def holding(ticker: str, bucket: str = "cash"):
         "JOIN account a ON a.id=d.account_id JOIN security sec ON sec.id=d.security_id "
         "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) ORDER BY d.pay_date",
         {"tk": ticker, "accts": accts})
+    fx = fx_map(s)
     s.close()
     if bucket == "cash":                               # CDP trades from cdp-stocks (priced)
         from portfolio.performance import cdp_transactions
@@ -264,6 +266,8 @@ def holding(ticker: str, bucket: str = "cash"):
     # enrich each dividend with qty held at pay date + declared rate per unit.
     # prefer statement-stated values; fall back to ledger replay / implied (gross/qty).
     # units_at / implied_rate are the shared pay_date attribution primitives (see dividends.py).
+    # gross_sgd mirrors the rest of the detail view (cost/MV/P/L are all SGD); the native
+    # gross + rate stay alongside it because they are what the statement actually said.
     for x in divs:
         units = _f(x["units"])
         if units is None:
@@ -275,6 +279,7 @@ def holding(ticker: str, bucket: str = "cash"):
             rate = dividends.implied_rate(x["gross"], units)
         x["units"] = units
         x["rate"] = rate
+        x["gross_sgd"] = round(to_sgd(_f(x["gross"]) or 0, x["currency"], fx), 2)
     # option trades on this underlying (wheel income), only for the cash bucket
     options = []
     if bucket == "cash":
