@@ -34,7 +34,23 @@ gaps:
 Units held at each ex-date are replayed from the CPF/SRS ledger; `gross = units × rate`.
 Totals: **CPF SGD 17,648**; **SRS SGD 8,620 + EUR 7,803**.
 
-## Totals (native currency, not FX-converted)
+## Display currency
+
+The `dividend` table stores the **native** amount the statement paid (`gross` + `currency`) —
+that never changes. Every read shape adds a `gross_sgd` converted at the latest FX rate
+(`portfolio.money.to_sgd`), and the UI leads with SGD everywhere, because the rest of the app
+(cost basis, market value, P/L, Net) is SGD and a native-currency dividend column made HKD
+199k read as SGD 199k. The native amount stays visible — muted underneath the SGD figure in the
+Dividends detail + security history, and as the row tooltip in Holdings — so any figure can
+still be reconciled against the statement. Per-unit rates (declared and implied) stay
+**native**: a declared rate is a statement fact, not a converted one.
+
+Latest FX is applied to all years (historical FX is not stored), so prior-year SGD figures are
+an approximation — the `SGD · latest FX` pill in the UI says so. A currency with no row in
+`fx_rate` is never passed through at 1:1: `/api/dividend-details` returns `gross_sgd: null` and
+flags the row `no FX rate for <CCY>`; the other endpoints raise (BR4, no silent fallback).
+
+## Totals (native currency, as paid)
 
 **By market**
 - **HK: HKD ~199,877** (the dividend engine — HK REITs/telcos: 01310 51k, 01523 49k, 00010 31k, 01038 22k, 00101 19k …)
@@ -53,6 +69,8 @@ Totals: **CPF SGD 17,648**; **SRS SGD 8,620 + EUR 7,803**.
 ## Per-dividend detail (qty held + declared rate)
 
 `GET /api/dividend-details` returns one row per payment with:
+- **gross** (native, as paid) and **gross_sgd** (latest FX; null + flagged when the currency has
+  no rate). `total_sgd` sums the converted amounts across all rows.
 - **declared rate** (`amount_per_unit`) — the per-share rate stated in the statement.
   Captured where the PDF prints it: CDP (`… <qty> units @ SGD <rate>`) and Moomoo
   (`… CASH DIVIDEND @ <CCY> <rate>` / US `<qty> SHARES DIVIDENDS`). Tiger / FSM / the
@@ -72,7 +90,9 @@ Totals: **CPF SGD 17,648**; **SRS SGD 8,620 + EUR 7,803**.
 
 - **Currency**: Tiger has no dividend-currency column → inferred from market (HK→HKD,
   SG→SGD, US→USD). The EUR REIT (SET/Cromwell→Stoneweg) Tiger payouts are therefore
-  labelled SGD; FSM's EUR ones are correct. Refine when prices/FX land.
+  labelled SGD; FSM's EUR ones are correct. Refine when prices/FX land. **Now that gross_sgd
+  converts off that label, those rows convert at 1:1 instead of the EUR rate — understated by
+  the EUR/SGD spread.** Fixing the inferred currency fixes the conversion for free.
 - **US withholding tax**: Tiger `Paid` amounts are taken as received (likely net of WHT);
   a separate `Withholding Tax` section exists to net gross vs net later.
 - **ADQU (Accordia Golf) SGD 28,264 on 2020-10-15** looks like a delisting/special capital
