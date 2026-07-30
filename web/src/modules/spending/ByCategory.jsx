@@ -4,14 +4,16 @@ import { COLORS, Donut } from "./charts.jsx";
 
 // Expenses for a single calendar year, broken down by category. The year selector loads that
 // year's window (from=YYYY-01-01, to=YYYY-12-31) through the existing spending endpoints;
-// clicking a category drills into its transactions for the same window.
+// clicking a category drills into its subcategories, and a subcategory into its transactions
+// for the same window.
 export default function SpendByCategory() {
   const [years, setYears] = useState(null);   // null=loading, []=no data
   const [yearsErr, setYearsErr] = useState(false);
   const [year, setYear] = useState(null);
   const [sum, setSum] = useState(null);
   const [open, setOpen] = useState(null);     // expanded category name
-  const [rows, setRows] = useState(null);     // transactions for `open`
+  const [openSub, setOpenSub] = useState(null); // expanded subcategory within `open`
+  const [rows, setRows] = useState(null);     // transactions for `open` + `openSub`
   const [undated, setUndated] = useState(null);
   // Request generation: every year switch / category click bumps it, and a response may only
   // land if it is still the newest one. Without it a slow earlier fetch resolves last and
@@ -36,7 +38,7 @@ export default function SpendByCategory() {
     if (year == null) return;
     let stale = false;
     gen.current += 1;                         // invalidates any drill-in still in flight
-    setSum(null); setOpen(null); setRows(null);
+    setSum(null); setOpen(null); setOpenSub(null); setRows(null);
     const q = `from=${year}-01-01&to=${year}-12-31`;
     get("/api/spending/summary?" + q)
       .then((d) => { if (!stale) setSum(d); })
@@ -44,12 +46,21 @@ export default function SpendByCategory() {
     return () => { stale = true; };
   }, [year]);
 
-  // drill-in: load transactions for the clicked category (same year window).
+  // first drill level: expand a category into its subcategories. No fetch — the summary
+  // already carries by_subcategory for the same window.
   function toggle(cat) {
+    gen.current += 1;                         // drops any subcategory fetch still in flight
+    setOpenSub(null); setRows(null);
+    setOpen(open === cat ? null : cat);
+  }
+
+  // second drill level: load transactions for the clicked subcategory (same year window).
+  function toggleSub(cat, sub) {
     const mine = ++gen.current;
-    if (open === cat) { setOpen(null); setRows(null); return; }
-    setOpen(cat); setRows(null);
-    const q = `from=${year}-01-01&to=${year}-12-31&group=${encodeURIComponent(cat)}&limit=1000`;
+    if (openSub === sub) { setOpenSub(null); setRows(null); return; }
+    setOpenSub(sub); setRows(null);
+    const q = `from=${year}-01-01&to=${year}-12-31&group=${encodeURIComponent(cat)}`
+      + `&subcategory=${encodeURIComponent(sub)}&limit=1000`;
     get("/api/spending/transactions?" + q)
       .then((d) => { if (gen.current === mine) setRows(d); })
       .catch(() => { if (gen.current === mine) setRows([]); });
@@ -65,6 +76,16 @@ export default function SpendByCategory() {
   const groups = sum && !sum.error
     ? sum.by_group.map((g) => ({ name: g.category || "Uncategorized", cat: g.category, value: Number(g.v), n: g.n }))
     : [];
+  // subcategory rows keyed by their parent category, ready for the drill-in. A null
+  // subcategory is spend classified into a category but no finer — shown as "—" and not
+  // drillable, since the transactions endpoint matches an exact subcategory string.
+  const subsOf = {};
+  if (sum && !sum.error) {
+    for (const r of sum.by_subcategory || []) {
+      const k = r.category || "";
+      (subsOf[k] ||= []).push({ name: r.subcategory || "—", sub: r.subcategory, value: Number(r.v), n: r.n });
+    }
+  }
   const total = sum && !sum.error ? sum.total_sgd : 0;
   const count = groups.reduce((a, g) => a + g.n, 0);
   const top = groups[0];
@@ -105,9 +126,22 @@ export default function SpendByCategory() {
                         <td className="mut">{fmt((g.value / total) * 100, 1)}%</td>
                         <td className="mut">{g.n}</td>
                       </tr>
-                      {open === g.cat && g.cat && (
-                        <tr><td colSpan={4} style={{ padding: 0 }}><TxnList rows={rows} /></td></tr>
-                      )}
+                      {open === g.cat && g.cat && (subsOf[g.cat] || []).map((sc) => (
+                        <React.Fragment key={g.cat + "/" + sc.name}>
+                          <tr onClick={() => sc.sub && toggleSub(g.cat, sc.sub)}
+                              style={{ cursor: sc.sub ? "pointer" : "default", background: "var(--panel2)" }}>
+                            <td className="l" style={{ paddingLeft: 26, fontSize: 12 }}>
+                              <span className="mut">{sc.sub ? (openSub === sc.sub ? "▾" : "▸") : "·"}</span> {sc.name}
+                            </td>
+                            <td style={{ fontSize: 12 }}>{sgd(sc.value)}</td>
+                            <td className="mut" style={{ fontSize: 12 }}>{fmt((sc.value / g.value) * 100, 1)}%</td>
+                            <td className="mut" style={{ fontSize: 12 }}>{sc.n}</td>
+                          </tr>
+                          {openSub === sc.sub && sc.sub && (
+                            <tr><td colSpan={4} style={{ padding: 0 }}><TxnList rows={rows} /></td></tr>
+                          )}
+                        </React.Fragment>
+                      ))}
                     </React.Fragment>
                   ))}
                 </tbody>
