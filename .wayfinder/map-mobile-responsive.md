@@ -93,6 +93,27 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   back and must become a real touch target. Least-certain assignments, flagged for the build session:
   the Options contract ledger and the Recurring monitor. Prototype:
   [3 patterns × 2 table shapes](../web/prototypes/mobile-tables-prototype.html).
+- [Charts on a phone](tickets/014-charts-on-phone.md) — **below 640px the donuts are deleted and the
+  list becomes the chart**; everything else follows. Not because the donut breaks — at percentage
+  radii it renders at **⌀216px, *larger* than desktop's 180px** — but because it spends **240px of an
+  ~800px viewport restating the list beneath it**, ×3, and its only added affordance was the tooltip
+  touch already drops. The `220`px bar constant dies into a full-width track at `width:{pct}%` in row
+  shape **S2 inline** (~38px pitch, fill behind the text), and the fixed 130px `.nm` column dies with
+  it — **applied at every width, not just phone**, so there is one row shape and no conditional. The
+  **duplicate `Donut` is merged in this spec**, because otherwise all of the above lands twice across
+  four call sites; the sort conflict resolves itself (`spending.py:58` is already `ORDER BY v DESC`,
+  so descending-by-default is a no-op) and `[...data].sort()` fixes an in-render mutation for free.
+  `LabelList` **dropped on Dividends** (the table 40px above already prints the same totals),
+  **halved to 6 months on Options** with a reserved band so negative labels clear the tick row.
+  `NetWorth`'s line chart gets **real treatment for ~5 lines** — its actual defect isn't responsive,
+  it **imports no `Legend`**, so touch sees two anonymous lines; keys are **DOM, never `<Legend>`**
+  (which eats ~75px of plot). **Three of the ticket's premises were wrong**: the row doesn't overflow
+  (flex-shrink absorbs it *out of the longest bar*, so the chart silently lies — SGX renders 92px
+  against its declared 110px), the name column wraps rather than clips, and neither `LabelList` chart
+  is a *live* collapse trap — both have explicit pixel-height wrappers and render today; they are
+  latent. **New surface:** this forces the app's **first `matchMedia` hook** — there is none in
+  `web/src` today, and `display:none` starves `ResponsiveContainer` to 0×0. Prototype:
+  [6 surfaces, 3×3 variants](../web/prototypes/mobile-charts-prototype.html).
 
 ## Not yet specified
 
@@ -107,8 +128,13 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   pattern). `Overview.jsx` came off this list: its `.tiles` grid is already
   `repeat(auto-fit, minmax(180px, 1fr))` (styles.css:28) and reflows to two columns at 390px for
   free — observed in both prototypes.
-- **Phone-hardware performance.** Whether the spec needs to say anything about recharts re-render
-  cost or table row counts on a phone. Unknown until the chart and table patterns are chosen.
+- **Phone-hardware performance.** Narrowed to **table row counts** by
+  [Charts on a phone](tickets/014-charts-on-phone.md): the recharts half has largely evaporated,
+  because phone now renders **strictly fewer charts** than desktop — three donuts deleted outright,
+  the Options monthly series halved to 6 bars — so there is no plausible re-render cost the desktop
+  build doesn't already pay. What remains is whether the scrolled-table pattern from ticket 013 needs
+  a row cap on a phone. Still unknown; likely answered by observation during verification (019)
+  rather than by a ticket of its own.
 
 ## Out of scope
 
