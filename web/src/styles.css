@@ -16,12 +16,21 @@ body { margin: 0; background: var(--bg); color: var(--txt);
 .fillpane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .fillpane > .grow { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .fillpane > .grow > .scroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
-.tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+/* `flex-wrap` is unconditional: at 1280 and 1440 the strip fits on one line and this rule
+   measures identical to today, so it needs no media query. `.tabs-right`'s margin-left
+   right-aligns Refresh on the wrapped line for free. Once wrapped, the active tab's
+   underline no longer coincides with `.tabs`' own bottom border — accepted. */
+.tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
 .tab { padding: 8px 14px; cursor: pointer; color: var(--mut); font-weight: 600; border-bottom: 2px solid transparent; }
 .tab.on { color: var(--txt); border-bottom-color: var(--acc); }
 .tabs-right { margin-left: auto; display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
 .refresh-msg { color: var(--mut); font-size: 12px; }
+/* `flex: none; white-space: nowrap` — the only shrinkable child of `.tabs`, it crushed from
+   152x35 to 78x77 with its label on three lines, which is what made the strip *appear* to
+   fit below ~1120. A flex-shrink bug, not a width tier: fixing it reveals the overflow the
+   crush was hiding. */
 .refresh-btn { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+  flex: none; white-space: nowrap;
   padding: 6px 12px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
 .refresh-btn:hover:not(:disabled) { border-color: var(--acc); color: var(--acc); }
 .refresh-btn:disabled { opacity: .5; cursor: default; }
@@ -29,7 +38,12 @@ body { margin: 0; background: var(--bg); color: var(--txt);
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .tile .lbl { color: var(--mut); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 .tile .val { font-size: 24px; font-weight: 700; margin-top: 6px; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+/* `.tiles`' own idiom, one line up. `auto-fit` collapses the empty track and all five call
+   sites have exactly two children, so a third column is impossible however wide the monitor.
+   420 is min-content over representative data — it sets where the grid collapses, not a
+   promise that nothing spills inside a column (`spending/Overview`'s card needs 519 against
+   the live DB's longest subcategory name). */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .card h3 { margin: 0 0 12px; font-size: 14px; color: var(--mut); text-transform: uppercase; letter-spacing: .04em; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
