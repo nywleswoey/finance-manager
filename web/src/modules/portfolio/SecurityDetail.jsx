@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { get, fmt, sgd, money, pct, cls } from "../../api.js";
+import { ContractCell } from "./contract.jsx";
 
 export default function SecurityDetail({ ticker, bucket, onBack }) {
   const [d, setD] = useState(null);
@@ -101,17 +102,13 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
             <span className="pill" style={{ marginLeft: 8 }}>realised {sgd(optPlSgd)}</span></h3>
           <table>
             <thead><tr>
-              <th className="l">Type</th><th>Qty</th><th>Strike</th>
-              <th className="l">Opened</th><th className="l">Closed</th>
+              <th className="l">Contract</th><th className="l">Closed</th>
               <th>Premium</th><th>Buyback</th><th className="l">Outcome</th><th>P/L</th>
             </tr></thead>
             <tbody>
               {opts.map((t, i) => (
                 <tr key={i}>
-                  <td className="l" style={{ textTransform: "capitalize" }}>{t.type}</td>
-                  <td>{fmt(t.contracts, 0)}</td>
-                  <td className="mut">{t.strike == null ? "—" : fmt(t.strike, 2)}</td>
-                  <td className="l mut">{t.open_date || "—"}</td>
+                  <ContractCell trade={t} />
                   <td className="l mut">{t.close_date || "—"}</td>
                   <td>{t.premium_open == null ? "—" : fmt(t.premium_open, 2)}</td>
                   <td className="mut">{t.premium_close ? fmt(t.premium_close, 2) : "—"}</td>
