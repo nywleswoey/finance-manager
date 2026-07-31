@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, Legend, CartesianGrid,
 } from "recharts";
 import { get, sgd, fmt } from "../../api.js";
-import { COLORS, Donut } from "./charts.jsx";
+import { COLORS, Donut } from "../../charts.jsx";
 
 export default function SpendOverview() {
   const [sum, setSum] = useState(null);

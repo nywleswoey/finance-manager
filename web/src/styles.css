@@ -16,12 +16,21 @@ body { margin: 0; background: var(--bg); color: var(--txt);
 .fillpane { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
 .fillpane > .grow { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .fillpane > .grow > .scroll { flex: 1 1 auto; min-height: 0; overflow: auto; }
-.tabs { display: flex; align-items: center; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
+/* `flex-wrap` is unconditional: at 1280 and 1440 the strip fits on one line and this rule
+   measures identical to today, so it needs no media query. `.tabs-right`'s margin-left
+   right-aligns Refresh on the wrapped line for free. Once wrapped, the active tab's
+   underline no longer coincides with `.tabs`' own bottom border — accepted. */
+.tabs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 20px; border-bottom: 1px solid var(--line); }
 .tab { padding: 8px 14px; cursor: pointer; color: var(--mut); font-weight: 600; border-bottom: 2px solid transparent; }
 .tab.on { color: var(--txt); border-bottom-color: var(--acc); }
 .tabs-right { margin-left: auto; display: flex; align-items: center; gap: 10px; padding-bottom: 4px; }
 .refresh-msg { color: var(--mut); font-size: 12px; }
+/* `flex: none; white-space: nowrap` — the only shrinkable child of `.tabs`, it crushed from
+   152x35 to 78x77 with its label on three lines, which is what made the strip *appear* to
+   fit below ~1120. A flex-shrink bug, not a width tier: fixing it reveals the overflow the
+   crush was hiding. */
 .refresh-btn { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+  flex: none; white-space: nowrap;
   padding: 6px 12px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
 .refresh-btn:hover:not(:disabled) { border-color: var(--acc); color: var(--acc); }
 .refresh-btn:disabled { opacity: .5; cursor: default; }
@@ -29,7 +38,12 @@ body { margin: 0; background: var(--bg); color: var(--txt);
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .tile .lbl { color: var(--mut); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
 .tile .val { font-size: 24px; font-weight: 700; margin-top: 6px; }
-.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+/* `.tiles`' own idiom, one line up. `auto-fit` collapses the empty track and all five call
+   sites have exactly two children, so a third column is impossible however wide the monitor.
+   420 is min-content over representative data — it sets where the grid collapses, not a
+   promise that nothing spills inside a column (`spending/Overview`'s card needs 519 against
+   the live DB's longest subcategory name). */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .card h3 { margin: 0 0 12px; font-size: 14px; color: var(--mut); text-transform: uppercase; letter-spacing: .04em; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
@@ -39,12 +53,38 @@ td.l, th.l { text-align: left; }
 tr:hover td { background: #1a212a; }
 .pos { color: var(--pos); } .neg { color: var(--neg); } .mut { color: var(--mut); }
 .pill { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: var(--panel2); color: var(--mut); }
+/* the merged options identity cell — see modules/portfolio/contract.jsx */
+.contract-terms { font-size: 12px; }
+.contract-type { text-transform: capitalize; }
 .link-btn { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 13px; padding: 2px 6px; }
 .link-btn:hover { color: var(--txt); }
-.bar { height: 8px; border-radius: 4px; background: var(--acc); }
-.barrow { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
-.barrow .nm { width: 130px; color: var(--mut); font-size: 13px; }
-input, select { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+/* WCAG 2.5.8's 24x24 floor, unconditional rather than phone-only: `.nw-del` is ~17x20 and
+   `.link-btn` ~21px tall, so this is a live failure on the desktop the two editors are
+   optimised for, not merely a touch problem. Going 24x24 outright rather than leaning on
+   2.5.8's spacing exception means nobody has to measure inter-target gaps. Visually free:
+   a glyph centred in a 24px box looks identical.
+   The *vertical* half is app-wide, because it costs nothing horizontally. The *horizontal*
+   half is scoped to the two editors — `.fillpane` is Classify, `.nw-del` is Net Worth —
+   because widening a `✕` inside a table cell widens the table, and Recurring's three
+   `.link-btn`s are in a fully-responsive view whose floor is 44px square, not 24px. They
+   get their width from that rule, in the phone tier, rather than twice. */
+button { min-height: 24px; }
+.fillpane button, .nw-del { min-width: 24px; }
+/* S2 inline: one line per entry, the proportional fill *behind* the text rather than beside
+   it, at every width. Replaces a 130px fixed name column and a 220px bar constant that made
+   the bar non-proportional the moment a name ran long. One row shape, one code path — the
+   phone-only alternative would have branched in two component files. */
+.barrow { position: relative; display: flex; align-items: center; gap: 8px;
+  min-height: 38px; padding: 0 8px; border-radius: 4px; overflow: hidden; }
+.barfill { position: absolute; left: 0; top: 0; bottom: 0; opacity: .3; border-radius: 4px; }
+.barrow > .chip, .barrow > .nm, .barrow > .val { position: relative; }
+.barrow .chip { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.barrow .nm { flex: 1 1 auto; min-width: 0; color: var(--txt); font-size: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barrow .val { flex: none; color: var(--mut); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* `textarea` joins the rule it was always missing from: it is styled nowhere else in the
+   app, so it rendered UA-default — a white box on a dark modal — at every width. */
+input, select, textarea { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
   padding: 6px 9px; border-radius: 6px; font: inherit; }
 .loading { color: var(--mut); padding: 40px; }
 
@@ -56,7 +96,10 @@ input, select { background: var(--panel2); border: 1px solid var(--line); color:
 .nw-row { display: grid; grid-template-columns: 1fr 120px 70px; gap: 8px; align-items: center; margin-bottom: 5px; }
 .nw-label { font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .nw-row input, .nw-row select { text-align: right; }
-.nw-del { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 13px; }
+/* The 24px floor comes from the `button` rule above; the flex is what centres the ✕ inside
+   the box it grew, so the glyph does not move. */
+.nw-del { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center; }
 .nw-del:hover { color: var(--neg); }
 .nw-err { color: var(--neg); padding: 8px 0; font-size: 13px; }
 
