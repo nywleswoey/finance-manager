@@ -2,7 +2,7 @@
 label: wayfinder:map
 slug: map-mobile-responsive
 title: Mobile-responsive UI
-status: charting
+status: done
 ---
 
 # Mobile-responsive UI
@@ -283,6 +283,35 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   with a trigger cheap enough to run; the checklist states plainly that it decays and that automation is
   the real fix.
 
+- [The four tables no ticket ever assigned](tickets/022-unassigned-tables.md) — **all four assigned, and
+  the count is now closed at 22 — but the rule that assigns the third bucket does not survive.** 013's
+  "under ~5 columns → it already fits" is **half wrong, and column count was never the discriminator**:
+  `Options`' two 4-col summaries measure 273/261 and genuinely fit, while `Overview:33` (**471**) and
+  `ByCategory:117` (**413**) fail — each has one column of **unbounded free text from the DB**
+  (`Life/Health/Surgical Insurance`, 30 chars, real, 3rd by spend). **`Performance.jsx:18` is the app's
+  second-widest table** at **921px with 2 of 9 columns visible** — a whole Portfolio tab, → **A**, and the
+  *cheapest* A in the map because its row count is bounded by the grouping dimension (max 8), making 020's
+  `60svh` cap a permanent no-op. **013's least-certain B is overturned to A** for `Options.jsx:71` *and*
+  `SecurityDetail.jsx:102`: a 9-field card measures **121px → 4 rows per screen** against A's 12, where 013
+  rejected B for Holdings at 3 and accepted it at 9 — **`ledger → B` over-generalised on the word *ledger***,
+  and the real test is how many numbers a row carries (a cash ledger has one; an options row has five).
+  `Options:71` already ships `overflow-x: auto` today, so A *keeps* behaviour. **013's "pin the first `.l`
+  column" rule breaks** on `:102`, whose first column is `Put`/`Put`/`Call` — fixed by merging
+  Opened+Type+Strike+Qty into a two-line `Contract` pin **at every width** (678→**524**, so the pin more than
+  pays for itself), the **first change to a desktop read-only table's column set**, on 014's and 015's
+  free-and-better precedent. **`ByCategory` turns out to be one three-level drill, not two tables** — `:168`
+  is nested in a `colSpan` cell so **the child sets the parent's width** (413→567); it takes **B** on identity
+  rather than measurement (same `cash_txn` rows as `spending/Transactions`, which is already B), but **cards
+  cannot live in the colspan cell** without inheriting 413px and losing the very property B was chosen for,
+  so on phone level 3 **leaves the table**. `:117` then takes A and earns the **first carve-out from 013's
+  persistent `›`** — it expands in place, so its own `▸`/`▾` is the truthful affordance. **Why the map missed
+  them: two causes, and the ticket's own hypothesis was wrong** — 013's *view* list was 8 of 13 (Performance
+  and spending/Overview never entered), and two tables render outside the main path (`opts.length > 0`; a
+  helper component behind two taps). It was not blind to non-main tables — it assigned seven correctly.
+  **Corrects 018**: `.grid2`'s `minmax(420px)` is ~100px optimistic against real data (`Overview:33` needs
+  519). Checklist amended in place: [`RESPONSIVE.md`](../RESPONSIVE.md) now carries no ⚠ markers, and gains a
+  regression trigger cheap enough to run — `grep -ro "<table" web/src | wc -l` must return **22**.
+
 ## Not yet specified
 
 <!-- in-scope fog: real, but not yet sharp enough to ticket -->
@@ -303,8 +332,12 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   build doesn't already pay. What remains is whether the scrolled-table pattern from ticket 013 needs
   a row cap on a phone — and [Touch targets & type scale](tickets/015-touch-targets-type-scale.md) has
   moved the goalposts: the 44px row pitch means **12 rows on screen, not 15**, so any cap is now judged
-  against a viewport that holds ~20% less. Still unknown; likely answered by observation during
-  verification (019) rather than by a ticket of its own.
+  against a viewport that holds ~20% less. [The four unassigned tables](tickets/022-unassigned-tables.md)
+  sharpened the worst case without making it decidable: the longest render in the app is not a table at all
+  but the **By Category drilldown**, which fetches `limit=1000` and becomes **B cards at ~2× an A row's
+  height** (121px vs 44px) — and "Dining Out" alone is 285 transactions in one year in the live DB.
+  `SecurityDetail:102` is likewise uncapped at 73 rows. Still unknown, and still not answerable at a desk;
+  019's routing to observation during verification stands.
 
 ## Out of scope
 
