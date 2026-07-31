@@ -115,6 +115,30 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   `web/src` today, and `display:none` starves `ResponsiveContainer` to 0×0. Prototype:
   [6 surfaces, 3×3 variants](../web/prototypes/mobile-charts-prototype.html).
 
+- [Touch targets & type scale on a phone](tickets/015-touch-targets-type-scale.md) — **two tiers, one
+  media query, one token.** **44px square** for everything tappable in a fully-responsive view; an
+  **unconditional 24px square** floor for the two editors, at *every* width — because `.nw-del` at ~17×20
+  is a live WCAG 2.5.8 failure on desktop today, and fixing it there is visually free and removes a
+  conditional. Two tiers rather than one because `Classify.jsx:141-143` puts **three `.link-btn`s side by
+  side inside one table cell** — 44px there isn't padding, it's the editor redesign the map ruled out.
+  **Square, not height-only**, on the strength of a single shape: the bare `✕` glyphs (~20px wide) sit
+  *adjacent* in a cell, which is the exact case the number exists for. **Body stays 14px at every width**
+  — raising it to 16px would fix the input zoom for free via `font: inherit` and silently invalidate every
+  measurement in 013 and 014; only `input, select, textarea` go to **16px on phone**, explicitly.
+  **11px holds everywhere, no floor** (it is *at* iOS HIG's 11pt line, and the one place a bump helps most
+  — `th` — is where it costs most, since the uppercase header is often the widest thing in a short numeric
+  column). **No carve-out for table rows**: `th, td { padding: 11px 8px }` puts the pitch at a true 44px,
+  and **the stated bill is 013's 15 rows on screen becoming 12** — its 15-vs-3 argument against cards
+  survives, so no pattern assignment changes. Mechanism is **literal values in one
+  `@media (max-width: 639.98px)` block**, not a token layer — most of what phone changes (012's column
+  flip, 014's deleted donuts, 013's table surgery) *can't* be a token override, so tokens would split the
+  phone story across two mechanisms; `--tap: 44px` is the single exception, being the one number that
+  recurs across unrelated selectors. **Inventory correction**: `.link-btn` is two populations with
+  different obligations, not one (7 in `Classify`, 3 in `Recurring`), and `.pill` is **never tappable** in
+  any of its 8 call sites. **Two traps handed to the build session**: `Transactions.jsx:35` carries an
+  inline `fontSize: 13` that CSS cannot reach (the rule silently no-ops), and `640` must be a literal in
+  both `styles.css` and 014's `matchMedia` hook — no single source of truth without a build step.
+
 ## Not yet specified
 
 <!-- in-scope fog: real, but not yet sharp enough to ticket -->
@@ -133,8 +157,10 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   because phone now renders **strictly fewer charts** than desktop — three donuts deleted outright,
   the Options monthly series halved to 6 bars — so there is no plausible re-render cost the desktop
   build doesn't already pay. What remains is whether the scrolled-table pattern from ticket 013 needs
-  a row cap on a phone. Still unknown; likely answered by observation during verification (019)
-  rather than by a ticket of its own.
+  a row cap on a phone — and [Touch targets & type scale](tickets/015-touch-targets-type-scale.md) has
+  moved the goalposts: the 44px row pitch means **12 rows on screen, not 15**, so any cap is now judged
+  against a viewport that holds ~20% less. Still unknown; likely answered by observation during
+  verification (019) rather than by a ticket of its own.
 
 ## Out of scope
 
