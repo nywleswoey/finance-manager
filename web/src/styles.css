@@ -55,10 +55,24 @@ tr:hover td { background: #1a212a; }
 .pill { font-size: 11px; padding: 1px 7px; border-radius: 9px; background: var(--panel2); color: var(--mut); }
 .link-btn { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 13px; padding: 2px 6px; }
 .link-btn:hover { color: var(--txt); }
+/* WCAG 2.5.8's 24x24 floor, unconditional rather than phone-only: `.nw-del` is ~17x20 and
+   `.link-btn` ~21px tall, so this is a live failure on the desktop the two editors are
+   optimised for, not merely a touch problem. Going 24x24 outright rather than leaning on
+   2.5.8's spacing exception means nobody has to measure inter-target gaps. Visually free:
+   a glyph centred in a 24px box looks identical.
+   The *vertical* half is app-wide, because it costs nothing horizontally. The *horizontal*
+   half is scoped to the two editors — `.fillpane` is Classify, `.nw-del` is Net Worth —
+   because widening a `✕` inside a table cell widens the table, and Recurring's three
+   `.link-btn`s are in a fully-responsive view whose floor is 44px square, not 24px. They
+   get their width from that rule, in the phone tier, rather than twice. */
+button { min-height: 24px; }
+.fillpane button, .nw-del { min-width: 24px; }
 .bar { height: 8px; border-radius: 4px; background: var(--acc); }
 .barrow { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
 .barrow .nm { width: 130px; color: var(--mut); font-size: 13px; }
-input, select { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
+/* `textarea` joins the rule it was always missing from: it is styled nowhere else in the
+   app, so it rendered UA-default — a white box on a dark modal — at every width. */
+input, select, textarea { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
   padding: 6px 9px; border-radius: 6px; font: inherit; }
 .loading { color: var(--mut); padding: 40px; }
 
@@ -70,7 +84,10 @@ input, select { background: var(--panel2); border: 1px solid var(--line); color:
 .nw-row { display: grid; grid-template-columns: 1fr 120px 70px; gap: 8px; align-items: center; margin-bottom: 5px; }
 .nw-label { font-size: 13px; display: flex; align-items: center; gap: 6px; }
 .nw-row input, .nw-row select { text-align: right; }
-.nw-del { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 13px; }
+/* The 24px floor comes from the `button` rule above; the flex is what centres the ✕ inside
+   the box it grew, so the glyph does not move. */
+.nw-del { background: none; border: none; color: var(--mut); cursor: pointer; font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center; }
 .nw-del:hover { color: var(--neg); }
 .nw-err { color: var(--neg); padding: 8px 0; font-size: 13px; }
 
