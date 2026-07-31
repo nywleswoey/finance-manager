@@ -261,6 +261,28 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   `<select>` is **gutter-immune** at 70px, being a fixed track in `1fr 120px 70px`, so only the label
   absorbs the change. 017's 124px reproduces exactly as 156px minus the card's own 16px × 2.
 
+- [Verification checklist & target viewports](tickets/019-verification-checklist.md) — the checklist is
+  [`RESPONSIVE.md`](../RESPONSIVE.md) at the repo root, and **assembling it found what it was built to
+  find**: `grep -rn "<table" web/src/modules` returns **22** tables against the 13 013 inventoried plus
+  the 5 017 found, so **four have no pattern assignment** — two of them 9 columns wide in
+  fully-responsive views, including `Performance.jsx:18`, a whole Portfolio tab no ticket had examined.
+  Graduated as [The four tables no ticket ever assigned](tickets/022-unassigned-tables.md), so **this
+  did not close the map**. **Nine viewports**, three of which a naive sweep misses: the **639/640 pair**
+  (every phone rule is `max-width: 639.98px`, so one side proves half a rule), **844×390** (the only one
+  exercising 018's `max-height: 500px` guard), and **1100×900** (the 1024–1120 band where the wrapped tab
+  strip is *deliberate* — the range a reviewer would otherwise file as a bug). Emulation suffices except
+  for four items needing a real iPhone, `env()` among them because **desktop Chrome reports 0** — 012's
+  prototype had to fake it. **Three classes, not one list** — Gates / Observations / Open calls — because
+  016 had already drawn that line ("Observations, not gates") and 013's least-certain calls *change a
+  decision* when they fail; the editors get 017's four criteria quoted positively, never as exemptions.
+  **Rejected consolidating the spec into `RESPONSIVE.md`**: several resolutions layer corrections on
+  earlier ones, which read as contradictions once flattened. **Two of the ticket's own five universal
+  criteria were already dead** — "no horizontal page scroll" is unbuildable (017: `.main` absorbs it, so
+  it can never fail) and "no text below the type floor" cites a floor 015 explicitly declined to create
+  ("11px holds, no floor"). Regression is a `web/CLAUDE.md` pointer written **by the build session**,
+  with a trigger cheap enough to run; the checklist states plainly that it decays and that automation is
+  the real fix.
+
 ## Not yet specified
 
 <!-- in-scope fog: real, but not yet sharp enough to ticket -->
