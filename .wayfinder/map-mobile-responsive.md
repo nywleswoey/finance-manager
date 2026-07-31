@@ -239,6 +239,28 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   a Total and can never scroll), and Classify's rules cap is **inline** at `Classify.jsx:126`, unreachable
   from CSS — same family as 015's `Transactions.jsx:35`, accepted as-is.
 
+- [The phone content gutter](tickets/021-phone-content-gutter.md) — **14px ratified, but the reason for
+  asking was wrong and the real find is elsewhere.** Measured at a true 390px frame, the gutter is **not
+  load-bearing anywhere between 8px and 16px** — Holdings shows the same 3 columns throughout and the
+  first threshold is at **20px** — so "several decisions are sitting close to their limits on it" is
+  false. 14px wins on a fact rather than taste: 018 already hoisted `max(14px, env(...))` into a closed
+  decision, so ratifying costs nothing while 12px means amending it for 4px that changes nothing.
+  `.card` stays **16px** (dropping it to 12 buys 10px, and 017 already closed `.nw-row`). Bottom becomes
+  **`max(20px, env(safe-area-inset-bottom))`** — under `100svh` the pane's bottom edge *is* the screen's,
+  so the last row otherwise sits under the home indicator; it resolves to 34px on an iPhone and gives all
+  four sides one `max(<literal>, env())` idiom. **No full-bleed** for scrolled tables: it buys **zero**
+  columns, a plain `margin-inline: -14px` breaks in landscape (padding becomes the 44px inset, margin
+  stays −14), and under 020 it would put the pinned identity column 8px from the screen edge instead of
+  22px. **Value follows width, guard is unconditional** — `.main` keeps `22px 28px` at ≥640px inside the
+  same `max()`, consistent with 018's shell-follows-height / horizontal-follows-width split. **The defect
+  it actually found: 012 has no `env()` guard on the app bar** (`padding: 0 12px`), so `☰` sits under the
+  notch in landscape — live, because 018 made landscape supported. Fixed with
+  `max(12px, env(...))`; rejected guarding `.app` instead, which would inset the bar's *background* and
+  leave an unpainted strip 010 and 016 both counted on. **Corrections**: the three prototypes never
+  agreed — 013's tables used a flat **12px**, not the 14px the ticket assumed — and `.nw-row`'s currency
+  `<select>` is **gutter-immune** at 70px, being a fixed track in `1fr 120px 70px`, so only the label
+  absorbs the change. 017's 124px reproduces exactly as 156px minus the card's own 16px × 2.
+
 ## Not yet specified
 
 <!-- in-scope fog: real, but not yet sharp enough to ticket -->
