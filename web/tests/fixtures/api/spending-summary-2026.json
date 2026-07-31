@@ -1,0 +1,149 @@
+{
+ "total_sgd": 58953.13,
+ "avg_month_sgd": 8421.88,
+ "months": 7,
+ "by_group": [
+  {
+   "category": "Personal",
+   "v": 43386.19,
+   "n": 265
+  },
+  {
+   "category": "Housing",
+   "v": 9349.25,
+   "n": 134
+  },
+  {
+   "category": null,
+   "v": 5497.78,
+   "n": 93
+  },
+  {
+   "category": "Transport",
+   "v": 719.91,
+   "n": 82
+  }
+ ],
+ "by_subcategory": [
+  {
+   "category": "Personal",
+   "subcategory": "Others",
+   "v": 16328.55,
+   "n": 57
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Childcare",
+   "v": 10977.06,
+   "n": 34
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Life/Health/Surgical Insurance",
+   "v": 6762.71,
+   "n": 16
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Family Allowance",
+   "v": 6000.0,
+   "n": 12
+  },
+  {
+   "category": null,
+   "subcategory": null,
+   "v": 5497.78,
+   "n": 93
+  },
+  {
+   "category": "Housing",
+   "subcategory": "Domestic Helper",
+   "v": 4734.5,
+   "n": 13
+  },
+  {
+   "category": "Housing",
+   "subcategory": "Groceries",
+   "v": 3249.56,
+   "n": 100
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Personal Taxes",
+   "v": 1845.82,
+   "n": 12
+  },
+  {
+   "category": "Housing",
+   "subcategory": "Utilities",
+   "v": 1044.34,
+   "n": 16
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Dining Out",
+   "v": 1006.86,
+   "n": 117
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Shopping",
+   "v": 377.19,
+   "n": 6
+  },
+  {
+   "category": "Transport",
+   "subcategory": "Public Transport",
+   "v": 365.25,
+   "n": 64
+  },
+  {
+   "category": "Transport",
+   "subcategory": "Other Transport",
+   "v": 354.66,
+   "n": 18
+  },
+  {
+   "category": "Housing",
+   "subcategory": "Conservancy Charges",
+   "v": 320.85,
+   "n": 5
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Mobile Phone",
+   "v": 88.0,
+   "n": 11
+  }
+ ],
+ "by_month": [
+  {
+   "ym": "2026-01",
+   "v": 8660.52
+  },
+  {
+   "ym": "2026-02",
+   "v": 12858.62
+  },
+  {
+   "ym": "2026-03",
+   "v": 10838.23
+  },
+  {
+   "ym": "2026-04",
+   "v": 8621.97
+  },
+  {
+   "ym": "2026-05",
+   "v": 7821.44
+  },
+  {
+   "ym": "2026-06",
+   "v": 9552.77
+  },
+  {
+   "ym": "2026-07",
+   "v": 599.58
+  }
+ ]
+}

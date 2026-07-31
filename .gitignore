@@ -9,6 +9,11 @@ __pycache__/
 web/node_modules/
 web/dist/
 
+# playwright run artifacts (the suite itself and its fixtures ARE tracked)
+web/test-results/
+web/playwright-report/
+web/blob-report/
+
 # generated outputs
 build/*.csv
 portfolio.html

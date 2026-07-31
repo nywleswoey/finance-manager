@@ -1,0 +1,138 @@
+{
+ "/api/auth/me": {
+  "file": "auth-me.json",
+  "status": 200
+ },
+ "/api/overview": {
+  "file": "overview.json",
+  "status": 200
+ },
+ "/api/return": {
+  "file": "return.json",
+  "status": 200
+ },
+ "/api/options": {
+  "file": "options.json",
+  "status": 200
+ },
+ "/api/options-trades?limit=500": {
+  "file": "options-trades.json",
+  "status": 200
+ },
+ "/api/positions": {
+  "file": "positions.json",
+  "status": 200
+ },
+ "/api/positions?closed=true": {
+  "file": "positions-closed.json",
+  "status": 200
+ },
+ "/api/performance?by=market": {
+  "file": "performance-market.json",
+  "status": 200
+ },
+ "/api/performance?by=bucket": {
+  "file": "performance-bucket.json",
+  "status": 200
+ },
+ "/api/performance?by=account": {
+  "file": "performance-account.json",
+  "status": 200
+ },
+ "/api/dividends-annual": {
+  "file": "dividends-annual.json",
+  "status": 200
+ },
+ "/api/dividend-details": {
+  "file": "dividend-details.json",
+  "status": 200
+ },
+ "/api/accounts": {
+  "file": "accounts.json",
+  "status": 200
+ },
+ "/api/transactions?": {
+  "file": "transactions.json",
+  "status": 200
+ },
+ "/api/holding?ticker=PLTR&bucket=cash": {
+  "file": "holding-pltr.json",
+  "status": 200
+ },
+ "/api/networth/items": {
+  "file": "networth-items.json",
+  "status": 200
+ },
+ "/api/networth/snapshots": {
+  "file": "networth-snapshots.json",
+  "status": 200
+ },
+ "/api/networth/latest": {
+  "file": "networth-latest.json",
+  "status": 200
+ },
+ "/api/spending/summary": {
+  "file": "spending-summary.json",
+  "status": 200
+ },
+ "/api/spending/trends": {
+  "file": "spending-trends.json",
+  "status": 500
+ },
+ "/api/spending/years": {
+  "file": "spending-years.json",
+  "status": 200
+ },
+ "/api/spending/undated": {
+  "file": "spending-undated.json",
+  "status": 200
+ },
+ "/api/spending/categories": {
+  "file": "spending-categories.json",
+  "status": 200
+ },
+ "/api/spending/transactions?limit=1000": {
+  "file": "spending-transactions.json",
+  "status": 200
+ },
+ "/api/spending/recurring": {
+  "file": "spending-recurring.json",
+  "status": 200
+ },
+ "/api/spending/recurring/detect": {
+  "file": "spending-recurring-detect.json",
+  "status": 200
+ },
+ "/api/spending/classify/unclassified": {
+  "file": "classify-unclassified.json",
+  "status": 200
+ },
+ "/api/spending/classify/rules": {
+  "file": "classify-rules.json",
+  "status": 200
+ },
+ "/api/spending/classify/categories": {
+  "file": "classify-categories.json",
+  "status": 200
+ },
+ "/api/networth/snapshots/2": {
+  "file": "networth-snapshot-2.json",
+  "status": 200
+ },
+ "/api/networth/snapshots/1": {
+  "file": "networth-snapshot-1.json",
+  "status": 200
+ },
+ "/api/spending/summary?from=2026-01-01&to=2026-12-31": {
+  "file": "spending-summary-2026.json",
+  "status": 200
+ },
+ "/api/spending/summary?from=2025-01-01&to=2025-12-31": {
+  "file": "spending-summary-2025.json",
+  "status": 200
+ },
+ "/api/spending/transactions?from=2026-01-01&to=2026-12-31&group=Personal&subcategory=Life/Health/Surgical%20Insurance&limit=1000": {
+  "file": "spending-transactions-drilled.json",
+  "status": 200
+ }
+}

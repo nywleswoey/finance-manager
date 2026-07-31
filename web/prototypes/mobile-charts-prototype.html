@@ -1,0 +1,550 @@
+<!--
+  PROTOTYPE — throwaway. Every chart surface in the app at 390px. Not production code.
+
+  Answers wayfinder ticket 014 "Charts on a phone". Spends the findings from ticket 011
+  (research/recharts-narrow-touch.md); does not re-derive them.
+
+  Two independent switches, both in the floating bar (or ?donut=A|B|C&rows=S0|S1|S2):
+    DONUT  A keep full-width donut · B drop it, list only · C compact ring + big total
+    ROWS   S0 today (130px name + 220px hard-coded bar) · S1 stacked · S2 inline track
+
+  Charts are hand-drawn SVG at the container's real measured width — NOT recharts. The point
+  is geometry and legibility at 390px, and recharts' own layout maths (percentage radii, tick
+  self-dropping, LabelList centring) is reproduced faithfully enough to judge. Value labels
+  that would physically overlap are outlined in red so the collision is visible, not argued.
+
+  Real chart inventory rendered here (six files, three types), in ticket order:
+    1  Allocation by Market       portfolio/Overview.jsx:49-73  (duplicate Donut)
+    2  Spending by Category       spending/charts.jsx:9-33      (shared Donut) — long-name stress
+    3  Monthly Spend by Category  spending/Overview.jsx:48-66   (stacked bars + <Legend>)
+    4  Dividends by Year          portfolio/Dividends.jsx:63    (LabelList, height="100%")
+    5  Options P/L by Month       portfolio/Options.jsx:52      (LabelList at fontSize 9)
+    6  Net Worth Over Time        networth/NetWorth.jsx:96      (the only time-series)
+
+  Rendered inside the shell decided by ticket 012 (48px app bar, 100svh column, native tab
+  select) so the vertical budget is honest. Desktop shows a 390x844 frame; below 760px it is
+  the page.
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Charts on a phone — prototype</title>
+<style>
+  :root {
+    --bg:#0f1419; --panel:#161b22; --panel2:#1c232c; --line:#2b333d;
+    --txt:#d7dde4; --mut:#8b97a5; --pos:#2ea043; --neg:#f85149; --acc:#388bfd;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { background:#05080b; color:var(--txt);
+    font:14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+
+  /* ---- staging (not under test) ---- */
+  .stage { min-height:100svh; display:flex; align-items:center; justify-content:center; padding:34px 16px 120px; }
+  .frame { width:390px; height:844px; flex:none; background:var(--bg); overflow:hidden;
+    border:1px solid #333c47; border-radius:34px; box-shadow:0 24px 70px rgba(0,0,0,.6); position:relative; }
+  .framelbl { position:absolute; top:-24px; left:6px; font-size:11px; color:#5b6675;
+    letter-spacing:.06em; text-transform:uppercase; }
+  @media (max-width:760px) {
+    .stage { padding:0; display:block; min-height:0; }
+    .frame { width:100%; height:100svh; border:none; border-radius:0; box-shadow:none; }
+    .framelbl { display:none; }
+  }
+
+  .ctl { position:fixed; left:50%; transform:translateX(-50%); bottom:16px; z-index:50;
+    display:flex; gap:8px; align-items:center; background:#11161d; border:1px solid var(--line);
+    border-radius:12px; padding:8px 10px; box-shadow:0 10px 30px rgba(0,0,0,.6); flex-wrap:wrap;
+    justify-content:center; max-width:calc(100% - 20px); }
+  .ctl .grp { display:flex; gap:4px; align-items:center; }
+  .ctl .glbl { font-size:10px; color:#5b6675; letter-spacing:.08em; text-transform:uppercase; margin-right:2px; }
+  .ctl button { background:var(--panel2); border:1px solid var(--line); color:var(--mut);
+    border-radius:7px; padding:5px 9px; font:600 12px/1 inherit; cursor:pointer; }
+  .ctl button.on { background:var(--acc); border-color:var(--acc); color:#fff; }
+  .ctl .sep { width:1px; height:20px; background:var(--line); }
+  .ctl .note { font-size:11px; color:#5b6675; max-width:230px; line-height:1.35; }
+
+  /* ---- the shell decided by ticket 012 ---- */
+  .app { display:flex; flex-direction:column; height:100%; }
+  .appbar { flex:none; height:48px; display:flex; align-items:center; gap:10px;
+    padding:0 max(12px, env(safe-area-inset-left)) 0 max(12px, env(safe-area-inset-left));
+    border-bottom:1px solid var(--line); background:var(--panel); }
+  .burger { width:36px; height:36px; flex:none; display:grid; place-items:center; font-size:18px;
+    color:var(--mut); background:none; border:none; }
+  .appbar .brand { font-weight:700; font-size:15px; flex:1; min-width:0; }
+  .icobtn { width:36px; height:36px; flex:none; display:grid; place-items:center; font-size:17px;
+    color:var(--mut); background:none; border:none; }
+  .tabsel { flex:none; padding:8px 12px 10px; border-bottom:1px solid var(--line); background:var(--bg); }
+  .tabsel select { width:100%; font-size:16px; background:var(--panel2); border:1px solid var(--line);
+    color:var(--txt); padding:8px 10px; border-radius:8px; font-family:inherit; }
+  .main { flex:1 1 auto; min-height:0; overflow:auto; padding:14px 14px 40px;
+    -webkit-overflow-scrolling:touch; }
+
+  /* ---- app styles under test ---- */
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:16px; margin-bottom:14px; }
+  .card h3 { margin:0 0 12px; font-size:14px; color:var(--mut); text-transform:uppercase;
+    letter-spacing:.04em; font-weight:600; }
+  .mut { color:var(--mut); }
+  .pill { font-size:11px; padding:1px 7px; border-radius:9px; background:var(--panel2); color:var(--mut); }
+
+  /* S0 — today. 130px name + JS-computed 220px bar. Kept verbatim to show the overflow. */
+  .s0 .barrow { display:flex; align-items:center; gap:10px; margin:7px 0; }
+  .s0 .barrow .nm { width:130px; color:var(--mut); font-size:13px; }
+  .s0 .bar { height:8px; border-radius:4px; }
+  .s0 .amt { color:var(--mut); font-size:13px; white-space:nowrap; }
+
+  /* S1 — stacked: name+value on one line, full-width proportional track under it. */
+  .s1 .barrow { margin:11px 0; }
+  .s1 .l1 { display:flex; align-items:baseline; gap:10px; }
+  .s1 .nm { flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    font-size:14px; }
+  .s1 .amt { flex:none; font-size:13px; color:var(--mut); font-variant-numeric:tabular-nums; }
+  .s1 .track { height:8px; border-radius:4px; background:var(--panel2); margin-top:5px; overflow:hidden; }
+  .s1 .bar { height:100%; border-radius:4px; }
+
+  /* S2 — inline: one line, name and value sit on top of a full-width proportional track. */
+  .s2 .barrow { position:relative; height:32px; margin:6px 0; border-radius:6px;
+    background:var(--panel2); overflow:hidden; display:flex; align-items:center; }
+  .s2 .bar { position:absolute; inset:0 auto 0 0; opacity:.30; }
+  .s2 .dot { position:relative; width:8px; height:8px; border-radius:2px; flex:none; margin:0 8px 0 9px; }
+  .s2 .nm { position:relative; flex:1 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; font-size:14px; }
+  .s2 .amt { position:relative; flex:none; font-size:13px; color:var(--mut); padding-right:10px;
+    font-variant-numeric:tabular-nums; }
+
+  .ringrow { display:flex; align-items:center; gap:16px; margin-bottom:6px; }
+  .ringtot .k { font-size:11px; color:var(--mut); text-transform:uppercase; letter-spacing:.04em; }
+  .ringtot .v { font-size:24px; font-weight:700; margin-top:2px; font-variant-numeric:tabular-nums; }
+
+  .domlegend { display:flex; flex-wrap:wrap; gap:6px 14px; margin-top:10px; }
+  .domlegend span { font-size:12px; color:var(--mut); display:flex; align-items:center; gap:6px; }
+  .domlegend i { width:9px; height:9px; border-radius:2px; display:block; }
+
+  .flag { font-size:11px; line-height:1.45; color:#f0883e; margin-top:8px; }
+  .flag b { color:#f0883e; font-weight:700; }
+  .ok { color:var(--pos); }
+  .sub { font-size:11px; color:#5b6675; margin:-6px 0 12px; }
+  .qtag { font-size:10px; letter-spacing:.08em; text-transform:uppercase; color:#4b5563;
+    border:1px solid #262d36; border-radius:4px; padding:1px 5px; margin-left:6px; vertical-align:2px; }
+  .toggle { display:flex; gap:6px; margin:10px 0 0; }
+  .toggle button { background:var(--panel2); border:1px solid var(--line); color:var(--mut);
+    border-radius:6px; padding:4px 8px; font:600 11px/1 inherit; cursor:pointer; }
+  .toggle button.on { background:#233042; border-color:var(--acc); color:var(--txt); }
+  svg text { font-family:ui-sans-serif, system-ui, -apple-system, sans-serif; }
+</style>
+
+<div class="stage">
+  <div class="frame">
+    <span class="framelbl">390 × 844 — iPhone 14/15/16</span>
+    <div class="app">
+      <div class="appbar">
+        <button class="burger">☰</button>
+        <div class="brand">Portfolio</div>
+        <button class="icobtn">↻</button>
+      </div>
+      <div class="tabsel">
+        <select><option>Overview</option><option>Holdings</option><option>Performance</option>
+          <option>Dividends</option><option>Options</option><option>Transactions</option></select>
+      </div>
+      <div class="main" id="main"></div>
+    </div>
+  </div>
+</div>
+
+<div class="ctl">
+  <div class="grp"><span class="glbl">Donut</span>
+    <button data-d="A">A keep</button><button data-d="B">B drop</button><button data-d="C">C ring</button></div>
+  <div class="sep"></div>
+  <div class="grp"><span class="glbl">Rows</span>
+    <button data-r="S0">S0 today</button><button data-r="S1">S1 stack</button><button data-r="S2">S2 inline</button></div>
+  <div class="sep"></div>
+  <div class="note" id="note"></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------- data (real-shaped)
+const MARKET = [
+  { name:"SGX",    value:182400 }, { name:"NASDAQ", value:96200 },
+  { name:"NYSE",   value:54800  }, { name:"HKEX",   value:21300 },
+  { name:"LSE",    value:8900   },
+];
+// The long-name stress case: spending categories are user-authored and run long.
+const SPEND = [
+  { name:"Household",                 value:4820 }, { name:"Eating out",     value:3140 },
+  { name:"Transport",                 value:1960 }, { name:"Groceries",      value:1720 },
+  { name:"Subscriptions & streaming", value:880  }, { name:"Health & pharmacy", value:610 },
+  { name:"Shopping",                  value:540  }, { name:"Utilities",      value:430  },
+];
+const TREND_GROUPS = ["Household","Eating out","Transport","Groceries","Other"];
+const TREND = ["2025-02","2025-03","2025-04","2025-05","2025-06","2025-07"].map((ym,i) => ({
+  ym, Household:760+i*40, "Eating out":520-i*15, Transport:310+i*20,
+  Groceries:280+i*10, Other:190+i*25,
+}));
+const DIVS = [{ k:"2021", v:1240 },{ k:"2022", v:3480 },{ k:"2023", v:5910 },
+              { k:"2024", v:7220 },{ k:"2025", v:8640 }];
+const OPTMO = [["2024-08",412],["2024-09",-180],["2024-10",903],["2024-11",264],["2024-12",-95],
+               ["2025-01",1120],["2025-02",340],["2025-03",-610],["2025-04",780],["2025-05",205],
+               ["2025-06",1465],["2025-07",-340]].map(([k,v]) => ({ k, v }));
+const NW = ["2024-09","2024-10","2024-11","2024-12","2025-01","2025-02","2025-03","2025-04",
+            "2025-05","2025-06","2025-07"].map((d,i) => ({
+  d, net: 512000 + i*14500 + (i%3)*4200, excl: 318000 + i*9800 + (i%4)*3100 }));
+
+const COLORS = ["#388bfd","#2ea043","#d29922","#8957e5","#f85149","#39c5cf","#db61a2","#6e7681"];
+const sgd = v => "S$" + Math.round(Math.abs(v)).toLocaleString("en-SG");
+const sgn = v => (v < 0 ? "−" : "") + sgd(v);
+const kfmt = v => (v < 0 ? "−" : "") + (Math.abs(v) >= 1000
+  ? (Math.abs(v)/1000).toFixed(1).replace(/\.0$/,"") + "k" : Math.abs(v));
+
+// ---------------------------------------------------------------- state
+const qs = new URLSearchParams(location.search);
+let DONUT = ["A","B","C"].includes(qs.get("donut")) ? qs.get("donut") : "A";
+let ROWS  = ["S0","S1","S2"].includes(qs.get("rows"))  ? qs.get("rows")  : "S0";
+let LABELS = true;   // ticket q4 — LabelList on the two bar charts
+let LEGEND = "recharts"; // ticket — <Legend> vs DOM key on the stacked bars
+
+// ---------------------------------------------------------------- svg helpers
+const NS = "http://www.w3.org/2000/svg";
+const el = (n, a = {}, kids = []) => {
+  const e = document.createElementNS(NS, n);
+  for (const k in a) e.setAttribute(k, a[k]);
+  for (const c of [].concat(kids)) e.appendChild(typeof c === "string"
+    ? document.createTextNode(c) : c);
+  return e;
+};
+const svg = (w, h) => el("svg", { width:w, height:h, viewBox:`0 0 ${w} ${h}` });
+// Approximate advance width for the collision test. 0.55em is close for tabular digits in
+// the system UI stack; the flag is a signal, not a measurement.
+const textw = (s, fs) => s.length * fs * 0.55;
+
+function arc(cx, cy, r0, r1, a0, a1) {
+  const p = (r, a) => [cx + r*Math.cos(a), cy + r*Math.sin(a)];
+  const [x0,y0] = p(r1,a0), [x1,y1] = p(r1,a1), [x2,y2] = p(r0,a1), [x3,y3] = p(r0,a0);
+  const big = a1 - a0 > Math.PI ? 1 : 0;
+  return `M${x0} ${y0}A${r1} ${r1} 0 ${big} 1 ${x1} ${y1}L${x2} ${y2}A${r0} ${r0} 0 ${big} 0 ${x3} ${y3}Z`;
+}
+
+// Recharts sizes percentage radii off min(width,height)/2 — reproduced here.
+function donutSVG(w, h, data, { inner = 0.55, outer = 0.90, pad = 2 } = {}) {
+  const s = svg(w, h), cx = w/2, cy = h/2, base = Math.min(w, h)/2;
+  const r1 = base*outer, r0 = base*inner;
+  const total = data.reduce((a,b) => a + b.value, 0);
+  let a = -Math.PI/2;
+  const gap = (pad*Math.PI)/180;
+  data.forEach((d,i) => {
+    const span = (d.value/total)*Math.PI*2;
+    s.appendChild(el("path", { d:arc(cx,cy,r0,r1,a+gap/2,a+span-gap/2),
+      fill:COLORS[i%COLORS.length] }));
+    a += span;
+  });
+  return { node:s, r1 };
+}
+
+// ---------------------------------------------------------------- row shapes (q2, q3)
+function rows(data, container) {
+  const total = data.reduce((a,b) => a + b.value, 0);
+  const wrap = document.createElement("div");
+  wrap.className = ROWS.toLowerCase();
+  let overflow = false;
+
+  data.forEach((x,i) => {
+    const c = COLORS[i%COLORS.length];
+    const pct = (x.value/total)*100;
+    const amt = `${sgd(x.value)} · ${Math.round(pct)}%`;
+    const r = document.createElement("div"); r.className = "barrow";
+
+    if (ROWS === "S0") {
+      // verbatim today: 130px name + (value/total)*220 px bar + amount
+      const px = (x.value/total)*220;
+      r.dataset.want = px.toFixed(1);
+      r.innerHTML = `<span class="nm">${x.name}</span>`
+        + `<div class="bar" style="width:${px}px;background:${c}"></div>`
+        + `<span class="amt">${amt}</span>`;
+    } else if (ROWS === "S1") {
+      r.innerHTML = `<div class="l1"><span class="nm">${x.name}</span>`
+        + `<span class="amt">${amt}</span></div>`
+        + `<div class="track"><div class="bar" style="width:${pct}%;background:${c}"></div></div>`;
+    } else {
+      r.innerHTML = `<div class="bar" style="width:${pct}%;background:${c}"></div>`
+        + `<div class="dot" style="background:${c}"></div>`
+        + `<span class="nm">${x.name}</span><span class="amt">${amt}</span>`;
+    }
+    wrap.appendChild(r);
+  });
+  return { node:wrap };
+}
+
+// S0's real failure is NOT an overflow — flex-shrink absorbs it silently. It absorbs it out of
+// the *longest* bar, so the bars stop being proportional to their values. Measured after
+// layout, never asserted from arithmetic.
+function auditS0(card) {
+  const rs = [...card.querySelectorAll(".s0 .barrow")];
+  if (!rs.length) return;
+  let worst = 0, wrapped = 0;
+  rs.forEach(r => {
+    const want = parseFloat(r.dataset.want);
+    const got = r.querySelector(".bar").getBoundingClientRect().width;
+    if (want > 1) worst = Math.max(worst, (want - got)/want);
+    const nm = r.querySelector(".nm");
+    if (nm.getBoundingClientRect().height > 22) wrapped++;
+  });
+  const bits = [];
+  if (worst > 0.02) bits.push(`the longest bar renders <b>${Math.round(worst*100)}% short</b> — `
+    + `flex-shrink eats the overflow out of it, so the bars no longer encode their values`);
+  if (wrapped) bits.push(`<b>${wrapped} name${wrapped>1?"s":""} wrap</b> in the fixed 130px column, `
+    + `pushing the row taller and knocking the bar off the baseline`);
+  if (bits.length) card.insertAdjacentHTML("beforeend",
+    `<div class="flag">▲ ${bits.join("; ")}.</div>`);
+}
+
+// ---------------------------------------------------------------- donut card (q1)
+function donutCard(title, data, note) {
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<h3>${title}<span class="qtag">donut ${DONUT}</span></h3>`;
+  if (note) card.insertAdjacentHTML("beforeend", `<div class="sub">${note}</div>`);
+  const inner = 390 - 14*2 - 16*2;   // page padding + card padding = 330px of usable width
+  const total = data.reduce((a,b) => a + b.value, 0);
+
+  if (DONUT === "A") {
+    const h = 240;
+    const { node, r1 } = donutSVG(inner, h, data);
+    card.appendChild(node);
+    card.insertAdjacentHTML("beforeend",
+      `<div class="flag ok">⌀ ${Math.round(r1*2)}px at percentage radii — vs 180px on desktop. `
+      + `It grows, because <code>.grid2</code> is one column here.</div>`);
+  } else if (DONUT === "C") {
+    const row = document.createElement("div"); row.className = "ringrow";
+    const { node } = donutSVG(112, 112, data, { inner:0.62, outer:0.95 });
+    row.appendChild(node);
+    row.insertAdjacentHTML("beforeend",
+      `<div class="ringtot"><div class="k">Total</div><div class="v">${sgd(total)}</div>`
+      + `<div class="k" style="margin-top:6px">${data.length} slices</div></div>`);
+    card.appendChild(row);
+  }
+  // DONUT B renders no chart at all.
+
+  card.appendChild(rows(data, inner).node);
+  return card;
+}
+
+// ---------------------------------------------------------------- stacked bars + legend
+function stackedCard() {
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<h3>Monthly Spend by Category<span class="qtag">stacked</span></h3>`;
+  const w = 390 - 14*2 - 16*2, legendH = LEGEND === "recharts" ? 75 : 0;
+  const h = 300, L = 40, R = 8, T = 8, B = 24 + legendH;
+  const s = svg(w, h);
+  const pw = w - L - R, ph = h - T - B;
+  const max = Math.max(...TREND.map(r => TREND_GROUPS.reduce((a,g) => a + r[g], 0)));
+
+  for (let i = 0; i <= 4; i++) {
+    const y = T + ph - (ph*i/4);
+    s.appendChild(el("line", { x1:L, x2:w-R, y1:y, y2:y, stroke:"#222a33", "stroke-dasharray":"3 3" }));
+    const tv = max*i/4;
+    s.appendChild(el("text", { x:L-6, y:y+4, fill:"#8b949e", "font-size":11, "text-anchor":"end" },
+      tv >= 1000 ? (tv/1000).toFixed(1).replace(/\.0$/,"") + "k" : String(Math.round(tv))));
+  }
+  const bw = pw/TREND.length, bar = Math.min(bw*0.62, 38);
+  TREND.forEach((r,i) => {
+    const cx = L + bw*i + bw/2;
+    let acc = 0;
+    TREND_GROUPS.forEach((g,gi) => {
+      const hh = (r[g]/max)*ph;
+      s.appendChild(el("rect", { x:cx-bar/2, y:T+ph-acc-hh, width:bar, height:hh,
+        fill:COLORS[gi%COLORS.length] }));
+      acc += hh;
+    });
+    s.appendChild(el("text", { x:cx, y:T+ph+16, fill:"#8b949e", "font-size":11,
+      "text-anchor":"middle" }, r.ym.slice(2)));
+  });
+
+  if (LEGEND === "recharts") {
+    // What <Legend> actually does at 330px: wraps to 3 rows and eats ~75px of the 300px box.
+    s.appendChild(el("rect", { x:0, y:h-legendH, width:w, height:legendH,
+      fill:"none", stroke:"#f0883e", "stroke-dasharray":"4 3" }));
+    let x = 6, y = h - legendH + 16;
+    TREND_GROUPS.forEach((g,i) => {
+      const tw = textw(g,12) + 22;
+      if (x + tw > w - 4) { x = 6; y += 22; }
+      s.appendChild(el("rect", { x, y:y-8, width:9, height:9, fill:COLORS[i%COLORS.length] }));
+      s.appendChild(el("text", { x:x+14, y, fill:"#8b949e", "font-size":12 }, g));
+      x += tw;
+    });
+    s.appendChild(el("text", { x:w-6, y:h-legendH+12, fill:"#f0883e", "font-size":10,
+      "text-anchor":"end" }, "−75px of plot"));
+  }
+  card.appendChild(s);
+
+  if (LEGEND === "dom") {
+    const k = document.createElement("div"); k.className = "domlegend";
+    TREND_GROUPS.forEach((g,i) => k.insertAdjacentHTML("beforeend",
+      `<span><i style="background:${COLORS[i%COLORS.length]}"></i>${g}</span>`));
+    card.appendChild(k);
+  }
+  card.insertAdjacentHTML("beforeend",
+    `<div class="toggle"><button data-lg="recharts">&lt;Legend&gt;</button>`
+    + `<button data-lg="dom">DOM key</button></div>`);
+  card.querySelectorAll("[data-lg]").forEach(b => {
+    b.classList.toggle("on", b.dataset.lg === LEGEND);
+    b.onclick = () => { LEGEND = b.dataset.lg; render(); };
+  });
+  return card;
+}
+
+// ---------------------------------------------------------------- LabelList bar charts (q4)
+function barCard(title, data, opts) {
+  const { fmt, fs, color, sub } = opts;
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<h3>${title}<span class="qtag">labels ${LABELS ? "on" : "off"}</span></h3>`;
+  if (sub) card.insertAdjacentHTML("beforeend", `<div class="sub">${sub}</div>`);
+  const w = 390 - 14*2 - 16*2, h = 240, L = 44, R = 8, T = LABELS ? 22 : 10, B = 22;
+  const s = svg(w, h);
+  const pw = w - L - R, ph = h - T - B;
+  const vals = data.map(d => d.v);
+  const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals), span = hi - lo || 1;
+  const y0 = T + ph - ((0 - lo)/span)*ph;
+
+  s.appendChild(el("line", { x1:L, x2:w-R, y1:y0, y2:y0, stroke:"#2b333d" }));
+  const bw = pw/data.length, bar = Math.min(bw*0.6, 34);
+  const boxes = [];
+
+  data.forEach((d,i) => {
+    const cx = L + bw*i + bw/2;
+    const hh = Math.abs(d.v/span)*ph;
+    const top = d.v >= 0 ? y0 - hh : y0;
+    s.appendChild(el("rect", { x:cx-bar/2, y:top, width:bar, height:hh, rx:3,
+      fill: color ? color(d.v) : "var(--pos)" }));
+    if (LABELS) {
+      const t = fmt(d.v);
+      const tw = textw(t, fs);
+      boxes.push({ i, x0:cx - tw/2, x1:cx + tw/2, t, cx, y: d.v >= 0 ? top - 5 : top + hh + fs + 2, fs });
+    }
+    // x ticks: recharts self-drops on collision. Reproduced — drop every other when tight.
+    const every = bw < 34 ? 2 : 1;
+    if (i % every === 0)
+      s.appendChild(el("text", { x:cx, y:h-6, fill:"#8b949e", "font-size":11,
+        "text-anchor":"middle" }, d.k.length > 4 ? d.k.slice(2) : d.k));
+  });
+
+  let collisions = 0, tickHits = 0;
+  boxes.forEach((b, i) => {
+    const prev = boxes[i-1];
+    // Two ways a LabelList collides at this width: into its neighbour, or — for negative bars,
+    // where the label is printed *below* the bar — into the x-axis tick row at y = h-6.
+    const neighbour = prev && b.x0 < prev.x1 + 2;
+    const tick = b.y > h - 6 - fs;
+    const hit = neighbour || tick;
+    if (neighbour) collisions++;
+    if (tick) tickHits++;
+    s.appendChild(el("text", { x:b.cx, y:b.y, fill: hit ? "#f85149" : "#c9d1d9",
+      "font-size":b.fs, "text-anchor":"middle" }, b.t));
+    if (hit) s.appendChild(el("rect", { x:b.x0-1, y:b.y-b.fs, width:b.x1-b.x0+2, height:b.fs+3,
+      fill:"none", stroke:"#f85149", "stroke-dasharray":"2 2" }));
+  });
+  card.appendChild(s);
+
+  if (LABELS && collisions)
+    card.insertAdjacentHTML("beforeend",
+      `<div class="flag">▲ <b>${collisions} label-into-label collisions</b> at ${fs}px — `
+      + `${Math.round(bw)}px per bar, labels need ~${Math.round(textw(boxes[0].t, fs))}px.</div>`);
+  if (LABELS && tickHits)
+    card.insertAdjacentHTML("beforeend",
+      `<div class="flag">▲ <b>${tickHits} negative-bar label${tickHits>1?"s":""} land in the `
+      + `x-axis tick row</b> — the label prints below the bar and there is no room left for it.</div>`);
+  if (LABELS && fs < 12)
+    card.insertAdjacentHTML("beforeend",
+      `<div class="flag">▲ <b>${fs}px</b> is under any plausible type floor `
+      + `(ticket 015).</div>`);
+
+  card.insertAdjacentHTML("beforeend",
+    `<div class="toggle"><button data-lb="1">LabelList on</button>`
+    + `<button data-lb="0">off</button></div>`);
+  card.querySelectorAll("[data-lb]").forEach(b => {
+    b.classList.toggle("on", (b.dataset.lb === "1") === LABELS);
+    b.onclick = () => { LABELS = b.dataset.lb === "1"; render(); };
+  });
+  return card;
+}
+
+// ---------------------------------------------------------------- line chart (q5)
+function lineCard() {
+  const card = document.createElement("div"); card.className = "card";
+  card.innerHTML = `<h3>Net Worth Over Time<span class="qtag">line</span></h3>`;
+  card.insertAdjacentHTML("beforeend",
+    `<div class="sub">Lives in NetWorth.jsx — a view the map otherwise leaves at the "doesn't break" floor.</div>`);
+  const w = 390 - 14*2 - 16*2, h = 240, L = 44, R = 8, T = 10, B = 24;
+  const s = svg(w, h);
+  const pw = w - L - R, ph = h - T - B;
+  const all = NW.flatMap(d => [d.net, d.excl]);
+  const lo = Math.min(...all)*0.95, hi = Math.max(...all)*1.02, span = hi - lo;
+  for (let i = 0; i <= 4; i++) {
+    const y = T + ph - (ph*i/4);
+    s.appendChild(el("line", { x1:L, x2:w-R, y1:y, y2:y, stroke:"#20262e" }));
+    s.appendChild(el("text", { x:L-6, y:y+4, fill:"#8b97a5", "font-size":11, "text-anchor":"end" },
+      Math.round((lo + span*i/4)/1000) + "k"));
+  }
+  const px = i => L + (pw*i)/(NW.length-1);
+  const py = v => T + ph - ((v-lo)/span)*ph;
+  [["net","#388bfd"],["excl","#2ea043"]].forEach(([k,c]) =>
+    s.appendChild(el("path", { fill:"none", stroke:c, "stroke-width":2,
+      d: NW.map((d,i) => (i ? "L" : "M") + px(i) + " " + py(d[k])).join("") })));
+  // recharts self-drops colliding ticks; 11 dates at 278px means it keeps ~4.
+  NW.forEach((d,i) => { if (i % 3 === 0)
+    s.appendChild(el("text", { x:px(i), y:h-6, fill:"#8b97a5", "font-size":11,
+      "text-anchor":"middle" }, d.d.slice(2))); });
+  card.appendChild(s);
+  const k = document.createElement("div"); k.className = "domlegend";
+  k.innerHTML = `<span><i style="background:#388bfd"></i>Net Worth</span>`
+    + `<span><i style="background:#2ea043"></i>Excl. Housing</span>`;
+  card.appendChild(k);
+  return card;
+}
+
+// ---------------------------------------------------------------- render
+function render() {
+  const m = document.getElementById("main");
+  m.innerHTML = "";
+  m.appendChild(donutCard("Allocation by Market", MARKET,
+    "portfolio/Overview.jsx:49-73 — the hand-copied duplicate Donut."));
+  m.appendChild(donutCard("Spending by Category", SPEND,
+    "spending/charts.jsx:9-33 — shared Donut, 8 slices, user-authored names."));
+  m.appendChild(stackedCard());
+  m.appendChild(barCard("Dividends by Year", DIVS,
+    { fmt:sgd, fs:11, color:() => "#2e9e5b",
+      sub:'Dividends.jsx:63 — the height="100%" collapse trap.' }));
+  m.appendChild(barCard("Options Realized P/L by Month", OPTMO,
+    { fmt:kfmt, fs:9, color:v => v >= 0 ? "#2ea043" : "#f85149",
+      sub:"Options.jsx:52 — 12 bars, LabelList at fontSize 9." }));
+  m.appendChild(lineCard());
+  m.querySelectorAll(".card").forEach(auditS0);
+
+  document.querySelectorAll("[data-d]").forEach(b => {
+    b.classList.toggle("on", b.dataset.d === DONUT);
+    b.onclick = () => { DONUT = b.dataset.d; sync(); render(); };
+  });
+  document.querySelectorAll("[data-r]").forEach(b => {
+    b.classList.toggle("on", b.dataset.r === ROWS);
+    b.onclick = () => { ROWS = b.dataset.r; sync(); render(); };
+  });
+  document.getElementById("note").textContent = ({
+    A:"A — donut survives at ⌀216, bigger than desktop's 180.",
+    B:"B — no chart. The list is the chart.",
+    C:"C — ring as ornament; the total is the headline.",
+  })[DONUT] + " " + ({
+    S0:"S0 is today: flex-shrink hides the break by lying about the bars.",
+    S1:"S1: 2 lines/row, % width, no truncation.",
+    S2:"S2: 1 line/row, name over the track.",
+  })[ROWS];
+}
+function sync() {
+  const u = new URL(location); u.searchParams.set("donut", DONUT); u.searchParams.set("rows", ROWS);
+  history.replaceState(null, "", u);
+}
+addEventListener("keydown", e => {
+  const D = ["A","B","C"], R = ["S0","S1","S2"];
+  if (e.key === "ArrowRight") DONUT = D[(D.indexOf(DONUT)+1)%3];
+  else if (e.key === "ArrowLeft") DONUT = D[(D.indexOf(DONUT)+2)%3];
+  else if (e.key === "ArrowDown") ROWS = R[(R.indexOf(ROWS)+1)%3];
+  else if (e.key === "ArrowUp") ROWS = R[(R.indexOf(ROWS)+2)%3];
+  else return;
+  sync(); render();
+});
+render();
+</script>

@@ -1,0 +1,508 @@
+<!--
+  PROTOTYPE — throwaway. Wide numeric tables at 390px, 3 structurally-different patterns.
+  Switch pattern via the floating bar / ←→ / ?variant=A|B|C. Switch dataset with the HOLDINGS |
+  TRANSACTIONS toggle (?view=holdings|txns).
+
+  Answers wayfinder ticket 013 "Wide numeric tables on a phone". Not production code.
+
+  Real-shaped data and real column sets:
+    Holdings     — all 13 columns from Holdings.jsx:142-149, incl. the Net bar (NetCell:28-45),
+                   the "~" cost-unknown marker, closed positions, grouping rows, and clickable
+                   rows that drill into SecurityDetail.
+    Transactions — the 6 columns from spending/Transactions.jsx:41-44. Ledger-style, rows NOT
+                   clickable, excluded rows dimmed to .55.
+
+  Rendered inside the shell decided by ticket 012 (48px app bar, 100svh column, drawer behind the
+  hamburger) so the vertical budget is honest. Desktop shows a 390x844 frame; below 760px it is
+  the page. The ROWS readout counts data rows fully visible in the pane — the density number the
+  patterns actually trade against each other.
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Wide tables on a phone — prototype</title>
+<style>
+  :root {
+    --bg:#0f1419; --panel:#161b22; --panel2:#1c232c; --line:#2b333d;
+    --txt:#d7dde4; --mut:#8b97a5; --pos:#2ea043; --neg:#f85149; --acc:#388bfd;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { background:#05080b; color:var(--txt);
+    font:14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+
+  /* ---- staging (not under test) ---- */
+  .stage { min-height:100svh; display:flex; align-items:center; justify-content:center; padding:24px 16px 96px; }
+  .frame { width:390px; height:844px; flex:none; background:var(--bg); overflow:hidden;
+    border:1px solid #333c47; border-radius:34px; box-shadow:0 24px 70px rgba(0,0,0,.6); position:relative; }
+  .framelbl { position:absolute; top:-22px; left:4px; font-size:11px; color:#5b6675; letter-spacing:.06em; text-transform:uppercase; }
+  @media (max-width:760px) {
+    .stage { padding:0; display:block; min-height:0; }
+    .frame { width:100%; height:100svh; border:none; border-radius:0; box-shadow:none; }
+    .framelbl { display:none; }
+  }
+
+  /* ---- shell from ticket 012 ---- */
+  .shell { height:100%; display:flex; flex-direction:column; min-height:0; }
+  .bar { flex:none; display:flex; align-items:center; gap:10px; background:var(--panel);
+    border-bottom:1px solid var(--line); padding:0 12px; height:48px; }
+  .iconbtn { background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px;
+    min-width:40px; height:36px; font:inherit; font-weight:600; cursor:pointer; display:flex;
+    align-items:center; justify-content:center; padding:0 10px; }
+  select.tabsel { flex:1; min-width:0; background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    border-radius:8px; padding:8px 10px; font:inherit; font-weight:600; font-size:16px; height:38px; }
+  .content { flex:1 1 auto; min-height:0; overflow:auto; padding:12px;
+    padding-left:max(12px, env(safe-area-inset-left)); padding-right:max(12px, env(safe-area-inset-right)); }
+
+  /* ---- shared view chrome ---- */
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .card > h3 { margin:0 0 10px; font-size:13px; color:var(--mut); text-transform:uppercase; letter-spacing:.04em; }
+  .ctrls { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; align-items:center; }
+  .ctrls select, .ctrls input { background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    padding:7px 9px; border-radius:8px; font:inherit; font-size:16px; }
+  .ctrls label { font-size:12px; color:var(--mut); display:flex; align-items:center; gap:6px; }
+  .hint { color:var(--mut); font-size:11px; margin:8px 2px 0; }
+  .pill { font-size:11px; padding:1px 7px; border-radius:9px; background:var(--panel2); color:var(--mut); }
+  .pos { color:var(--pos); } .neg { color:var(--neg); } .mut { color:var(--mut); }
+  .num { font-variant-numeric:tabular-nums; }
+
+  /* =========== VARIANT A — the real table, horizontal scroll, pinned identity column =========== */
+  .hscroll { overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch;
+    margin:0 -12px; padding:0 12px; }
+  .hscroll table { border-collapse:separate; border-spacing:0; font-variant-numeric:tabular-nums; }
+  .hscroll th, .hscroll td { padding:7px 10px; text-align:right; white-space:nowrap;
+    border-bottom:1px solid #20262e; }
+  .hscroll th { color:var(--mut); font-size:11px; text-transform:uppercase; position:sticky; top:0;
+    background:var(--panel); z-index:2; }
+  .hscroll td.l, .hscroll th.l { text-align:left; }
+  /* the pin: identity column frozen against the horizontal scroll */
+  .hscroll th.pin, .hscroll td.pin { position:sticky; left:0; background:var(--panel); z-index:3;
+    max-width:150px; }
+  .hscroll td.pin .pinnm { max-width:130px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .hscroll th.pin { z-index:4; }
+  .hscroll td.pin::after, .hscroll th.pin::after { content:""; position:absolute; top:0; bottom:0; right:0;
+    width:10px; transform:translateX(100%); pointer-events:none;
+    background:linear-gradient(to right, rgba(0,0,0,.45), transparent); }
+  .hscroll tr.grp td { background:var(--panel2); font-weight:600; }
+  .hscroll tr.grp td.pin { background:var(--panel2); }
+  .swipehint { display:flex; align-items:center; gap:6px; color:var(--mut); font-size:11px; margin:6px 2px 0; }
+
+  /* =========== VARIANT B — card per row =========== */
+  .cards { display:flex; flex-direction:column; gap:8px; }
+  .grphead { font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--mut);
+    display:flex; gap:8px; align-items:baseline; padding:10px 2px 2px; }
+  .grphead b { color:var(--txt); font-size:12px; }
+  .grphead .agg { margin-left:auto; font-variant-numeric:tabular-nums; font-weight:700; }
+  .plist .grphead { padding:8px 10px; background:var(--panel2); border-bottom:1px solid #20262e; }
+  .rowcard { background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  .rowcard.tap { cursor:pointer; }
+  .rowcard .head { display:flex; align-items:baseline; gap:8px; }
+  .rowcard .nm { font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .rowcard .hero { font-weight:700; font-size:17px; font-variant-numeric:tabular-nums; }
+  .rowcard .sub { color:var(--mut); font-size:11px; margin-top:1px; display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .kv { display:grid; grid-template-columns:1fr 1fr; gap:2px 14px; margin-top:9px;
+    border-top:1px solid var(--line); padding-top:8px; }
+  .kv div { display:flex; justify-content:space-between; gap:8px; font-size:12px; }
+  .kv span.k { color:var(--mut); }
+  .kv span.v { font-variant-numeric:tabular-nums; }
+  .rowcard.dim { opacity:.55; }
+
+  /* =========== VARIANT C — priority summary, expand in place =========== */
+  .plist { border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  .phead { display:grid; grid-template-columns:1fr auto 22px; gap:8px; padding:7px 10px;
+    background:var(--panel); position:sticky; top:0; z-index:2; border-bottom:1px solid var(--line);
+    color:var(--mut); font-size:11px; text-transform:uppercase; }
+  .phead .r { text-align:right; }
+  .prow { display:grid; grid-template-columns:1fr auto 22px; gap:8px; align-items:center;
+    padding:9px 10px; border-bottom:1px solid #20262e; cursor:pointer; min-height:44px; }
+  .prow:active { background:#1a212a; }
+  .prow .id { min-width:0; }
+  .prow .nm { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .prow .sub { color:var(--mut); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .prow .val { text-align:right; font-weight:700; font-variant-numeric:tabular-nums; position:relative;
+    padding:0 4px; min-width:118px; }
+  .prow .val .barfill { position:absolute; right:0; top:-2px; bottom:-2px; border-radius:3px; }
+  .prow .val span { position:relative; }
+  .prow .car { color:var(--mut); text-align:center; transition:transform .15s; }
+  .prow.open .car { transform:rotate(90deg); }
+  .prow.dim { opacity:.55; }
+  .panel { background:var(--panel2); border-bottom:1px solid #20262e; padding:10px 12px 12px; }
+  .panel .kv { margin-top:0; border-top:none; padding-top:0; }
+  .drill { display:flex; align-items:center; justify-content:space-between; margin-top:10px;
+    background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    font-weight:600; font-size:13px; cursor:pointer; min-height:44px; }
+  .drill .car { color:var(--acc); }
+
+  /* ---- drilldown stand-in (SecurityDetail) ---- */
+  .detail { position:absolute; inset:0; background:var(--bg); z-index:8; display:flex; flex-direction:column; }
+  .detail .bar { background:var(--panel); }
+  .detail .body { flex:1; overflow:auto; padding:14px; }
+  .backbtn { background:none; border:none; color:var(--acc); font:inherit; font-weight:600; cursor:pointer;
+    min-height:44px; display:flex; align-items:center; gap:6px; padding:0 4px; }
+
+  /* ---- floating switcher ---- */
+  .switch { position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:50;
+    display:flex; align-items:center; gap:6px; background:#f2f5f8; color:#101820; border-radius:999px;
+    padding:5px 6px; box-shadow:0 6px 24px rgba(0,0,0,.5); font-size:12px; font-weight:600; }
+  .switch button { background:#101820; color:#f2f5f8; border:none; border-radius:999px; width:28px; height:28px;
+    font-size:14px; cursor:pointer; }
+  .switch .lab { padding:0 8px; white-space:nowrap; }
+  .switch .lab b { font-weight:700; }
+  .switch .tog { background:#dfe5ec; color:#101820; border-radius:999px; padding:5px 10px; cursor:pointer;
+    border:1px solid #c3ccd7; font-size:11px; }
+  .switch .tog.on { background:#101820; color:#f2f5f8; border-color:#101820; }
+  .switch .meas { color:#5a6675; font-weight:500; padding-right:6px; white-space:nowrap; }
+  @media (max-width:760px) {
+    .switch { left:auto; right:6px; bottom:auto; top:50%; transform:translateY(-50%); flex-direction:column;
+      gap:4px; padding:5px; opacity:.9; }
+    .switch .lab { padding:0; font-size:14px; width:28px; text-align:center; }
+    .switch .lab #labn { display:none; }
+    .switch .meas { display:none; }
+    .switch .tog { padding:4px 5px; font-size:9px; writing-mode:vertical-rl; }
+  }
+</style>
+
+<div class="stage">
+  <div class="frame" id="frame">
+    <span class="framelbl">390 x 844</span>
+    <div id="root"></div>
+  </div>
+</div>
+
+<div class="switch">
+  <button id="prev">‹</button>
+  <span class="lab"><b id="labk"></b><span id="labn"></span></span>
+  <button id="next">›</button>
+  <span class="tog" id="viewtog">HOLDINGS</span>
+  <span class="meas" id="meas"></span>
+</div>
+
+<script>
+// ------------------------------------------------------------------ data (real shapes)
+// name, ticker, accounts, bucket, market, units, avgCost, price, ccy, costSgd, mvSgd, pl, divSgd,
+// optPl, net, partial(cost unknown), xirr, closed
+const HOLD = [
+  ["Vanguard FTSE All-World","VWRA",["IBKR"],"Core","LSE",184,88.12,99.40,"USD",160530,182410,21880,0,2140,24020,false,.121,false],
+  ["DBS Group Holdings","D05",["CDP","FSM"],"Income","SGX",1200,37.40,43.60,"SGD",44880,52320,7440,3980,0,11420,false,.148,false],
+  ["OCBC Bank","O39",["CDP"],"Income","SGX",900,15.26,16.60,"SGD",13734,14940,1206,1140,0,2346,false,.092,false],
+  ["NVIDIA Corp","NVDA",["IBKR"],"Growth","NASDAQ",22,745.10,1298.00,"USD",21680,38120,16440,0,0,16440,false,.416,false],
+  ["Apple Inc","AAPL",["IBKR"],"Growth","NASDAQ",60,262.00,248.20,"USD",21120,19880,-1240,210,0,-1030,false,-.031,false],
+  ["Microsoft Corp","MSFT",["IBKR"],"Growth","NASDAQ",35,585.40,700.30,"USD",20490,24510,4020,180,0,4200,false,.134,false],
+  ["STI ETF","ES3",["CDP"],"Core","SGX",4000,3.785,4.030,"SGD",15140,16120,980,1420,0,2400,false,.067,false],
+  ["Lion-Phillip S-REIT","CLR",["FSM"],"Income","SGX",7000,1.137,1.020,"SGD",7959,7140,-819,640,0,-179,false,-.024,false],
+  ["CapitaLand Ascendas REIT","A17U",["CDP"],"Income","SGX",2100,2.947,2.800,"SGD",6189,5880,-309,420,0,111,false,.018,false],
+  ["Tesla Inc","TSLA",["IBKR"],"Growth","NASDAQ",18,264.40,330.00,"USD",4759,5940,1181,0,0,1181,false,.199,false],
+  ["Brookfield Corp","BN",["IBKR"],"Growth","NYSE",70,65.00,77.28,"USD",4550,5410,860,90,0,950,false,.112,false],
+  ["Schwab US Dividend","SCHD",["IBKR"],"Income","NYSE",90,102.00,114.66,"USD",9180,10320,1140,740,0,1880,false,.081,false],
+  ["Singtel","Z74",["CDP"],"Income","SGX",3000,null,3.24,"SGD",null,9720,null,1180,0,1180,true,null,false],
+  ["Keppel DC REIT","AJBU",["FSM"],"Income","SGX",0,2.11,2.04,"SGD",4220,0,-140,310,0,170,false,-.012,true],
+  ["Alibaba Group","BABA",["IBKR"],"Growth","NYSE",0,88.00,0,"USD",5940,0,-1180,0,880,-300,false,-.061,true],
+];
+const TXNS = [
+  ["2026-07-28","Trust card","NTUC FairPrice Bedok","Groceries","Supermarket",-84.30,true,""],
+  ["2026-07-28","DBS bank","GIRO — SP GROUP","Utilities","Electricity",-142.15,true,""],
+  ["2026-07-27","HSBC card","Grab* Ride 8823","Transport","Ride-hailing",-18.60,true,""],
+  ["2026-07-27","Trust card","Ya Kun Kaya Toast","Food & Drink","Eating out",-9.80,true,""],
+  ["2026-07-26","DBS bank","SALARY — ACME PTE LTD",  "Income","Salary",8400.00,false,"income, not spend"],
+  ["2026-07-26","HSBC card","Amazon SG Marketplace","Shopping","Household",-63.45,true,""],
+  ["2026-07-25","Trust card","Shell Alexandra Rd","Transport","Fuel",-72.00,true,""],
+  ["2026-07-25","DBS bank","TRANSFER TO SAVINGS","Transfers","Internal",-2000.00,false,"internal transfer"],
+  ["2026-07-24","HSBC card","Netflix.com","Subscriptions","Streaming",-19.98,true,""],
+  ["2026-07-24","Trust card","Cold Storage Great World","Groceries","Supermarket",-56.20,true,""],
+  ["2026-07-23","DBS bank","GIRO — INCOME INSURANCE","Insurance","Life",-238.00,true,""],
+  ["2026-07-23","HSBC card","Apple Services","Subscriptions","Cloud",-4.98,true,""],
+  ["2026-07-22","Trust card","Din Tai Fung Jewel","Food & Drink","Eating out",-68.40,true,""],
+  ["2026-07-22","DBS bank","ATM WITHDRAWAL","Cash","Withdrawal",-200.00,false,"cash, unclassifiable"],
+  ["2026-07-21","HSBC card","Uniqlo Orchard","Shopping","Clothing",-119.90,true,""],
+  ["2026-07-21","Trust card","Guardian Pharmacy","Health","Pharmacy",-31.15,true,""],
+];
+
+// ------------------------------------------------------------------ formatting (mirrors api.js)
+const sgd = (n) => n == null ? "n/a" : (n < 0 ? "-" : "") + "S$" + Math.abs(n).toLocaleString("en-SG",
+  { minimumFractionDigits:0, maximumFractionDigits:0 });
+const sgd2 = (n) => (n < 0 ? "-" : "") + "S$" + Math.abs(n).toLocaleString("en-SG",
+  { minimumFractionDigits:2, maximumFractionDigits:2 });
+const money = (n,c,d=2) => n == null ? "n/a" : c + " " + n.toLocaleString("en-SG",
+  { minimumFractionDigits:d, maximumFractionDigits:d });
+const pct = (n) => n == null ? "—" : (n*100).toFixed(1) + "%";
+const cls = (n) => n == null ? "" : n >= 0 ? "pos" : "neg";
+const H = (i) => ({ name:HOLD[i][0], ticker:HOLD[i][1], accounts:HOLD[i][2], bucket:HOLD[i][3],
+  market:HOLD[i][4], units:HOLD[i][5], avg:HOLD[i][6], price:HOLD[i][7], ccy:HOLD[i][8],
+  cost:HOLD[i][9], mv:HOLD[i][10], pl:HOLD[i][11], div:HOLD[i][12], opt:HOLD[i][13],
+  net:HOLD[i][14], partial:HOLD[i][15], xirr:HOLD[i][16], closed:HOLD[i][17] });
+const T = (i) => ({ date:TXNS[i][0], src:TXNS[i][1], merch:TXNS[i][2], cat:TXNS[i][3],
+  sub:TXNS[i][4], amt:TXNS[i][5], spend:TXNS[i][6], why:TXNS[i][7] });
+const rowsH = () => HOLD.map((_,i)=>H(i)).filter(r => st.showClosed || !r.closed);
+const rowsT = () => TXNS.map((_,i)=>T(i)).filter(r => st.showExcl || r.spend);
+const maxNet = () => Math.max(...HOLD.map(r => Math.abs(r[14])));
+
+const st = { variant:"A", view:"holdings", showClosed:false, showExcl:false, group:"bucket",
+             open:null, detail:null };
+
+// ------------------------------------------------------------------ controls (real ones, from the views)
+const ctrlsH = () => `<div class="ctrls">
+  <label>Group by
+    <select data-c="group">${["bucket","market","account","none"].map(g =>
+      `<option value="${g}" ${g===st.group?"selected":""}>${{bucket:"Funding bucket",market:"Market",account:"Account",none:"No grouping"}[g]}</option>`).join("")}</select></label>
+  <label><input type="checkbox" data-c="showClosed" ${st.showClosed?"checked":""}> Show closed</label>
+</div>`;
+const ctrlsT = () => `<div class="ctrls">
+  <select data-c="cat"><option>All categories</option><option>Groceries</option><option>Transport</option></select>
+  <select data-c="src"><option>All sources</option><option>DBS bank</option><option>Trust card</option></select>
+  <label><input type="checkbox" data-c="showExcl" ${st.showExcl?"checked":""}> Show excluded</label>
+</div>`;
+
+// grouping, shared by all three patterns (Holdings only)
+function groupRows(rs) {
+  if (st.group === "none") return [["", rs]];
+  const key = { bucket:(r)=>r.bucket, market:(r)=>r.market, account:(r)=>r.accounts[0] }[st.group];
+  const g = {};
+  rs.forEach(r => { const k = key(r); (g[k] = g[k] || []).push(r); });
+  return Object.entries(g);
+}
+const groupNet = (rows) => rows.reduce((a,r) => a + r.net, 0);
+
+// ================================================================== VARIANT A — pinned h-scroll
+function A_holdings() {
+  const rs = rowsH(), max = maxNet();
+  const grouped = st.group !== "none";
+  const key = { bucket:"bucket", market:"market", account:(r)=>r.accounts[0] }[st.group];
+  const groups = {};
+  rs.forEach(r => { const k = grouped ? (typeof key === "function" ? key(r) : r[key]) : "";
+                    (groups[k] = groups[k] || []).push(r); });
+  const body = Object.entries(groups).map(([k, rows]) => {
+    const agg = rows.reduce((a,r)=>({mv:a.mv+r.mv, pl:a.pl+(r.pl||0), div:a.div+r.div,
+      opt:a.opt+r.opt, net:a.net+r.net}), {mv:0,pl:0,div:0,opt:0,net:0});
+    const head = grouped ? `<tr class="grp"><td class="l pin" colspan="7">▾ ${k}
+      <span class="mut" style="font-weight:400"> · ${rows.length}</span></td>
+      <td>${sgd(agg.mv)}</td><td class="${cls(agg.pl)}">${sgd(agg.pl)}</td>
+      <td class="pos">${sgd(agg.div)}</td><td class="${cls(agg.opt)}">${agg.opt?sgd(agg.opt):""}</td>
+      <td class="${cls(agg.net)}" style="font-weight:700">${sgd(agg.net)}</td><td></td></tr>` : "";
+    return head + rows.map(r => {
+      const w = Math.min(100, Math.abs(r.net)/max*100), c = r.net>=0?"16,185,129":"239,68,68";
+      return `<tr data-h="${r.ticker}" style="cursor:pointer;${r.closed?"opacity:.7":""}">
+        <td class="l pin"><div class="pinnm">${r.name}</div>
+          <div class="mut" style="font-size:11px">${r.ticker} · ${r.accounts.join(", ")}${r.closed?" · closed":""}</div></td>
+        <td class="l"><span class="pill">${r.bucket}</span></td>
+        <td class="l"><span class="pill">${r.market}</span></td>
+        <td>${r.closed?'<span class="mut">—</span>':r.units.toLocaleString()}</td>
+        <td class="mut">${money(r.avg,r.ccy,4)}</td>
+        <td class="mut">${money(r.price,r.ccy,4)}</td>
+        <td>${r.cost==null?'<span class="mut">n/a</span>':sgd(r.cost)}</td>
+        <td>${r.closed?'<span class="mut">—</span>':sgd(r.mv)}</td>
+        <td class="${cls(r.pl)}">${r.pl==null?'<span class="mut">n/a</span>':sgd(r.pl)}</td>
+        <td class="pos">${r.div?sgd(r.div):"—"}</td>
+        <td class="${cls(r.opt)}">${r.opt?sgd(r.opt):"—"}</td>
+        <td style="min-width:110px"><div style="position:relative;padding:1px 4px">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:${w}%;background:rgba(${c},.18);border-radius:3px"></div>
+          <span class="${cls(r.net)}" style="position:relative;font-weight:700">${sgd(r.net)}${r.partial?' <span class="mut" style="font-weight:400">~</span>':""}</span>
+        </div></td>
+        <td class="${cls(r.xirr)}">${pct(r.xirr)}</td></tr>`;
+    }).join("");
+  }).join("");
+  return `<div class="card"><h3>Holdings (${rs.length})</h3>${ctrlsH()}
+    <div class="hscroll"><table>
+      <thead><tr><th class="l pin">Security</th><th class="l">Bucket</th><th class="l">Mkt</th>
+      <th>Units</th><th>Avg Cost</th><th>Price</th><th>Cost (SGD)</th><th>MV (SGD)</th><th>P/L</th>
+      <th>Dividends</th><th>Options P/L</th><th>Net</th><th>XIRR</th></tr></thead>
+      <tbody>${body}</tbody></table></div>
+    <div class="swipehint">← swipe the table · Security column stays pinned · tap a row for full history</div>
+  </div>`;
+}
+function A_txns() {
+  const rs = rowsT();
+  return `<div class="card"><h3>Transactions (${rs.length})</h3>${ctrlsT()}
+    <div class="hscroll"><table>
+      <thead><tr><th class="l pin">Date</th><th class="l">Source</th><th class="l">Merchant</th>
+      <th class="l">Category</th><th>Amount</th><th class="l">Flag</th></tr></thead>
+      <tbody>${rs.map(r => `<tr style="${r.spend?"":"opacity:.55"}">
+        <td class="l pin mut">${r.date}</td><td class="l mut">${r.src}</td>
+        <td class="l">${r.merch}</td>
+        <td class="l">${r.cat}<span class="mut"> · ${r.sub}</span></td>
+        <td class="${r.amt<0?"neg":"pos"}">${sgd2(r.amt)}</td>
+        <td class="l mut" style="font-size:11px">${r.why}</td></tr>`).join("")}</tbody></table></div>
+    <div class="swipehint">← swipe the table · Date column stays pinned</div>
+  </div>`;
+}
+
+// ================================================================== VARIANT B — card per row
+function B_holdings() {
+  const rs = rowsH();
+  return `<div class="card"><h3>Holdings (${rs.length})</h3>${ctrlsH()}
+    <div class="cards">${groupRows(rs).map(([k, rows]) => (k ? `
+      <div class="grphead"><b>${k}</b><span>· ${rows.length}</span>
+        <span class="agg ${cls(groupNet(rows))}">${sgd(groupNet(rows))}</span></div>` : "") + rows.map(r => `
+      <div class="rowcard tap ${r.closed?"dim":""}" data-h="${r.ticker}">
+        <div class="head"><span class="nm">${r.name}</span>
+          <span class="hero ${cls(r.net)}">${sgd(r.net)}${r.partial?' <span class="mut" style="font-weight:400;font-size:12px">~</span>':""}</span></div>
+        <div class="sub"><span class="pill">${r.ticker}</span><span class="pill">${r.bucket}</span>
+          <span class="pill">${r.market}</span>${r.closed?'<span class="pill">closed</span>':""}
+          <span>${r.accounts.join(", ")}</span></div>
+        <div class="kv">
+          <div><span class="k">Units</span><span class="v">${r.closed?"—":r.units.toLocaleString()}</span></div>
+          <div><span class="k">XIRR</span><span class="v ${cls(r.xirr)}">${pct(r.xirr)}</span></div>
+          <div><span class="k">Avg cost</span><span class="v mut">${money(r.avg,r.ccy,4)}</span></div>
+          <div><span class="k">Price</span><span class="v mut">${money(r.price,r.ccy,4)}</span></div>
+          <div><span class="k">Cost</span><span class="v">${sgd(r.cost)}</span></div>
+          <div><span class="k">MV</span><span class="v">${r.closed?"—":sgd(r.mv)}</span></div>
+          <div><span class="k">P/L</span><span class="v ${cls(r.pl)}">${sgd(r.pl)}</span></div>
+          <div><span class="k">Dividends</span><span class="v pos">${r.div?sgd(r.div):"—"}</span></div>
+          <div><span class="k">Options P/L</span><span class="v ${cls(r.opt)}">${r.opt?sgd(r.opt):"—"}</span></div>
+        </div></div>`).join("")).join("")}</div>
+    <div class="hint">Every field survives; column alignment across rows does not.</div></div>`;
+}
+function B_txns() {
+  const rs = rowsT();
+  return `<div class="card"><h3>Transactions (${rs.length})</h3>${ctrlsT()}
+    <div class="cards">${rs.map(r => `
+      <div class="rowcard ${r.spend?"":"dim"}">
+        <div class="head"><span class="nm">${r.merch}</span>
+          <span class="hero ${r.amt<0?"neg":"pos"}">${sgd2(r.amt)}</span></div>
+        <div class="sub"><span>${r.date}</span><span class="pill">${r.src}</span>
+          <span>${r.cat} · ${r.sub}</span>${r.why?`<span class="pill">${r.why}</span>`:""}</div>
+      </div>`).join("")}</div>
+    <div class="hint">A ledger row only has 6 fields — the card needs no key/value block at all.</div></div>`;
+}
+
+// ================================================================== VARIANT C — priority + expand
+function C_holdings() {
+  const rs = rowsH(), max = maxNet();
+  return `<div class="card"><h3>Holdings (${rs.length})</h3>${ctrlsH()}
+    <div class="plist">
+      <div class="phead"><span>Security</span><span class="r">Net</span><span></span></div>
+      ${groupRows(rs).map(([gk, grows]) => (gk ? `
+        <div class="grphead"><b>${gk}</b><span>· ${grows.length}</span>
+          <span class="agg ${cls(groupNet(grows))}">${sgd(groupNet(grows))}</span></div>` : "") + grows.map(r => {
+        const isOpen = st.open === r.ticker;
+        const w = Math.min(100, Math.abs(r.net)/max*100), c = r.net>=0?"16,185,129":"239,68,68";
+        return `<div class="prow ${isOpen?"open":""} ${r.closed?"dim":""}" data-x="${r.ticker}">
+          <div class="id"><div class="nm">${r.name}</div>
+            <div class="sub">${r.ticker} · ${r.bucket} · ${r.market}${r.closed?" · closed":""}</div></div>
+          <div class="val"><div class="barfill" style="width:${w}%;background:rgba(${c},.18)"></div>
+            <span class="${cls(r.net)}">${sgd(r.net)}${r.partial?' <span class="mut" style="font-weight:400">~</span>':""}</span></div>
+          <div class="car">›</div></div>
+        ${isOpen ? `<div class="panel"><div class="kv">
+          <div><span class="k">Units</span><span class="v">${r.closed?"—":r.units.toLocaleString()}</span></div>
+          <div><span class="k">XIRR</span><span class="v ${cls(r.xirr)}">${pct(r.xirr)}</span></div>
+          <div><span class="k">Avg cost</span><span class="v mut">${money(r.avg,r.ccy,4)}</span></div>
+          <div><span class="k">Price</span><span class="v mut">${money(r.price,r.ccy,4)}</span></div>
+          <div><span class="k">Cost</span><span class="v">${sgd(r.cost)}</span></div>
+          <div><span class="k">MV</span><span class="v">${r.closed?"—":sgd(r.mv)}</span></div>
+          <div><span class="k">P/L</span><span class="v ${cls(r.pl)}">${sgd(r.pl)}</span></div>
+          <div><span class="k">Dividends</span><span class="v pos">${r.div?sgd(r.div):"—"}</span></div>
+          <div><span class="k">Options P/L</span><span class="v ${cls(r.opt)}">${r.opt?sgd(r.opt):"—"}</span></div>
+          </div>
+          <div class="drill" data-h="${r.ticker}">Full history for ${r.ticker}<span class="car">›</span></div>
+        </div>` : ""}`;
+      }).join("")).join("")}
+    </div>
+    <div class="hint">Tap a row to expand it here; the drilldown is an explicit action inside.</div></div>`;
+}
+function C_txns() {
+  const rs = rowsT();
+  return `<div class="card"><h3>Transactions (${rs.length})</h3>${ctrlsT()}
+    <div class="plist">
+      <div class="phead"><span>Merchant</span><span class="r">Amount</span><span></span></div>
+      ${rs.map((r,i) => {
+        const k = "t"+i, isOpen = st.open === k;
+        return `<div class="prow ${isOpen?"open":""} ${r.spend?"":"dim"}" data-x="${k}">
+          <div class="id"><div class="nm">${r.merch}</div>
+            <div class="sub">${r.date} · ${r.cat}</div></div>
+          <div class="val"><span class="${r.amt<0?"neg":"pos"}">${sgd2(r.amt)}</span></div>
+          <div class="car">›</div></div>
+        ${isOpen ? `<div class="panel"><div class="kv">
+          <div><span class="k">Source</span><span class="v">${r.src}</span></div>
+          <div><span class="k">Subcategory</span><span class="v">${r.sub}</span></div>
+          <div><span class="k">Date</span><span class="v">${r.date}</span></div>
+          <div><span class="k">Flag</span><span class="v">${r.why || "—"}</span></div>
+        </div></div>` : ""}`;
+      }).join("")}
+    </div>
+    <div class="hint">Expanding a ledger row reveals 4 fields you could have shown outright.</div></div>`;
+}
+
+// ------------------------------------------------------------------ drilldown stand-in
+function detailScreen(ticker) {
+  const r = HOLD.map((_,i)=>H(i)).find(x => x.ticker === ticker);
+  return `<div class="detail">
+    <div class="bar"><button class="backbtn" data-act="back">‹ Holdings</button></div>
+    <div class="body"><h2 style="margin:0 0 4px;font-size:18px">${r.name}</h2>
+      <div class="mut" style="margin-bottom:14px">${r.ticker} · ${r.market} · ${r.bucket}</div>
+      <div class="card" style="background:var(--panel2)">
+        <h3>SecurityDetail stand-in</h3>
+        <div class="mut" style="font-size:12px">Transaction history, dividend history and the
+        per-security chart live here. This screen only exists to show how back-navigation works.</div>
+      </div></div></div>`;
+}
+
+// ------------------------------------------------------------------ plumbing
+const VARIANTS = {
+  A: [{holdings:A_holdings, txns:A_txns}, "Pinned column + horizontal scroll"],
+  B: [{holdings:B_holdings, txns:B_txns}, "Card per row"],
+  C: [{holdings:C_holdings, txns:C_txns}, "Priority summary, expand in place"],
+};
+const root = document.getElementById("root");
+function render() {
+  const body = VARIANTS[st.variant][0][st.view]();
+  root.innerHTML = `<div class="shell">
+    <div class="bar"><button class="iconbtn">☰</button>
+      <select class="tabsel">${(st.view==="holdings"
+        ? ["Overview","Holdings","Performance","Dividends","Options","Transactions"]
+        : ["Overview","By Category","Classify","Recurring","Transactions"]).map(t =>
+        `<option ${((st.view==="holdings"&&t==="Holdings")||(st.view==="txns"&&t==="Transactions"))?"selected":""}>${t}</option>`).join("")}</select>
+      ${st.view==="holdings"?'<button class="iconbtn">↻</button>':""}</div>
+    <div class="content">${body}</div>
+  </div>${st.detail ? detailScreen(st.detail) : ""}`;
+  document.getElementById("labk").textContent = st.variant;
+  document.getElementById("labn").textContent = " — " + VARIANTS[st.variant][1];
+  document.getElementById("viewtog").textContent = st.view === "holdings" ? "HOLDINGS" : "TRANSACTIONS";
+  requestAnimationFrame(measure);
+}
+// count data rows FULLY visible in the content pane — the density each pattern actually delivers
+function measure() {
+  const pane = root.querySelector(".content");
+  if (!pane) return;
+  const sel = { A:".hscroll tbody tr", B:".rowcard", C:".prow" }[st.variant];
+  const top = pane.getBoundingClientRect().top, bot = pane.getBoundingClientRect().bottom;
+  let n = 0;
+  root.querySelectorAll(sel).forEach(el => {
+    const b = el.getBoundingClientRect();
+    if (b.top >= top - 1 && b.bottom <= bot + 1) n++;
+  });
+  const cols = st.variant === "A" ? (st.view==="holdings"?13:6) : null;
+  document.getElementById("meas").textContent =
+    `${n} rows visible` + (cols ? ` · ${cols} cols, ${Math.round(root.querySelector(".hscroll table").scrollWidth)}px wide` : "");
+}
+root.addEventListener("click", (e) => {
+  const back = e.target.closest('[data-act="back"]');
+  if (back) { st.detail = null; return render(); }
+  const drill = e.target.closest("[data-h]");
+  if (drill) { st.detail = drill.dataset.h; return render(); }
+  const x = e.target.closest("[data-x]");
+  if (x) { st.open = st.open === x.dataset.x ? null : x.dataset.x; return render(); }
+});
+root.addEventListener("change", (e) => {
+  const c = e.target.dataset.c;
+  if (c === "group") st.group = e.target.value;
+  if (c === "showClosed") st.showClosed = e.target.checked;
+  if (c === "showExcl") st.showExcl = e.target.checked;
+  if (c) render();
+});
+const keys = Object.keys(VARIANTS);
+function sync() { const u = new URL(location); u.searchParams.set("variant", st.variant);
+  u.searchParams.set("view", st.view); history.replaceState({}, "", u); }
+function cycle(d) { st.variant = keys[(keys.indexOf(st.variant)+d+keys.length)%keys.length];
+  st.open = null; st.detail = null; sync(); render(); }
+document.getElementById("prev").onclick = () => cycle(-1);
+document.getElementById("next").onclick = () => cycle(1);
+document.getElementById("viewtog").onclick = () => {
+  st.view = st.view === "holdings" ? "txns" : "holdings"; st.open = null; st.detail = null; sync(); render(); };
+addEventListener("keydown", (e) => {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+addEventListener("resize", measure);
+const q = new URLSearchParams(location.search);
+if (keys.includes(q.get("variant"))) st.variant = q.get("variant");
+if (["holdings","txns"].includes(q.get("view"))) st.view = q.get("view");
+render();
+</script>

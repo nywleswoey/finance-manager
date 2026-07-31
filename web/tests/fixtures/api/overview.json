@@ -1,0 +1,105 @@
+{
+ "market_value_sgd": 1175700.71,
+ "dividends_sgd": 166229.9,
+ "pl_sgd": 367805.02,
+ "cost_sgd": 1657517.66,
+ "return_pct": 0.2219,
+ "positions": 40,
+ "by_market": {
+  "SG": {
+   "mv_sgd": 709809.73,
+   "income_sgd": 139035.52,
+   "pl_sgd": 369522.06,
+   "cost_sgd": 531286.25,
+   "capital_sgd": 481401.64,
+   "invested_sgd": 531286.25,
+   "realised_pl_sgd": 2223.03,
+   "unrealised_pl_sgd": 228269.62
+  },
+  "HK": {
+   "mv_sgd": 158789.38,
+   "income_sgd": 25368.03,
+   "pl_sgd": 53151.29,
+   "cost_sgd": 289890.71,
+   "capital_sgd": 148394.4,
+   "invested_sgd": 289890.71,
+   "realised_pl_sgd": 17388.28,
+   "unrealised_pl_sgd": 10394.98
+  },
+  "US": {
+   "mv_sgd": 297495.36,
+   "income_sgd": 1826.35,
+   "pl_sgd": -54704.87,
+   "cost_sgd": 826571.0,
+   "capital_sgd": 342539.73,
+   "invested_sgd": 826571.0,
+   "realised_pl_sgd": -10951.59,
+   "unrealised_pl_sgd": -45578.4
+  },
+  "MY": {
+   "mv_sgd": 9606.24,
+   "income_sgd": 0.0,
+   "pl_sgd": -163.46,
+   "cost_sgd": 9769.7,
+   "capital_sgd": 9769.7,
+   "invested_sgd": 9769.7,
+   "realised_pl_sgd": 0.0,
+   "unrealised_pl_sgd": -163.46
+  }
+ },
+ "by_bucket": {
+  "cash": {
+   "mv_sgd": 909789.89,
+   "income_sgd": 133435.98,
+   "pl_sgd": 263602.0,
+   "cost_sgd": 1455245.95,
+   "capital_sgd": 782004.05,
+   "invested_sgd": 1455245.95,
+   "realised_pl_sgd": 3060.01,
+   "unrealised_pl_sgd": 127113.34
+  },
+  "cpf": {
+   "mv_sgd": 197054.89,
+   "income_sgd": 16370.62,
+   "pl_sgd": 127309.85,
+   "cost_sgd": 86115.66,
+   "capital_sgd": 88430.76,
+   "invested_sgd": 86115.66,
+   "realised_pl_sgd": 2315.1,
+   "unrealised_pl_sgd": 108624.13
+  },
+  "srs": {
+   "mv_sgd": 68855.93,
+   "income_sgd": 16423.3,
+   "pl_sgd": -23106.83,
+   "cost_sgd": 116156.05,
+   "capital_sgd": 111670.66,
+   "invested_sgd": 116156.05,
+   "realised_pl_sgd": 3284.61,
+   "unrealised_pl_sgd": -42814.73
+  }
+ },
+ "by_account": {
+  "Tiger Prime": {
+   "mv_sgd": 493614.65
+  },
+  "SRS": {
+   "mv_sgd": 68855.93
+  },
+  "FSM": {
+   "mv_sgd": 334887.57
+  },
+  "CDP": {
+   "mv_sgd": 52125.71
+  },
+  "CPF": {
+   "mv_sgd": 197054.89
+  },
+  "Moomoo": {
+   "mv_sgd": 8511.09
+  },
+  "Tiger Cash Boost": {
+   "mv_sgd": 20650.85
+  }
+ }
+}

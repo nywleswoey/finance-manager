@@ -1,0 +1,203 @@
+{
+ "total_sgd": 139732.64,
+ "avg_month_sgd": 7354.35,
+ "months": 19,
+ "by_group": [
+  {
+   "category": "Personal",
+   "v": 103075.95,
+   "n": 658
+  },
+  {
+   "category": "Housing",
+   "v": 23663.93,
+   "n": 281
+  },
+  {
+   "category": null,
+   "v": 11530.03,
+   "n": 179
+  },
+  {
+   "category": "Transport",
+   "v": 1462.73,
+   "n": 181
+  }
+ ],
+ "by_subcategory": [
+  {
+   "category": "Personal",
+   "subcategory": "Childcare",
+   "v": 36960.26,
+   "n": 99
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Others",
+   "v": 29030.04,
+   "n": 127
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Family Allowance",
+   "v": 18000.0,
+   "n": 36
+  },
+  {
+   "category": "Housing",
+   "subcategory": "Domestic Helper",
+   "v": 15012.95,
+   "n": 44
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Life/Health/Surgical Insurance",
+   "v": 12438.47,
+   "n": 43
+  },
+  {
+   "category": null,
+   "subcategory": null,
+   "v": 11530.03,
+   "n": 179
+  },
+  {
+   "category": "Housing",
+   "subcategory": "Groceries",
+   "v": 6095.0,
+   "n": 198
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Personal Taxes",
+   "v": 2247.41,
+   "n": 19
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Dining Out",
+   "v": 2198.48,
+   "n": 285
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Shopping",
+   "v": 2020.89,
+   "n": 27
+  },
+  {
+   "category": "Housing",
+   "subcategory": "Utilities",
+   "v": 1985.58,
+   "n": 30
+  },
+  {
+   "category": "Transport",
+   "subcategory": "Other Transport",
+   "v": 740.99,
+   "n": 37
+  },
+  {
+   "category": "Transport",
+   "subcategory": "Public Transport",
+   "v": 721.74,
+   "n": 144
+  },
+  {
+   "category": "Housing",
+   "subcategory": "Conservancy Charges",
+   "v": 570.4,
+   "n": 9
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Mobile Phone",
+   "v": 160.0,
+   "n": 20
+  },
+  {
+   "category": "Personal",
+   "subcategory": "Entertainment",
+   "v": 20.4,
+   "n": 2
+  }
+ ],
+ "by_month": [
+  {
+   "ym": "2025-01",
+   "v": 5237.43
+  },
+  {
+   "ym": "2025-02",
+   "v": 3297.5
+  },
+  {
+   "ym": "2025-03",
+   "v": 4289.9
+  },
+  {
+   "ym": "2025-04",
+   "v": 6850.92
+  },
+  {
+   "ym": "2025-05",
+   "v": 4281.46
+  },
+  {
+   "ym": "2025-06",
+   "v": 4831.02
+  },
+  {
+   "ym": "2025-07",
+   "v": 9349.22
+  },
+  {
+   "ym": "2025-08",
+   "v": 4581.4
+  },
+  {
+   "ym": "2025-09",
+   "v": 7648.12
+  },
+  {
+   "ym": "2025-10",
+   "v": 11798.58
+  },
+  {
+   "ym": "2025-11",
+   "v": 10345.33
+  },
+  {
+   "ym": "2025-12",
+   "v": 8268.63
+  },
+  {
+   "ym": "2026-01",
+   "v": 8660.52
+  },
+  {
+   "ym": "2026-02",
+   "v": 12858.62
+  },
+  {
+   "ym": "2026-03",
+   "v": 10838.23
+  },
+  {
+   "ym": "2026-04",
+   "v": 8621.97
+  },
+  {
+   "ym": "2026-05",
+   "v": 7821.44
+  },
+  {
+   "ym": "2026-06",
+   "v": 9552.77
+  },
+  {
+   "ym": "2026-07",
+   "v": 599.58
+  }
+ ]
+}

@@ -1,0 +1,168 @@
+{
+ "id": 2,
+ "date": "2026-06-30",
+ "note": "statements: tiger tiger_prime_2026.csv + dbs dbs_202606.pdf (as at 30 Jun 2026)",
+ "portfolio_value_sgd": 1117722.25,
+ "total_assets": 2176245.06,
+ "total_liabilities": 284649.09,
+ "liquid_assets": 214793.31,
+ "net_worth": 1891595.97,
+ "net_worth_excl_housing": 1782245.06,
+ "net_worth_excl_housing_cpf": 1336710.76,
+ "values": [
+  {
+   "item_id": 1,
+   "code": "posb",
+   "label": "POSB Shared Account",
+   "kind": "asset",
+   "native_value": 519.13,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 519.13,
+   "is_manual": true
+  },
+  {
+   "item_id": 2,
+   "code": "dbs_multiplier",
+   "label": "DBS Multiplier",
+   "kind": "asset",
+   "native_value": 52910.65,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 52910.65,
+   "is_manual": false
+  },
+  {
+   "item_id": 3,
+   "code": "srs",
+   "label": "SRS Account",
+   "kind": "asset",
+   "native_value": 4195.2,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 4195.2,
+   "is_manual": false
+  },
+  {
+   "item_id": 4,
+   "code": "tiger_hkd",
+   "label": "Tiger HKD Cash",
+   "kind": "asset",
+   "native_value": 22936.09,
+   "currency": "HKD",
+   "rate_to_sgd": 0.1647,
+   "value_sgd": 3777.57,
+   "is_manual": false
+  },
+  {
+   "item_id": 5,
+   "code": "tiger_sgd",
+   "label": "Tiger SGD Cash",
+   "kind": "asset",
+   "native_value": 1500.0,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 1500.0,
+   "is_manual": false
+  },
+  {
+   "item_id": 6,
+   "code": "tiger_usd",
+   "label": "Tiger USD Cash",
+   "kind": "asset",
+   "native_value": 4467.25,
+   "currency": "USD",
+   "rate_to_sgd": 1.2903,
+   "value_sgd": 5764.09,
+   "is_manual": false
+  },
+  {
+   "item_id": 7,
+   "code": "tiger_vault",
+   "label": "Tiger Vault",
+   "kind": "asset",
+   "native_value": 116493.32,
+   "currency": "USD",
+   "rate_to_sgd": 1.2903,
+   "value_sgd": 150311.33,
+   "is_manual": false
+  },
+  {
+   "item_id": 8,
+   "code": "ibkr_sgd",
+   "label": "IBKR SGD Cash",
+   "kind": "asset",
+   "native_value": 10.53,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 10.53,
+   "is_manual": true
+  },
+  {
+   "item_id": 9,
+   "code": "cpf_oa",
+   "label": "CPF OA",
+   "kind": "asset",
+   "native_value": 104243.03,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 104243.03,
+   "is_manual": true
+  },
+  {
+   "item_id": 10,
+   "code": "cpf_sa",
+   "label": "CPF SA",
+   "kind": "asset",
+   "native_value": 262291.27,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 262291.27,
+   "is_manual": true
+  },
+  {
+   "item_id": 11,
+   "code": "cpf_ma",
+   "label": "CPF MA",
+   "kind": "asset",
+   "native_value": 79000.0,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 79000.0,
+   "is_manual": true
+  },
+  {
+   "item_id": 12,
+   "code": "hdb",
+   "label": "Tampines HDB",
+   "kind": "asset",
+   "native_value": 394000.0,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 394000.0,
+   "is_manual": true
+  },
+  {
+   "item_id": 13,
+   "code": "home_loan",
+   "label": "CPF Home Loan",
+   "kind": "liability",
+   "native_value": 256661.17,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 256661.17,
+   "is_manual": true
+  },
+  {
+   "item_id": 14,
+   "code": "home_loan_accrued",
+   "label": "CPF Home Loan Accrued Interest",
+   "kind": "liability",
+   "native_value": 27987.92,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 27987.92,
+   "is_manual": true
+  }
+ ]
+}

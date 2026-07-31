@@ -1,0 +1,97 @@
+[
+ {
+  "id": 1,
+  "category": "Personal",
+  "subcategory": "Dining Out"
+ },
+ {
+  "id": 2,
+  "category": "Personal",
+  "subcategory": "Shopping"
+ },
+ {
+  "id": 3,
+  "category": "Personal",
+  "subcategory": "Entertainment"
+ },
+ {
+  "id": 4,
+  "category": "Personal",
+  "subcategory": "Mobile Phone"
+ },
+ {
+  "id": 5,
+  "category": "Personal",
+  "subcategory": "Life/Health/Surgical Insurance"
+ },
+ {
+  "id": 6,
+  "category": "Personal",
+  "subcategory": "Personal Taxes"
+ },
+ {
+  "id": 7,
+  "category": "Personal",
+  "subcategory": "Interest Expenses"
+ },
+ {
+  "id": 8,
+  "category": "Personal",
+  "subcategory": "Family Allowance"
+ },
+ {
+  "id": 9,
+  "category": "Personal",
+  "subcategory": "Childcare"
+ },
+ {
+  "id": 10,
+  "category": "Personal",
+  "subcategory": "Others"
+ },
+ {
+  "id": 11,
+  "category": "Housing",
+  "subcategory": "Mortgage"
+ },
+ {
+  "id": 12,
+  "category": "Housing",
+  "subcategory": "Utilities"
+ },
+ {
+  "id": 13,
+  "category": "Housing",
+  "subcategory": "Conservancy Charges"
+ },
+ {
+  "id": 14,
+  "category": "Housing",
+  "subcategory": "Domestic Helper"
+ },
+ {
+  "id": 15,
+  "category": "Housing",
+  "subcategory": "Groceries"
+ },
+ {
+  "id": 16,
+  "category": "Housing",
+  "subcategory": "Property Taxes"
+ },
+ {
+  "id": 17,
+  "category": "Housing",
+  "subcategory": "Mortgage Insurance"
+ },
+ {
+  "id": 18,
+  "category": "Transport",
+  "subcategory": "Other Transport"
+ },
+ {
+  "id": 19,
+  "category": "Transport",
+  "subcategory": "Public Transport"
+ }
+]

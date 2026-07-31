@@ -1,0 +1,939 @@
+{
+ "total_pl_sgd": 177265.98,
+ "total_premium_sgd": 335959.76,
+ "trades_closed": 394,
+ "wins": 343,
+ "losses": 51,
+ "win_rate": 0.8706,
+ "open_trades": 3,
+ "by_year": [
+  {
+   "trades": 107,
+   "wins": 102,
+   "premium_sgd": 48752.878999999986,
+   "pl_sgd": 40919.598216000006,
+   "pl_native": 31718.159999999985,
+   "currency": null,
+   "key": 2026,
+   "win_rate": 0.9532710280373832
+  },
+  {
+   "trades": 95,
+   "wins": 82,
+   "premium_sgd": 84401.60609999999,
+   "pl_sgd": 30290.426950000005,
+   "pl_native": 23346.940000000002,
+   "currency": null,
+   "key": 2025,
+   "win_rate": 0.8631578947368421
+  },
+  {
+   "trades": 68,
+   "wins": 52,
+   "premium_sgd": 91946.97913099997,
+   "pl_sgd": 55269.81185599999,
+   "pl_native": 48391.04,
+   "currency": null,
+   "key": 2024,
+   "win_rate": 0.7647058823529411
+  },
+  {
+   "trades": 44,
+   "wins": 37,
+   "premium_sgd": 59704.537899999996,
+   "pl_sgd": 33226.51259900001,
+   "pl_native": 25754.98999999999,
+   "currency": null,
+   "key": 2023,
+   "win_rate": 0.8409090909090909
+  },
+  {
+   "trades": 52,
+   "wins": 43,
+   "premium_sgd": 33933.5003,
+   "pl_sgd": 8691.416601000003,
+   "pl_native": 6737.009999999998,
+   "currency": null,
+   "key": 2022,
+   "win_rate": 0.8269230769230769
+  },
+  {
+   "trades": 28,
+   "wins": 27,
+   "premium_sgd": 17220.2548,
+   "pl_sgd": 8868.211905,
+   "pl_native": 6874.05,
+   "currency": null,
+   "key": 2021,
+   "win_rate": 0.9642857142857143
+  }
+ ],
+ "by_month": [
+  {
+   "trades": 3,
+   "wins": 3,
+   "premium_sgd": 4314.0944,
+   "pl_sgd": 1381.335872,
+   "pl_native": 1070.72,
+   "currency": null,
+   "key": "2021-05",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 3,
+   "premium_sgd": 1103.0355,
+   "pl_sgd": 1077.904352,
+   "pl_native": 835.52,
+   "currency": null,
+   "key": "2021-07",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 2,
+   "premium_sgd": 2218.9719999999998,
+   "pl_sgd": -2160.207945,
+   "pl_native": -1674.4499999999998,
+   "currency": null,
+   "key": "2021-08",
+   "win_rate": 0.6666666666666666
+  },
+  {
+   "trades": 1,
+   "wins": 1,
+   "premium_sgd": 2322.18,
+   "pl_sgd": 2317.638848,
+   "pl_native": 1796.48,
+   "currency": null,
+   "key": "2021-09",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 3,
+   "premium_sgd": 645.05,
+   "pl_sgd": 613.6747680000001,
+   "pl_native": 475.68,
+   "currency": null,
+   "key": "2021-10",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 5,
+   "wins": 5,
+   "premium_sgd": 4161.8625999999995,
+   "pl_sgd": 3611.493039,
+   "pl_native": 2799.39,
+   "currency": null,
+   "key": "2021-11",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 3,
+   "premium_sgd": 654.0807,
+   "pl_sgd": 636.432132,
+   "pl_native": 493.32,
+   "currency": null,
+   "key": "2021-12",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 6,
+   "wins": 6,
+   "premium_sgd": 1768.7271,
+   "pl_sgd": 1371.995548,
+   "pl_native": 1063.48,
+   "currency": null,
+   "key": "2022-01",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 9,
+   "wins": 9,
+   "premium_sgd": 4710.1551,
+   "pl_sgd": 3165.9312020000007,
+   "pl_native": 2454.02,
+   "currency": null,
+   "key": "2022-02",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 6,
+   "wins": 3,
+   "premium_sgd": 3755.4811,
+   "pl_sgd": -2499.8654730000007,
+   "pl_native": -1937.73,
+   "currency": null,
+   "key": "2022-03",
+   "win_rate": 0.5
+  },
+  {
+   "trades": 2,
+   "wins": 2,
+   "premium_sgd": 2218.9719999999998,
+   "pl_sgd": 2195.905012,
+   "pl_native": 1702.12,
+   "currency": null,
+   "key": "2022-04",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 10,
+   "wins": 8,
+   "premium_sgd": 7183.2768,
+   "pl_sgd": -335.1937819999995,
+   "pl_native": -259.8199999999998,
+   "currency": null,
+   "key": "2022-05",
+   "win_rate": 0.8
+  },
+  {
+   "trades": 2,
+   "wins": 1,
+   "premium_sgd": 2458.9306,
+   "pl_sgd": -629.7365130000001,
+   "pl_native": -488.13,
+   "currency": null,
+   "key": "2022-06",
+   "win_rate": 0.5
+  },
+  {
+   "trades": 5,
+   "wins": 4,
+   "premium_sgd": 1954.5015,
+   "pl_sgd": 825.444683,
+   "pl_native": 639.8299999999999,
+   "currency": null,
+   "key": "2022-07",
+   "win_rate": 0.8
+  },
+  {
+   "trades": 4,
+   "wins": 3,
+   "premium_sgd": 2618.9030000000002,
+   "pl_sgd": -4.154121999999916,
+   "pl_native": -3.2199999999999704,
+   "currency": null,
+   "key": "2022-08",
+   "win_rate": 0.75
+  },
+  {
+   "trades": 6,
+   "wins": 6,
+   "premium_sgd": 2398.2959,
+   "pl_sgd": 1841.966077,
+   "pl_native": 1427.77,
+   "currency": null,
+   "key": "2022-09",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 2,
+   "wins": 2,
+   "premium_sgd": 1112.0662,
+   "pl_sgd": 1090.340916,
+   "pl_native": 845.1600000000001,
+   "currency": null,
+   "key": "2022-10",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 3,
+   "premium_sgd": 2323.4701,
+   "pl_sgd": 2129.993803,
+   "pl_native": 1651.03,
+   "currency": null,
+   "key": "2022-11",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 2,
+   "wins": 1,
+   "premium_sgd": 1330.0931,
+   "pl_sgd": -471.33803500000005,
+   "pl_native": -365.35,
+   "currency": null,
+   "key": "2022-12",
+   "win_rate": 0.5
+  },
+  {
+   "trades": 5,
+   "wins": 5,
+   "premium_sgd": 3227.8302,
+   "pl_sgd": 2470.902728,
+   "pl_native": 1915.2800000000002,
+   "currency": null,
+   "key": "2023-01",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 5,
+   "wins": 3,
+   "premium_sgd": 4253.4597,
+   "pl_sgd": 373.6387619999998,
+   "pl_native": 289.6199999999999,
+   "currency": null,
+   "key": "2023-02",
+   "win_rate": 0.6
+  },
+  {
+   "trades": 4,
+   "wins": 3,
+   "premium_sgd": 4315.3845,
+   "pl_sgd": -158.1662600000002,
+   "pl_native": -122.60000000000002,
+   "currency": null,
+   "key": "2023-03",
+   "win_rate": 0.75
+  },
+  {
+   "trades": 3,
+   "wins": 3,
+   "premium_sgd": 4494.7083999999995,
+   "pl_sgd": 2855.597647,
+   "pl_native": 2213.47,
+   "currency": null,
+   "key": "2023-04",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 2,
+   "premium_sgd": 4226.3676,
+   "pl_sgd": 1386.0834399999999,
+   "pl_native": 1074.3999999999999,
+   "currency": null,
+   "key": "2023-05",
+   "win_rate": 0.6666666666666666
+  },
+  {
+   "trades": 2,
+   "wins": 2,
+   "premium_sgd": 1493.9358,
+   "pl_sgd": 1360.4233510000001,
+   "pl_native": 1054.51,
+   "currency": null,
+   "key": "2023-06",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 2,
+   "wins": 1,
+   "premium_sgd": 4154.121999999999,
+   "pl_sgd": 757.8176410000001,
+   "pl_native": 587.4100000000001,
+   "currency": null,
+   "key": "2023-08",
+   "win_rate": 0.5
+  },
+  {
+   "trades": 2,
+   "wins": 2,
+   "premium_sgd": 2120.9244,
+   "pl_sgd": 2043.9957370000002,
+   "pl_native": 1584.3700000000001,
+   "currency": null,
+   "key": "2023-09",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 1,
+   "premium_sgd": 9375.1567,
+   "pl_sgd": 206.71272299999998,
+   "pl_native": 160.23000000000002,
+   "currency": null,
+   "key": "2023-10",
+   "win_rate": 0.3333333333333333
+  },
+  {
+   "trades": 6,
+   "wins": 6,
+   "premium_sgd": 5650.638,
+   "pl_sgd": 5207.398343,
+   "pl_native": 4036.4300000000003,
+   "currency": null,
+   "key": "2023-11",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 1,
+   "wins": 1,
+   "premium_sgd": 2012.556,
+   "pl_sgd": 1998.674524,
+   "pl_native": 1549.24,
+   "currency": null,
+   "key": "2023-12",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 2,
+   "wins": 2,
+   "premium_sgd": 3328.458,
+   "pl_sgd": 3300.8240579999997,
+   "pl_native": 2558.58,
+   "currency": null,
+   "key": "2024-01",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 1,
+   "wins": 1,
+   "premium_sgd": 1715.833,
+   "pl_sgd": 1701.977326,
+   "pl_native": 1319.26,
+   "currency": null,
+   "key": "2024-02",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 3,
+   "premium_sgd": 2928.527,
+   "pl_sgd": 2895.061806,
+   "pl_native": 2244.06,
+   "currency": null,
+   "key": "2024-03",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 2,
+   "premium_sgd": 2237.0334000000003,
+   "pl_sgd": 586.389153,
+   "pl_native": 454.53,
+   "currency": null,
+   "key": "2024-04",
+   "win_rate": 0.6666666666666666
+  },
+  {
+   "trades": 5,
+   "wins": 5,
+   "premium_sgd": 8002.4903,
+   "pl_sgd": 7909.564397000001,
+   "pl_native": 6130.969999999999,
+   "currency": null,
+   "key": "2024-05",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 6,
+   "wins": 5,
+   "premium_sgd": 6543.3872,
+   "pl_sgd": 5315.689337,
+   "pl_native": 4120.370000000001,
+   "currency": null,
+   "key": "2024-06",
+   "win_rate": 0.8333333333333334
+  },
+  {
+   "trades": 5,
+   "wins": 5,
+   "premium_sgd": 5631.2865,
+   "pl_sgd": 5590.725756,
+   "pl_native": 4333.56,
+   "currency": null,
+   "key": "2024-07",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 11,
+   "wins": 5,
+   "premium_sgd": 15247.691900000002,
+   "pl_sgd": -1886.7067450000013,
+   "pl_native": -1462.4499999999994,
+   "currency": null,
+   "key": "2024-08",
+   "win_rate": 0.45454545454545453
+  },
+  {
+   "trades": 6,
+   "wins": 5,
+   "premium_sgd": 6410.80958,
+   "pl_sgd": 6374.609367,
+   "pl_native": 4919.3099999999995,
+   "currency": null,
+   "key": "2024-09",
+   "win_rate": 0.8333333333333334
+  },
+  {
+   "trades": 9,
+   "wins": 7,
+   "premium_sgd": 10959.412401000001,
+   "pl_sgd": 7794.435873000002,
+   "pl_native": 6041.73,
+   "currency": null,
+   "key": "2024-10",
+   "win_rate": 0.7777777777777778
+  },
+  {
+   "trades": 8,
+   "wins": 7,
+   "premium_sgd": 6380.3484499999995,
+   "pl_sgd": 6305.536040999999,
+   "pl_native": 4768.05,
+   "currency": null,
+   "key": "2024-11",
+   "win_rate": 0.875
+  },
+  {
+   "trades": 5,
+   "wins": 5,
+   "premium_sgd": 11727.4416,
+   "pl_sgd": 12773.004258,
+   "pl_native": 15591.779999999999,
+   "currency": null,
+   "key": "2024-12",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 5,
+   "wins": 4,
+   "premium_sgd": 7483.870100000001,
+   "pl_sgd": 5843.172524,
+   "pl_native": 4529.24,
+   "currency": null,
+   "key": "2025-01",
+   "win_rate": 0.8
+  },
+  {
+   "trades": 10,
+   "wins": 6,
+   "premium_sgd": 20050.7342,
+   "pl_sgd": -209.28002200000037,
+   "pl_native": -162.22000000000025,
+   "currency": null,
+   "key": "2025-02",
+   "win_rate": 0.6
+  },
+  {
+   "trades": 4,
+   "wins": 3,
+   "premium_sgd": 6128.5014,
+   "pl_sgd": 6085.984744,
+   "pl_native": 4654.240000000001,
+   "currency": null,
+   "key": "2025-03",
+   "win_rate": 0.75
+  },
+  {
+   "trades": 11,
+   "wins": 2,
+   "premium_sgd": 24711.865500000004,
+   "pl_sgd": -18745.114297000004,
+   "pl_native": -14529.97,
+   "currency": null,
+   "key": "2025-04",
+   "win_rate": 0.18181818181818182
+  },
+  {
+   "trades": 3,
+   "wins": 3,
+   "premium_sgd": 3663.884,
+   "pl_sgd": 3113.836964,
+   "pl_native": 2413.6400000000003,
+   "currency": null,
+   "key": "2025-05",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 5,
+   "wins": 4,
+   "premium_sgd": 5773.355,
+   "pl_sgd": 5710.432973000001,
+   "pl_native": 4357.37,
+   "currency": null,
+   "key": "2025-06",
+   "win_rate": 0.8
+  },
+  {
+   "trades": 4,
+   "wins": 4,
+   "premium_sgd": 3253.6322,
+   "pl_sgd": 2754.944045,
+   "pl_native": 2135.45,
+   "currency": null,
+   "key": "2025-07",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 3,
+   "premium_sgd": 2025.457,
+   "pl_sgd": 1996.4039480000001,
+   "pl_native": 1547.48,
+   "currency": null,
+   "key": "2025-08",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 3,
+   "wins": 3,
+   "premium_sgd": 2302.8285,
+   "pl_sgd": 2285.41215,
+   "pl_native": 1771.5,
+   "currency": null,
+   "key": "2025-09",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 13,
+   "wins": 13,
+   "premium_sgd": 7930.244700000001,
+   "pl_sgd": 7877.982748999999,
+   "pl_native": 6106.49,
+   "currency": null,
+   "key": "2025-10",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 21,
+   "wins": 20,
+   "premium_sgd": 12537.1918,
+   "pl_sgd": 10752.015924999998,
+   "pl_native": 8334.25,
+   "currency": null,
+   "key": "2025-11",
+   "win_rate": 0.9523809523809523
+  },
+  {
+   "trades": 19,
+   "wins": 19,
+   "premium_sgd": 11955.356699999998,
+   "pl_sgd": 11893.4319,
+   "pl_native": 9219.0,
+   "currency": null,
+   "key": "2025-12",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 16,
+   "wins": 14,
+   "premium_sgd": 6444.0495,
+   "pl_sgd": 5739.977425,
+   "pl_native": 4449.249999999999,
+   "currency": null,
+   "key": "2026-01",
+   "win_rate": 0.875
+  },
+  {
+   "trades": 10,
+   "wins": 10,
+   "premium_sgd": 4579.8550000000005,
+   "pl_sgd": 4539.203949000001,
+   "pl_native": 3518.49,
+   "currency": null,
+   "key": "2026-02",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 14,
+   "wins": 13,
+   "premium_sgd": 7188.437199999999,
+   "pl_sgd": 4796.346681,
+   "pl_native": 3717.8100000000004,
+   "currency": null,
+   "key": "2026-03",
+   "win_rate": 0.9285714285714286
+  },
+  {
+   "trades": 11,
+   "wins": 11,
+   "premium_sgd": 4587.5956,
+   "pl_sgd": 4529.192773,
+   "pl_native": 3510.7299999999996,
+   "currency": null,
+   "key": "2026-04",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 24,
+   "wins": 24,
+   "premium_sgd": 9893.776899999999,
+   "pl_sgd": 9802.863553,
+   "pl_native": 7598.529999999997,
+   "currency": null,
+   "key": "2026-05",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 20,
+   "wins": 18,
+   "premium_sgd": 7339.378900000001,
+   "pl_sgd": 2823.138731,
+   "pl_native": 2188.3100000000004,
+   "currency": null,
+   "key": "2026-06",
+   "win_rate": 0.9
+  },
+  {
+   "trades": 20,
+   "wins": 20,
+   "premium_sgd": 12419.792699999998,
+   "pl_sgd": 12352.281767000002,
+   "pl_native": 9574.669999999998,
+   "currency": null,
+   "key": "2026-07",
+   "win_rate": 1.0
+  }
+ ],
+ "by_ticker": [
+  {
+   "trades": 73,
+   "wins": 66,
+   "premium_sgd": 82650.25650000003,
+   "pl_sgd": 52989.24487500002,
+   "pl_native": 41073.75000000001,
+   "currency": "USD",
+   "key": "PLTR",
+   "win_rate": 0.9041095890410958
+  },
+  {
+   "trades": 64,
+   "wins": 58,
+   "premium_sgd": 59286.55840099998,
+   "pl_sgd": 44169.69554200001,
+   "pl_native": 34237.420000000006,
+   "currency": "USD",
+   "key": "RIVN",
+   "win_rate": 0.90625
+  },
+  {
+   "trades": 52,
+   "wins": 48,
+   "premium_sgd": 35093.30019999999,
+   "pl_sgd": 18999.56072,
+   "pl_native": 14727.199999999997,
+   "currency": "USD",
+   "key": "BABA",
+   "win_rate": 0.9230769230769231
+  },
+  {
+   "trades": 37,
+   "wins": 33,
+   "premium_sgd": 21059.592399999998,
+   "pl_sgd": 17728.231675,
+   "pl_native": 13741.749999999993,
+   "currency": "USD",
+   "key": "INTC",
+   "win_rate": 0.8918918918918919
+  },
+  {
+   "trades": 51,
+   "wins": 40,
+   "premium_sgd": 64689.4843,
+   "pl_sgd": 9327.152078999996,
+   "pl_native": 7229.79,
+   "currency": "USD",
+   "key": "COIN",
+   "win_rate": 0.7843137254901961
+  },
+  {
+   "trades": 40,
+   "wins": 35,
+   "premium_sgd": 24078.426399999997,
+   "pl_sgd": 8600.400046,
+   "pl_native": 6666.459999999996,
+   "currency": "USD",
+   "key": "AMD",
+   "win_rate": 0.875
+  },
+  {
+   "trades": 15,
+   "wins": 13,
+   "premium_sgd": 11699.9169,
+   "pl_sgd": 7263.3662079999995,
+   "pl_native": 5630.080000000001,
+   "currency": "USD",
+   "key": "NVDA",
+   "win_rate": 0.8666666666666667
+  },
+  {
+   "trades": 12,
+   "wins": 11,
+   "premium_sgd": 10390.4654,
+   "pl_sgd": 5073.369854000001,
+   "pl_native": 3932.540000000001,
+   "currency": "USD",
+   "key": "HUYA",
+   "win_rate": 0.9166666666666666
+  },
+  {
+   "trades": 10,
+   "wins": 9,
+   "premium_sgd": 5560.330999999999,
+   "pl_sgd": 3662.4003850000004,
+   "pl_native": 2838.85,
+   "currency": "USD",
+   "key": "TSLA",
+   "win_rate": 0.9
+  },
+  {
+   "trades": 12,
+   "wins": 11,
+   "premium_sgd": 6874.942900000002,
+   "pl_sgd": 3191.655796000001,
+   "pl_native": 2473.96,
+   "currency": "USD",
+   "key": "BIDU",
+   "win_rate": 0.9166666666666666
+  },
+  {
+   "trades": 2,
+   "wins": 2,
+   "premium_sgd": 2399.5860000000002,
+   "pl_sgd": 2389.91025,
+   "pl_native": 1852.5,
+   "currency": "USD",
+   "key": "TLT",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 2,
+   "wins": 2,
+   "premium_sgd": 1502.9665,
+   "pl_sgd": 1500.9668450000001,
+   "pl_native": 1163.45,
+   "currency": "USD",
+   "key": "GOOG",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 4,
+   "wins": 4,
+   "premium_sgd": 1341.7040000000002,
+   "pl_sgd": 1220.318491,
+   "pl_native": 945.91,
+   "currency": "USD",
+   "key": "GPS",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 5,
+   "wins": 1,
+   "premium_sgd": 15.124130000000001,
+   "pl_sgd": 1021.392015,
+   "pl_native": 6209.07,
+   "currency": "HKD",
+   "key": "LNK",
+   "win_rate": 0.2
+  },
+  {
+   "trades": 4,
+   "wins": 3,
+   "premium_sgd": 1688.7409,
+   "pl_sgd": 773.105326,
+   "pl_native": 599.26,
+   "currency": "USD",
+   "key": "AMZN",
+   "win_rate": 0.75
+  },
+  {
+   "trades": 1,
+   "wins": 1,
+   "premium_sgd": 567.644,
+   "pl_sgd": 562.844828,
+   "pl_native": 436.28,
+   "currency": "USD",
+   "key": "HOG",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 1,
+   "wins": 1,
+   "premium_sgd": 433.47360000000003,
+   "pl_sgd": 320.576949,
+   "pl_native": 248.49,
+   "currency": "USD",
+   "key": "WBA",
+   "win_rate": 1.0
+  },
+  {
+   "trades": 5,
+   "wins": 4,
+   "premium_sgd": 2906.5953,
+   "pl_sgd": 320.4608400000001,
+   "pl_native": 248.4000000000001,
+   "currency": "USD",
+   "key": "MSFT",
+   "win_rate": 0.8
+  },
+  {
+   "trades": 2,
+   "wins": 1,
+   "premium_sgd": 1341.7040000000002,
+   "pl_sgd": 182.26532800000007,
+   "pl_native": 141.28000000000003,
+   "currency": "USD",
+   "key": "ANF",
+   "win_rate": 0.5
+  },
+  {
+   "trades": 1,
+   "wins": 0,
+   "premium_sgd": 2025.457,
+   "pl_sgd": -950.3134620000001,
+   "pl_native": -736.62,
+   "currency": "USD",
+   "key": "FB",
+   "win_rate": 0.0
+  },
+  {
+   "trades": 1,
+   "wins": 0,
+   "premium_sgd": 353.4874,
+   "pl_sgd": -1080.626463,
+   "pl_native": -837.63,
+   "currency": "USD",
+   "key": "PYPL",
+   "win_rate": 0.0
+  }
+ ],
+ "by_type": [
+  {
+   "trades": 280,
+   "wins": 231,
+   "premium_sgd": 264590.7284300001,
+   "pl_sgd": 110334.20838300008,
+   "pl_native": 91073.3099999999,
+   "currency": null,
+   "key": "put",
+   "win_rate": 0.825
+  },
+  {
+   "trades": 114,
+   "wins": 112,
+   "premium_sgd": 71369.02880100001,
+   "pl_sgd": 66931.76974399999,
+   "pl_native": 51748.88,
+   "currency": null,
+   "key": "call",
+   "win_rate": 0.9824561403508771
+  }
+ ],
+ "by_currency": [
+  {
+   "trades": 389,
+   "wins": 342,
+   "premium_sgd": 335944.6331010002,
+   "pl_sgd": 176244.58611199996,
+   "pl_native": 136613.11999999988,
+   "currency": "USD",
+   "key": "USD",
+   "win_rate": 0.8791773778920309
+  },
+  {
+   "trades": 5,
+   "wins": 1,
+   "premium_sgd": 15.124130000000001,
+   "pl_sgd": 1021.392015,
+   "pl_native": 6209.07,
+   "currency": "HKD",
+   "key": "HKD",
+   "win_rate": 0.2
+  }
+ ]
+}

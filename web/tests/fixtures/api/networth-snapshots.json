@@ -1,0 +1,26 @@
+[
+ {
+  "id": 2,
+  "date": "2026-06-30",
+  "note": "statements: tiger tiger_prime_2026.csv + dbs dbs_202606.pdf (as at 30 Jun 2026)",
+  "portfolio_value_sgd": 1117722.25,
+  "total_assets": 2176245.06,
+  "total_liabilities": 284649.09,
+  "liquid_assets": 214793.31,
+  "net_worth": 1891595.97,
+  "net_worth_excl_housing": 1782245.06,
+  "net_worth_excl_housing_cpf": 1336710.76
+ },
+ {
+  "id": 1,
+  "date": "2026-06-21",
+  "note": null,
+  "portfolio_value_sgd": 1029006.95,
+  "total_assets": 2048017.2,
+  "total_liabilities": 284649.09,
+  "liquid_assets": 175410.91,
+  "net_worth": 1763368.11,
+  "net_worth_excl_housing": 1654017.2,
+  "net_worth_excl_housing_cpf": 1208482.9
+ }
+]

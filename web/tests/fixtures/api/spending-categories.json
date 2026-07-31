@@ -1,0 +1,98 @@
+[
+ {
+  "category": "Housing",
+  "subcategory": "Domestic Helper",
+  "v": 15012.95,
+  "n": 44
+ },
+ {
+  "category": "Housing",
+  "subcategory": "Groceries",
+  "v": 6095.0,
+  "n": 198
+ },
+ {
+  "category": "Housing",
+  "subcategory": "Utilities",
+  "v": 1985.58,
+  "n": 30
+ },
+ {
+  "category": "Housing",
+  "subcategory": "Conservancy Charges",
+  "v": 570.4,
+  "n": 9
+ },
+ {
+  "category": "Personal",
+  "subcategory": "Childcare",
+  "v": 36960.26,
+  "n": 99
+ },
+ {
+  "category": "Personal",
+  "subcategory": "Others",
+  "v": 29030.04,
+  "n": 127
+ },
+ {
+  "category": "Personal",
+  "subcategory": "Family Allowance",
+  "v": 18000.0,
+  "n": 36
+ },
+ {
+  "category": "Personal",
+  "subcategory": "Life/Health/Surgical Insurance",
+  "v": 12438.47,
+  "n": 43
+ },
+ {
+  "category": "Personal",
+  "subcategory": "Personal Taxes",
+  "v": 2247.41,
+  "n": 19
+ },
+ {
+  "category": "Personal",
+  "subcategory": "Dining Out",
+  "v": 2198.48,
+  "n": 285
+ },
+ {
+  "category": "Personal",
+  "subcategory": "Shopping",
+  "v": 2020.89,
+  "n": 27
+ },
+ {
+  "category": "Personal",
+  "subcategory": "Mobile Phone",
+  "v": 160.0,
+  "n": 20
+ },
+ {
+  "category": "Personal",
+  "subcategory": "Entertainment",
+  "v": 20.4,
+  "n": 2
+ },
+ {
+  "category": "Transport",
+  "subcategory": "Other Transport",
+  "v": 740.99,
+  "n": 37
+ },
+ {
+  "category": "Transport",
+  "subcategory": "Public Transport",
+  "v": 721.74,
+  "n": 144
+ },
+ {
+  "category": null,
+  "subcategory": null,
+  "v": 11530.03,
+  "n": 179
+ }
+]
