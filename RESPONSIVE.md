@@ -1,28 +1,36 @@
 # Responsive verification checklist
 
-The definition of done for the mobile-responsive work. Verification is **manual, in a real browser** —
-the repo has 17 pytest files and no JS test runner, and automated viewport/visual-regression testing is
-deliberately out of scope (its own effort).
+The definition of done for the mobile-responsive work.
+
+**Part of this is now automated: `make test-web`.** A Playwright viewport suite runs the nine viewports
+below against committed fixtures and asserts the gates it can — see `web/TESTING.md`. It does not
+replace this file. Four items need a real iPhone and always will (they are named under *Viewports*
+below), the observations record values rather than pass or fail, and the open calls change decisions
+rather than failing checks. Visual-regression diffing remains out of scope by decision.
+
+So this checklist **shrinks rather than dies**, and it shrinks as behaviour lands: a gate moves out of
+this file only once the suite actually asserts it. Everything below is still checked by hand today.
 
 The decisions behind every line here live in `.wayfinder/map-mobile-responsive.md` and its tickets. This
 file does not restate them; it checks them.
 
-**A manual checklist decays.** Nothing here can fail a build. It is the weakest form of protection that
-still beats nothing, and the real fix is the automated effort parked as its own map.
-
 ## Viewports
 
-| # | size | why this one |
-|---|---|---|
-| 1 | 360×740 | small phone — the tightest realistic width |
-| 2 | **390×844** | the design width; every measurement in the spec was taken here |
-| 3 | 430×932 | large phone |
-| 4 | **639×844** | last pixel of the phone tier — every phone rule is `max-width: 639.98px` |
-| 5 | **640×844** | first pixel of the tablet tier, and the tier at its worst: 384px of content behind the 200px rail |
-| 6 | **844×390** | rotated phone — the *only* viewport exercising the `(max-height: 500px)` shell guard |
-| 7 | 834×1112 | iPad portrait |
-| 8 | **1100×900** | the 1024–1120 band, where the wrapped tab strip and single-column `.grid2` are **deliberate**, not bugs |
-| 9 | 1280×800 | desktop control — criterion is "identical to before" |
+The `name` column is what the suite calls each one: `npx playwright test --project=design-width`.
+Names and sizes are asserted against `web/tests/viewports.js`, so this table and the suite cannot
+drift apart.
+
+| # | size | name | why this one |
+|---|---|---|---|
+| 1 | 360×740 | `small-phone` | small phone — the tightest realistic width |
+| 2 | **390×844** | `design-width` | the design width; every measurement in the spec was taken here |
+| 3 | 430×932 | `large-phone` | large phone |
+| 4 | **639×844** | `phone-tier-last-pixel` | last pixel of the phone tier — every phone rule is `max-width: 639.98px` |
+| 5 | **640×844** | `tablet-tier-first-pixel` | first pixel of the tablet tier, and the tier at its worst: 384px of content behind the 200px rail |
+| 6 | **844×390** | `rotated-phone` | rotated phone — the *only* viewport exercising the `(max-height: 500px)` shell guard |
+| 7 | 834×1112 | `ipad-portrait` | iPad portrait |
+| 8 | **1100×900** | `deliberate-band` | the 1024–1120 band, where the wrapped tab strip and single-column `.grid2` are **deliberate**, not bugs |
+| 9 | 1280×800 | `desktop-control` | desktop control — criterion is "identical to before" |
 
 4/5 and 8 exist because a naive 360/390/430/768/1280 sweep never sees a tier boundary or the one range
 where the spec knowingly ships a compromise.
@@ -135,9 +143,10 @@ Things the build session must be told, not left to discover.
 
 ## Re-running
 
-- **Any change under `web/src`** → universal gates at 390×844, touched views only.
-- **Changes to `styles.css` or the shell** → the full sweep.
-- **`grep -ro "<table" web/src | wc -l` must return 22.** If it does not, a table has been added or removed and the
-  per-view table above is stale. Four tables went unassigned through the whole map because two views never
-  entered the inventory and two tables render only behind a conditional; this one line is what catches the
-  next one.
+- **Any change under `web/src`** → `make test-web`, then the manual gates at 390×844 for touched views.
+- **Changes to `styles.css` or the shell** → `make test-web`, then the full manual sweep.
+- **The table inventory must be 22** — `grep -ro "<table" web/src | wc -l`. If it is not, a table has been
+  added or removed and the per-view table above is stale. Four tables went unassigned through the whole map
+  because two views never entered the inventory and two tables render only behind a conditional; this one
+  line is what catches the next one. `web/tests/inventory.spec.js` now asserts it, so `make test-web` fails
+  rather than leaving it to whoever remembers to run the grep.

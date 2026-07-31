@@ -1,5 +1,5 @@
 .PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net \
-        flat-cash load-cash spending snapshot snapshot-commit ingest-all
+        flat-cash load-cash spending snapshot snapshot-commit ingest-all test-web capture-web-fixtures
 
 PY = PYTHONPATH=. .venv/bin/python
 AL = PYTHONPATH=. .venv/bin/alembic
@@ -59,6 +59,17 @@ build-web:    ## build the React frontend
 	cd web && npm install && npm run build
 app: build-web   ## build frontend then run API+web on :8000
 	$(PY) -m uvicorn server.main:app --port 8000
+
+test-web: build-web   ## Playwright viewport suite: 9 named viewports x 13 views (see web/TESTING.md)
+	@# Runs against the production build through vite's preview server, not the dev server,
+	@# so the suite tests what ships. Every API call is served from web/tests/fixtures — no
+	@# database, no network. First run on a machine needs `cd web && npx playwright install chromium`.
+	cd web && npx playwright test
+
+capture-web-fixtures:   ## re-derive the suite's fixtures from the live DB (needs the API running)
+	@# Rarely. Regenerating re-tethers every measured assertion to whatever the DB holds
+	@# today — read the docstring in the script before running it.
+	$(PY) scripts/capture_web_fixtures.py --base http://localhost:8000
 
 net:          ## per-ticker net verdict (+/-) incl dividends + option premiums
 	$(PY) scripts/net.py $(filter-out $@,$(MAKECMDGOALS))
