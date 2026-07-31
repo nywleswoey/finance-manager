@@ -69,14 +69,14 @@ criteria **instead of** the universal list — reading comfort, row density and 
 |---|---|
 | Portfolio › Overview | tiles reflow to 2 columns; `.grid2` single column; **donuts gone below 640**; both lists render as S2 inline rows — full-width track, fill behind the text, no 130px name column |
 | Portfolio › Holdings | pattern **A**: Security pinned, h-scroll inside the wrapper, sticky `th` stays put as the wrapper scrolls; `tr:active` feedback and a persistent `›` in the pinned cell; footnote collapsed into `<details>`; row tap opens SecurityDetail |
-| Portfolio › Performance | ⚠ **no pattern assigned** — see Open calls |
+| Portfolio › Performance | pattern **A**, grouping key pinned (its `th` is `{by}` — lowercase, changes with the `<select>`). Row count is bounded by the grouping dimension (max 8), so the whole table is on screen and `max-height: 60svh` never bites |
 | Portfolio › Dividends | crosstab pattern **A** (grows in columns, so h-scroll never expires); payment ledger pattern **B** cards; `LabelList` dropped below 640 |
-| Portfolio › Options | contract ledger **B** *(open call)*; by-ticker and by-type unchanged (≤4 cols); monthly P/L halved to 6 bars with a reserved band so negative labels clear the ticks |
+| Portfolio › Options | contract ledger **A** — pinned Underlying; it already has an `overflow-x: auto` wrapper at `:70`, so this keeps behaviour rather than replacing it. By-ticker and by-type unchanged (273/261px, they genuinely fit); monthly P/L halved to 6 bars with a reserved band so negative labels clear the ticks |
 | Portfolio › Transactions | pattern **B** cards |
-| Portfolio › SecurityDetail | txn history **B**; dividend history **B**; options history ⚠ **unassigned**; `← Holdings` is a ≥44px target and is the **only** way back — there is no router |
+| Portfolio › SecurityDetail | txn history **B**; dividend history **B**; options history **A** with a merged two-line `Contract` pin (`Opened` over `Type Strike ×Qty`) replacing the Type/Strike/Qty columns **at every width** — 678→524px. Three tables, two patterns, deliberately. `← Holdings` is a ≥44px target and is the **only** way back — there is no router |
 | Net Worth | editor floor; line chart has a **DOM key, not `<Legend>`**; Breakdown and History wrapped in `overflow-x: auto`; `100svh` |
-| Spending › Overview | donut gone below 640, list is the chart; Top Line Items ⚠ **unassigned** (4 cols) |
-| Spending › By Category | donut gone below 640; 4-col table unchanged; drilldown sub-table ⚠ **unassigned** |
+| Spending › Overview | donut gone below 640, list is the chart; Top Line Items pattern **B** (471px — A's pin would be the 232px Line item, 70% of the viewport). Both halves of the `.grid2` end up as ranked lists |
+| Spending › By Category | donut gone below 640; Categories pattern **A** with the name column pinned — it keeps its own `▸`/`▾` and does **not** get the persistent `›`; drilled transactions render as **B** cards **below the table**, not as a nested row, headed by subcategory + count + aggregate |
 | Spending › Classify | editor floor; `.fillpane` neutralised so the page scrolls as one; **⇅ Reorder hidden on phone**; `RuleModal` uses `svh`; `textarea` is styled (it is styled nowhere today — white box on a dark modal) |
 | Spending › Recurring | monitor **A** *(open call)* and candidates **A**; three `.link-btn`s at 44px square; **two nested scroll regions** — the feel check |
 | Spending › Transactions | pattern **B** cards |
@@ -97,15 +97,16 @@ Record the value. These **cannot fail** — nothing here changes the work.
 
 Failing these **changes a decision**, rather than reporting a bug.
 
-- `Options.jsx:71` contract ledger assigned **B** — 11 fields is a heavy card and may hit Holdings'
-  3-rows-per-screen problem, in which case it wants **A**.
 - `Recurring.jsx:94` monitor assigned **A** — the map suspects Recurring wants a different information
   design entirely, not a reflow.
 - Recurring's two nested scroll regions — geometry is fine; whether it *feels* confusing is not
   measurable from here.
-- **Four tables have no pattern assignment in any ticket**: `Performance.jsx:18` (9 cols),
-  `SecurityDetail.jsx:102` (9 cols), `spending/Overview.jsx:33` (4 cols),
-  `ByCategory.jsx:168` (headerless drilldown).
+- `SecurityDetail.jsx:48` txn history stays **B**, but it measures the same ~4 cards per screen that
+  overturned B for the options table beside it (8 cols, 914px, up to 71 rows, four numbers per row). If it
+  reads as cramped, it wants **A** and SecurityDetail becomes B, A, A.
+
+*(`Options.jsx:71` left this list: resolved to **A**, on the measurement that a 9-field card is 4 rows per
+screen against A's 12 — the same reasoning that rejected B for Holdings at 3.)*
 
 ## Traps
 
@@ -114,6 +115,16 @@ Things the build session must be told, not left to discover.
 - `Transactions.jsx:35` carries an inline `fontSize: 13` — **CSS cannot reach it**; the rule silently
   no-ops until that style moves to a class.
 - `Classify.jsx:126` carries an inline `maxHeight: 232` — same problem, accepted as-is.
+- `ByCategory.jsx:133` carries an inline `paddingLeft: 26` — same family. It is what makes that table's
+  pinned column 212px rather than ~186px.
+- **A pinned column is only useful if its column is an identity.** `SecurityDetail:102` leads with `Type`
+  (`Put`/`Put`/`Call`), which is why it gets a merged pin cell; check the pin actually tells you which row
+  you are on, on every A table.
+- **A nested `<table>` inherits its parent's width**, so it sets the parent's min-content. This is why the
+  By Category drilldown leaves the table on phone rather than becoming cards in place.
+- `.grid2`'s `minmax(420px, 1fr)` is **~100px optimistic against real data** — `Overview:33`'s card needs
+  **519px** with the live DB's longest subcategory name. `auto-fit` still behaves; the column just spills
+  inside itself between 1024 and ~1256.
 - **`640` is a literal in two places**: `styles.css` and the `matchMedia` hook. No single source of
   truth without a build step. Cross-reference both sides in a comment.
 - In `.main`, the padding **longhands must follow the shorthand** — the shorthand resets all four sides.
@@ -126,3 +137,7 @@ Things the build session must be told, not left to discover.
 
 - **Any change under `web/src`** → universal gates at 390×844, touched views only.
 - **Changes to `styles.css` or the shell** → the full sweep.
+- **`grep -ro "<table" web/src | wc -l` must return 22.** If it does not, a table has been added or removed and the
+  per-view table above is stale. Four tables went unassigned through the whole map because two views never
+  entered the inventory and two tables render only behind a conditional; this one line is what catches the
+  next one.
