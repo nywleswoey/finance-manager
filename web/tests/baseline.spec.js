@@ -1,5 +1,5 @@
 /**
- * The viewport suite: nine named viewports x thirteen views, asserting the geometric
+ * The viewport suite: ten named viewports x thirteen views, asserting the geometric
  * gates a human currently checks by eye against `RESPONSIVE.md`.
  *
  * THE SEAM. One, and it already existed: the HTTP API boundary, intercepted in the

@@ -1,7 +1,7 @@
 # Frontend verification — start here
 
 **The definition of done for anything you change under `web/src` is [`../RESPONSIVE.md`](../RESPONSIVE.md).**
-It is the checklist: nine viewports, the universal gates, the per-view gates, the traps, and
+It is the checklist: ten viewports, the universal gates, the per-view gates, the traps, and
 the handful of items that need a real iPhone. Read it before changing layout, not after.
 
 **The command is `make test-web`** (from the repo root). It builds the frontend and runs the
@@ -17,15 +17,21 @@ First run on a machine also needs the browser: `cd web && npx playwright install
 
 ## What the suite is
 
-`tests/baseline.spec.js` — nine named viewports × thirteen views. Its header docstring is the
+`tests/baseline.spec.js` — ten named viewports × thirteen views. Its header docstring is the
 authority on what it asserts and, more importantly, **what it can never assert**. Read that
 before treating a green run as "verified on a phone"; it is not. Four things need a real
 iPhone and are named there.
 
-`tests/inventory.spec.js` — the checks that read files rather than pixels: the table count,
-the viewport list against `RESPONSIVE.md`, and the fixtures' own integrity.
+`tests/unconditional.spec.js` — the gates that hold at *every* width, checked at every width and
+only on the views that carry them: the refresh control's size, `.grid2`'s collapse, the wrapping
+tab strip, the editors' 24px floor, the rule textarea's styling, the S2 list rows, and the merged
+options identity cell. Each one moved **out of** `RESPONSIVE.md` when it moved in here.
 
-`tests/viewports.js` — the nine viewports, declared once. They mirror `RESPONSIVE.md`'s table
+`tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
+single donut implementation, the viewport list against `RESPONSIVE.md`, and the fixtures' own
+integrity.
+
+`tests/viewports.js` — the ten viewports, declared once. They mirror `RESPONSIVE.md`'s table
 one-for-one and a test fails if the two lists drift apart.
 
 `tests/fixtures/` — every API response, derived from the live database once by

@@ -35,11 +35,11 @@ export default defineConfig({
   projects: [
     // Checks that read files rather than pixels — the checklist/viewport parity, the
     // table inventory, the fixtures' own integrity. They do not depend on a viewport, so
-    // running them nine times would only make nine identical failures out of one.
+    // running them ten times would only make ten identical failures out of one.
     { name: "inventory", testMatch: /inventory\.spec\.js/ },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
-      testMatch: /baseline\.spec\.js/,
+      testMatch: /(baseline|unconditional)\.spec\.js/,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: v.width, height: v.height },

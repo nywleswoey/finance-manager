@@ -6,7 +6,7 @@
  * kinds of drift. Four tables went unassigned through the whole effort, because two
  * views never entered the inventory and two tables render only behind a conditional —
  * so the table count is asserted rather than grepped by hand. And the automated sweep
- * and the manual checklist are two lists of the same nine viewports, which is one list
+ * and the manual checklist are two lists of the same ten viewports, which is one list
  * too many unless something checks they still match.
  */
 import fs from "node:fs";
@@ -41,9 +41,20 @@ test("the table inventory is 22", () => {
     .toBe(22);
 });
 
-test("the nine viewports match the manual checklist one-for-one", () => {
+test("exactly one donut implementation exists", () => {
+  // `portfolio/Overview.jsx` carried a hand-copied duplicate of `charts.jsx`'s `Donut`,
+  // with its own 7-colour palette, so every chart change had to land twice across four
+  // call sites — and the copy sorted the caller's array in place during render. Counting
+  // `<PieChart` is what makes "merged" a fact rather than a commit message: a second copy
+  // can be re-introduced by paste in ten seconds, and this is the only thing that notices.
+  const pies = sourceFiles(path.join(WEB, "src"))
+    .flatMap((f) => (fs.readFileSync(f, "utf8").match(/<PieChart/g) ?? []).map(() => path.relative(WEB, f)));
+  expect(pies, "files rendering a <PieChart> — the donut is shared, not copied").toHaveLength(1);
+});
+
+test("the ten viewports match the manual checklist one-for-one", () => {
   // RESPONSIVE.md's viewport table is the human-facing list; `viewports.js` is the
-  // machine-facing one. Two lists of the same nine viewports drift the moment nothing
+  // machine-facing one. Two lists of the same ten viewports drift the moment nothing
   // reads both, so this reads both — names as well as sizes, and in order, because the
   // name is what you type at `--project=` and what a failure is reported under.
   const md = fs.readFileSync(path.join(REPO, "RESPONSIVE.md"), "utf8");
@@ -52,7 +63,7 @@ test("the nine viewports match the manual checklist one-for-one", () => {
     ...section.matchAll(/\|\s*\d+\s*\|\s*\**(\d+)×(\d+)\**\s*\|\s*`([a-z-]+)`\s*\|/g),
   ].map(([, w, h, name]) => `${name} ${w}x${h}`);
 
-  expect(fromChecklist, "parsed from RESPONSIVE.md's viewport table").toHaveLength(9);
+  expect(fromChecklist, "parsed from RESPONSIVE.md's viewport table").toHaveLength(10);
   expect(VIEWPORTS.map((v) => `${v.name} ${v.width}x${v.height}`)).toEqual(fromChecklist);
 });
 

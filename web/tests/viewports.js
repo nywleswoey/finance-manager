@@ -1,17 +1,20 @@
 /**
- * The nine viewports, declared once.
+ * The ten viewports, declared once.
  *
  * These mirror the manual checklist in `RESPONSIVE.md` one-for-one, by name and by size.
  * `inventory.spec.js` parses that table and fails if the two lists disagree, so the
  * automated sweep and the human one cannot drift apart — which is the whole reason the
  * names and sizes are written here rather than inlined into a config.
  *
- * Four of the nine exist because a naive 360/390/430/768/1280 sweep never sees them:
+ * Five of the ten exist because a naive 360/390/430/768/1280 sweep never sees them:
  * the 639/640 pair (every phone rule is `max-width: 639.98px`, so one side of it only
  * ever proves half a rule — which is why a tier boundary costs two viewports, not one),
- * 844x390 (the only viewport that exercises the shell's `max-height: 500px` guard), and
+ * 844x390 (the only viewport that exercises the shell's `max-height: 500px` guard),
  * 1100x900 (the 1024-1120 band where the wrapped tab strip and the single-column grid
- * are deliberate, not bugs).
+ * are deliberate, not bugs), and 1440x900 — the second desktop control. One desktop width
+ * cannot distinguish "the tab strip fits" from "the tab strip fits at exactly 1280", and
+ * `.tabs { flex-wrap: wrap }` and `.grid2`'s `auto-fit` are both claims about *every*
+ * width above the fold, not about one.
  */
 
 /**
@@ -35,4 +38,5 @@ export const VIEWPORTS = [
   { name: "ipad-portrait",           width: 834,  height: 1112, why: "iPad portrait" },
   { name: "deliberate-band",         width: 1100, height: 900,  why: "the 1024-1120 band, where the wrapped tab strip and single-column .grid2 are deliberate" },
   { name: "desktop-control",         width: 1280, height: 800,  why: "desktop control — criterion is 'identical to before'" },
+  { name: "desktop-wide",            width: 1440, height: 900,  why: "the second desktop control — the unconditional fixes claim every width, not one" },
 ];

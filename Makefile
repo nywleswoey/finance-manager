@@ -60,7 +60,7 @@ build-web:    ## build the React frontend
 app: build-web   ## build frontend then run API+web on :8000
 	$(PY) -m uvicorn server.main:app --port 8000
 
-test-web: build-web   ## Playwright viewport suite: 9 named viewports x 13 views (see web/TESTING.md)
+test-web: build-web   ## Playwright viewport suite: 10 named viewports x 13 views (see web/TESTING.md)
 	@# Runs against the production build through vite's preview server, not the dev server,
 	@# so the suite tests what ships. Every API call is served from web/tests/fixtures — no
 	@# database, no network. First run on a machine needs `cd web && npx playwright install chromium`.
