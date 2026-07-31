@@ -139,6 +139,26 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   inline `fontSize: 13` that CSS cannot reach (the rule silently no-ops), and `640` must be a literal in
   both `styles.css` and 014's `matchMedia` hook — no single source of truth without a build step.
 
+- [Sign-in on a phone](tickets/016-sign-in-on-phone.md) — **already responsive; only mis-sized.** Nothing
+  overflows at any phone width, so the screen contributes **no rule to 015's media query** and the whole
+  ticket is **two characters on two lines**: `100vh` → `100svh` at `auth.jsx:50` and `:125`. Unlike the
+  shell's `height: 100vh`, `min-height` makes the extra ~64px **scrollable** rather than unreachable — the
+  page rubber-bands with nothing to scroll and the "centred" content sits ~32px below optical centre. The
+  **GSI button is explicitly carved out of the 44px floor**: Google exposes only `width` (max 400px) and no
+  height, so the floor is unsatisfiable by our mechanism — and unnecessary, since 015 justified 44px on
+  *adjacent* targets and this screen has one button in 390px of empty space, above WCAG 2.5.8's 24px either
+  way. **The carve-out is robust to a number nobody measured** (40 vs 44px) because we can't change it
+  regardless. The inline-styles cleanup is **ruled out on two facts**: `styles.css` is already imported
+  globally at `main.jsx:7`, so `var(--bg)` was always in scope and fixing the drift never required moving the
+  file — the ticket bundled two separable questions; and `auth.jsx` is **not an outlier**, inline hex
+  literals bypassing the tokens are the house style in ~30 places across 9 files. `maxWidth: 280` confirmed
+  (all four error strings are bounded, longest ≈240px, so the cap never binds) and **zero `env()` padding** —
+  nothing here is edge-anchored, and `viewport-fit=cover` is a passive win, painting the dark background
+  under the home bar. **One trap**: React style objects have unique keys, so the `height: 100vh; height:
+  100svh;` fallback pair **has no inline equivalent** — accepted, because the failure mode degrades to body's
+  `--bg`, which differs from the div's `#0f1115` by four units in one channel. *The colour drift the ticket
+  declined to fix is what makes the fallback safe to omit.*
+
 ## Not yet specified
 
 <!-- in-scope fog: real, but not yet sharp enough to ticket -->
@@ -174,3 +194,8 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   making HTML5 drag work on touch is a sub-project that buys little.
 - **Adopting Tailwind or a component library** — a framework migration would churn every component
   and dwarf the change it is meant to serve.
+- **Token drift in inline styles** — ~30 hardcoded hex literals across 9 files bypass the `--bg`/`--txt`/
+  `--mut`/`--neg`/`--panel` custom properties and are each a few units off them (`charts.jsx:7`,
+  `Recurring.jsx:6-10`, `Classify.jsx:25-28,350`, every Recharts `contentStyle`, `NetWorth.jsx:98-105`,
+  `auth.jsx:50-57`). App-wide cosmetic consistency, not a responsiveness question, and not sign-in's to
+  carry alone. Ruled out by [Sign-in on a phone](tickets/016-sign-in-on-phone.md).
