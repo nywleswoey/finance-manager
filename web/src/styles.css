@@ -67,9 +67,18 @@ tr:hover td { background: #1a212a; }
    get their width from that rule, in the phone tier, rather than twice. */
 button { min-height: 24px; }
 .fillpane button, .nw-del { min-width: 24px; }
-.bar { height: 8px; border-radius: 4px; background: var(--acc); }
-.barrow { display: flex; align-items: center; gap: 10px; margin: 7px 0; }
-.barrow .nm { width: 130px; color: var(--mut); font-size: 13px; }
+/* S2 inline: one line per entry, the proportional fill *behind* the text rather than beside
+   it, at every width. Replaces a 130px fixed name column and a 220px bar constant that made
+   the bar non-proportional the moment a name ran long. One row shape, one code path — the
+   phone-only alternative would have branched in two component files. */
+.barrow { position: relative; display: flex; align-items: center; gap: 8px;
+  min-height: 38px; padding: 0 8px; border-radius: 4px; overflow: hidden; }
+.barfill { position: absolute; left: 0; top: 0; bottom: 0; opacity: .3; border-radius: 4px; }
+.barrow > .chip, .barrow > .nm, .barrow > .val { position: relative; }
+.barrow .chip { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.barrow .nm { flex: 1 1 auto; min-width: 0; color: var(--txt); font-size: 13px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.barrow .val { flex: none; color: var(--mut); font-size: 13px; font-variant-numeric: tabular-nums; }
 /* `textarea` joins the rule it was always missing from: it is styled nowhere else in the
    app, so it rendered UA-default — a white box on a dark modal — at every width. */
 input, select, textarea { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);

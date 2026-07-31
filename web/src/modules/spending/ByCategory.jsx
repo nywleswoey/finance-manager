@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { get, sgd, fmt } from "../../api.js";
-import { COLORS, Donut } from "./charts.jsx";
+import { COLORS, Donut } from "../../charts.jsx";
 
 // Expenses for a single calendar year, broken down by category. The year selector loads that
 // year's window (from=YYYY-01-01, to=YYYY-12-31) through the existing spending endpoints;
