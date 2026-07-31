@@ -215,6 +215,30 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   putting an editor inside this decision), and **013's "needs nothing" bucket doesn't survive 640** — those
   four ≤4-column tables measure 419px against 384px of content behind the rail.
 
+- [Scroll ownership on a phone](tickets/020-scroll-ownership-on-phone.md) — **nobody was going to choose
+  the scroll owner; 013's wrapper chooses it.** Adding `overflow-x: auto` to a flex item of `.main` flips
+  its `min-height: auto` to `0`, so it shrinks to the pane and **becomes the vertical scroll owner while
+  `.main` stops scrolling** — a side effect of pattern A, not anyone's decision. **Ratified**, because the
+  trade is binary (shrinking wrapper → sticky `th` works; `flex: none` → pane scrolls, header dead) and
+  re-measuring reproduces **exactly the 15 rows** 013 reported, so its prototype already assumed this and
+  its "sticky headers survive under A" claim depends on it. Item 1's nested-scroll worry largely dissolves:
+  `.main` stops scrolling, so Holdings has **one** scrollable region, not two. But the behaviour is free
+  only for a **direct flex child of `.main`** — and only `Holdings.jsx:142` is one; the other three
+  pattern-A tables sit inside `.card`, where the wrapper never scrolls and **the sticky header is dead**.
+  Fixed with **one self-limiting rule** — `max-height: 60svh`, phone-only, a no-op on short tables so no
+  exemption list. `overscroll-behavior` **deliberately left unset** (the reflex `contain` would trap the
+  gesture in a 60svh box; default chaining is what you want), no gradient cue (the clipped half-row *is*
+  the cue), and `-webkit-overflow-scrolling` recorded as obsolete. **`.fillpane`/`.grow`/`.scroll` has
+  exactly one user in the whole app** — `Classify.jsx:104`, an *editor* — so it is **neutralised under
+  640px** and Classify scrolls as one page, deleting the app's deepest nesting. **Landscape accepted as a
+  columns-for-rows trade** (844px shows 8+ of Holdings' 13 columns vs 2–3 in portrait; a header that
+  vanishes on rotate would be worse than a short table), with Holdings' footnote becoming a phone
+  `<details>` — the real lever, measured at 44px pitch: portrait **11 → 13 rows**, landscape **2 → 4**.
+  **Two live desktop defects recorded, not fixed**: `Dividends.jsx:30` already has a dead sticky header
+  (provably harmless — `CONTEXT.md:18` fixes funding buckets as a closed set of three, so it is 3 rows plus
+  a Total and can never scroll), and Classify's rules cap is **inline** at `Classify.jsx:126`, unreachable
+  from CSS — same family as 015's `Transactions.jsx:35`, accepted as-is.
+
 ## Not yet specified
 
 <!-- in-scope fog: real, but not yet sharp enough to ticket -->
