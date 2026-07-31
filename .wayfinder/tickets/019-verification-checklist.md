@@ -4,7 +4,7 @@ title: Verification checklist & target viewports
 type: grilling
 status: open
 assignee:
-blocked_by: [12, 13, 14, 15, 16, 17, 18]
+blocked_by: [12, 13, 14, 15, 16, 17, 18, 21]
 parent: map-mobile-responsive
 ---
 
