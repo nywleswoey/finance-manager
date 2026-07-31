@@ -43,3 +43,13 @@ still the right behaviour at 390px, where the scrollable box is a few hundred px
 Blocked by [Wide numeric tables on a phone](013-wide-tables-on-phone.md) — if that ticket replaces
 tables with cards or a horizontally-scrolling wrapper, the sticky-header premise this machinery
 exists to serve may not survive, and this question answers itself.
+
+**Widened by [The tablet tier](018-tablet-tier.md)**, in two ways the title no longer covers:
+
+- Pattern A now applies up to **1024px**, not just below 640, and it scopes *horizontal* scroll to the
+  table — taking it away from `.main`, which owns it today at every width (measured: `Holdings.jsx:142`
+  is 1272px against 1024px of content even at a 1280px viewport). So "who owns the scroll" is now a
+  question with a horizontal axis and a two-tier answer, not a phone-only vertical one.
+- Item 4 is **half-answered**: 018 put 012's shell rules behind `(max-height: 500px)` as well as
+  `(max-width: 639.98px)`, so a rotated phone gets the phone shell and its 48px app bar. What that
+  leaves open is only whether the *inner scroll box* survives at ~340px of remaining height.
