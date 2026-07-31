@@ -186,6 +186,35 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   load-bearing for 013, 014 and this ticket but exists only as a number inside 012's prototype →
   [The phone content gutter](tickets/021-phone-content-gutter.md).
 
+- [The tablet tier (640–1024px)](tickets/018-tablet-tier.md) — **the tier holds exactly one rule.**
+  Everything else went **unconditional** (and stopped being a tier item), stayed **unchanged**, or moved to
+  a **height** guard; the one survivor is extending 013's pattern A to any table that overflows, with
+  card-per-row staying phone-only. **1024 is not a working desktop floor — ~1120 is**, and two independent
+  measurements land there, both describing breakage that exists *today*: the Portfolio tab strip needs
+  ~1120px (six tabs are 615px and never shrink, so `.refresh-btn` — the only shrinkable child — crushes
+  152×35 → **78×77**, wrapping its label to three lines and doubling `.tabs` to 82px; at 1024 the strip
+  only *appears* to fit because the button crushed itself to make it), and `.grid2` needs ~1113px for two
+  columns (min-content **419px** on `ByCategory`, so at 1024 the spending tables already spill their cards
+  and `.main`'s h-scroll has been hiding it). Three fixes therefore land at **every** width, not in the
+  tier: `.refresh-btn { flex: none; white-space: nowrap }`, `.grid2 → repeat(auto-fit, minmax(420px, 1fr))`
+  (`.tiles`' own idiom at `styles.css:28`; `auto-fit` collapses empty tracks and all five call sites have
+  exactly two children, so a third column is impossible), and `.tabs { flex-wrap: wrap }` — which measures
+  **identical to today at 1280/1440**, a no-op whenever the strip fits. **Sidebar unchanged**: hiding the
+  200px rail flips *nothing* across 640–900, where every real tablet-portrait width lives. **Tables get the
+  pin**: "untouched" was measured and fails — at 640 you see Security, Bucket and *not one number*, and
+  `.main` owning the scroll takes the identity column away with it. **Landscape resolved by splitting the
+  guard on how each decision was made** — 012's shell chose the drawer on a *vertical* budget so it gains
+  `(max-height: 500px)`; 013/014 chose on *horizontal* room so they stay width-only, which also leaves
+  014's `matchMedia` hook untouched. Forced by: at 844×390 the tier costs **107px of chrome = 27%**, where
+  012 rejected its own variant A at **21%**. **Fixed a live contradiction in 012**: its
+  `env(safe-area-inset-left/right)` padding is justified "for landscape" but sits in the ≤639.98px block
+  that a rotated phone *exits* — hoisted to unconditional, free everywhere. **Explicitly not done**: 44px
+  targets stay phone-only (tablet rows measure **33px** — above WCAG 2.5.8, below comfort; `pointer:
+  coarse` rejected for firing on touchscreen laptops), as do 16px inputs, card-per-row, donut deletion and
+  the drawer. **Inventory corrections**: `.grid2` has **five** users not two (including `NetWorth.jsx:42`,
+  putting an editor inside this decision), and **013's "needs nothing" bucket doesn't survive 640** — those
+  four ≤4-column tables measure 419px against 384px of content behind the rail.
+
 ## Not yet specified
 
 <!-- in-scope fog: real, but not yet sharp enough to ticket -->
@@ -221,6 +250,12 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   making HTML5 drag work on touch is a sub-project that buys little.
 - **Adopting Tailwind or a component library** — a framework migration would churn every component
   and dwarf the change it is meant to serve.
+- **Pattern A at desktop widths (≥1024px).** `Holdings.jsx:142` measures **1272px against 1024px of
+  content at a 1280px viewport** — it overflows on the widest screen this map recognises, so the pinned
+  identity column is arguably right at *every* width, not just below 1024. Ruled out by the map's
+  destination-shaping lock that **desktop is unchanged**, which was set before the measurement existed.
+  Revisiting it means redrawing the destination, i.e. a fresh effort. Recorded by
+  [The tablet tier](tickets/018-tablet-tier.md).
 - **Token drift in inline styles** — ~30 hardcoded hex literals across 9 files bypass the `--bg`/`--txt`/
   `--mut`/`--neg`/`--panel` custom properties and are each a few units off them (`charts.jsx:7`,
   `Recurring.jsx:6-10`, `Classify.jsx:25-28,350`, every Recharts `contentStyle`, `NetWorth.jsx:98-105`,
