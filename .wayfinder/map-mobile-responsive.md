@@ -81,18 +81,32 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   landscape left/right insets do. **Accepted ambiguity**: with the drawer shut nothing names the
   section, and Portfolio and Spending both have an "Overview" tab. Prototype:
   [3 variants](../web/prototypes/mobile-shell-prototype.html).
+- [Wide numeric tables on a phone](tickets/013-wide-tables-on-phone.md) — **two patterns, assigned by
+  one test: does the table exist to compare a number down the column, or to read one row at a time?**
+  Compare → **the real table, horizontally scrolled behind a pinned identity column** (measured **15
+  rows** on screen vs 3 for cards; every column keeps its alignment, `tabular-nums` and sticky headers
+  intact — the trap is that sticky cells need `border-collapse: separate`). Read → **card per row**
+  (a ledger row has six fields, reads top-to-bottom, and fits two lines with nothing hidden and no
+  interaction). **A third bucket the inventory missed: the 8 views hold 13 tables, and four are ≤4
+  columns and need nothing done.** `tr:hover` is dead on touch → `tr:active` + a persistent `›` in the
+  pinned cell; there is **no router**, so `SecurityDetail`'s existing `← Holdings` link is the only way
+  back and must become a real touch target. Least-certain assignments, flagged for the build session:
+  the Options contract ledger and the Recurring monitor. Prototype:
+  [3 patterns × 2 table shapes](../web/prototypes/mobile-tables-prototype.html).
 
 ## Not yet specified
 
 <!-- in-scope fog: real, but not yet sharp enough to ticket -->
 
-- **Per-view column priority.** Which columns survive at phone width in each of the 8 table views.
-  Only becomes a stateable question once [Wide numeric tables on a phone](tickets/013-wide-tables-on-phone.md)
-  picks a pattern — under horizontal-scroll there is no "priority" concept at all. May graduate into
-  one ticket, or eight, or none.
-- **Views that need a different information design, not a reflow.** `Overview.jsx` (tile grid),
-  `Recurring.jsx` (167 lines of derived cadence data) may want a genuinely different phone view
-  rather than a narrowed desktop one. Too dim to phrase until the table and chart patterns land.
+- ~~**Per-view column priority.**~~ **Killed, not graduated** by
+  [Wide numeric tables on a phone](tickets/013-wide-tables-on-phone.md): no table in any bucket ever
+  drops a column, so there is no priority to decide. The two questions that replaced it (which column
+  is pinned, which field is the card hero) are answered inside that ticket.
+- **Views that need a different information design, not a reflow.** Narrowed to **`Recurring.jsx`**
+  (167 lines of derived cadence data, an 11-column monitor provisionally assigned the scrolled-table
+  pattern). `Overview.jsx` came off this list: its `.tiles` grid is already
+  `repeat(auto-fit, minmax(180px, 1fr))` (styles.css:28) and reflows to two columns at 390px for
+  free — observed in both prototypes.
 - **Phone-hardware performance.** Whether the spec needs to say anything about recharts re-render
   cost or table row counts on a phone. Unknown until the chart and table patterns are chosen.
 
