@@ -1,0 +1,41 @@
+{
+ "cash": {
+  "mv_sgd": 909789.89,
+  "income_sgd": 159753.22,
+  "pl_sgd": 367835.3,
+  "cost_sgd": 2073942.08,
+  "capital_sgd": 782004.05,
+  "invested_sgd": 2073942.08,
+  "realised_pl_sgd": 80976.07,
+  "unrealised_pl_sgd": 127113.34,
+  "options_pl_sgd": 177265.98,
+  "net_pl_sgd": 545108.61,
+  "return_pct": 0.2628
+ },
+ "cpf": {
+  "mv_sgd": 197054.89,
+  "income_sgd": 17648.12,
+  "pl_sgd": 131106.35,
+  "cost_sgd": 130666.66,
+  "capital_sgd": 88430.76,
+  "invested_sgd": 130666.66,
+  "realised_pl_sgd": 4834.1,
+  "unrealised_pl_sgd": 108624.13,
+  "options_pl_sgd": 0.0,
+  "net_pl_sgd": 131106.35,
+  "return_pct": 1.0034
+ },
+ "srs": {
+  "mv_sgd": 68855.93,
+  "income_sgd": 16423.3,
+  "pl_sgd": -23106.83,
+  "cost_sgd": 116156.05,
+  "capital_sgd": 111670.66,
+  "invested_sgd": 116156.05,
+  "realised_pl_sgd": 3284.61,
+  "unrealised_pl_sgd": -42814.73,
+  "options_pl_sgd": 0.0,
+  "net_pl_sgd": -23106.82,
+  "return_pct": -0.1989
+ }
+}

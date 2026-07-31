@@ -1,0 +1,42 @@
+[
+ {
+  "name": "CDP",
+  "broker": "SGX CDP",
+  "funding_bucket": "cash"
+ },
+ {
+  "name": "FSM",
+  "broker": "iFast / FSMOne",
+  "funding_bucket": "cash"
+ },
+ {
+  "name": "IBKR",
+  "broker": "Interactive Brokers",
+  "funding_bucket": "cash"
+ },
+ {
+  "name": "Moomoo",
+  "broker": "Moomoo Financial SG",
+  "funding_bucket": "cash"
+ },
+ {
+  "name": "Tiger Cash Boost",
+  "broker": "Tiger Brokers",
+  "funding_bucket": "cash"
+ },
+ {
+  "name": "Tiger Prime",
+  "broker": "Tiger Brokers",
+  "funding_bucket": "cash"
+ },
+ {
+  "name": "CPF",
+  "broker": "CPF Investment Scheme",
+  "funding_bucket": "cpf"
+ },
+ {
+  "name": "SRS",
+  "broker": "SRS",
+  "funding_bucket": "srs"
+ }
+]

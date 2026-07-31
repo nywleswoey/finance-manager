@@ -1,0 +1,54 @@
+{
+ "SG": {
+  "mv_sgd": 709809.73,
+  "income_sgd": 157778.63,
+  "pl_sgd": 419541.09,
+  "cost_sgd": 889506.09,
+  "capital_sgd": 481401.64,
+  "invested_sgd": 889506.09,
+  "realised_pl_sgd": 33498.95,
+  "unrealised_pl_sgd": 228269.62,
+  "options_pl_sgd": 0.0,
+  "net_pl_sgd": 419547.2,
+  "return_pct": 0.4717
+ },
+ "HK": {
+  "mv_sgd": 158789.38,
+  "income_sgd": 34217.08,
+  "pl_sgd": 135977.84,
+  "cost_sgd": 337801.06,
+  "capital_sgd": 148394.4,
+  "invested_sgd": 337801.06,
+  "realised_pl_sgd": 91365.78,
+  "unrealised_pl_sgd": 10394.98,
+  "options_pl_sgd": 1021.39,
+  "net_pl_sgd": 136999.23,
+  "return_pct": 0.4056
+ },
+ "US": {
+  "mv_sgd": 297495.36,
+  "income_sgd": 1828.93,
+  "pl_sgd": -79520.65,
+  "cost_sgd": 1083687.94,
+  "capital_sgd": 342539.73,
+  "invested_sgd": 1083687.94,
+  "realised_pl_sgd": -35769.95,
+  "unrealised_pl_sgd": -45578.4,
+  "options_pl_sgd": 176244.59,
+  "net_pl_sgd": 96725.17,
+  "return_pct": 0.0893
+ },
+ "MY": {
+  "mv_sgd": 9606.24,
+  "income_sgd": 0.0,
+  "pl_sgd": -163.46,
+  "cost_sgd": 9769.7,
+  "capital_sgd": 9769.7,
+  "invested_sgd": 9769.7,
+  "realised_pl_sgd": 0.0,
+  "unrealised_pl_sgd": -163.46,
+  "options_pl_sgd": 0.0,
+  "net_pl_sgd": -163.46,
+  "return_pct": -0.0167
+ }
+}

@@ -1,0 +1,130 @@
+[
+ {
+  "merchant": "YEOW ZHI XUAN  REF:SI",
+  "cadence": "monthly",
+  "occurrences": 4,
+  "avg_amount": 1095.2,
+  "typical_day": 30,
+  "last_seen": "2026-06-30"
+ },
+ {
+  "merchant": "TAY BEE LIAN  REF:     SI",
+  "cadence": "monthly",
+  "occurrences": 9,
+  "avg_amount": 500.0,
+  "typical_day": 1,
+  "last_seen": "2025-09-01"
+ },
+ {
+  "merchant": "TAY BEE LIAN  REF:SI",
+  "cadence": "monthly",
+  "occurrences": 9,
+  "avg_amount": 500.0,
+  "typical_day": 2,
+  "last_seen": "2026-06-02"
+ },
+ {
+  "merchant": "YEOW LEONG CHEE  REF:     SI",
+  "cadence": "monthly",
+  "occurrences": 9,
+  "avg_amount": 500.0,
+  "typical_day": 1,
+  "last_seen": "2025-09-01"
+ },
+ {
+  "merchant": "YEOW LEONG CHEE  REF:SI",
+  "cadence": "monthly",
+  "occurrences": 9,
+  "avg_amount": 500.0,
+  "typical_day": 2,
+  "last_seen": "2026-06-02"
+ },
+ {
+  "merchant": "MIN OF EDUCATION",
+  "cadence": "monthly",
+  "occurrences": 11,
+  "avg_amount": 174.55,
+  "typical_day": 26,
+  "last_seen": "2025-11-26"
+ },
+ {
+  "merchant": "SERAYA ENERGY PTE LTD",
+  "cadence": "monthly",
+  "occurrences": 7,
+  "avg_amount": 127.75,
+  "typical_day": 26,
+  "last_seen": "2026-06-25"
+ },
+ {
+  "merchant": "SERAYA ENERGY PTE LTD Singapore SG",
+  "cadence": "monthly",
+  "occurrences": 4,
+  "avg_amount": 124.1,
+  "typical_day": 24,
+  "last_seen": "2025-11-24"
+ },
+ {
+  "merchant": "TAMPINES TOWN COUNCIL",
+  "cadence": "monthly",
+  "occurrences": 10,
+  "avg_amount": 60.6,
+  "typical_day": 9,
+  "last_seen": "2026-07-09"
+ },
+ {
+  "merchant": "MINISTRY OF MANPOWER",
+  "cadence": "monthly",
+  "occurrences": 18,
+  "avg_amount": 60.0,
+  "typical_day": 17,
+  "last_seen": "2026-06-17"
+ },
+ {
+  "merchant": "Cabcharge",
+  "cadence": "monthly",
+  "occurrences": 13,
+  "avg_amount": 22.74,
+  "typical_day": 16,
+  "last_seen": "2026-07-05"
+ },
+ {
+  "merchant": "Netflix",
+  "cadence": "monthly",
+  "occurrences": 10,
+  "avg_amount": 15.98,
+  "typical_day": 24,
+  "last_seen": "2026-06-23"
+ },
+ {
+  "merchant": "KCUTS",
+  "cadence": "quarterly",
+  "occurrences": 3,
+  "avg_amount": 14.0,
+  "typical_day": 6,
+  "last_seen": "2026-04-22"
+ },
+ {
+  "merchant": "EIGHT TELECOM",
+  "cadence": "weekly",
+  "occurrences": 22,
+  "avg_amount": 8.0,
+  "typical_day": 6,
+  "last_seen": "2026-07-06"
+ },
+ {
+  "merchant": "KOUFU PTE LTD",
+  "cadence": "monthly",
+  "occurrences": 9,
+  "avg_amount": 2.21,
+  "typical_day": 9,
+  "last_seen": "2026-07-06"
+ },
+ {
+  "merchant": "MCDONALD'S (TAM KIOSK)",
+  "cadence": "monthly",
+  "occurrences": 3,
+  "avg_amount": 1.1,
+  "typical_day": 15,
+  "last_seen": "2026-05-04"
+ }
+]
