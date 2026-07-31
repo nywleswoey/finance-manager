@@ -159,6 +159,33 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   `--bg`, which differs from the div's `#0f1115` by four units in one channel. *The colour drift the ticket
   declined to fix is what makes the fallback safe to omit.*
 
+- [The "doesn't break" floor for Classify & Net Worth](tickets/017-editors-dont-break-floor.md) — **four
+  criteria, and both editors are a handful of lines from clearing them.** The floor: sideways scroll
+  confined to a container that is visibly a table (**`.main` never scrolls horizontally** — the ticket's
+  "no horizontal *page* scroll" is unbuildable, since `.main { overflow: auto }` absorbs everything before
+  it reaches the page); nothing overlapping or clipped; every control reachable, readable and tappable at
+  015's 24px; and **no control that silently does nothing** — noting `title=` **does not exist on touch**.
+  **Three of the ticket's premises were wrong.** The rules list has **no drag at all** — drag is a separate
+  `ReorderModal` behind one **⇅ Reorder** button, so the fix is **hiding one button**, not per-row handles,
+  which then makes that modal **unreachable on phone** and halves the modal question to `RuleModal` alone.
+  There are **two** modals sharing `overlay`/`sheet`, not one. And the editors hold **five tables, none in
+  013's inventory** — of which **Classify's three are already contained for free** (`overflowY: "auto"`
+  makes `overflow-x` compute to `auto`), so the entire table half is **two `overflow-x` wrappers on
+  NetWorth**. The editors' tables get **containment, not a pattern**, because *both* of 013's patterns
+  assume read-only rows and these cells hold live `<input>`/`<select>` — likely why the map excluded the
+  editors from 013 to begin with. **`.nw-row` changes not at all**: at the 14px gutter the label column is
+  **124px, not the ticket's ~200px**, and the column you'd instinctively shrink (the 120px value input) is
+  the one that can least afford it under 015's 16px; stacking would turn 17 rows into ~34 lines and destroy
+  the scannable right-aligned column, and h-scrolling a *form* violates criterion 1. `RuleModal` gets the
+  floor not a full-screen sheet — it is **already responsive horizontally** via `min(720px, 100%)`, and its
+  only real defect is `6vh`/`84vh`, which is 010 applied rather than a new decision. **Two live defects on
+  desktop, both recorded**: `textarea` is styled **nowhere** in `web/src`, so it renders a **white box on a
+  dark modal** at every width (folded in, on 015's `.nw-del` precedent); and `.link-btn` has **no
+  `:disabled` rule** whose explicit `color` defeats UA greying, so both existing `disabled` props render
+  invisibly (recorded, not fixed). **Graduated a fog patch nobody had noticed**: the 14px phone gutter is
+  load-bearing for 013, 014 and this ticket but exists only as a number inside 012's prototype →
+  [The phone content gutter](tickets/021-phone-content-gutter.md).
+
 ## Not yet specified
 
 <!-- in-scope fog: real, but not yet sharp enough to ticket -->
