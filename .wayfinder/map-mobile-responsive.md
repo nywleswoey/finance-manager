@@ -67,6 +67,20 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   including two live instances of the collapse trap it warns about (`Dividends.jsx:63` `height="100%"`,
   `Options.jsx:34,52` bare container) and a **hand-copied duplicate `Donut`**. Full:
   [findings](research/recharts-narrow-touch.md).
+- [The phone navigation shell](tickets/012-phone-navigation-shell.md) — **variant B: hamburger drawer
+  + native tab `<select>`**. Decided on measured vertical budget: a bottom section bar costs **147px
+  of chrome (181px with the home bar) = 21% of an 844px screen**, versus **48px** for the drawer —
+  too much rent for a rare act on a dashboard you land in and read. The drawer holds today's `.side`
+  rail *verbatim* (sections, dimmed Settings, email + Sign out in the footer), so nothing needs a new
+  home. Tabs become a **native `<select>` at `font-size:16px`** (6 items beat a scroll-strip that
+  hides options with no affordance; 16px or iOS zooms to 114%). **Refresh** shrinks to an icon-only
+  `↻` in the app bar with its status as a **transient toast strip below the bar** — a flex child, not
+  an overlay; `.tabs-right` is gone under 640px. Shell: `.app` flips to `flex-direction:column` at
+  `100svh`, **nothing `position: fixed`** (drawer/scrim are `absolute` inside the shell), and because
+  B has **no bottom-anchored chrome, `safe-area-inset-bottom` nearly stops mattering** — only the
+  landscape left/right insets do. **Accepted ambiguity**: with the drawer shut nothing names the
+  section, and Portfolio and Spending both have an "Overview" tab. Prototype:
+  [3 variants](../web/prototypes/mobile-shell-prototype.html).
 
 ## Not yet specified
 
@@ -79,10 +93,6 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
 - **Views that need a different information design, not a reflow.** `Overview.jsx` (tile grid),
   `Recurring.jsx` (167 lines of derived cadence data) may want a genuinely different phone view
   rather than a narrowed desktop one. Too dim to phrase until the table and chart patterns land.
-- **The nested-scroll machinery.** `.fillpane` / `.grow` / `.scroll` (styles.css:15-18) lets a
-  section own the vertical scroll inside a `100vh` shell. Strongly suspect it needs rework once the
-  shell changes, but the question can't be phrased before
-  [The phone navigation shell](tickets/012-phone-navigation-shell.md).
 - **Phone-hardware performance.** Whether the spec needs to say anything about recharts re-render
   cost or table row counts on a phone. Unknown until the chart and table patterns are chosen.
 

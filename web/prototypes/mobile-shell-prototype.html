@@ -1,0 +1,404 @@
+<!--
+  PROTOTYPE — throwaway. The phone navigation shell (<640px), 3 structurally-different variants.
+  Switch via the floating bar, ←/→, or ?variant=A|B|C. Mock data; real palette from web/src/styles.css;
+  real section/tab names and real column counts from App.jsx + Holdings.jsx.
+
+  Answers wayfinder ticket 012 "The phone navigation shell". Not production code.
+
+  On a desktop browser the shell renders inside a 390x844 phone frame so it can be judged without
+  devtools. Below 760px the frame drops away and the shell is the page (a real phone gets the real
+  thing). The HOME BAR toggle fakes env(safe-area-inset-bottom): 34px, which desktop always reports as 0.
+  The CHROME readout in the floating bar is measured, not asserted — px of vertical budget each
+  variant spends on navigation.
+
+  Height model under test (from research/mobile-viewport-safe-area.md): the shell is 100svh, all
+  chrome is an ordinary FLEX CHILD of it — nothing is position:fixed — and bottom-anchored chrome pads
+  with max(8px, env(safe-area-inset-bottom)) rather than offsetting.
+-->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Phone nav shell — prototype</title>
+<style>
+  :root {
+    --bg:#0f1419; --panel:#161b22; --panel2:#1c232c; --line:#2b333d;
+    --txt:#d7dde4; --mut:#8b97a5; --pos:#2ea043; --neg:#f85149; --acc:#388bfd;
+    --sab: 0px;                     /* faked safe-area-inset-bottom; see HOME BAR toggle */
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; }
+  body { background:#05080b; color:var(--txt);
+    font:14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+
+  /* ---- desktop staging frame (not part of the design under test) ---- */
+  .stage { min-height:100svh; display:flex; align-items:center; justify-content:center; padding:24px 16px 96px; }
+  .frame { width:390px; height:844px; flex:none; background:var(--bg); overflow:hidden;
+    border:1px solid #333c47; border-radius:34px; box-shadow:0 24px 70px rgba(0,0,0,.6); position:relative; }
+  .framelbl { position:absolute; top:-22px; left:4px; font-size:11px; color:#5b6675; letter-spacing:.06em; text-transform:uppercase; }
+  @media (max-width:760px) {
+    .stage { padding:0; display:block; min-height:0; }
+    .frame { width:100%; height:100svh; border:none; border-radius:0; box-shadow:none; }
+    .framelbl { display:none; }
+  }
+
+  /* ---- the shell: a 100% (=100svh) column; every bar is a flex child ---- */
+  .shell { height:100%; display:flex; flex-direction:column; min-height:0; }
+  .content { flex:1 1 auto; min-height:0; overflow:auto; padding:14px 14px 20px;
+    padding-left:max(14px, env(safe-area-inset-left));
+    padding-right:max(14px, env(safe-area-inset-right)); -webkit-overflow-scrolling:touch; }
+
+  .bar { flex:none; display:flex; align-items:center; gap:10px; background:var(--panel);
+    border-bottom:1px solid var(--line); padding:0 12px; height:48px; }
+  .brand { font-weight:700; font-size:15px; }
+  .spacer { margin-left:auto; }
+  .iconbtn { background:var(--panel2); border:1px solid var(--line); color:var(--txt); border-radius:8px;
+    min-width:40px; height:36px; font:inherit; font-weight:600; cursor:pointer; display:flex;
+    align-items:center; justify-content:center; padding:0 10px; }
+  .iconbtn:active { border-color:var(--acc); color:var(--acc); }
+  .iconbtn.spin { opacity:.55; }
+  .toast { flex:none; background:#12301c; color:#9fe0ac; font-size:12px; padding:6px 14px;
+    border-bottom:1px solid var(--line); }
+
+  /* tiles / table / cards — copied density from styles.css so the content is honest */
+  h2.vt { margin:0 0 12px; font-size:13px; color:var(--mut); text-transform:uppercase; letter-spacing:.05em; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-bottom:16px; }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .tile .lbl { color:var(--mut); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+  .tile .val { font-size:20px; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:14px; }
+  .card h3 { margin:0 0 10px; font-size:12px; color:var(--mut); text-transform:uppercase; letter-spacing:.04em; }
+  .tblwrap { overflow-x:auto; -webkit-overflow-scrolling:touch; border:1px solid var(--line); border-radius:10px; background:var(--panel); }
+  table { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  th,td { padding:7px 10px; text-align:right; border-bottom:1px solid #20262e; white-space:nowrap; }
+  th { color:var(--mut); font-size:11px; text-transform:uppercase; position:sticky; top:0; background:var(--panel); }
+  td.l,th.l { text-align:left; }
+  .pill { font-size:11px; padding:1px 7px; border-radius:9px; background:var(--panel2); color:var(--mut); }
+  .pos { color:var(--pos); } .neg { color:var(--neg); } .mut { color:var(--mut); }
+  .note { color:var(--mut); font-size:12px; margin:10px 2px 0; }
+
+  /* =============== VARIANT A — bottom section bar + scrolling tab strip =============== */
+  .strip { flex:none; display:flex; gap:4px; overflow-x:auto; scrollbar-width:none; background:var(--bg);
+    border-bottom:1px solid var(--line); padding:0 8px; scroll-snap-type:x proximity; }
+  .strip::-webkit-scrollbar { display:none; }
+  .strip .tab { flex:none; scroll-snap-align:start; padding:11px 12px; color:var(--mut); font-weight:600;
+    border-bottom:2px solid transparent; cursor:pointer; font-size:13px; }
+  .strip .tab.on { color:var(--txt); border-bottom-color:var(--acc); }
+  .btmbar { flex:none; display:flex; background:var(--panel); border-top:1px solid var(--line);
+    padding-bottom:max(6px, var(--sab), env(safe-area-inset-bottom)); }
+  .btmbar .b { flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 2px 6px;
+    color:var(--mut); font-size:10px; font-weight:600; cursor:pointer; min-height:48px; justify-content:center; }
+  .btmbar .b .ic { font-size:17px; line-height:1; }
+  .btmbar .b.on { color:var(--acc); }
+
+  /* =============== VARIANT B — hamburger drawer + native tab select =============== */
+  select.tabsel { flex:1; min-width:0; background:var(--panel2); border:1px solid var(--line); color:var(--txt);
+    border-radius:8px; padding:8px 10px; font:inherit; font-weight:600; font-size:16px; height:38px; }
+  .scrim { position:absolute; inset:0; background:rgba(0,0,0,.55); opacity:0; pointer-events:none;
+    transition:opacity .18s; z-index:5; }
+  .scrim.on { opacity:1; pointer-events:auto; }
+  .drawer { position:absolute; top:0; bottom:0; left:0; width:246px; background:var(--panel);
+    border-right:1px solid var(--line); transform:translateX(-100%); transition:transform .2s; z-index:6;
+    display:flex; flex-direction:column; padding:16px 0;
+    padding-bottom:max(16px, var(--sab), env(safe-area-inset-bottom));
+    padding-left:max(0px, env(safe-area-inset-left)); }
+  .drawer.on { transform:none; }
+  .drawer .brand { padding:4px 18px 14px; font-size:16px; }
+  .navitem { padding:12px 18px; cursor:pointer; color:var(--mut); font-weight:600; min-height:44px; display:flex; align-items:center; }
+  .navitem.on { color:var(--txt); background:var(--panel2); border-left:3px solid var(--acc); padding-left:15px; }
+  .navitem.dim { opacity:.4; cursor:default; font-weight:500; font-size:13px; }
+  .drawer .foot { margin-top:auto; padding:12px 18px 0; border-top:1px solid var(--line); }
+  .email { font-size:11px; color:var(--mut); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; margin-bottom:8px; }
+  .ghostbtn { font-size:13px; font-weight:600; color:var(--mut); background:none; border:1px solid var(--line);
+    border-radius:8px; padding:9px 12px; cursor:pointer; min-height:40px; width:100%; }
+
+  /* =============== VARIANT C — one unified destination sheet =============== */
+  .titlebtn { display:flex; align-items:center; gap:7px; background:none; border:none; color:var(--txt);
+    font:inherit; font-weight:700; font-size:16px; cursor:pointer; padding:6px 4px; min-height:44px; }
+  .titlebtn .sec { color:var(--mut); font-weight:600; }
+  .titlebtn .car { color:var(--mut); font-size:12px; }
+  .sheet { position:absolute; left:0; right:0; bottom:0; z-index:6; background:var(--panel);
+    border-top:1px solid var(--line); border-radius:16px 16px 0 0; transform:translateY(101%);
+    transition:transform .2s; max-height:82%; display:flex; flex-direction:column;
+    padding-bottom:max(10px, var(--sab), env(safe-area-inset-bottom)); }
+  .sheet.on { transform:none; }
+  .sheet .grab { width:38px; height:4px; border-radius:2px; background:var(--line); margin:8px auto 4px; flex:none; }
+  .sheet .list { overflow:auto; padding:4px 0; }
+  .sheet .grp { font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--mut);
+    padding:12px 18px 4px; }
+  .dest { display:flex; align-items:center; gap:10px; padding:11px 18px; min-height:44px; cursor:pointer; font-weight:600; }
+  .dest.on { color:var(--acc); background:var(--panel2); }
+  .dest .tick { margin-left:auto; color:var(--acc); }
+  .sheet .foot { flex:none; border-top:1px solid var(--line); padding:10px 18px 4px; display:flex;
+    align-items:center; gap:10px; }
+  .sheet .foot .email { margin:0; flex:1; }
+
+  /* ---- floating switcher (obviously not part of the design) ---- */
+  .switch { position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:50;
+    display:flex; align-items:center; gap:6px; background:#f2f5f8; color:#101820; border-radius:999px;
+    padding:5px 6px; box-shadow:0 6px 24px rgba(0,0,0,.5); font-size:12px; font-weight:600; }
+  .switch button { background:#101820; color:#f2f5f8; border:none; border-radius:999px; width:28px; height:28px;
+    font-size:14px; cursor:pointer; }
+  .switch .lab { padding:0 8px; white-space:nowrap; }
+  .switch .lab b { font-weight:700; }
+  .switch .lab #labn { font-weight:500; }
+  .switch .tog { background:#dfe5ec; color:#101820; border-radius:999px; padding:5px 10px; cursor:pointer;
+    border:1px solid #c3ccd7; font-size:11px; }
+  .switch .tog.on { background:#101820; color:#f2f5f8; border-color:#101820; }
+  .switch .meas { color:#5a6675; font-weight:500; padding-right:6px; white-space:nowrap; }
+  /* On a real phone the bar must not sit on top of the chrome being judged: collapse it to a badge
+     pinned to the middle of the right edge, over content only. Tap to cycle, long-press area = none. */
+  @media (max-width:760px) {
+    .switch { left:auto; right:6px; bottom:auto; top:50%; transform:translateY(-50%); flex-direction:column;
+      gap:4px; padding:5px; opacity:.9; }
+    .switch .lab { padding:0; font-size:14px; width:28px; text-align:center; }
+    .switch .lab #labn { display:none; }
+    .switch .meas { display:none; }
+    .switch .tog { padding:4px 5px; font-size:9px; writing-mode:vertical-rl; }
+  }
+</style>
+
+<div class="stage">
+  <div class="frame" id="frame">
+    <span class="framelbl">390 x 844 — iPhone 14/15/16 class</span>
+    <div id="root"></div>
+  </div>
+</div>
+
+<div class="switch">
+  <button id="prev">‹</button>
+  <span class="lab"><b id="labk"></b><span id="labn"></span></span>
+  <button id="next">›</button>
+  <span class="tog" id="sabtog">HOME BAR</span>
+  <span class="meas" id="meas"></span>
+</div>
+
+<script>
+// ---------------------------------------------------------------- mock data
+const EMAIL = "selwyn@example.com";
+const SECTIONS = {
+  "Portfolio": ["Overview","Holdings","Performance","Dividends","Options","Transactions"],
+  "Net Worth": [],
+  "Spending":  ["Overview","By Category","Classify","Recurring","Transactions"],
+};
+const SEC_ICON = { "Portfolio":"📊", "Net Worth":"🏦", "Spending":"💳" };
+
+const TILES = [
+  ["Market Value","S$412,880"], ["Money-weighted Return (p.a.)","11.4%","pos"],
+  ["Time-weighted Return (p.a.)","9.8%","pos"], ["Total P/L (cost-known)","S$48,201","pos"],
+  ["Dividends (held)","S$9,455","pos"], ["Options Realized P/L","S$2,140","pos"],
+  ["Positions","37"],
+];
+const HOLD = [
+  ["VWRA","Vanguard FTSE All-World","Core","LSE",184,"S$182,410","S$21,880","S$2,140","12.1%"],
+  ["D05","DBS Group Holdings","Income","SGX",1200,"S$52,320","S$7,410","S$3,980","14.8%"],
+  ["O39","OCBC Bank","Income","SGX",900,"S$14,940","S$1,210","S$1,140","9.2%"],
+  ["NVDA","NVIDIA Corp","Growth","NASDAQ",22,"S$38,120","S$16,440","—","41.6%"],
+  ["AAPL","Apple Inc","Growth","NASDAQ",60,"S$19,880","-S$1,240","S$210","-3.1%"],
+  ["MSFT","Microsoft Corp","Growth","NASDAQ",35,"S$24,510","S$4,020","S$180","13.4%"],
+  ["ES3","STI ETF","Core","SGX",4000,"S$16,120","S$980","S$1,420","6.7%"],
+  ["CLR","Lion-Phillip S-REIT","Income","SGX",7000,"S$7,140","-S$820","S$640","-2.4%"],
+  ["A17U","CapitaLand Ascendas REIT","Income","SGX",2100,"S$5,880","-S$310","S$420","1.8%"],
+  ["TSLA","Tesla Inc","Growth","NASDAQ",18,"S$5,940","S$1,180","—","19.9%"],
+  ["BN","Brookfield Corp","Growth","NYSE",70,"S$5,410","S$860","S$90","11.2%"],
+  ["SCHD","Schwab US Dividend","Income","NYSE",90,"S$10,320","S$1,140","S$740","8.1%"],
+];
+
+// ---------------------------------------------------------------- app state
+const st = { variant:"A", section:"Portfolio", tab:"Overview", spendTab:"Overview",
+             drawer:false, sheet:false, sab:false, busy:false, msg:"" };
+const curTab = () => st.section === "Spending" ? st.spendTab : st.tab;
+const setTab = (t) => { st.section === "Spending" ? st.spendTab = t : st.tab = t; };
+
+function goto(sec, tab) {
+  st.section = sec;
+  if (tab) setTab(tab); else if (SECTIONS[sec].length && !SECTIONS[sec].includes(curTab())) setTab(SECTIONS[sec][0]);
+  st.drawer = false; st.sheet = false; render();
+}
+function refresh() {
+  if (st.busy) return;
+  st.busy = true; st.msg = ""; render();
+  setTimeout(() => { st.busy = false; st.msg = "37 updated, 1 failed (CLR)"; render();
+    setTimeout(() => { st.msg = ""; render(); }, 4000); }, 900);
+}
+function signOut() { alert("(prototype) sign out"); }
+
+// ---------------------------------------------------------------- view body
+function viewHTML() {
+  const t = curTab();
+  if (st.section === "Net Worth")
+    return `<h2 class="vt">Net Worth — snapshot editor</h2>
+      <div class="card"><h3>Editor (desktop-optimised; must not break)</h3>
+        <div class="note">Ticket 017 owns this. Rendered here only so the shell is judged with a
+        form-bearing view in it, not just tables.</div></div>` + rows(6);
+  if (t === "Overview")
+    return `<div class="tiles">${TILES.map(([l,v,c]) =>
+        `<div class="tile"><div class="lbl">${l}</div><div class="val ${c||""}">${v}</div></div>`).join("")}</div>
+      <div class="card"><h3>Allocation by Market</h3>
+        <div class="note" style="margin:0">chart — ticket 014 owns this</div></div>
+      <div class="card"><h3>Allocation by Account</h3>
+        <div class="note" style="margin:0">chart — ticket 014 owns this</div></div>` + rows(4);
+  // every other tab: the wide numeric table (12 columns, nowrap) — the real vertical/horizontal load
+  return `<h2 class="vt">${st.section} — ${t}</h2>
+    <div class="tblwrap"><table>
+      <thead><tr><th class="l">Security</th><th class="l">Bucket</th><th class="l">Market</th>
+        <th>Units</th><th>MV (SGD)</th><th>P/L</th><th>Dividends</th><th>Options P/L</th><th>XIRR</th></tr></thead>
+      <tbody>${HOLD.map(r => `<tr>
+        <td class="l">${r[1]} <span class="pill">${r[0]}</span></td>
+        <td class="l"><span class="pill">${r[2]}</span></td>
+        <td class="l"><span class="pill">${r[3]}</span></td>
+        <td>${r[4].toLocaleString()}</td><td>${r[5]}</td>
+        <td class="${r[6][0]==="-"?"neg":"pos"}">${r[6]}</td>
+        <td class="pos">${r[7]}</td><td class="mut">—</td>
+        <td class="${r[8][0]==="-"?"neg":"pos"}">${r[8]}</td></tr>`).join("")}</tbody>
+    </table></div>
+    <div class="note">Horizontal scroll here is a placeholder — ticket 013 owns the table pattern.</div>`;
+}
+const rows = (n) => Array.from({length:n}, () =>
+  `<div class="card"><h3>filler</h3><div class="note" style="margin:0">so the pane actually scrolls</div></div>`).join("");
+
+const refreshBtn = () =>
+  st.section === "Portfolio"
+    ? `<button class="iconbtn ${st.busy?"spin":""}" data-act="refresh" title="Refresh prices">${st.busy?"…":"↻"}</button>`
+    : "";
+const toast = () => st.msg ? `<div class="toast">${st.msg}</div>` : "";
+
+// ---------------------------------------------------------------- variants
+// A — persistent bottom section bar + horizontally scrolling tab strip.
+//     Both nav levels stay VISIBLE. Costs the most vertical budget.
+function VariantA() {
+  const tabs = SECTIONS[st.section];
+  return `<div class="shell">
+    <div class="bar"><span class="brand">📊 MyApp</span><span class="spacer"></span>${refreshBtn()}</div>
+    ${toast()}
+    ${tabs.length ? `<div class="strip">${tabs.map(t =>
+      `<div class="tab ${t===curTab()?"on":""}" data-tab="${t}">${t}</div>`).join("")}</div>` : ""}
+    <div class="content">${viewHTML()}</div>
+    <div class="btmbar">
+      ${Object.keys(SECTIONS).map(s =>
+        `<div class="b ${s===st.section?"on":""}" data-sec="${s}">
+           <span class="ic">${SEC_ICON[s]}</span><span>${s}</span></div>`).join("")}
+      <div class="b" data-act="account"><span class="ic">👤</span><span>Account</span></div>
+    </div>
+  </div>`;
+}
+
+// B — off-canvas drawer (today's rail, unchanged) + native <select> for tabs.
+//     Zero persistent bottom chrome: the cheapest diff and the most content.
+function VariantB() {
+  const tabs = SECTIONS[st.section];
+  return `<div class="shell">
+    <div class="bar">
+      <button class="iconbtn" data-act="drawer">☰</button>
+      ${tabs.length
+        ? `<select class="tabsel" data-act="tabsel">${tabs.map(t =>
+            `<option ${t===curTab()?"selected":""}>${t}</option>`).join("")}</select>`
+        : `<span class="brand" style="flex:1">Net Worth</span>`}
+      ${refreshBtn()}
+    </div>
+    ${toast()}
+    <div class="content">${viewHTML()}</div>
+  </div>
+  <div class="scrim ${st.drawer?"on":""}" data-act="closedrawer"></div>
+  <div class="drawer ${st.drawer?"on":""}">
+    <div class="brand">📊 MyApp</div>
+    ${Object.keys(SECTIONS).map(s =>
+      `<div class="navitem ${s===st.section?"on":""}" data-sec="${s}">${s}</div>`).join("")}
+    <div class="navitem dim">Settings</div>
+    <div class="foot"><div class="email">${EMAIL}</div>
+      <button class="ghostbtn" data-act="signout">Sign out</button></div>
+  </div>`;
+}
+
+// C — one flattened destination sheet. Section and tab collapse into a single list of 11 places,
+//     reachable in two taps from anywhere. Nothing persistent below the app bar.
+function VariantC() {
+  return `<div class="shell">
+    <div class="bar">
+      <button class="titlebtn" data-act="sheet">
+        <span class="sec">${st.section}${SECTIONS[st.section].length ? " ·" : ""}</span>
+        ${SECTIONS[st.section].length ? curTab() : ""}<span class="car">▾</span>
+      </button>
+      <span class="spacer"></span>${refreshBtn()}
+    </div>
+    ${toast()}
+    <div class="content">${viewHTML()}</div>
+  </div>
+  <div class="scrim ${st.sheet?"on":""}" data-act="closesheet"></div>
+  <div class="sheet ${st.sheet?"on":""}">
+    <div class="grab"></div>
+    <div class="list">
+      ${Object.entries(SECTIONS).map(([s,tabs]) => tabs.length
+        ? `<div class="grp">${s}</div>` + tabs.map(t =>
+            `<div class="dest ${s===st.section && t===curTab() ? "on":""}" data-sec="${s}" data-tab="${t}">
+               ${t}${s===st.section && t===curTab() ? '<span class="tick">✓</span>' : ""}</div>`).join("")
+        : `<div class="grp">&nbsp;</div><div class="dest ${s===st.section?"on":""}" data-sec="${s}">
+             ${SEC_ICON[s]} ${s}${s===st.section?'<span class="tick">✓</span>':""}</div>`).join("")}
+      <div class="grp">Settings</div>
+      <div class="dest" style="opacity:.4">Settings</div>
+    </div>
+    <div class="foot"><div class="email">${EMAIL}</div>
+      <button class="ghostbtn" style="width:auto" data-act="signout">Sign out</button></div>
+  </div>`;
+}
+
+const VARIANTS = {
+  A: [VariantA, "Bottom section bar + scrolling tab strip"],
+  B: [VariantB, "Hamburger drawer + native tab select"],
+  C: [VariantC, "One unified destination sheet"],
+};
+
+// ---------------------------------------------------------------- plumbing
+const root = document.getElementById("root");
+function render() {
+  document.documentElement.style.setProperty("--sab", st.sab ? "34px" : "0px");
+  root.innerHTML = VARIANTS[st.variant][0]();
+  document.getElementById("labk").textContent = st.variant;
+  document.getElementById("labn").textContent = " — " + VARIANTS[st.variant][1];
+  document.getElementById("sabtog").classList.toggle("on", st.sab);
+  requestAnimationFrame(measure);
+}
+function measure() {
+  const shell = root.querySelector(".shell"), content = root.querySelector(".content");
+  if (!shell || !content) return;
+  const chrome = shell.clientHeight - content.clientHeight;
+  document.getElementById("meas").textContent =
+    `chrome ${chrome}px · content ${content.clientHeight}px`;
+}
+root.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-act],[data-sec],[data-tab]");
+  if (!el) return;
+  const act = el.dataset.act;
+  if (act === "refresh")      return refresh();
+  if (act === "drawer")       { st.drawer = true;  return render(); }
+  if (act === "closedrawer")  { st.drawer = false; return render(); }
+  if (act === "sheet")        { st.sheet = true;   return render(); }
+  if (act === "closesheet")   { st.sheet = false;  return render(); }
+  if (act === "signout")      return signOut();
+  if (act === "account")      { st.variant === "A" ? (st.sheet = !st.sheet) : 0;
+                                alert(`(prototype) account sheet: ${EMAIL} / Sign out`); return; }
+  if (el.dataset.sec)         return goto(el.dataset.sec, el.dataset.tab);
+  if (el.dataset.tab)         { setTab(el.dataset.tab); return render(); }
+});
+root.addEventListener("change", (e) => {
+  if (e.target.dataset.act === "tabsel") { setTab(e.target.value); render(); }
+});
+document.getElementById("sabtog").onclick = () => { st.sab = !st.sab; render(); };
+
+const keys = Object.keys(VARIANTS);
+function setVariant(v) {
+  st.variant = v; st.drawer = st.sheet = false;
+  const u = new URL(location); u.searchParams.set("variant", v); history.replaceState({}, "", u);
+  render();
+}
+const cycle = (d) => setVariant(keys[(keys.indexOf(st.variant) + d + keys.length) % keys.length]);
+document.getElementById("prev").onclick = () => cycle(-1);
+document.getElementById("next").onclick = () => cycle(1);
+addEventListener("keydown", (e) => {
+  if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName) || e.target.isContentEditable) return;
+  if (e.key === "ArrowLeft") cycle(-1);
+  if (e.key === "ArrowRight") cycle(1);
+});
+addEventListener("resize", measure);
+
+st.variant = keys.includes(new URLSearchParams(location.search).get("variant"))
+  ? new URLSearchParams(location.search).get("variant") : "A";
+render();
+</script>
