@@ -238,10 +238,10 @@ for (const { view, tables, unrendered } of PINNED) {
 }
 
 test.describe("the height that makes the sticky header work", () => {
-  test("caps every pattern-A wrapper at 60svh on a phone, and leaves short tables alone",
+  test("caps every pattern-A wrapper at 60svh below the tier, and leaves short tables alone",
     async ({ page, baseURL }, testInfo) => {
       const vp = viewportOf(testInfo.project.name);
-      test.skip(vp.width >= PHONE_TIER_BELOW, "the cap is phone-only, by decision");
+      test.skip(vp.width >= PIN_TIER_BELOW, "above the tier the table keeps its full height");
 
       const cap = vp.height * 0.6;
 
@@ -275,23 +275,45 @@ test.describe("the height that makes the sticky header work", () => {
       });
     });
 
-  test("writes the cap in the phone block and nowhere else", async ({ page, baseURL }) => {
+  test("writes the cap against the pattern's tier, not the phone's", async ({ page, baseURL }) => {
     await openView(page, baseURL, "Portfolio › Holdings");
     const rules = await declarationsFor(page, ".pinned");
-    const capped = rules.filter((r) => r.decls["max-height"] !== undefined);
-    expect(capped, "`.pinned` declares a height in more than one place").toHaveLength(1);
-    // Rejected unconditional: turning a long list into a 60vh box on a 1280px desktop is a
-    // visible change to a view nobody complained about.
-    expect(capped[0].media, "the cap escaped the phone block").toContain("639.98px");
-    // `svh`, like the shell — a box sized in `vh` resizes mid-flick when a toolbar retracts,
-    // and this one is being flicked by definition.
-    expect(capped[0].decls["max-height"]).toBe("60svh");
 
     const pattern = rules.filter((r) => r.decls["overflow-x"] !== undefined);
     expect(pattern, "the pattern itself is declared in more than one place").toHaveLength(1);
     expect(pattern[0].media, "the pattern is not written against the pin tier")
       .toContain(PIN_TIER_EDGE);
+
+    const capped = rules.filter((r) => r.decls["max-height"] !== undefined);
+    expect(capped, "`.pinned` declares a height in more than one place").toHaveLength(1);
+    // THE TIER IS THE ASSERTION. `overflow-x: auto` forces `overflow-y` to `auto`, so the
+    // wrapper becomes the sticky scrollport wherever the pattern applies — and a scrollport
+    // that sizes to content never scrolls, so the header rides the page away instead. Behind
+    // `PHONE_TIER_EDGE` this rule leaves the header broken from 640 to 1024 and in landscape,
+    // where a rotated phone is 844px wide. The two edges are one character apart to read and
+    // a whole tier apart in effect, which is exactly why this is a gate.
+    expect(capped[0].media, "the cap is scoped to a narrower tier than the pattern it serves")
+      .toContain(PIN_TIER_EDGE);
+    // `svh`, like the shell — a box sized in `vh` resizes mid-flick when a toolbar retracts,
+    // and this one is being flicked by definition.
+    expect(capped[0].decls["max-height"]).toBe("60svh");
   });
+
+  test("the long table really is a scroll box wherever the pattern applies",
+    async ({ page, baseURL }, testInfo) => {
+      const vp = viewportOf(testInfo.project.name);
+      test.skip(vp.width >= PIN_TIER_BELOW, "above the tier the pane owns the scroll again");
+      // The gate the per-view header check cannot hold on its own: that one skips a wrapper
+      // that does not scroll, on the reasonable grounds that a short table has nothing to
+      // demonstrate — which is also exactly what a dead sticky header looks like from here.
+      // Holdings is long at every width in the fixtures, so for that one table "it does not
+      // scroll" is never a legitimate answer.
+      await openView(page, baseURL, "Portfolio › Holdings");
+      const scrolls = await page.locator(".pinned").first()
+        .evaluate((el) => el.scrollHeight > el.clientHeight);
+      expect(scrolls, "the wrapper sizes to content, so its sticky header sticks to nothing")
+        .toBe(true);
+    });
 });
 
 test("no rule anywhere declares `overscroll-behavior`", async ({ page, baseURL }) => {
@@ -366,10 +388,12 @@ test.describe("a tappable row says so without a hover", () => {
       const rules = await declarationsFor(page, "tr.rowlink:active > td");
       expect(rules, "no `:active` feedback — hover does not exist on touch").toHaveLength(1);
       expect(rules[0].media, "the tap feedback was scoped to a tier").toBeNull();
-      // `background-color`, not `background`: the CSSOM expands the shorthand into its nine
-      // longhands, so the property as authored is not a key here at all.
-      expect(rules[0].decls["background-color"], "the row flashes nothing on tap")
-        .toBe("rgb(26, 33, 42)");
+      // Read from `text` rather than `decls`, and `support/css.js` explains why at length: a
+      // shorthand carrying a `var()` arrives as nine longhands with EMPTY values and no
+      // shorthand key, so `background: var(--hover)` is invisible under both names. The
+      // token itself is the assertion — the pinned cell has to restate this colour, and a
+      // literal here is how the two halves of one feedback state drift apart.
+      expect(rules[0].text, "the row flashes nothing on tap").toContain("var(--hover)");
     });
 });
 

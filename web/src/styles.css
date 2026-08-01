@@ -1,6 +1,10 @@
 :root {
   --bg: #0f1419; --panel: #161b22; --panel2: #1c232c; --line: #2b333d;
   --txt: #d7dde4; --mut: #8b97a5; --pos: #2ea043; --neg: #f85149; --acc: #388bfd;
+  /* The row-feedback colour. A literal until the pinned column gave it a third and fourth
+     call site: an opaque pinned cell has to restate whatever the row it sits in is doing,
+     so hover and the tap flash both need it in two places rather than one. */
+  --hover: #1a212a;
   /* The one number that earns a token in a block that otherwise holds only colours: the
      phone tap floor. It recurs across unrelated selectors as the phone tier lands, which
      is the whole test — every other phone value is written as a literal in the media
@@ -132,17 +136,32 @@ table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nu
 th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid #20262e; white-space: nowrap; }
 th { color: var(--mut); font-size: 11px; text-transform: uppercase; position: sticky; top: 0; background: var(--panel); }
 td.l, th.l { text-align: left; }
-tr:hover td { background: #1a212a; }
+tr:hover td { background: var(--hover); }
 /* Hover is dead on touch, so a tappable row says so a second way: `:active` for the tap
    itself, and the persistent `›` in the pinned block below for the state between taps.
    Written at every width rather than inside a tier — a mouse-down flash in the colour the
    row already takes on hover costs desktop nothing, and the alternative was a second rule
    in a tablet tier whose whole claim is that it holds exactly one. */
-tr.rowlink:active > td { background: #1a212a; }
+tr.rowlink:active > td { background: var(--hover); }
 /* Dividends' total rule, moved off the `<tr>` and onto its cells. `border-collapse:
    separate` — which the pinned block below switches that table to — does not paint a border
    declared on a row at all. Identical under both modes, so it is unconditional. */
 .totalrow > * { border-top: 2px solid var(--line); font-weight: 600; }
+
+/* The two wrappers that predate this pattern, keeping the behaviour they shipped with so the
+   pin is additive rather than a replacement — and so both still hold above 1024, where
+   `.pinned` does nothing. Dividends' crosstab is `.hscroll`; the trades ledger is both.
+
+   Classes rather than the inline styles they replace, and declared ABOVE the pattern rather
+   than below it, for one reason each. Inline first: `.selfscroll`'s 480px would otherwise
+   beat the pattern's `60svh` outright, because an inline value beats any stylesheet. Then
+   order: `.selfscroll` and `.pinned` have the same specificity and a media query adds none,
+   so whichever is written last wins — and the one that has to win is the tier's. This is a
+   source-order dependency, which is a bad thing to rely on and a worse thing to leave
+   unguarded, so `pinned.spec.js` measures every wrapper against the cap rather than trusting
+   it. That gate caught this exact rule in the wrong place. */
+.hscroll { overflow-x: auto; }
+.selfscroll { overflow: auto; max-height: 480px; }
 
 /* ─── pattern A: the pinned identity column ──────────────────────────────────────────────
    For the tables that exist so you can compare a number DOWN the column. You read the real
@@ -175,6 +194,33 @@ tr.rowlink:active > td { background: #1a212a; }
    touch` is absent for a duller reason: it has been the default since iOS 13. */
 @media (max-width: 1023.98px) {
   .pinned { overflow-x: auto; }
+  /* THE HEIGHT IS PART OF THE PATTERN, not part of the phone tier, and getting that wrong is
+     silent. `overflow-x: auto` forces `overflow-y` from `visible` to `auto`, so this wrapper
+     becomes the sticky scrollport for the `th` above whether anyone asked for it or not — and
+     a scrollport that sizes to its content never scrolls, so the header rides the *page*
+     away instead of sticking. Measured: −500px of drift on a 500px page scroll. Without a
+     height here the pattern would take a working sticky header (stuck to `.main`, which does
+     scroll) and break it everywhere between 640 and 1024.
+
+     ONE SELF-LIMITING RULE RATHER THAN AN EXEMPTION LIST. `max-height` is a no-op whenever
+     the table is shorter, so Performance — bounded at eight rows by its grouping dimension
+     and never more — never sees it, while Recurring engages only once its list is long.
+
+     Scoped to the pattern's own tier rather than to the phone, which is where 020 wrote it
+     when pattern A was still a phone-only idea and 018 had not yet widened it to 1024. 018
+     said as much in its hand-off: scoping horizontal scroll to the table "changes what
+     `.main` owns — adjacent to, not the same as, the vertical question in 020". This is that
+     question, answered. It also fixes landscape, which the phone-only version could not
+     reach at all: a rotated phone is 844px wide and exits the phone block, so the inner box
+     020 decision 5 deliberately kept in landscape was not actually there. What stays out is
+     desktop, which is what 020 was protecting — a long list turning into a 60vh box on a
+     1280px monitor is a visible change to a view nobody complained about.
+
+     `svh`, like the shell, so the box cannot resize mid-flick when a toolbar retracts. A
+     height rather than a row count on purpose: it almost always clips the last row through
+     the middle, and half a row is the most reliable "more below" cue there is — which is
+     also why there is no gradient and no scrollbar affordance here. */
+  .pinned { max-height: 60svh; }
   .pinned table { border-collapse: separate; border-spacing: 0; }
   .pinned th { z-index: 3; }
   .pinned thead > tr > :first-child { position: sticky; left: 0; z-index: 4; }
@@ -184,8 +230,10 @@ tr.rowlink:active > td { background: #1a212a; }
      keeps the row identifiable once it has. */
   .pinned tbody > tr:not(.grouprow) > :first-child {
     position: sticky; left: 0; z-index: 2; background: var(--panel); }
-  .pinned tbody > tr:not(.grouprow):hover > :first-child { background: #1a212a; }
-  .pinned tbody > tr.rowlink:active > :first-child { background: #1a212a; }
+  /* The pinned cell is opaque, so it needs the row's two feedback states restated on it or
+     it stays flat while the rest of the row lights up. */
+  .pinned tbody > tr:not(.grouprow):hover > :first-child,
+  .pinned tbody > tr.rowlink:active > :first-child { background: var(--hover); }
   /* The chevron: persistent, at the right edge of the *pinned* cell, so "this row opens
      something" is visible without hovering and cannot be scrolled away. Absolutely
      positioned against the sticky cell with the padding reserving its lane, so it never
@@ -196,11 +244,6 @@ tr.rowlink:active > td { background: #1a212a; }
     content: "›"; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
     color: var(--mut); font-size: 15px; font-weight: 600; }
 }
-/* The trades ledger capped its own height and scrolled both ways before this pattern
-   existed — which is what makes A the *smaller* change there rather than a replacement.
-   Kept as a class rather than the inline styles it replaces so the phone tier's `60svh` can
-   win over it: an inline `max-height` beats any stylesheet. */
-.selfscroll { overflow: auto; max-height: 480px; }
 /* Holdings' footnote as a disclosure — five lines of prose above a table that wants every
    row it can get. The summary is hidden by default and turned on in the phone block, which
    is the inverse of how it reads: `open` is set once at mount from the same 640 the
@@ -372,30 +415,13 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
      stops being a floor. Free here: the label is already ~76px wide. */
   .logout-btn { min-height: var(--tap); min-width: var(--tap); }
 
-  /* ── pattern A's height, and the sticky header it buys ──
-     A wrapper that sizes to its content is a scroll container that never scrolls, and a
-     sticky header inside one is dead — it sticks to a top that never moves. A cap restores
-     it, and on a 13-column table scrolled sideways the header is the half of the pattern
-     that tells you *which number* you are looking at; the pin only tells you which row.
-
-     ONE SELF-LIMITING RULE RATHER THAN AN EXEMPTION LIST. `max-height` is a no-op whenever
-     the table is shorter, so Performance — bounded at eight rows by its grouping dimension
-     and never more — never sees it, while Recurring engages only once its list is long.
-     Rejected unconditional: turning a long list into a 60vh box on a 1280px desktop is a
-     visible change to a view nobody complained about.
-
-     `svh`, like the shell, so the box cannot resize mid-flick when a toolbar retracts. A
-     height rather than a row count on purpose: it almost always clips the last row through
-     the middle, and half a row is the most reliable "more below" cue there is — which is
-     also why there is no gradient and no scrollbar affordance here.
-
-     The scroll-ownership work expected `Holdings` to escape this rule, on the reading that
-     its table is a direct flex child of `.main` — where `overflow-x` flips `min-height:
-     auto` to 0, the wrapper shrinks to the pane, and the header sticks for free. In the
-     shipped markup every view's root is a `.card`, so no such table exists and the rule is
-     uniform. That is the outcome the rule was shaped to make safe: one declaration, no list
-     of exceptions to keep current. */
-  .pinned { max-height: 60svh; }
+  /* PATTERN A'S HEIGHT IS NOT HERE, and its absence is the decision. `60svh` reads like a
+     phone rule and 020 wrote it as one, but the height is what makes the sticky header work
+     at all — and a phone-only version would leave the header broken from 640 to 1024 and,
+     because a rotated phone is 844px wide, in landscape too. It travels with the pattern
+     instead; see the `.pinned` block above. This is the second time a rule written for the
+     phone turned out to belong to the width the pattern claims rather than to the tier —
+     `.main`'s landscape gutter was the first. */
 
   /* The disclosure the footnote becomes here. Measured at the 44px pitch it takes Holdings
      from 11 rows to 13 in portrait and from 2 to 4 in landscape — the largest single row

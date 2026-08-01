@@ -160,6 +160,12 @@ Things the build session must be told, not left to discover.
 - `.grid2`'s `minmax(420px, 1fr)` is **~100px optimistic against real data** — `Overview:33`'s card needs
   **519px** with the live DB's longest subcategory name. `auto-fit` still behaves; the column just spills
   inside itself between 1024 and ~1256.
+- **The 420px track floor is also the last unowned entry in the horizontal ratchet, and no ticket has
+  it.** Below 640 the floor exceeds the 362px pane outright, so `Portfolio › Overview`, `Options`,
+  `By Category` and `Spending › Overview` all carry the *same* residual — 74 / 44 / 4 / 8 / 48 by
+  viewport, one cause, no table involved. The pinned column cannot reach it and neither can card-per-row
+  or the editors' floor. The usual remedy is `minmax(min(420px, 100%), 1fr)`. **Written down here
+  because a residual with no owner is precisely how the four unassigned tables happened.**
 - **`640` is a literal in three places**: `styles.css`'s `max-width: 639.98px`, `tests/viewports.js`'s
   `PHONE_TIER_BELOW` / `PHONE_TIER_EDGE`, and `Holdings.jsx`'s `startsCollapsed` — the app's first
   `matchMedia` read, which arrived with the pinned column rather than with the charts as the map
@@ -176,13 +182,17 @@ Things the build session must be told, not left to discover.
   pin by `:not(.grouprow)` — pinning a seven-column banner parks a subtotal over the numbers the
   sideways scroll exists to reach. The label slides away instead; its background is what keeps the row
   identifiable once it has. Any new grouped pattern-A table needs the same class.
-- **An inline `max-height` beats the phone tier's `60svh`.** `Options`' trades wrapper shipped its cap
+- **An inline `max-height` beats the pattern's `60svh`.** `Options`' trades wrapper shipped its cap
   inline; it is `.selfscroll` now precisely so the cascade can reach it. Nothing else may put a height
   on a `.pinned` wrapper inline.
-- **A row with `opacity` below 1 makes its own pinned cell translucent**, so the columns scrolling under
-  it ghost through at ~30%. Live on `Holdings`' closed positions (behind a checkbox) and `Recurring`'s
-  inactive rows. Accepted rather than fixed: the alternative is changing how those rows dim at every
-  width, which is a desktop change nobody asked for.
+- **`overflow-x: auto` forces `overflow-y` from `visible` to `auto`.** So a `.pinned` wrapper is the
+  sticky scrollport for its own header *whether or not anyone gave it a height* — and a scrollport that
+  sizes to content never scrolls, so the header rides the page away instead of sticking. Measured at
+  −500px of drift on a 500px page scroll. **This is why `60svh` sits with the pattern at 1024 rather
+  than in the phone block**, where it was first written: scoped to the phone it would leave the header
+  broken from 640 to 1024, and in landscape too, since a rotated phone is 844px wide and exits that
+  block. The map already had this mechanism recorded once — `Dividends.jsx:30`'s "dead sticky header on
+  desktop today" is the same sentence about a table short enough for it not to matter.
 - In `.main`, the padding **longhands must follow the shorthand** — the shorthand resets all four sides.
 - ~~**`.main`'s phone `padding-top` guards `env(safe-area-inset-top)` and must stop once the app bar
   lands.**~~ **Discharged** by the shell: the pane's top is a bare `14px` now and the app bar carries

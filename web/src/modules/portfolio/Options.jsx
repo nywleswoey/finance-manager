@@ -67,11 +67,12 @@ export default function Options() {
 
       <div className="card">
         <h3>Trades&nbsp;<span className="pill">most recent {trades ? trades.length : 0}</span></h3>
-        {/* Eleven columns, 862px, and cross-security comparison is plainly its job — the
+        {/* Eight columns since the merged contract cell — eleven and 862px when the pattern
+            was chosen for it — and cross-security comparison is plainly its job, so the
             contract ledger takes the pinned pattern rather than card-per-row, on the
             measurement that a nine-field card is four rows per screen against twelve here.
             `.selfscroll` is the 480px cap and both-axis scroll this wrapper already shipped,
-            moved off the inline styles so the phone tier's cap can win over it. */}
+            moved off the inline styles so the pattern's own cap can win over it. */}
         {!trades ? <div className="loading">Loading…</div> : (
           <div className="pinned selfscroll">
             <table>

@@ -29,10 +29,10 @@ export default function Dividends() {
         <h3>Annual Dividend Income&nbsp;<span className="pill">SGD · latest FX</span></h3>
         {/* The crosstab grows in COLUMNS — one per year — so horizontal scroll is the only
             treatment that does not expire, and comparing a bucket across years is the whole
-            of what it is for. It already carried `overflow-x: auto` at every width, which is
-            kept: `.pinned` adds the pin, the sticky header and the borders that survive it
-            below 1024px, and changes nothing above. */}
-        <div className="pinned" style={{ overflowX: "auto" }}>
+            of what it is for. It already carried `overflow-x: auto` at every width, which
+            `.hscroll` keeps: `.pinned` adds the pin, the header and the borders that survive
+            it below 1024px, and changes nothing above. */}
+        <div className="pinned hscroll">
           <table>
             <thead><tr>
               <th className="l">Bucket</th>

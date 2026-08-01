@@ -13,8 +13,13 @@
  */
 
 /**
- * Every rule in the shipped stylesheets that applies to `selector`, with the media condition
- * it sits under and its *specified* declarations as `{ property: value }`.
+ * Every rule in the shipped stylesheets whose selector *list* contains `selector`, with the
+ * media condition it sits under and its *specified* declarations as `{ property: value }`.
+ *
+ * Textual containment, not selector matching: `.pinned` finds the rule written `.pinned` and
+ * not the rule written `.pinned table`, which also applies to `.pinned`'s subtree. Callers
+ * ask "how was this written", so that is the right reading — but it is a narrower one than
+ * the word "applies" would suggest.
  *
  * Read from the browser rather than from `styles.css`, so what is asserted is what ships —
  * and the difference is not academic. The build expands `padding: 14px` into four longhands
@@ -34,6 +39,14 @@
  * The declarations are the whole block, shared members included. Every caller today asks
  * about a property only one of them sets; a rule merged out of two that set the *same*
  * property could not have been distinguished in the source either.
+ *
+ * `text` IS THE BLOCK AS AUTHORED, and it is here because `decls` has a blind spot with a
+ * shape nobody would guess. A shorthand normally expands into its longhands — `background:
+ * #1a212a` arrives as nine of them, `background-color` among them with a real value. But a
+ * shorthand carrying a `var()` cannot be split at parse time, because the custom property is
+ * not resolved until computed-value time, so the same nine longhands arrive with **empty**
+ * values and the shorthand key does not exist either. `background: var(--hover)` is
+ * therefore invisible in `decls` under both names. `cssText` is the only place it survives.
  */
 export function declarationsFor(page, selector) {
   return page.evaluate((sel) => {
@@ -52,7 +65,7 @@ export function declarationsFor(page, selector) {
         if (rule.selectorText !== undefined && applies(rule.selectorText)) {
           const decls = {};
           for (const prop of rule.style) decls[prop] = rule.style.getPropertyValue(prop);
-          found.push({ media: media ?? null, decls });
+          found.push({ media: media ?? null, decls, text: rule.style.cssText });
         }
         if (rule.cssRules) walk(rule.cssRules, rule.conditionText ?? media);
       }
