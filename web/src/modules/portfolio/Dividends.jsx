@@ -27,7 +27,12 @@ export default function Dividends() {
     <>
       <div className="card">
         <h3>Annual Dividend Income&nbsp;<span className="pill">SGD · latest FX</span></h3>
-        <div style={{ overflowX: "auto" }}>
+        {/* The crosstab grows in COLUMNS — one per year — so horizontal scroll is the only
+            treatment that does not expire, and comparing a bucket across years is the whole
+            of what it is for. It already carried `overflow-x: auto` at every width, which is
+            kept: `.pinned` adds the pin, the sticky header and the borders that survive it
+            below 1024px, and changes nothing above. */}
+        <div className="pinned" style={{ overflowX: "auto" }}>
           <table>
             <thead><tr>
               <th className="l">Bucket</th>
@@ -43,7 +48,9 @@ export default function Dividends() {
                   })}
                 </tr>
               ))}
-              <tr style={{ borderTop: "2px solid var(--line, #ccc)", fontWeight: 600 }}>
+              {/* The rule is on the cells, not the row: `border-collapse: separate` — which
+                  the pinned pattern switches this table to — does not paint a row border. */}
+              <tr className="totalrow">
                 <td className="l">Total</td>
                 {years.map((y) => <td key={y} className="pos">{sgd(ann.totals[y] || 0)}</td>)}
               </tr>
