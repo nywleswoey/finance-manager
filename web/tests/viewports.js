@@ -44,6 +44,22 @@ export const HSCROLL_GATE_APPLIES_BELOW = 1024;
 export const PHONE_TIER_BELOW = 640;
 export const PHONE_TIER_EDGE = "639.98px";
 
+/**
+ * The width below which the pinned-column pattern applies — the phone tier and the tablet
+ * tier together, because the pin is worth *more* as the window narrows, not less.
+ *
+ * The same number as `HSCROLL_GATE_APPLIES_BELOW` above, and not by coincidence: the gate is
+ * exempt at and above 1024 precisely *because* the pattern stops there. They are written
+ * twice because they are two claims — "the pin applies here" and "the pane must not scroll
+ * sideways here" — and a later ticket that takes the pattern to desktop widths moves one of
+ * them without moving the other.
+ *
+ * `.98` for the same reason as the phone edge: no fractional viewport width lands in a dead
+ * zone. `PIN_TIER_EDGE` survives minification into the range syntax as its number alone.
+ */
+export const PIN_TIER_BELOW = 1024;
+export const PIN_TIER_EDGE = "1023.98px";
+
 export const VIEWPORTS = [
   { name: "small-phone",             width: 360,  height: 740,  why: "small phone — the tightest realistic width" },
   { name: "design-width",            width: 390,  height: 844,  why: "the design width; every measurement in the spec was taken here" },

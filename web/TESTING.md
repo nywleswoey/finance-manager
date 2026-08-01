@@ -49,6 +49,16 @@ none of it renders. It shares
 `foundations.spec.js`'s CSSOM reader (`tests/support/css.js`) for the two criteria that are
 about a notch and therefore have no geometric form in Chromium.
 
+`tests/pinned.spec.js` — pattern A: seven tables across six views that pin an identity column and
+scroll the rest sideways below **1024px**, not 640. It is the one spec whose tier is the pin tier,
+because the pin is worth more as the window narrows: the same gates run at seven viewports and the
+other three assert the inverse — that the desktop table is untouched. It also carries the two gates
+that have no geometry. **The column count of every pinned table is asserted**, because "no table
+drops a column" is the criterion a build could satisfy every *geometric* gate while breaking. And
+`overscroll-behavior` is asserted to be declared **nowhere**: the reflex on a capped scroll box is
+`contain`, chaining is the decision, and a synthetic scroll does not chain, so there is nothing to
+measure.
+
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no `100vh` survives under `web/src`, the viewport meta's
 `viewport-fit=cover`, the viewport list against `RESPONSIVE.md`, and the fixtures' own

@@ -91,60 +91,64 @@ export default function Recurring() {
       <div className="card">
         <h3>Tracked recurring spends</h3>
         {items.length === 0 ? <div className="mut">None yet. Add one above, or pull from Detected below.</div> : (
-          <table>
-            <thead><tr>
-              <th className="l">Name</th><th className="l">Merchant</th><th className="l">Cadence</th>
-              <th>Expected</th><th>Last amt</th><th>Drift</th>
-              <th className="l">Last seen</th><th>Typ. day</th><th className="l">Next due</th>
-              <th className="l">Status</th><th></th>
-            </tr></thead>
-            <tbody>
-              {items.map((r) => (
-                <tr key={r.id} style={r.active ? null : { opacity: 0.5 }}>
-                  <td className="l" style={{ fontWeight: 600 }}>{r.name}</td>
-                  <td className="l mut">{r.merchant_match || "—"}</td>
-                  <td className="l">{r.cadence}</td>
-                  <td>{r.expected_amount == null ? "—" : sgd(r.expected_amount)}</td>
-                  <td className="mut">{r.last_amount == null ? "—" : sgd(r.last_amount)}</td>
-                  <td className={r.amount_drift > 0 ? "neg" : r.amount_drift < 0 ? "pos" : "mut"}>
-                    {r.amount_drift == null ? "—" : (r.amount_drift > 0 ? "+" : "") + sgd(r.amount_drift)}</td>
-                  <td className="l mut">{r.last_seen || "—"}</td>
-                  <td className="mut">{r.typical_day || "—"}</td>
-                  <td className="l">{r.next_due || "—"}{r.shift && <span className="mut" title={"shifted to " + r.shift + " business day (weekend)"}>&nbsp;{shiftArrow(r.next_due)}</span>}</td>
-                  <td className="l"><Badge status={r.status} /></td>
-                  <td><button className="link-btn" onClick={() => remove(r.id)} title="Delete">✕</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="pinned">
+            <table>
+              <thead><tr>
+                <th className="l">Name</th><th className="l">Merchant</th><th className="l">Cadence</th>
+                <th>Expected</th><th>Last amt</th><th>Drift</th>
+                <th className="l">Last seen</th><th>Typ. day</th><th className="l">Next due</th>
+                <th className="l">Status</th><th></th>
+              </tr></thead>
+              <tbody>
+                {items.map((r) => (
+                  <tr key={r.id} style={r.active ? null : { opacity: 0.5 }}>
+                    <td className="l" style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td className="l mut">{r.merchant_match || "—"}</td>
+                    <td className="l">{r.cadence}</td>
+                    <td>{r.expected_amount == null ? "—" : sgd(r.expected_amount)}</td>
+                    <td className="mut">{r.last_amount == null ? "—" : sgd(r.last_amount)}</td>
+                    <td className={r.amount_drift > 0 ? "neg" : r.amount_drift < 0 ? "pos" : "mut"}>
+                      {r.amount_drift == null ? "—" : (r.amount_drift > 0 ? "+" : "") + sgd(r.amount_drift)}</td>
+                    <td className="l mut">{r.last_seen || "—"}</td>
+                    <td className="mut">{r.typical_day || "—"}</td>
+                    <td className="l">{r.next_due || "—"}{r.shift && <span className="mut" title={"shifted to " + r.shift + " business day (weekend)"}>&nbsp;{shiftArrow(r.next_due)}</span>}</td>
+                    <td className="l"><Badge status={r.status} /></td>
+                    <td><button className="link-btn" onClick={() => remove(r.id)} title="Delete">✕</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       <div className="card">
         <h3>Detected&nbsp;<span className="pill">from ledger · not tracked</span></h3>
         {cands.length === 0 ? <div className="mut">No unregistered recurring patterns found.</div> : (
-          <table>
-            <thead><tr>
-              <th className="l">Merchant</th><th className="l">Cadence</th><th>Seen</th>
-              <th>Avg amt</th><th>Typ. day</th><th className="l">Last seen</th><th></th>
-            </tr></thead>
-            <tbody>
-              {cands.map((c, i) => (
-                <tr key={i}>
-                  <td className="l">{c.merchant}</td>
-                  <td className="l">{c.cadence}</td>
-                  <td>{c.occurrences}</td>
-                  <td>{sgd(c.avg_amount)}</td>
-                  <td className="mut">{c.typical_day}</td>
-                  <td className="l mut">{c.last_seen}</td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    <button className="link-btn" onClick={() => addCandidate(c)}>+ Track</button>
-                    &nbsp;<button className="link-btn mut" onClick={() => dismiss(c.merchant)} title="Not recurring — dismiss">✕</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="pinned">
+            <table>
+              <thead><tr>
+                <th className="l">Merchant</th><th className="l">Cadence</th><th>Seen</th>
+                <th>Avg amt</th><th>Typ. day</th><th className="l">Last seen</th><th></th>
+              </tr></thead>
+              <tbody>
+                {cands.map((c, i) => (
+                  <tr key={i}>
+                    <td className="l">{c.merchant}</td>
+                    <td className="l">{c.cadence}</td>
+                    <td>{c.occurrences}</td>
+                    <td>{sgd(c.avg_amount)}</td>
+                    <td className="mut">{c.typical_day}</td>
+                    <td className="l mut">{c.last_seen}</td>
+                    <td style={{ whiteSpace: "nowrap" }}>
+                      <button className="link-btn" onClick={() => addCandidate(c)}>+ Track</button>
+                      &nbsp;<button className="link-btn mut" onClick={() => dismiss(c.merchant)} title="Not recurring — dismiss">✕</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
     </div>

@@ -13,8 +13,13 @@
  */
 
 /**
- * Every rule in the shipped stylesheets whose selector is exactly `selector`, with the
+ * Every rule in the shipped stylesheets whose selector *list* contains `selector`, with the
  * media condition it sits under and its *specified* declarations as `{ property: value }`.
+ *
+ * Textual containment, not selector matching: `.pinned` finds the rule written `.pinned` and
+ * not the rule written `.pinned table`, which also applies to `.pinned`'s subtree. Callers
+ * ask "how was this written", so that is the right reading — but it is a narrower one than
+ * the word "applies" would suggest.
  *
  * Read from the browser rather than from `styles.css`, so what is asserted is what ships —
  * and the difference is not academic. The build expands `padding: 14px` into four longhands
@@ -22,19 +27,45 @@
  * and the shorthand silently resets all four sides) does not exist here to check. What
  * catches that mistake is a resolved-padding assertion, where the bottom comes back 14px
  * instead of 20px.
+ *
+ * MATCHED AGAINST THE RULE'S SELECTOR *LIST*, not against the whole of `selectorText`, and
+ * that is the build showing through again: two rules that share a declaration block are
+ * merged into one, so `tr.rowlink:active > td { background: … }` ships as
+ * `tr:hover td, tr.rowlink:active > td { … }`. An exact comparison finds nothing and fails
+ * as "no such rule" rather than as "written alongside another one" — which is the wrong
+ * thing to go looking for. Matching a member of the list is also simply what the caller
+ * means: the rule *does* apply to the selector it asked about.
+ *
+ * The declarations are the whole block, shared members included. Every caller today asks
+ * about a property only one of them sets; a rule merged out of two that set the *same*
+ * property could not have been distinguished in the source either.
+ *
+ * `text` IS THE BLOCK AS AUTHORED, and it is here because `decls` has a blind spot with a
+ * shape nobody would guess. A shorthand normally expands into its longhands — `background:
+ * #1a212a` arrives as nine of them, `background-color` among them with a real value. But a
+ * shorthand carrying a `var()` cannot be split at parse time, because the custom property is
+ * not resolved until computed-value time, so the same nine longhands arrive with **empty**
+ * values and the shorthand key does not exist either. `background: var(--hover)` is
+ * therefore invisible in `decls` under both names. `cssText` is the only place it survives.
  */
 export function declarationsFor(page, selector) {
   return page.evaluate((sel) => {
+    // Whitespace around combinators is the only thing normalised — the build strips it, and
+    // nothing else about a selector is safe to rewrite here. Splitting on commas is safe for
+    // the selectors this suite asks about; a `:not(a, b)` would need a real parser.
+    const norm = (s) => s.replace(/\s*([>+~])\s*/g, "$1").replace(/\s+/g, " ").trim();
+    const want = norm(sel);
+    const applies = (text) => text.split(",").some((one) => norm(one) === want);
     const found = [];
     const walk = (rules, media) => {
       for (const rule of rules) {
         // Matched *before* descending, not instead of: a `CSSStyleRule` carries its own
         // (empty) `cssRules` list now that CSS nesting exists, so a style rule and a
         // grouping rule are no longer distinguishable by that property being present.
-        if (rule.selectorText === sel) {
+        if (rule.selectorText !== undefined && applies(rule.selectorText)) {
           const decls = {};
           for (const prop of rule.style) decls[prop] = rule.style.getPropertyValue(prop);
-          found.push({ media: media ?? null, decls });
+          found.push({ media: media ?? null, decls, text: rule.style.cssText });
         }
         if (rule.cssRules) walk(rule.cssRules, rule.conditionText ?? media);
       }

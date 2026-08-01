@@ -12,6 +12,22 @@ const GROUPS = {                                   // group key -> label
 };
 
 const NCOLS = 12;
+
+/**
+ * The phone tier, as JavaScript says it — and the third place `640` is written as a literal.
+ *
+ * `styles.css` says `max-width: 639.98px` and `tests/viewports.js` says `< 640`; JS cannot
+ * read a CSS custom property and this repo takes no build step to make one, so the three
+ * sites cross-reference in comments rather than share a constant. `RESPONSIVE.md`'s Traps
+ * names all of them.
+ *
+ * Read ONCE, at mount, deliberately: it seeds the footnote's initial state and nothing more.
+ * A live `matchMedia` listener here would fight the user's own toggle on every rotation, and
+ * a footnote that reopens itself when you turn the phone is worse than one that is stale.
+ */
+const startsCollapsed = () =>
+  typeof window !== "undefined" && window.matchMedia("(max-width: 639.98px)").matches;
+
 const groupKey = (r, by) =>
   by === "account" ? ((r.accounts || []).join(", ") || "—") : (r[by] || "—");
 const plOf = (r) => (r.status === "closed" ? r.pl_sgd : r.unrealised_pl_sgd);
@@ -49,7 +65,7 @@ function DataRow({ r, onClick, max }) {
   const pl = plOf(r);
   const { net, partial } = netOf(r);
   return (
-    <tr style={{ cursor: "pointer", opacity: closed ? 0.7 : 1 }} onClick={onClick}>
+    <tr className="rowlink" style={{ cursor: "pointer", opacity: closed ? 0.7 : 1 }} onClick={onClick}>
       <td className="l">{r.name} <span className="pill">{r.ticker}</span>
         {closed && <span className="pill" style={{ marginLeft: 4, color: "var(--mut)" }}>closed</span>}
         <div className="mut" style={{ fontSize: 11 }}>{(r.accounts || []).join(", ")}</div></td>
@@ -80,6 +96,7 @@ export default function Holdings() {
   const [by, setBy] = useState("asset_type");
   const [showClosed, setShowClosed] = useState(false);
   const [collapsed, setCollapsed] = useState({});
+  const [noteOpen, setNoteOpen] = useState(() => !startsCollapsed());
 
   useEffect(() => {
     setRows(null);
@@ -138,48 +155,60 @@ export default function Holdings() {
         </label>
         <span className="mut" style={{ fontSize: 12, marginLeft: "auto" }}>click a row for full history</span>
       </div>
-      <table>
-        <thead><tr>
-          <th className="l">Security</th><th className="l">Bucket</th><th className="l">Mkt</th>
-          <th>Units</th><th>Avg Cost</th><th>Price</th>
-          <th>Cost (SGD)</th><th>MV (SGD)</th><th>P/L</th>
-          <th title="converted at latest FX; hover a row for the native amount">Dividends (SGD)</th>
-          <th>Options P/L</th>
-          <th title="total P/L incl dividends + option premiums">Net</th><th>XIRR</th>
-        </tr></thead>
-        <tbody>
-          {flat
-            ? rows.map((r, i) => <DataRow key={i} r={r} max={maxNet} onClick={() => open(r)} />)
-            : groups.map((g) => {
-              const hidden = collapsed[g.key];
-              return (
-                <React.Fragment key={g.key}>
-                  <tr onClick={() => toggle(g.key)} style={{ cursor: "pointer", background: "var(--panel2)" }}>
-                    <td className="l" colSpan={7} style={{ fontWeight: 600 }}>
-                      {hidden ? "▸" : "▾"} {g.label}
-                      <span className="mut" style={{ fontWeight: 400 }}> · {g.rows.length}</span>
-                    </td>
-                    <td>{sgd(g.mv)}</td>
-                    <td className={cls(g.pl)}>{sgd(g.pl)}</td>
-                    <td className="pos">{g.inc ? sgd(g.inc) : ""}</td>
-                    <td className={cls(g.opt)}>{g.opt ? sgd(g.opt) : ""}</td>
-                    <td className={cls(g.net)} style={{ fontWeight: 700 }}>{sgd(g.net)}</td>
-                    <td></td>
-                  </tr>
-                  {!hidden && g.rows.map((r, i) => <DataRow key={i} r={r} max={maxNet} onClick={() => open(r)} />)}
-                </React.Fragment>
-              );
-            })}
-        </tbody>
-      </table>
-      <p className="mut" style={{ fontSize: 12 }}>
-        Open positions show market value & unrealised P/L; closed positions (units ≈ 0) show realised
-        P/L. Avg cost / cost basis / XIRR shown where transaction cost is known. CDP cost comes from
-        cdp-stocks; positions transferred CDP→FSM keep their CDP purchase cost (pooled per funding bucket).
-        XIRR is the money-weighted return incl. realised trades & dividends.
-        <b>Net</b> = total P/L (realised + unrealised + dividends) + option premiums — the bar shows its
-        size vs the biggest mover; <b>~</b> marks cost-unknown names where Net counts only dividends + premiums.
-      </p>
+      {/* The widest table in the app — 1302px of content, 13 columns — read through the
+          pinned-column pattern: Security stays put, the numbers scroll under it. The wrapper
+          is what owns the sideways scroll below 1024px, so `.main` no longer does. */}
+      <div className="pinned">
+        <table>
+          <thead><tr>
+            <th className="l">Security</th><th className="l">Bucket</th><th className="l">Mkt</th>
+            <th>Units</th><th>Avg Cost</th><th>Price</th>
+            <th>Cost (SGD)</th><th>MV (SGD)</th><th>P/L</th>
+            <th title="converted at latest FX; hover a row for the native amount">Dividends (SGD)</th>
+            <th>Options P/L</th>
+            <th title="total P/L incl dividends + option premiums">Net</th><th>XIRR</th>
+          </tr></thead>
+          <tbody>
+            {flat
+              ? rows.map((r, i) => <DataRow key={i} r={r} max={maxNet} onClick={() => open(r)} />)
+              : groups.map((g) => {
+                const hidden = collapsed[g.key];
+                return (
+                  <React.Fragment key={g.key}>
+                    <tr className="grouprow" onClick={() => toggle(g.key)} style={{ cursor: "pointer", background: "var(--panel2)" }}>
+                      <td className="l" colSpan={7} style={{ fontWeight: 600 }}>
+                        {hidden ? "▸" : "▾"} {g.label}
+                        <span className="mut" style={{ fontWeight: 400 }}> · {g.rows.length}</span>
+                      </td>
+                      <td>{sgd(g.mv)}</td>
+                      <td className={cls(g.pl)}>{sgd(g.pl)}</td>
+                      <td className="pos">{g.inc ? sgd(g.inc) : ""}</td>
+                      <td className={cls(g.opt)}>{g.opt ? sgd(g.opt) : ""}</td>
+                      <td className={cls(g.net)} style={{ fontWeight: 700 }}>{sgd(g.net)}</td>
+                      <td></td>
+                    </tr>
+                    {!hidden && g.rows.map((r, i) => <DataRow key={i} r={r} max={maxNet} onClick={() => open(r)} />)}
+                  </React.Fragment>
+                );
+              })}
+          </tbody>
+        </table>
+      </div>
+      {/* Five lines of prose above a table that wants every row it can get: collapsed on a
+          phone, where it is worth two rows in portrait and two in landscape, and open with
+          its summary hidden everywhere else, which is the paragraph this used to be.
+          `open` is read once at mount rather than tracked, so a user's own toggle stands. */}
+      <details className="tablenote" open={noteOpen} onToggle={(e) => setNoteOpen(e.currentTarget.open)}>
+        <summary>About these figures</summary>
+        <p className="mut" style={{ fontSize: 12 }}>
+          Open positions show market value & unrealised P/L; closed positions (units ≈ 0) show realised
+          P/L. Avg cost / cost basis / XIRR shown where transaction cost is known. CDP cost comes from
+          cdp-stocks; positions transferred CDP→FSM keep their CDP purchase cost (pooled per funding bucket).
+          XIRR is the money-weighted return incl. realised trades & dividends.
+          <b>Net</b> = total P/L (realised + unrealised + dividends) + option premiums — the bar shows its
+          size vs the biggest mover; <b>~</b> marks cost-unknown names where Net counts only dividends + premiums.
+        </p>
+      </details>
     </div>
   );
 }

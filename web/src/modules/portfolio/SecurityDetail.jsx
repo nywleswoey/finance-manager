@@ -100,25 +100,31 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
         <div className="card" style={{ marginTop: 18 }}>
           <h3>Option trades ({opts.length}) · {s.ticker} wheel
             <span className="pill" style={{ marginLeft: 8 }}>realised {sgd(optPlSgd)}</span></h3>
-          <table>
-            <thead><tr>
-              <th className="l">Contract</th><th className="l">Closed</th>
-              <th>Premium</th><th>Buyback</th><th className="l">Outcome</th><th>P/L</th>
-            </tr></thead>
-            <tbody>
-              {opts.map((t, i) => (
-                <tr key={i}>
-                  <ContractCell trade={t} />
-                  <td className="l mut">{t.close_date || "—"}</td>
-                  <td>{t.premium_open == null ? "—" : fmt(t.premium_open, 2)}</td>
-                  <td className="mut">{t.premium_close ? fmt(t.premium_close, 2) : "—"}</td>
-                  <td className="l mut">{t.outcome}</td>
-                  <td className={cls(t.realized_native)}>
-                    {money(t.realized_native, t.currency, 0)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          {/* The one pinned table on this page — three tables, two patterns, deliberately.
+              What you do with one security's wheel log is scan P/L and Outcome *down* the
+              column, and the ledger is uncapped (73 trades on the longest). The pin is the
+              merged `Contract` cell rather than a first column of Put / Put / Call. */}
+          <div className="pinned">
+            <table>
+              <thead><tr>
+                <th className="l">Contract</th><th className="l">Closed</th>
+                <th>Premium</th><th>Buyback</th><th className="l">Outcome</th><th>P/L</th>
+              </tr></thead>
+              <tbody>
+                {opts.map((t, i) => (
+                  <tr key={i}>
+                    <ContractCell trade={t} />
+                    <td className="l mut">{t.close_date || "—"}</td>
+                    <td>{t.premium_open == null ? "—" : fmt(t.premium_open, 2)}</td>
+                    <td className="mut">{t.premium_close ? fmt(t.premium_close, 2) : "—"}</td>
+                    <td className="l mut">{t.outcome}</td>
+                    <td className={cls(t.realized_native)}>
+                      {money(t.realized_native, t.currency, 0)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

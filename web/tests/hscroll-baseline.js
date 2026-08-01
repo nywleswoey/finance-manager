@@ -23,7 +23,7 @@
  * Above 1024px there is no gate and therefore no entries here — `HSCROLL_GATE_APPLIES_BELOW`
  * in `viewports.js` says why those three viewports are exempt.
  *
- * LOWERED THREE TIMES SO FAR.
+ * LOWERED FOUR TIMES SO FAR.
  *
  * 1. The unconditional fixes. `.grid2`'s `auto-fit` did most of it: two 419px tracks side by
  *    side became one, so `Portfolio › Overview` went 619 → 288 at 360px, `Spending › By
@@ -50,12 +50,30 @@
  *    and `Classify` (34) at 360, `Classify` (4) at 390, and `Spending › Overview` (35) at
  *    639. The three viewports at or above 640px are untouched to the pixel, which is the
  *    tier boundary doing its job for the second time.
+ *
+ * 4. The pinned identity column. The first drop that is not uniform and not a constant: it
+ *    is **the whole overflow or none of it**, per view, because a table either got the
+ *    pattern or did not. Six of the seven rows that carried the largest numbers go to
+ *    **zero at every gated viewport** — `Holdings` from 1031, `Performance` from 507,
+ *    `Recurring` from 430 — and they go to zero at 640, 834 and 844 as well, because the
+ *    pattern is written below 1024 rather than below 640. That is the first time a tier
+ *    boundary has *not* shown up in this file, and it is deliberate: the pin is worth more
+ *    as the window narrows, so the tablet has it too.
+ *
+ *    `SecurityDetail` is the seventh and does not move. Its options table was pinned; its
+ *    914px transaction history was not, and that is the one that sets the width. The
+ *    remaining non-zero rows name what is left rather than what failed: both `Transactions`
+ *    ledgers and `SecurityDetail` wait for card-per-row, `Net Worth` for the editor floor,
+ *    and the identical 74 / 44 / 4 / 8 / 48 across `Portfolio › Overview`, `Options`,
+ *    `By Category` and `Spending › Overview` is one shared cause — `.grid2`'s `minmax(420px,
+ *    1fr)` track floor, which does not fit a 362px pane. None of the four holds a table
+ *    this pattern was assigned to.
  */
 export const HSCROLL_BASELINE = {
   "small-phone": {
     "Portfolio › Overview": 74,
-    "Portfolio › Holdings": 1031,
-    "Portfolio › Performance": 507,
+    "Portfolio › Holdings": 0,
+    "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 74,
     "Portfolio › Transactions": 891,
@@ -64,13 +82,13 @@ export const HSCROLL_BASELINE = {
     "Spending › Overview": 114,
     "Spending › By Category": 74,
     "Spending › Classify": 0,
-    "Spending › Recurring": 430,
+    "Spending › Recurring": 0,
     "Spending › Transactions": 867,
   },
   "design-width": {
     "Portfolio › Overview": 44,
-    "Portfolio › Holdings": 1001,
-    "Portfolio › Performance": 477,
+    "Portfolio › Holdings": 0,
+    "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 44,
     "Portfolio › Transactions": 861,
@@ -79,13 +97,13 @@ export const HSCROLL_BASELINE = {
     "Spending › Overview": 84,
     "Spending › By Category": 44,
     "Spending › Classify": 0,
-    "Spending › Recurring": 400,
+    "Spending › Recurring": 0,
     "Spending › Transactions": 837,
   },
   "large-phone": {
     "Portfolio › Overview": 4,
-    "Portfolio › Holdings": 961,
-    "Portfolio › Performance": 437,
+    "Portfolio › Holdings": 0,
+    "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 4,
     "Portfolio › Transactions": 821,
@@ -94,13 +112,13 @@ export const HSCROLL_BASELINE = {
     "Spending › Overview": 44,
     "Spending › By Category": 4,
     "Spending › Classify": 0,
-    "Spending › Recurring": 360,
+    "Spending › Recurring": 0,
     "Spending › Transactions": 797,
   },
   "phone-tier-last-pixel": {
     "Portfolio › Overview": 0,
-    "Portfolio › Holdings": 752,
-    "Portfolio › Performance": 228,
+    "Portfolio › Holdings": 0,
+    "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 0,
     "Portfolio › Transactions": 612,
@@ -109,13 +127,13 @@ export const HSCROLL_BASELINE = {
     "Spending › Overview": 0,
     "Spending › By Category": 0,
     "Spending › Classify": 0,
-    "Spending › Recurring": 151,
+    "Spending › Recurring": 0,
     "Spending › Transactions": 588,
   },
   "tablet-tier-first-pixel": {
     "Portfolio › Overview": 8,
-    "Portfolio › Holdings": 965,
-    "Portfolio › Performance": 441,
+    "Portfolio › Holdings": 0,
+    "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 8,
     "Portfolio › Transactions": 825,
@@ -124,13 +142,13 @@ export const HSCROLL_BASELINE = {
     "Spending › Overview": 48,
     "Spending › By Category": 8,
     "Spending › Classify": 0,
-    "Spending › Recurring": 364,
+    "Spending › Recurring": 0,
     "Spending › Transactions": 801,
   },
   "rotated-phone": {
     "Portfolio › Overview": 0,
-    "Portfolio › Holdings": 761,
-    "Portfolio › Performance": 237,
+    "Portfolio › Holdings": 0,
+    "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 0,
     "Portfolio › Transactions": 621,
@@ -139,13 +157,13 @@ export const HSCROLL_BASELINE = {
     "Spending › Overview": 0,
     "Spending › By Category": 0,
     "Spending › Classify": 0,
-    "Spending › Recurring": 160,
+    "Spending › Recurring": 0,
     "Spending › Transactions": 597,
   },
   "ipad-portrait": {
     "Portfolio › Overview": 0,
-    "Portfolio › Holdings": 771,
-    "Portfolio › Performance": 247,
+    "Portfolio › Holdings": 0,
+    "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 0,
     "Portfolio › Transactions": 631,
@@ -154,7 +172,7 @@ export const HSCROLL_BASELINE = {
     "Spending › Overview": 0,
     "Spending › By Category": 0,
     "Spending › Classify": 0,
-    "Spending › Recurring": 170,
+    "Spending › Recurring": 0,
     "Spending › Transactions": 607,
   },
 };

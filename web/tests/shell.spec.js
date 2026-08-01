@@ -301,9 +301,16 @@ test.describe("below 640px the navigation is a drawer and a picker", () => {
 
   test("the shell is a column that fills the screen, and the pane owns the scroll",
     async ({ page, baseURL }) => {
-      // Holdings is the tallest thing in the app at this width, so there is genuinely
-      // something below the fold to fail to reach.
-      await openView(page, baseURL, "Portfolio › Holdings");
+      // A view whose pane genuinely has something below the fold to fail to reach.
+      //
+      // IT USED TO BE HOLDINGS, and it stopped being able to be, which is the pinned-column
+      // pattern landing rather than a flaw here. That table's wrapper is capped at 60svh on
+      // a phone, so the card fits the pane, `.main` has nothing to scroll, and the ONE
+      // scrollable region on that screen is the table itself. Asserting the pane scrolls
+      // there would now be asserting the pattern had not landed. The spending ledger is the
+      // durable choice: it is a long list in a card at every width, and card-per-row will
+      // keep it one when it arrives.
+      await openView(page, baseURL, "Spending › Transactions");
 
       const height = page.viewportSize().height;
       expect(await page.locator(".app").evaluate((el) => getComputedStyle(el).flexDirection))
