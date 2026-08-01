@@ -158,6 +158,34 @@ export const VIEWS = [
   },
 ];
 
+/**
+ * Load the app signed *out*, so the login screen renders instead of the shell.
+ *
+ * The session endpoint is the app's one auth chokepoint — `AuthGate` turns on it alone —
+ * so answering it 401 is the whole of it. The override is registered after `mockApi`'s
+ * catch-all on purpose: Playwright matches routes in reverse registration order, so the
+ * later, narrower route wins.
+ *
+ * What renders is not quite what a signed-out person sees: Google Identity Services is
+ * cross-origin, so the seam aborts it and the screen shows its own load-failure line where
+ * production shows a button. That is the point of the seam rather than a gap in it — every
+ * gate this screen carries is about the *box*, which is the same either way, and the GSI
+ * button is explicitly carved out of the tap floor because Google exposes no height for it.
+ */
+export async function loadSignIn(page, baseURL) {
+  const seam = await mockApi(page, baseURL);
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "no session" }),
+    })
+  );
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Portfolio" })).toBeVisible({ timeout: 20_000 });
+  return seam;
+}
+
 /** Load the app with the seam installed and the shell rendered. */
 export async function loadApp(page, baseURL) {
   const seam = await mockApi(page, baseURL);

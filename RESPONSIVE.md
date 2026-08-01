@@ -61,7 +61,15 @@ Applied to all 12 tab views, SecurityDetail, and sign-in. Must pass.
    hold everywhere, there is no type floor).
 6. Nothing is `position: fixed`.
 7. Safe areas: in landscape, content **and the app bar** clear the notch; the dark background paints
-   under the home bar with no seam.
+   under the home bar with no seam. *(This one stays here whatever lands. `viewport-fit=cover` and
+   the gutter's four `max(<literal>, env(...))` sides are asserted by `foundations.spec.js` — but
+   only as **declarations**, because desktop Chrome reports every inset as 0. Whether the notch is
+   actually cleared is an iPhone check and always will be.)*
+8. The shell fills the screen with nothing unreachable below it: the bottom of a scrolled list is
+   scrollable to, and sign-in does not rubber-band. *(Landed — `100svh` in the shell and on sign-in,
+   asserted by `foundations.spec.js` at all ten viewports, plus a source gate in `inventory.spec.js`
+   that no `100vh` survives under `web/src`. Emulation has no retractable toolbar, so this is the
+   declaration rather than the symptom; a real iPhone is still what proves the strip is gone.)*
 
 ## The two editors
 
@@ -87,13 +95,13 @@ criteria **instead of** the universal list — reading comfort, row density and 
 | Portfolio › Options | contract ledger **A** — pinned Underlying; it already has an `overflow-x: auto` wrapper at `:70`, so this keeps behaviour rather than replacing it. By-ticker and by-type unchanged (273/261px, they genuinely fit); monthly P/L halved to 6 bars with a reserved band so negative labels clear the ticks. *(The merged `Contract` cell has landed — asserted; the pin has not.)* |
 | Portfolio › Transactions | pattern **B** cards |
 | Portfolio › SecurityDetail | txn history **B**; dividend history **B**; options history **A**, pinning the merged two-line `Contract` cell. Three tables, two patterns, deliberately. `← Holdings` is a ≥44px target and is the **only** way back — there is no router. *(The merged cell itself has landed at every width — asserted; only the pin is left.)* |
-| Net Worth | editor floor; line chart has a **DOM key, not `<Legend>`**; Breakdown and History wrapped in `overflow-x: auto`; `100svh` |
+| Net Worth | editor floor; line chart has a **DOM key, not `<Legend>`**; Breakdown and History wrapped in `overflow-x: auto`; ~~`100svh`~~ *(the shell's, landed and asserted)* |
 | Spending › Overview | donut gone below 640, list is the chart; Top Line Items pattern **B** (471px — A's pin would be the 232px Line item, 70% of the viewport). Both halves of the `.grid2` end up as ranked lists |
 | Spending › By Category | donut gone below 640; Categories pattern **A** with the name column pinned — it keeps its own `▸`/`▾` and does **not** get the persistent `›`; drilled transactions render as **B** cards **below the table**, not as a nested row, headed by subcategory + count + aggregate |
 | Spending › Classify | editor floor; `.fillpane` neutralised so the page scrolls as one; **⇅ Reorder hidden on phone**; `RuleModal` uses `svh`. *(The `textarea`'s styling has landed — asserted.)* |
 | Spending › Recurring | monitor **A** *(open call)* and candidates **A**; three `.link-btn`s at 44px square; **two nested scroll regions** — the feel check |
 | Spending › Transactions | pattern **B** cards |
-| Sign-in | `100vh` → `100svh` at `auth.jsx:50` and `:125`; GSI button **carved out** of the 44px floor; no `env()` padding anywhere |
+| Sign-in | ~~`100vh` → `100svh` at `auth.jsx:50` and `:125`~~ **landed** — asserted, along with the box filling the screen, optical centring and the absence of any phone rule. GSI button **carved out** of the 44px floor; no `env()` padding anywhere. What is left here is eyes-only: whether the carved-out button looks right beside a 44px world |
 
 ## Observations
 
