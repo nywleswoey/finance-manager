@@ -244,6 +244,49 @@ tr.rowlink:active > td { background: var(--hover); }
     content: "›"; position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
     color: var(--mut); font-size: 15px; font-weight: 600; }
 }
+/* ─── pattern B: card per row ─────────────────────────────────────────────────────────────
+   The other half of the table story. For the tables that exist so you can read ONE ROW at a
+   time, a row becomes a card: identity and the one number it is about on line one, its
+   textual fields muted on line two, and — only where a row carries more numbers than its
+   hero — a two-column key/value block under a rule. A six-field ledger row stops at two
+   lines, which is the measurement the pattern was chosen on: 9 cards on a 390x844 screen
+   against the pinned table's 13, with nothing hidden and no interaction at all.
+
+   NO MEDIA QUERY, AND THAT IS DELIBERATE. Pattern A is a restyling of markup that renders at
+   every width, so its tier has to be written in CSS. This one is different markup — the card
+   list and the real table are two renders of the same rows and `usePhone()` in `cards.jsx`
+   picks between them, so above 640px none of these selectors matches anything. Writing the
+   tier twice, once in the hook and once around these rules, would be two places to get the
+   same number wrong. The hook is the tier; these are just the styles it reveals.
+
+   NOTHING IS CLIPPED. `overflow-wrap: anywhere` rather than the prototype's ellipsis: a
+   65-character merchant name wraps to a second line instead of being truncated, because a
+   card you have to widen to finish reading is a table with extra steps — and "nothing hidden"
+   is most of why cards beat the pin on these tables in the first place.
+
+   The hero keeps `text-align: right` even though the flex row already puts it there. Right
+   plus tabular is what the amount column had in the table and the one alignment the pattern
+   promises to preserve; leaving it implicit in a `justify-content` would lose it silently the
+   next time someone changes the head row's layout. */
+.cards { display: flex; flex-direction: column; gap: 8px; }
+.rowcard { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; }
+/* The excluded/dimmed treatment the table row carried, restated on the card. Same 0.55 as
+   `spending/Transactions`' inline row style, because it is the same fact about the row. */
+.rowcard.dim { opacity: .55; }
+.rc-head { display: flex; align-items: baseline; gap: 8px; }
+.rc-nm { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.rc-hero { flex: none; text-align: right; font-weight: 700; font-size: 17px;
+  font-variant-numeric: tabular-nums; }
+.rc-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px;
+  margin-top: 3px; color: var(--mut); font-size: 11px; overflow-wrap: anywhere; }
+.rc-kv { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px;
+  margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
+.rc-kv > div { display: flex; justify-content: space-between; gap: 8px; min-width: 0;
+  font-size: 12px; }
+.rc-kv .k { flex: none; color: var(--mut); }
+.rc-kv .v { text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
 /* Holdings' footnote as a disclosure — five lines of prose above a table that wants every
    row it can get. The summary is hidden by default and turned on in the phone block, which
    is the inverse of how it reads: `open` is set once at mount from the same 640 the

@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { get, fmt, money, cls } from "../../api.js";
+import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
 export default function Transactions() {
   const [accts, setAccts] = useState([]);
   const [acct, setAcct] = useState("");
   const [ticker, setTicker] = useState("");
   const [rows, setRows] = useState(null);
+  const phone = usePhone();
 
   useEffect(() => { get("/api/accounts").then(setAccts).catch(() => {}); }, []);
   useEffect(() => {
@@ -17,14 +19,39 @@ export default function Transactions() {
 
   return (
     <div className="card">
-      <h3>Transactions
+      {/* The count moves into the title because the card list has no header to carry it —
+          see `cards.jsx`. Written at every width; it is the same number either way. */}
+      <h3>Transactions{rows ? ` (${rows.length})` : ""}
         <select value={acct} onChange={(e) => setAcct(e.target.value)} style={{ marginLeft: 12 }}>
           <option value="">All accounts</option>
           {accts.map((a) => <option key={a.name} value={a.name}>{a.name}</option>)}
         </select>
         <input placeholder="ticker…" value={ticker} onChange={(e) => setTicker(e.target.value)} style={{ marginLeft: 8, width: 100 }} />
       </h3>
-      {!rows ? <div className="loading">Loading…</div> : (
+      {!rows ? <div className="loading">Loading…</div> : phone ? (
+        /* Eight fields, but still one amount: the trade is the row and the cash it moved is
+           the hero. Qty and Price are the second and third numbers, so this one earns the
+           key/value block a six-field ledger does not. The source filename goes in the muted
+           line and is allowed to wrap — it is the longest string in the row and clipping it
+           would hide exactly the part that tells two imports apart. */
+        <Cards>
+          {rows.map((r, i) => (
+            <RowCard key={i}
+              name={<>{r.name} <span className="pill">{r.ticker}</span></>}
+              hero={r.gross_amount == null ? "—" : money(r.gross_amount, r.currency, 2)}
+              meta={[
+                r.trade_date || "—",
+                <span className="pill">{r.action}</span>,
+                r.account,
+                r.source_file,
+              ]}
+              fields={[
+                { k: "Qty", v: `${r.qty_signed > 0 ? "+" : ""}${fmt(r.qty_signed, 2)}`, cls: cls(r.qty_signed) },
+                { k: "Price", v: r.price == null ? "—" : fmt(r.price, 4), cls: "mut" },
+              ]} />
+          ))}
+        </Cards>
+      ) : (
         <table>
           <thead><tr>
             <th className="l">Date</th><th className="l">Acct</th><th className="l">Security</th>
