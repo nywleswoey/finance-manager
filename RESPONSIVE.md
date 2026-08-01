@@ -61,7 +61,17 @@ Applied to all 12 tab views, SecurityDetail, and sign-in. Must pass.
    hold everywhere, there is no type floor).
 6. Nothing is `position: fixed`.
 7. Safe areas: in landscape, content **and the app bar** clear the notch; the dark background paints
-   under the home bar with no seam.
+   under the home bar with no seam. *(Stays here whatever lands — it is one of the four iPhone items.
+   `foundations.spec.js` asserts `viewport-fit=cover` and that `.main`'s four phone sides are written
+   as `max(<literal>, env(...))`, which is a claim about the **declaration** only. Note what that
+   leaves uncovered: the phone block does not apply in landscape at all — a rotated phone is 844px
+   wide — so nothing yet guards content or the app bar there. That guard belongs to the tablet tier
+   and the shell.)*
+8. The shell fills the screen with nothing unreachable below it: the bottom of a scrolled list is
+   scrollable to, and sign-in does not rubber-band. *(`100svh` has landed in the shell and on sign-in
+   — asserted as a declaration by `foundations.spec.js`, plus a source gate in `inventory.spec.js`
+   that no `100vh` survives under `web/src`. The **symptom** stays an iPhone check: emulation has no
+   retractable toolbar, so it cannot see the strip either way.)*
 
 ## The two editors
 
@@ -87,13 +97,13 @@ criteria **instead of** the universal list — reading comfort, row density and 
 | Portfolio › Options | contract ledger **A** — pinned Underlying; it already has an `overflow-x: auto` wrapper at `:70`, so this keeps behaviour rather than replacing it. By-ticker and by-type unchanged (273/261px, they genuinely fit); monthly P/L halved to 6 bars with a reserved band so negative labels clear the ticks. *(The merged `Contract` cell has landed — asserted; the pin has not.)* |
 | Portfolio › Transactions | pattern **B** cards |
 | Portfolio › SecurityDetail | txn history **B**; dividend history **B**; options history **A**, pinning the merged two-line `Contract` cell. Three tables, two patterns, deliberately. `← Holdings` is a ≥44px target and is the **only** way back — there is no router. *(The merged cell itself has landed at every width — asserted; only the pin is left.)* |
-| Net Worth | editor floor; line chart has a **DOM key, not `<Legend>`**; Breakdown and History wrapped in `overflow-x: auto`; `100svh` |
+| Net Worth | editor floor; line chart has a **DOM key, not `<Legend>`**; Breakdown and History wrapped in `overflow-x: auto`; ~~`100svh`~~ *(the shell's, landed and asserted)* |
 | Spending › Overview | donut gone below 640, list is the chart; Top Line Items pattern **B** (471px — A's pin would be the 232px Line item, 70% of the viewport). Both halves of the `.grid2` end up as ranked lists |
 | Spending › By Category | donut gone below 640; Categories pattern **A** with the name column pinned — it keeps its own `▸`/`▾` and does **not** get the persistent `›`; drilled transactions render as **B** cards **below the table**, not as a nested row, headed by subcategory + count + aggregate |
 | Spending › Classify | editor floor; `.fillpane` neutralised so the page scrolls as one; **⇅ Reorder hidden on phone**; `RuleModal` uses `svh`. *(The `textarea`'s styling has landed — asserted.)* |
 | Spending › Recurring | monitor **A** *(open call)* and candidates **A**; three `.link-btn`s at 44px square; **two nested scroll regions** — the feel check |
 | Spending › Transactions | pattern **B** cards |
-| Sign-in | `100vh` → `100svh` at `auth.jsx:50` and `:125`; GSI button **carved out** of the 44px floor; no `env()` padding anywhere |
+| Sign-in | ~~`100vh` → `100svh` at `auth.jsx:50` and `:125`~~ **landed** — asserted, along with the box filling the screen, optical centring and the absence of any phone rule. GSI button **carved out** of the 44px floor; no `env()` padding anywhere. What is left here is eyes-only: whether the carved-out button looks right beside a 44px world |
 
 ## Observations
 
@@ -139,9 +149,14 @@ Things the build session must be told, not left to discover.
 - `.grid2`'s `minmax(420px, 1fr)` is **~100px optimistic against real data** — `Overview:33`'s card needs
   **519px** with the live DB's longest subcategory name. `auto-fit` still behaves; the column just spills
   inside itself between 1024 and ~1256.
-- **`640` is a literal in two places**: `styles.css` and the `matchMedia` hook. No single source of
-  truth without a build step. Cross-reference both sides in a comment.
+- **`640` is a literal in three places**: `styles.css`'s `max-width: 639.98px`, `tests/viewports.js`'s
+  `PHONE_TIER_BELOW` / `PHONE_TIER_MEDIA`, and — once the charts land — the `matchMedia` hook. No
+  single source of truth without a build step. Every site cross-references the others in a comment.
 - In `.main`, the padding **longhands must follow the shorthand** — the shorthand resets all four sides.
+- **`.main`'s phone `padding-top` guards `env(safe-area-inset-top)` and must stop once the app bar
+  lands.** Today `.main` is the top of the viewport, so the guard is what clears the notch. With a bar
+  above it the bar clears the notch instead, and `env()` is viewport-relative rather than
+  parent-relative, so the same rule would double-pad.
 - Sticky + pinned cells require `border-collapse: separate; border-spacing: 0`; under `collapse` they
   lose their borders.
 - `display: none` starves `ResponsiveContainer` to 0×0 — drop chart *chrome* via `matchMedia`, never the

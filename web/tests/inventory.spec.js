@@ -52,6 +52,34 @@ test("exactly one donut implementation exists", () => {
   expect(pies, "files rendering a <PieChart> — the donut is shared, not copied").toHaveLength(1);
 });
 
+test("no `100vh` survives anywhere under web/src", () => {
+  // The shell and sign-in both moved to `svh`, for two different reasons: `height: 100vh`
+  // leaves a permanently *unreachable* strip in a shell that owns its own scroll, and
+  // `min-height: 100vh` leaves a *scrollable* one that pushes centred content ~32px low.
+  // Neither reproduces in a browser with no retractable toolbar, so this grep is the only
+  // gate the suite can hold on it — and the same one a reviewer would run by eye.
+  // Comments are stripped first — both files explain at length what `100vh` did and why it
+  // is gone, and a gate that forbids naming the thing it forbids is a gate that gets the
+  // explanation deleted rather than the defect.
+  const stripComments = (src) =>
+    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+  const offenders = sourceFiles(path.join(WEB, "src"))
+    .filter((f) => /100vh/.test(stripComments(fs.readFileSync(f, "utf8"))))
+    .map((f) => path.relative(WEB, f));
+  expect(offenders, "`100vh` is `100lvh` by spec — use `100svh`").toEqual([]);
+});
+
+test("the viewport meta opts into the safe area", () => {
+  // `foundations.spec.js` asserts this on the served document. Here because the source is
+  // where a reviewer looks, and because a build that silently dropped it would fail there
+  // with no indication of which of the two files was wrong.
+  const html = fs.readFileSync(path.join(WEB, "index.html"), "utf8");
+  const meta = html.match(/<meta name="viewport"[^>]*content="([^"]*)"/)?.[1];
+  expect(meta, "web/index.html has no viewport meta tag").toBeTruthy();
+  expect(meta, "without `viewport-fit=cover` every env(safe-area-inset-*) resolves to 0")
+    .toContain("viewport-fit=cover");
+});
+
 test("the ten viewports match the manual checklist one-for-one", () => {
   // RESPONSIVE.md's viewport table is the human-facing list; `viewports.js` is the
   // machine-facing one. Two lists of the same ten viewports drift the moment nothing

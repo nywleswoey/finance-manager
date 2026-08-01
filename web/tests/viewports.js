@@ -28,6 +28,22 @@
  */
 export const HSCROLL_GATE_APPLIES_BELOW = 1024;
 
+/**
+ * The phone tier, as the suite says it — and the third place 640 is written as a literal.
+ *
+ * `styles.css` says `max-width: 639.98px` and this says `< 640`; JS cannot read a CSS custom
+ * property and the repo takes no build step to make one, so the two cross-reference in
+ * comments rather than share a constant. `RESPONSIVE.md`'s Traps names all three sites.
+ *
+ * `PHONE_TIER_EDGE` is how a test picks a phone rule out of the *shipped* stylesheet, and it
+ * is a substring of the condition rather than the whole of it on purpose: the build rewrites
+ * `@media (max-width: 639.98px)` into the range syntax `@media (width<=639.98px)`, so the
+ * number is the only part that survives minification. The `.98` is what keeps a fractional
+ * viewport width out of a 1px dead zone against the tablet tier's `min-width: 640px`.
+ */
+export const PHONE_TIER_BELOW = 640;
+export const PHONE_TIER_EDGE = "639.98px";
+
 export const VIEWPORTS = [
   { name: "small-phone",             width: 360,  height: 740,  why: "small phone — the tightest realistic width" },
   { name: "design-width",            width: 390,  height: 844,  why: "the design width; every measurement in the spec was taken here" },

@@ -27,8 +27,17 @@ only on the views that carry them: the refresh control's size, `.grid2`'s collap
 tab strip, the editors' 24px floor, the rule textarea's styling, the S2 list rows, and the merged
 options identity cell. Each one moved **out of** `RESPONSIVE.md` when it moved in here.
 
+`tests/foundations.spec.js` — the mechanism every phone rule sits in: the shell's `100svh`, the
+`viewport-fit=cover` opt-in, the `max(<literal>, env(...))` content gutter inside the one
+`@media (max-width: 639.98px)` block, the `--tap` token, and sign-in's box. It is the one file
+that asserts **declarations** as well as geometry, because the things it gates are on
+`baseline.spec.js`'s "cannot check, ever" list and leave nothing measurable behind. It is also
+the only spec that renders the app **signed out** — `loadSignIn` in `tests/support/app.js`
+answers the session endpoint 401.
+
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
-single donut implementation, the viewport list against `RESPONSIVE.md`, and the fixtures' own
+single donut implementation, that no `100vh` survives under `web/src`, the viewport meta's
+`viewport-fit=cover`, the viewport list against `RESPONSIVE.md`, and the fixtures' own
 integrity.
 
 `tests/viewports.js` — the ten viewports, declared once. They mirror `RESPONSIVE.md`'s table

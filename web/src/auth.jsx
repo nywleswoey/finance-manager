@@ -47,7 +47,12 @@ function LoginScreen({ onCredential, error }) {
   }, [onCredential]);
 
   return (
-    <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#0f1115" }}>
+    // `100svh` for a different reason than the shell's: `min-height: 100vh` leaves a
+    // *scrollable* strip rather than an unreachable one, so the page rubber-bands with
+    // nothing to scroll and the "centred" content sits ~32px low. No fallback pair — React
+    // style keys are unique — and without `svh` this collapses to content height, uncovering
+    // body's `#0f1419` behind the div's `#0f1115`. The colour drift makes the failure benign.
+    <div style={{ minHeight: "100svh", display: "grid", placeItems: "center", background: "#0f1115" }}>
       <div style={{ textAlign: "center", color: "#e6e6e6", fontFamily: "system-ui, sans-serif" }}>
         <div style={{ fontSize: 40, marginBottom: 8 }}>📊</div>
         <h1 style={{ fontSize: 20, fontWeight: 600, margin: "0 0 4px" }}>Portfolio</h1>
@@ -122,7 +127,8 @@ export default function AuthGate({ children }) {
   }
 
   if (state === "loading") {
-    return <div style={{ minHeight: "100vh", background: "#0f1115" }} />;
+    // Same `svh` fix as `LoginScreen`: this is the same screen with nothing painted on it yet.
+    return <div style={{ minHeight: "100svh", background: "#0f1115" }} />;
   }
   if (state === "out") {
     return <LoginScreen onCredential={onCredential} error={error} />;

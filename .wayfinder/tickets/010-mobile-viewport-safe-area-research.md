@@ -84,3 +84,20 @@ auth.jsx:50,125   minHeight       "100vh"  →  "100svh"
 **Constraint handed downstream.** [The phone navigation shell](012-phone-navigation-shell.md) is no
 longer free to choose `position: fixed` for bottom-anchored chrome — finding 4 rules it out on
 grounds that have nothing to do with taste.
+
+### Corrected in the build
+
+**The `height: 100vh; height: 100svh;` fallback pair was not built.** Finding 1 prescribes it for
+`styles.css:8`; the foundations slice ships `height: 100svh` alone, on the acceptance criterion "no
+`100vh` remains in the shell or on sign-in" — and `inventory.spec.js` now asserts that as a source
+grep, so the pair cannot come back without amending the gate. The grounds are
+[016](016-sign-in-on-phone.md)'s own, applied one file wider than it applied them: `svh` is Safari
+15.4 / Chrome 108 / Firefox 101, universally available since 2022. The residual risk that finding 1
+was guarding — a browser with no `svh` collapsing `.app`'s height — is real and accepted rather than
+denied; it is the one place the shell is less defended than the ticket asked for.
+
+**The phone gutter guards all four sides, `top` included** (`max(14px, env(safe-area-inset-top))`),
+where finding 2 says the insets that matter "are **`bottom`** and **`left`/`right` in landscape** —
+*not* `top`". Both are right at their own moment: with no app bar yet, `.main` *is* the top of the
+viewport. The finding becomes true again the moment the shell lands, and that is written down as a
+trap in [`RESPONSIVE.md`](../../RESPONSIVE.md) rather than left for a reader to rediscover.

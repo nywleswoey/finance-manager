@@ -2,7 +2,13 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `viewport-fit=cover` is what makes every `env(safe-area-inset-*)` in styles.css
+         resolve to something other than 0 — without it the safe-area CSS is dead code
+         rather than merely inactive. It also opts out of Chrome 135+ Android's dynamic
+         "chin", which resizes the viewport during scroll: a moving target under a shell
+         sized in `svh`. No `maximum-scale` / `user-scalable=no`: they do suppress iOS's
+         focus-zoom, and they fail WCAG 1.4.4. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Portfolio</title>
   </head>
   <body>
