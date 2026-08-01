@@ -23,7 +23,7 @@
  * Above 1024px there is no gate and therefore no entries here — `HSCROLL_GATE_APPLIES_BELOW`
  * in `viewports.js` says why those three viewports are exempt.
  *
- * LOWERED FOUR TIMES SO FAR.
+ * LOWERED FIVE TIMES SO FAR.
  *
  * 1. The unconditional fixes. `.grid2`'s `auto-fit` did most of it: two 419px tracks side by
  *    side became one, so `Portfolio › Overview` went 619 → 288 at 360px, `Spending › By
@@ -68,6 +68,26 @@
  *    `By Category` and `Spending › Overview` is one shared cause — `.grid2`'s `minmax(420px,
  *    1fr)` track floor, which does not fit a 362px pane. None of the four holds a table
  *    this pattern was assigned to.
+ *
+ * 5. Card per row. The tier boundary is back, and this time it is the whole story: **every
+ *    phone row that was still non-zero for a table reason goes to zero, and not one row at
+ *    640, 834 or 844 moves by a pixel.** That is the pattern being phone-only by decision
+ *    rather than by accident — cards trade density for readability on a 390px measurement,
+ *    and `spending/Transactions` is 803px natural and fits outright at 900. The three views
+ *    the previous entry named as waiting — both `Transactions` ledgers and `SecurityDetail`
+ *    — are now zero from 360 to 639 and unchanged above it. What is left at 640/834/844 is
+ *    the tablet tier's, which extends the *pin* to anything that overflows there.
+ *
+ *    `Spending › Overview` is the one that reads oddly and is the most informative: it falls
+ *    114 → 74, 84 → 44, 44 → 4, landing **exactly on `Portfolio › Overview`, `Options` and
+ *    `By Category`**. The 40px it shed was the Top Line Items table; what it is left holding
+ *    is the same `.grid2` 420px track floor the other three carry, which no ticket owns and
+ *    which neither pattern can reach. Four views, one residual, now identical to the pixel —
+ *    which is the strongest evidence yet that the remaining phone overflow has a single
+ *    cause and is not four separate table problems.
+ *
+ *    `Net Worth` is untouched and still the largest phone number here. It waits for the
+ *    editors' floor; neither table pattern applies to a form.
  */
 export const HSCROLL_BASELINE = {
   "small-phone": {
@@ -76,14 +96,14 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 74,
-    "Portfolio › Transactions": 891,
-    "Portfolio › SecurityDetail": 510,
+    "Portfolio › Transactions": 0,
+    "Portfolio › SecurityDetail": 0,
     "Net Worth": 349,
-    "Spending › Overview": 114,
+    "Spending › Overview": 74,
     "Spending › By Category": 74,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
-    "Spending › Transactions": 867,
+    "Spending › Transactions": 0,
   },
   "design-width": {
     "Portfolio › Overview": 44,
@@ -91,14 +111,14 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 44,
-    "Portfolio › Transactions": 861,
-    "Portfolio › SecurityDetail": 480,
+    "Portfolio › Transactions": 0,
+    "Portfolio › SecurityDetail": 0,
     "Net Worth": 319,
-    "Spending › Overview": 84,
+    "Spending › Overview": 44,
     "Spending › By Category": 44,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
-    "Spending › Transactions": 837,
+    "Spending › Transactions": 0,
   },
   "large-phone": {
     "Portfolio › Overview": 4,
@@ -106,14 +126,14 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 4,
-    "Portfolio › Transactions": 821,
-    "Portfolio › SecurityDetail": 440,
+    "Portfolio › Transactions": 0,
+    "Portfolio › SecurityDetail": 0,
     "Net Worth": 279,
-    "Spending › Overview": 44,
+    "Spending › Overview": 4,
     "Spending › By Category": 4,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
-    "Spending › Transactions": 797,
+    "Spending › Transactions": 0,
   },
   "phone-tier-last-pixel": {
     "Portfolio › Overview": 0,
@@ -121,14 +141,14 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 0,
-    "Portfolio › Transactions": 612,
-    "Portfolio › SecurityDetail": 231,
+    "Portfolio › Transactions": 0,
+    "Portfolio › SecurityDetail": 0,
     "Net Worth": 70,
     "Spending › Overview": 0,
     "Spending › By Category": 0,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
-    "Spending › Transactions": 588,
+    "Spending › Transactions": 0,
   },
   "tablet-tier-first-pixel": {
     "Portfolio › Overview": 8,
