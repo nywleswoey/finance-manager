@@ -1,11 +1,27 @@
 :root {
   --bg: #0f1419; --panel: #161b22; --panel2: #1c232c; --line: #2b333d;
   --txt: #d7dde4; --mut: #8b97a5; --pos: #2ea043; --neg: #f85149; --acc: #388bfd;
+  /* The one number that earns a token in a block that otherwise holds only colours: the
+     phone tap floor. It recurs across unrelated selectors as the phone tier lands, which
+     is the whole test — every other phone value is written as a literal in the media
+     block at the foot of this file. 44 is Apple's HIG rather than Material's 48: every
+     viewport finding behind this spec is WebKit-shaped, and 48 costs a row of density in
+     tables that already overflow. */
+  --tap: 44px;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--txt);
   font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, sans-serif; }
-.app { display: flex; height: 100vh; }
+/* `100svh` — not `vh`, and not `dvh`. This shell owns its own scroll (`.main`'s `overflow:
+   auto` below, plus the `.fillpane`/`.grow`/`.scroll` machinery), so the document never
+   scrolls, so a mobile toolbar never retracts. `100vh` is spec-defined to equal `100lvh` —
+   the height *as if* the toolbar had retracted — which in a shell that cannot retract it
+   makes the overflowing strip permanently **unreachable** rather than merely cosmetic.
+   `svh` over `dvh` because in a non-scrolling shell the two are identical and `svh` cannot
+   reflow mid-interaction. No `height: 100vh` fallback pair: `svh` is Safari 15.4 /
+   Chrome 108 / Firefox 101, universally available since 2022, and a fallback would leave
+   behind the literal this rule exists to remove. */
+.app { display: flex; height: 100svh; }
 .side { width: 200px; flex: none; border-right: 1px solid var(--line); padding: 16px 0; background: var(--panel); }
 .brand { font-weight: 700; padding: 4px 18px 16px; font-size: 16px; }
 .navitem { padding: 9px 18px; cursor: pointer; color: var(--mut); font-weight: 600; }
@@ -108,3 +124,54 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
 .side-email { font-size: 11px; color: var(--mut); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-bottom: 6px; }
 .logout-btn { font-size: 12px; font-weight: 600; color: var(--mut); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
 .logout-btn:hover { color: var(--txt); border-color: var(--mut); }
+
+/* ─── the phone tier ────────────────────────────────────────────────────────────────────
+   One block, literal values, no token layer. Most of what a phone changes cannot be
+   expressed as a token override at all — the shell flips to a column, charts lose chrome,
+   tables get restructured — so a token layer on top would split the phone story across two
+   mechanisms and hide the delta: `padding: var(--cell-y)` tells you nothing about 639px
+   without hunting elsewhere. `--tap` is the single exception, being the one number that
+   recurs across genuinely unrelated selectors.
+
+   `639.98px` rather than `639px` so no fractional viewport width lands in a 1px dead zone
+   against the tablet tier's `min-width: 640px`.
+
+   640 is a literal here, and will be a literal again in the chart hook's `matchMedia`: JS
+   cannot read a custom property and this repo takes no build step to make one. The two
+   sides cross-reference in comments instead — there is no single source of truth to have. */
+@media (max-width: 639.98px) {
+  /* The content gutter, and the app's first safe-area handling.
+
+     14px is ratified rather than tuned: measured at a true 390px frame, nothing in the
+     spec has a threshold anywhere between 8px and 16px — Holdings shows the same three
+     columns throughout — and the first one is at 20px. `.card` keeps its own 16px, so
+     card content does sit 30px from the screen edge; dropping the card to 12 buys 10px
+     that nothing needs.
+
+     The longhands MUST follow the shorthand — the shorthand resets all four sides.
+
+     Bottom is 20px rather than 14px because under `100svh` this pane's bottom edge *is*
+     the screen's, so the last row of a scrolled list would otherwise sit under the home
+     indicator. That gives it the same `max(<literal>, env())` shape as left and right —
+     one idiom, pad rather than offset, on every side that has an inset to guard. The top
+     is the one that has none: the top inset belongs to the top of the viewport, which is
+     the app bar's edge rather than this pane's, so guarding it here would double-pad under
+     a bar that already clears the notch.
+     Each `max()` resolves to its literal wherever there is no inset — including in the
+     test suite, since desktop Chrome reports every inset as 0 in both orientations, which
+     is why nothing automated can tell you whether content clears a real notch. */
+  .main {
+    padding: 14px;
+    padding-left: max(14px, env(safe-area-inset-left));
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+  }
+
+  /* `--tap`'s first call site. `.navitem` is ~38px tall from its `padding: 9px 18px`, and
+     it is the only navigation a phone has; the drawer that lands next holds these items
+     verbatim, so the rule survives the shell rather than being replaced by it. Height
+     only — a nav item is already a full-width row, so the square half of the floor has
+     nothing to do here. The flex is what centres the label inside the box `min-height`
+     grew, the same shape `.nw-del` uses above. */
+  .navitem { min-height: var(--tap); display: flex; align-items: center; }
+}
