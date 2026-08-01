@@ -22,10 +22,17 @@ authority on what it asserts and, more importantly, **what it can never assert**
 before treating a green run as "verified on a phone"; it is not. Four things need a real
 iPhone and are named there.
 
-`tests/unconditional.spec.js` — the gates that hold at *every* width, checked at every width and
-only on the views that carry them: the refresh control's size, `.grid2`'s collapse, the wrapping
-tab strip, the editors' 24px floor, the rule textarea's styling, the S2 list rows, and the merged
-options identity cell. Each one moved **out of** `RESPONSIVE.md` when it moved in here.
+**Below 640px, "open a view" means different clicks**, and `tests/support/app.js` makes them:
+the hamburger, then the section in the drawer, then the tab in the `<select>`. Every spec keeps
+asking for `"Spending › Recurring"` and gets there the way a person on that viewport would. So
+the phone half of the whole suite depends on the navigation shell — which is why that ticket
+landed before the tables and the charts.
+
+`tests/unconditional.spec.js` — the gates that hold at *every* width, checked at every width their
+subject exists at, and only on the views that carry them: `.grid2`'s collapse, the wrapping tab
+strip, the editors' 24px floor, the rule textarea's styling, the S2 list rows, the merged options
+identity cell, and the labelled refresh control — that last one at 640 and up, because below it
+the label does not render at all. Each one moved **out of** `RESPONSIVE.md` when it moved in here.
 
 `tests/foundations.spec.js` — the mechanism every phone rule sits in: the shell's `100svh`, the
 `viewport-fit=cover` opt-in, the `max(<literal>, env(...))` content gutter inside the one
@@ -34,6 +41,13 @@ that asserts **declarations** as well as geometry, because the things it gates a
 `baseline.spec.js`'s "cannot check, ever" list and leave nothing measurable behind. It is also
 the only spec that renders the app **signed out** — `loadSignIn` in `tests/support/app.js`
 answers the session endpoint 401.
+
+`tests/shell.spec.js` — the phone navigation shell: the drawer and its scrim, the native tab
+picker at 16px, the icon-only refresh with its toast strip *displacing* content rather than
+covering it and then leaving on its own, the `100svh` column, and — at 640 and above — that
+none of it renders. It shares
+`foundations.spec.js`'s CSSOM reader (`tests/support/css.js`) for the two criteria that are
+about a notch and therefore have no geometric form in Chromium.
 
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no `100vh` survives under `web/src`, the viewport meta's

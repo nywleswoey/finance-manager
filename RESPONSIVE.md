@@ -56,22 +56,28 @@ Applied to all 12 tab views, SecurityDetail, and sign-in. Must pass.
    editor floor has landed and is asserted by `unconditional.spec.js`; it is not checked here any
    more. Recurring's three `.link-btn`s take their width from the 44px rule rather than twice, so
    they are still this line's business.)*
-4. Navigation reachable from every screen: drawer opens, scrim tap closes it, the tab `<select>` works.
+4. ~~Navigation reachable from every screen: drawer opens, scrim tap closes it, the tab `<select>`
+   works.~~ **Landed** — `shell.spec.js` asserts the drawer, the scrim, the picker and the app bar,
+   and the suite now *drives* every phone viewport through them, so all thirteen views being
+   reachable at 390×844 is asserted thirteen times over in `baseline.spec.js` rather than once here.
 5. `input`, `select`, `textarea` render at **16px on phone** (nothing else changes size — 11px labels
-   hold everywhere, there is no type floor).
-6. Nothing is `position: fixed`.
+   hold everywhere, there is no type floor). *(The tab picker's own 16px has landed and is asserted;
+   every other form control on a phone is still this line's business.)*
+6. ~~Nothing is `position: fixed`.~~ **Landed** — asserted at all ten viewports across all thirteen
+   views by `baseline.spec.js`, and again by `shell.spec.js` with the drawer *open*, which is the
+   state the two candidates for fixed positioning actually exist in.
 7. Safe areas: in landscape, content **and the app bar** clear the notch; the dark background paints
    under the home bar with no seam. *(Stays here whatever lands — it is one of the four iPhone items.
-   `foundations.spec.js` asserts `viewport-fit=cover` and that `.main`'s four phone sides are written
-   as `max(<literal>, env(...))`, which is a claim about the **declaration** only. Note what that
-   leaves uncovered: the phone block does not apply in landscape at all — a rotated phone is 844px
-   wide — so nothing yet guards content or the app bar there. That guard belongs to the tablet tier
-   and the shell.)*
+   The suite asserts `viewport-fit=cover` and the **declarations**: `.main`'s three remaining phone
+   sides and — since the shell landed — the app bar's `max(12px, env(...))` and `.main`'s
+   `max(28px, env(...))`, both written **unconditionally**, because a rotated phone is 844px wide and
+   exits the phone block. What none of that can say is whether a real notch is actually cleared.)*
 8. The shell fills the screen with nothing unreachable below it: the bottom of a scrolled list is
    scrollable to, and sign-in does not rubber-band. *(`100svh` has landed in the shell and on sign-in
    — asserted as a declaration by `foundations.spec.js`, plus a source gate in `inventory.spec.js`
-   that no `100vh` survives under `web/src`. The **symptom** stays an iPhone check: emulation has no
-   retractable toolbar, so it cannot see the strip either way.)*
+   that no `100vh` survives under `web/src`; `shell.spec.js` adds the phone column and the pane
+   scrolling to its own end. The **symptom** stays an iPhone check: emulation has no retractable
+   toolbar, so it cannot see the strip either way.)*
 
 ## The two editors
 
@@ -153,10 +159,25 @@ Things the build session must be told, not left to discover.
   `PHONE_TIER_BELOW` / `PHONE_TIER_MEDIA`, and — once the charts land — the `matchMedia` hook. No
   single source of truth without a build step. Every site cross-references the others in a comment.
 - In `.main`, the padding **longhands must follow the shorthand** — the shorthand resets all four sides.
-- **`.main`'s phone `padding-top` guards `env(safe-area-inset-top)` and must stop once the app bar
-  lands.** Today `.main` is the top of the viewport, so the guard is what clears the notch. With a bar
-  above it the bar clears the notch instead, and `env()` is viewport-relative rather than
-  parent-relative, so the same rule would double-pad.
+- ~~**`.main`'s phone `padding-top` guards `env(safe-area-inset-top)` and must stop once the app bar
+  lands.**~~ **Discharged** by the shell: the pane's top is a bare `14px` now and the app bar carries
+  `max(0px, env(safe-area-inset-top))` instead. `shell.spec.js` asserts both halves, so putting the
+  guard back fails rather than silently double-padding.
+- **The app bar's inset guards are unconditional, and must stay that way.** They read like phone rules
+  and belong in the phone block by instinct — but a rotated phone is 844px wide and *exits* that block,
+  and landscape is the only orientation where the notch is at the side. Same for `.main`'s
+  `max(28px, env(...))`. The *value* follows the width; the *guard* does not. The **drawer's**
+  guard is the exception and stays inside the block, because `position: absolute` and the transform
+  are in that rule too — the whole rule travels together when the tablet tier's height guard brings
+  it to 844×390. **`.side` as a *rail* — 640 and up — has no guard at all**, so in landscape above
+  the tier the notch cuts into the sidebar. That belongs to the tablet tier, not the shell.
+- **The app bar is `box-sizing: content-box`** against the app-wide `border-box`, so the top inset adds
+  to its 48px instead of eating it. 48px is the number the whole drawer-versus-bottom-bar trade was
+  decided on; under `border-box` a 47px inset would crush the bar to a line.
+- **`.tabs` is not only the navigation strip.** `ByCategory.jsx:95` borrows the class for its own view
+  header — an `<h3>` and a year `<select>` — with the border overridden inline. That is why the phone
+  rule that hides the strip is `.main > .tabs`; a bare `.tabs` deletes that heading and the year picker
+  with it, and the view still renders, so nothing fails loudly.
 - Sticky + pinned cells require `border-collapse: separate; border-spacing: 0`; under `collapse` they
   lose their borders.
 - `display: none` starves `ResponsiveContainer` to 0×0 — drop chart *chrome* via `matchMedia`, never the
