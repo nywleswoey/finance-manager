@@ -138,3 +138,12 @@ Observations, not gates — neither can change the diff above:
   is moot; if it is 40px the carve-out is load-bearing and should stay written down.
 - **Confirm no seam under `viewport-fit=cover`** — that `#0f1115` paints under the home bar and no `--bg`
   strip appears at the bottom in either orientation.
+
+### Corrected in the build
+
+Note 1 above calls the missing inline fallback "the one capability a stylesheet has that inline
+genuinely lacks". The build removed the asymmetry by declining the fallback in the stylesheet too —
+see [010](010-mobile-viewport-safe-area-research.md)'s *Corrected in the build*. The reasoning is this
+ticket's, unchanged; only its reach grew. Nothing else here moved: the diff was the two characters on
+two lines it said it was, and the screen still contributes no rule to the phone block, which
+`foundations.spec.js` now asserts structurally by counting the classes it renders — zero.

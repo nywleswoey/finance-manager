@@ -136,9 +136,9 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
    `639.98px` rather than `639px` so no fractional viewport width lands in a 1px dead zone
    against the tablet tier's `min-width: 640px`.
 
-   640 is a literal here, and will be a literal again in the chart hook's `matchMedia`: JS
-   cannot read a custom property and this repo takes no build step to make one. The two
-   sides cross-reference in comments instead — there is no single source of truth to have. */
+   640 is a literal in three places: here, `tests/viewports.js`, and — once the charts land —
+   the `matchMedia` hook. JS cannot read a custom property and this repo takes no build step
+   to make one, so the sides cross-reference in comments instead of sharing a constant. */
 @media (max-width: 639.98px) {
   /* The content gutter, and the app's first safe-area handling.
 
@@ -150,28 +150,29 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
 
      The longhands MUST follow the shorthand — the shorthand resets all four sides.
 
-     Bottom is 20px rather than 14px because under `100svh` this pane's bottom edge *is*
-     the screen's, so the last row of a scrolled list would otherwise sit under the home
-     indicator. That gives it the same `max(<literal>, env())` shape as left and right —
-     one idiom, pad rather than offset, on every side that has an inset to guard. The top
-     is the one that has none: the top inset belongs to the top of the viewport, which is
-     the app bar's edge rather than this pane's, so guarding it here would double-pad under
-     a bar that already clears the notch.
-     Each `max()` resolves to its literal wherever there is no inset — including in the
-     test suite, since desktop Chrome reports every inset as 0 in both orientations, which
-     is why nothing automated can tell you whether content clears a real notch. */
+     One `max(<literal>, env())` idiom on all four: pad, never offset. Bottom is 20px
+     rather than 14px because under `100svh` this pane's bottom edge *is* the screen's, so
+     the last row of a scrolled list would otherwise sit under the home indicator.
+
+     TRAP for the phone shell: today `.main` is the top of the viewport, so guarding the
+     top inset here is what clears the notch. Once the app bar lands above it, the bar
+     clears the notch instead and `env(safe-area-inset-top)` — which is viewport-relative,
+     not parent-relative — keeps returning the full inset here, which would double-pad.
+     That rule belongs to whoever adds the bar, not to a later reader guessing. */
   .main {
     padding: 14px;
+    padding-top: max(14px, env(safe-area-inset-top));
     padding-left: max(14px, env(safe-area-inset-left));
     padding-right: max(14px, env(safe-area-inset-right));
     padding-bottom: max(20px, env(safe-area-inset-bottom));
   }
 
-  /* `--tap`'s first call site. `.navitem` is ~38px tall from its `padding: 9px 18px`, and
-     it is the only navigation a phone has; the drawer that lands next holds these items
-     verbatim, so the rule survives the shell rather than being replaced by it. Height
-     only — a nav item is already a full-width row, so the square half of the floor has
-     nothing to do here. The flex is what centres the label inside the box `min-height`
-     grew, the same shape `.nw-del` uses above. */
-  .navitem { min-height: var(--tap); display: flex; align-items: center; }
+  /* `--tap`'s call site, and the reason it is a token rather than a literal. `.navitem` is
+     ~38px tall from its `padding: 9px 18px`, and it is the only navigation a phone has;
+     the drawer that lands next holds these items verbatim, so the rule survives the shell
+     rather than being replaced by it. Square rather than height-only, which on a full-width
+     row is a no-op today and the rule as it was decided: the shape exists for bare glyph
+     buttons sitting adjacent, and one selector writing it differently is how a floor stops
+     being one. The flex centres the label in the box `min-height` grew — `.nw-del`'s shape. */
+  .navitem { min-height: var(--tap); min-width: var(--tap); display: flex; align-items: center; }
 }

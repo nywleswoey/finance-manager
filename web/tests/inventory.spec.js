@@ -56,9 +56,8 @@ test("no `100vh` survives anywhere under web/src", () => {
   // The shell and sign-in both moved to `svh`, for two different reasons: `height: 100vh`
   // leaves a permanently *unreachable* strip in a shell that owns its own scroll, and
   // `min-height: 100vh` leaves a *scrollable* one that pushes centred content ~32px low.
-  // Neither failure reproduces in emulation — Chromium has no retractable toolbar, so
-  // `vh`, `svh` and `lvh` are all the viewport height here. Grepping the source is the
-  // only gate this suite can hold on it, and the same one a reviewer would run by eye.
+  // Neither reproduces in a browser with no retractable toolbar, so this grep is the only
+  // gate the suite can hold on it — and the same one a reviewer would run by eye.
   // Comments are stripped first — both files explain at length what `100vh` did and why it
   // is gone, and a gate that forbids naming the thing it forbids is a gate that gets the
   // explanation deleted rather than the defect.

@@ -61,15 +61,17 @@ Applied to all 12 tab views, SecurityDetail, and sign-in. Must pass.
    hold everywhere, there is no type floor).
 6. Nothing is `position: fixed`.
 7. Safe areas: in landscape, content **and the app bar** clear the notch; the dark background paints
-   under the home bar with no seam. *(This one stays here whatever lands. `viewport-fit=cover` and
-   the gutter's four `max(<literal>, env(...))` sides are asserted by `foundations.spec.js` — but
-   only as **declarations**, because desktop Chrome reports every inset as 0. Whether the notch is
-   actually cleared is an iPhone check and always will be.)*
+   under the home bar with no seam. *(Stays here whatever lands — it is one of the four iPhone items.
+   `foundations.spec.js` asserts `viewport-fit=cover` and that `.main`'s four phone sides are written
+   as `max(<literal>, env(...))`, which is a claim about the **declaration** only. Note what that
+   leaves uncovered: the phone block does not apply in landscape at all — a rotated phone is 844px
+   wide — so nothing yet guards content or the app bar there. That guard belongs to the tablet tier
+   and the shell.)*
 8. The shell fills the screen with nothing unreachable below it: the bottom of a scrolled list is
-   scrollable to, and sign-in does not rubber-band. *(Landed — `100svh` in the shell and on sign-in,
-   asserted by `foundations.spec.js` at all ten viewports, plus a source gate in `inventory.spec.js`
-   that no `100vh` survives under `web/src`. Emulation has no retractable toolbar, so this is the
-   declaration rather than the symptom; a real iPhone is still what proves the strip is gone.)*
+   scrollable to, and sign-in does not rubber-band. *(`100svh` has landed in the shell and on sign-in
+   — asserted as a declaration by `foundations.spec.js`, plus a source gate in `inventory.spec.js`
+   that no `100vh` survives under `web/src`. The **symptom** stays an iPhone check: emulation has no
+   retractable toolbar, so it cannot see the strip either way.)*
 
 ## The two editors
 
@@ -147,9 +149,14 @@ Things the build session must be told, not left to discover.
 - `.grid2`'s `minmax(420px, 1fr)` is **~100px optimistic against real data** — `Overview:33`'s card needs
   **519px** with the live DB's longest subcategory name. `auto-fit` still behaves; the column just spills
   inside itself between 1024 and ~1256.
-- **`640` is a literal in two places**: `styles.css` and the `matchMedia` hook. No single source of
-  truth without a build step. Cross-reference both sides in a comment.
+- **`640` is a literal in three places**: `styles.css`'s `max-width: 639.98px`, `tests/viewports.js`'s
+  `PHONE_TIER_BELOW` / `PHONE_TIER_MEDIA`, and — once the charts land — the `matchMedia` hook. No
+  single source of truth without a build step. Every site cross-references the others in a comment.
 - In `.main`, the padding **longhands must follow the shorthand** — the shorthand resets all four sides.
+- **`.main`'s phone `padding-top` guards `env(safe-area-inset-top)` and must stop once the app bar
+  lands.** Today `.main` is the top of the viewport, so the guard is what clears the notch. With a bar
+  above it the bar clears the notch instead, and `env()` is viewport-relative rather than
+  parent-relative, so the same rule would double-pad.
 - Sticky + pinned cells require `border-collapse: separate; border-spacing: 0`; under `collapse` they
   lose their borders.
 - `display: none` starves `ResponsiveContainer` to 0×0 — drop chart *chrome* via `matchMedia`, never the

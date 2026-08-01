@@ -47,14 +47,11 @@ function LoginScreen({ onCredential, error }) {
   }, [onCredential]);
 
   return (
-    // `100svh`, for a different reason than the shell's. `min-height: 100vh` does not create
-    // the shell's unreachable strip — it creates a *scrollable* one: `100vh` ≡ `100lvh`, so
-    // the box is ~844px inside a ~780px visible area, the page rubber-bands with nothing to
-    // scroll, and the "centred" content sits ~32px below optical centre. React style objects
-    // have unique keys, so the `100vh`-then-`100svh` fallback pair has no inline equivalent —
-    // accepted: without `svh` this falls back to `auto` and the div collapses to content
-    // height, uncovering body's `--bg` `#0f1419` behind the div's `#0f1115`. Four units in
-    // one channel. The colour drift this screen deliberately keeps is what makes that benign.
+    // `100svh` for a different reason than the shell's: `min-height: 100vh` leaves a
+    // *scrollable* strip rather than an unreachable one, so the page rubber-bands with
+    // nothing to scroll and the "centred" content sits ~32px low. No fallback pair — React
+    // style keys are unique — and without `svh` this collapses to content height, uncovering
+    // body's `#0f1419` behind the div's `#0f1115`. The colour drift makes the failure benign.
     <div style={{ minHeight: "100svh", display: "grid", placeItems: "center", background: "#0f1115" }}>
       <div style={{ textAlign: "center", color: "#e6e6e6", fontFamily: "system-ui, sans-serif" }}>
         <div style={{ fontSize: 40, marginBottom: 8 }}>📊</div>

@@ -30,11 +30,10 @@ options identity cell. Each one moved **out of** `RESPONSIVE.md` when it moved i
 `tests/foundations.spec.js` — the mechanism every phone rule sits in: the shell's `100svh`, the
 `viewport-fit=cover` opt-in, the `max(<literal>, env(...))` content gutter inside the one
 `@media (max-width: 639.98px)` block, the `--tap` token, and sign-in's box. It is the one file
-that asserts **declarations** as well as geometry, and its header says why: desktop Chrome
-reports every `env(safe-area-inset-*)` as 0 and has no retractable toolbar, so computed style
-cannot tell `max(14px, env(...))` from a bare `14px`, or `svh` from `vh`. Reading the shipped
-CSSOM can. It is also the only spec that renders the app **signed out** — `loadSignIn` in
-`tests/support/app.js` answers the session endpoint 401.
+that asserts **declarations** as well as geometry, because the things it gates are on
+`baseline.spec.js`'s "cannot check, ever" list and leave nothing measurable behind. It is also
+the only spec that renders the app **signed out** — `loadSignIn` in `tests/support/app.js`
+answers the session endpoint 401.
 
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no `100vh` survives under `web/src`, the viewport meta's

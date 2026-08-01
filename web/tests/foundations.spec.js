@@ -2,38 +2,22 @@
  * The responsive foundations: the shell's height unit, the safe-area opt-in, the phone
  * media block, and the one token.
  *
- * These are the mechanism every later phone rule sits in rather than a behaviour anyone
- * can see, so they are asserted here as *declarations* as much as as geometry. That is
- * deliberate and it is the exception in this suite: `baseline` and `unconditional` measure
- * boxes because a box is what those decisions produce, whereas "the gutter uses one
- * `max(<literal>, env())` idiom on all four sides" has **no measurable consequence in
- * Chromium at all** — desktop Chrome reports every `env(safe-area-inset-*)` as 0 at every
- * viewport, in both orientations. Computed style resolves the `max()` away to the literal,
- * so reading the shipped CSSOM is the only way to tell the idiom from a bare `14px` that
- * happens to look identical everywhere a machine can look.
+ * These are the mechanism every later phone rule sits in rather than a behaviour anyone can
+ * see, so this is the one spec in the suite that asserts *declarations* as well as geometry.
+ * The reason is `baseline.spec.js`'s "WHAT THIS SUITE CANNOT CHECK, EVER" — safe-area insets
+ * and mobile toolbars are both on that list — which leaves nothing measurable behind the
+ * gutter's `max()` or the shell's `svh`. Reading the shipped CSSOM is what is left.
  *
- * The same limit applies to `svh` itself: emulation has no retractable browser toolbar, so
- * `100svh`, `100vh` and `100lvh` all resolve to the viewport height here. The unreachable
- * strip this slice removes is not reproducible in this harness — only the declaration is.
- * `inventory.spec.js` carries the other half, that no `100vh` is left in `web/src`.
+ * `inventory.spec.js` carries the half neither can reach: that no `100vh` survives the source.
  *
  * What IS ordinary geometry here: the gutter's resolved padding on both sides of the tier
- * boundary (which is also the "desktop is unchanged" half of the claim), the tap floor's
- * effect on the one selector using it, and sign-in's box.
+ * boundary — which is also the "desktop is unchanged" half of that claim — and sign-in's box.
  */
 import { expect, test } from "@playwright/test";
-import { VIEWPORTS } from "./viewports.js";
+import { PHONE_TIER_BELOW, PHONE_TIER_EDGE, VIEWPORTS } from "./viewports.js";
 import { loadApp, loadSignIn } from "./support/app.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
-
-/**
- * The tier boundary, as a JS literal. The stylesheet writes `max-width: 639.98px` and this
- * writes `< 640`; there is no single source of truth to share, because JS cannot read a CSS
- * custom property and the repo takes no build step to make one. The `.98` is what keeps a
- * fractional viewport width out of a 1px dead zone against the tablet tier's `min-width`.
- */
-const PHONE_TIER_BELOW = 640;
 
 /**
  * Every rule in the shipped stylesheets whose selector is exactly `selector`, with the
@@ -123,20 +107,14 @@ test.describe("the phone content gutter", () => {
   test("all four sides pad with one max(<literal>, env()) idiom", async ({ page, baseURL }) => {
     await loadApp(page, baseURL);
     const rules = await declarationsFor(page, ".main");
-    const phone = rules.filter((r) => r.media?.includes("639.98px"));
+    const phone = rules.filter((r) => r.media?.includes(PHONE_TIER_EDGE));
     expect(phone, "no `.main` rule in the phone media block").toHaveLength(1);
 
-    // Pad, never offset — and one shape on every side that has an inset to guard, so there
-    // is no second idiom for a later rule to copy from. The bottom is 20px rather than 14px
-    // on its own reasoning: under `100svh` this pane's bottom edge *is* the screen's.
-    //
-    // The top is the exception, and deliberately: the insets that matter to this pane are
-    // bottom (home bar) and left/right (notch in landscape). The *top* inset belongs to the
-    // top of the viewport, which is the app bar's edge and not `.main`'s — guarding it here
-    // would double-pad under a bar that already clears the notch. Asserted as a bare literal
-    // rather than left unmentioned, so adding it later reads as the decision it would be.
+    // Pad, never offset — one shape on all four sides, so there is no second idiom for a
+    // later rule to copy from. The bottom is 20px rather than 14px on its own reasoning:
+    // under `100svh` this pane's bottom edge *is* the screen's.
     expect(phone[0].decls).toMatchObject({
-      "padding-top": "14px",
+      "padding-top": "max(14px, env(safe-area-inset-top))",
       "padding-left": "max(14px, env(safe-area-inset-left))",
       "padding-right": "max(14px, env(safe-area-inset-right))",
       "padding-bottom": "max(20px, env(safe-area-inset-bottom))",
@@ -149,9 +127,8 @@ test.describe("the phone content gutter", () => {
     const pad = await paddingOf(page, ".main");
 
     if (vp.width < PHONE_TIER_BELOW) {
-      // Each `max()` resolves to its literal because Chromium reports every inset as 0. On
-      // an iPhone the bottom becomes 34px, which is the only reason it is 20 and not 14:
-      // under `100svh` this pane's bottom edge *is* the screen's.
+      // Every `max()` resolves to its literal here, which is the whole of what emulation
+      // can say about it. On an iPhone the bottom becomes 34px.
       expect(pad).toEqual({ top: "14px", right: "14px", bottom: "20px", left: "14px" });
     } else {
       // The other half of the same claim: the tier boundary is a boundary. 639 and 640 are
@@ -161,46 +138,28 @@ test.describe("the phone content gutter", () => {
   });
 });
 
-test.describe("the tap floor", () => {
-  test("is declared as a token and referenced rather than repeated", async ({ page, baseURL }) => {
-    await loadApp(page, baseURL);
+test("the tap token is declared, and referenced rather than repeated", async ({ page, baseURL }) => {
+  await loadApp(page, baseURL);
 
-    const tap = await page.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue("--tap").trim()
-    );
-    expect(tap, "`--tap` is not declared on `:root`").toBe("44px");
+  const tap = await page.evaluate(() =>
+    getComputedStyle(document.documentElement).getPropertyValue("--tap").trim()
+  );
+  expect(tap, "`--tap` is not declared on `:root`").toBe("44px");
 
-    // Declared and *used*: a token nothing references is worse than a literal, because it
-    // reads as a decision that is in force when it is not. This is the assertion that makes
-    // the token earn its place as call sites accumulate.
-    const navitem = await declarationsFor(page, ".navitem");
-    const phone = navitem.filter((r) => r.media?.includes("639.98px"));
-    expect(phone, "no `.navitem` rule in the phone media block").toHaveLength(1);
-    expect(phone[0].decls["min-height"], "the floor is written as a literal, bypassing the token")
-      .toBe("var(--tap)");
-  });
+  // Declared and *used*: a token nothing references is worse than a literal, because it
+  // reads as a decision that is in force when it is not. This is the assertion that makes
+  // the token earn its place as call sites accumulate.
+  const phone = (await declarationsFor(page, ".navitem")).filter((r) => r.media?.includes(PHONE_TIER_EDGE));
+  expect(phone, "no `.navitem` rule in the phone media block").toHaveLength(1);
+  expect(phone[0].decls["min-height"], "the floor is written as a literal, bypassing the token")
+    .toBe("var(--tap)");
+  expect(phone[0].decls["min-width"], "height-only — the floor was decided square").toBe("var(--tap)");
 
-  test("lifts navigation to 44px on a phone and leaves the desktop sidebar alone", async ({ page, baseURL }, testInfo) => {
-    const vp = viewportOf(testInfo.project.name);
-    await loadApp(page, baseURL);
-
-    const heights = await page.$$eval(".navitem", (els) =>
-      els.map((el) => ({ h: el.getBoundingClientRect().height, text: el.textContent.trim() }))
-    );
-    expect(heights.length, "the sidebar rendered no nav items").toBeGreaterThan(0);
-
-    for (const item of heights) {
-      if (vp.width < PHONE_TIER_BELOW) {
-        expect(item.h, `"${item.text}" is ${Math.round(item.h)}px tall`).toBeGreaterThanOrEqual(44);
-      } else {
-        // ~39px from `padding: 9px 18px`. Asserted as a ceiling rather than an exact number
-        // because the claim is "desktop is unchanged", and 44 is the number that would mean
-        // the phone rule had escaped its block.
-        expect(item.h, `"${item.text}" grew on desktop — the phone rule escaped its block`)
-          .toBeLessThan(44);
-      }
-    }
-  });
+  // What is deliberately NOT here: that a nav item measures 44px on a phone. The 44px target
+  // is a `RESPONSIVE.md` universal gate belonging to the shell slice, and it is not true of
+  // the app yet — the sidebar this rule lands on is not the navigation a phone will have.
+  // Asserting it here would move a checklist gate into the suite ahead of the behaviour,
+  // which is the one thing that file says about itself.
 });
 
 test.describe("sign-in", () => {
