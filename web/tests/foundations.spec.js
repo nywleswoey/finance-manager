@@ -16,55 +16,9 @@
 import { expect, test } from "@playwright/test";
 import { PHONE_TIER_BELOW, PHONE_TIER_EDGE, VIEWPORTS } from "./viewports.js";
 import { loadApp, loadSignIn } from "./support/app.js";
+import { declarationsFor, paddingOf } from "./support/css.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
-
-/**
- * Every rule in the shipped stylesheets whose selector is exactly `selector`, with the
- * media condition it sits under and its *specified* declarations as `{ property: value }`.
- *
- * Specified, not computed: `getComputedStyle` hands back `14px` for both a bare literal and
- * a `max(14px, env(...))`, which is exactly the distinction these gates exist to make.
- *
- * Read from the browser rather than from `styles.css`, so what is asserted is what ships —
- * and the difference is not academic. The build expands `padding: 14px` into four longhands
- * before this ever sees it, so the source's shorthand-then-longhand ordering (get it wrong
- * and the shorthand silently resets all four sides) does not exist here to check. What
- * catches that mistake is the resolved-padding test below, where the bottom would come back
- * 14px instead of 20px.
- */
-function declarationsFor(page, selector) {
-  return page.evaluate((sel) => {
-    const found = [];
-    const walk = (rules, media) => {
-      for (const rule of rules) {
-        // Matched *before* descending, not instead of: a `CSSStyleRule` carries its own
-        // (empty) `cssRules` list now that CSS nesting exists, so a style rule and a
-        // grouping rule are no longer distinguishable by that property being present.
-        if (rule.selectorText === sel) {
-          const decls = {};
-          for (const prop of rule.style) decls[prop] = rule.style.getPropertyValue(prop);
-          found.push({ media: media ?? null, decls });
-        }
-        if (rule.cssRules) walk(rule.cssRules, rule.conditionText ?? media);
-      }
-    };
-    for (const sheet of document.styleSheets) {
-      let rules;
-      try { rules = sheet.cssRules; } catch { continue; }   // a cross-origin sheet, if one ever appears
-      walk(rules, null);
-    }
-    return found;
-  }, selector);
-}
-
-/** The four resolved padding sides of one element, as CSS pixel strings. */
-function paddingOf(page, selector) {
-  return page.evaluate((sel) => {
-    const s = getComputedStyle(document.querySelector(sel));
-    return { top: s.paddingTop, right: s.paddingRight, bottom: s.paddingBottom, left: s.paddingLeft };
-  }, selector);
-}
 
 test("the document opts into the safe area", async ({ page, baseURL }) => {
   await loadApp(page, baseURL);
@@ -83,9 +37,17 @@ test("the shell is sized in svh and the page itself does not scroll", async ({ p
   await loadApp(page, baseURL);
 
   const rules = await declarationsFor(page, ".app");
-  expect(rules, "`.app` is declared in exactly one place").toHaveLength(1);
-  expect(rules[0].media, "`.app`'s height is unconditional — every tier owns its own scroll").toBeNull();
-  expect(rules[0].decls.height, "the shell is not `100svh`").toBe("100svh");
+  const unconditional = rules.filter((r) => r.media === null);
+  expect(unconditional, "`.app`'s base rule").toHaveLength(1);
+  expect(unconditional[0].decls.height, "the shell is not `100svh`").toBe("100svh");
+
+  // The height is unconditional — every tier owns its own scroll, so no tier restates it.
+  // The phone tier *does* have a rule here now: the shell flips to a column so the app bar
+  // and its toast can be flex children of it. What that rule must not do is touch the
+  // height, which is the one thing about the shell that is the same everywhere.
+  for (const r of rules.filter((r) => r.media !== null)) {
+    expect(r.decls.height, `\`.app\` restates its height under \`${r.media}\``).toBeUndefined();
+  }
   // This cannot tell `100svh` from a `height: 100vh; height: 100svh` fallback pair — a
   // declaration block holds one `height`, and the later valid value is the only one that
   // survives into the CSSOM. `inventory.spec.js` grepping `web/src` is what holds that half.
@@ -104,22 +66,29 @@ test("the shell is sized in svh and the page itself does not scroll", async ({ p
 });
 
 test.describe("the phone content gutter", () => {
-  test("all four sides pad with one max(<literal>, env()) idiom", async ({ page, baseURL }) => {
-    await loadApp(page, baseURL);
-    const rules = await declarationsFor(page, ".main");
-    const phone = rules.filter((r) => r.media?.includes(PHONE_TIER_EDGE));
-    expect(phone, "no `.main` rule in the phone media block").toHaveLength(1);
+  test("pads with one max(<literal>, env()) idiom on every side that still has an edge",
+    async ({ page, baseURL }) => {
+      await loadApp(page, baseURL);
+      const rules = await declarationsFor(page, ".main");
+      const phone = rules.filter((r) => r.media?.includes(PHONE_TIER_EDGE));
+      expect(phone, "no `.main` rule in the phone media block").toHaveLength(1);
 
-    // Pad, never offset — one shape on all four sides, so there is no second idiom for a
-    // later rule to copy from. The bottom is 20px rather than 14px on its own reasoning:
-    // under `100svh` this pane's bottom edge *is* the screen's.
-    expect(phone[0].decls).toMatchObject({
-      "padding-top": "max(14px, env(safe-area-inset-top))",
-      "padding-left": "max(14px, env(safe-area-inset-left))",
-      "padding-right": "max(14px, env(safe-area-inset-right))",
-      "padding-bottom": "max(20px, env(safe-area-inset-bottom))",
+      // Pad, never offset — one shape, so there is no second idiom for a later rule to copy
+      // from. The bottom is 20px rather than 14px on its own reasoning: under `100svh` this
+      // pane's bottom edge *is* the screen's.
+      //
+      // THE TOP IS NOT HERE ANY MORE, and its absence is the assertion. The app bar landed
+      // above this pane, so the pane no longer touches the top of the screen — but
+      // `env(safe-area-inset-top)` is viewport-relative rather than parent-relative and
+      // would keep handing back the full inset, paying for the notch twice. The bar carries
+      // that guard now; `shell.spec.js` holds both halves of the handover.
+      expect(phone[0].decls).toMatchObject({
+        "padding-top": "14px",
+        "padding-left": "max(14px, env(safe-area-inset-left))",
+        "padding-right": "max(14px, env(safe-area-inset-right))",
+        "padding-bottom": "max(20px, env(safe-area-inset-bottom))",
+      });
     });
-  });
 
   test("resolves to 14/14/20/14 on a phone and is untouched above the tier", async ({ page, baseURL }, testInfo) => {
     const vp = viewportOf(testInfo.project.name);
@@ -155,11 +124,11 @@ test("the tap token is declared, and referenced rather than repeated", async ({ 
     .toBe("var(--tap)");
   expect(phone[0].decls["min-width"], "height-only — the floor was decided square").toBe("var(--tap)");
 
-  // What is deliberately NOT here: that a nav item measures 44px on a phone. The 44px target
-  // is a `RESPONSIVE.md` universal gate belonging to the shell slice, and it is not true of
-  // the app yet — the sidebar this rule lands on is not the navigation a phone will have.
-  // Asserting it here would move a checklist gate into the suite ahead of the behaviour,
-  // which is the one thing that file says about itself.
+  // What is deliberately NOT here: that a nav item measures 44px on a phone. That gate
+  // waited for the sidebar to become navigation a phone can actually reach, and now that it
+  // has, it lives in `shell.spec.js` — measured inside an open drawer, which is the only
+  // place the number means anything. This file keeps the half it owns: that the token is
+  // declared once and referenced rather than copied.
 });
 
 test.describe("sign-in", () => {

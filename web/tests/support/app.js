@@ -5,9 +5,17 @@
  * reached by clicking, not by navigating to a URL. That is a property of the app under
  * test, not a shortcut: the same clicks are what a person does, which is what makes the
  * gates measure a real render rather than a mounted component.
+ *
+ * BELOW 640px THE CLICKS ARE DIFFERENT ONES, because the navigation is. The rail is behind
+ * a hamburger and the tab strip is a native `<select>`, so `openView` branches on the
+ * viewport rather than on a flag: every caller keeps asking for "Spending › Recurring" and
+ * gets there the way a person on that viewport would. This is the whole reason the phone
+ * shell is the ticket that unblocks the rest — until it lands, no phone behaviour past the
+ * first screen can be reached at all.
  */
 import { expect } from "@playwright/test";
 import { fixtureFor } from "../fixtures/index.js";
+import { PHONE_TIER_BELOW } from "../viewports.js";
 
 /**
  * Serve every API call from committed fixtures and cut the page off from the network.
@@ -76,12 +84,40 @@ async function settle(page, anchor) {
   await expect(anchor(page).first()).toBeVisible({ timeout: 20_000 });
 }
 
+/** True when the viewport is inside the phone tier, where navigation is the drawer. */
+export const onPhone = (page) => page.viewportSize().width < PHONE_TIER_BELOW;
+
+/** The drawer's parts, named once so a rename breaks in one place rather than eleven. */
+export const menuButton = (page) => page.getByTestId("menu");
+export const drawer = (page) => page.locator(".side");
+export const scrim = (page) => page.getByTestId("scrim");
+export const tabSelect = (page) => page.getByTestId("tabsel");
+
 const section = (page, name) => page.locator(".navitem", { hasText: new RegExp(`^${name}$`) });
 const tab = (page, name) => page.locator(".tab", { hasText: new RegExp(`^${name}$`) });
 
+/**
+ * Switch section — through the drawer on a phone, straight off the rail above it.
+ *
+ * The drawer closes itself when a section is chosen, and this waits for that: leaving it
+ * open would leave the scrim over the pane every later gate measures through.
+ */
+async function openSection(page, name) {
+  if (!onPhone(page)) return section(page, name).click();
+  await menuButton(page).click();
+  await section(page, name).click();
+  await expect(scrim(page)).toBeHidden();
+}
+
+/** Switch tab — the native picker on a phone, the strip above it. */
+async function openTabControl(page, name) {
+  if (!onPhone(page)) return tab(page, name).click();
+  await tabSelect(page).selectOption(name);
+}
+
 async function openTab(page, sectionName, tabName, anchor) {
-  await section(page, sectionName).click();
-  await tab(page, tabName).click();
+  await openSection(page, sectionName);
+  await openTabControl(page, tabName);
   await settle(page, anchor);
 }
 
@@ -132,7 +168,7 @@ export const VIEWS = [
   {
     name: "Net Worth",
     open: async (page) => {
-      await section(page, "Net Worth").click();
+      await openSection(page, "Net Worth");
       await settle(page, (p) => p.getByTestId("networth-summary"));
     },
   },
@@ -157,6 +193,21 @@ export const VIEWS = [
     open: (page) => openTab(page, "Spending", "Transactions", (p) => p.locator(".card h3")),
   },
 ];
+
+/**
+ * Install the seam, load the app, and open one named view — the two lines every spec that
+ * measures a rendered view starts with, written once.
+ *
+ * Returns the seam, so a caller that wants to report "the view never settled because these
+ * paths had no fixture" still can; `baseline.spec.js` is the one that does.
+ */
+export async function openView(page, baseURL, viewName) {
+  const seam = await loadApp(page, baseURL);
+  const view = VIEWS.find((v) => v.name === viewName);
+  if (!view) throw new Error(`no view named "${viewName}" — check VIEWS`);
+  await view.open(page);
+  return seam;
+}
 
 /**
  * Load the app signed *out*, so the login screen renders instead of the shell.
