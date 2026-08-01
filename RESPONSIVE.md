@@ -50,7 +50,12 @@ Applied to all 12 tab views, SecurityDetail, and sign-in. Must pass.
 
 1. **`.main` never scrolls horizontally.** Sideways scroll is confined to a container that is visibly a
    table. *(Not "no horizontal page scroll" — `.main { overflow: auto }` absorbs everything before it
-   reaches the page, so that criterion can never fail.)*
+   reaches the page, so that criterion can never fail.)* **Five of the thirteen views now hold it
+   outright at every gated viewport** — Holdings, Performance, Dividends and Recurring, because the
+   pinned column took their scroll off the pane, plus Classify, which was already there. The ratchet in
+   `hscroll-baseline.js` records what is left and why: the two ledgers and SecurityDetail wait for
+   card-per-row, Net Worth for the editor floor, and four views share one residual that is not a table
+   at all — `.grid2`'s 420px track floor against a 362px pane.
 2. No overlapping or clipped content.
 3. Every control reachable and tappable — **44px square** in fully-responsive views. *(The 24px
    editor floor has landed and is asserted by `unconditional.spec.js`; it is not checked here any
@@ -97,17 +102,17 @@ criteria **instead of** the universal list — reading comfort, row density and 
 | view | check |
 |---|---|
 | Portfolio › Overview | tiles reflow to 2 columns; **donuts gone below 640**. *(`.grid2` collapsing to one column and the S2 inline rows have landed — both asserted.)* |
-| Portfolio › Holdings | pattern **A**: Security pinned, h-scroll inside the wrapper, sticky `th` stays put as the wrapper scrolls; `tr:active` feedback and a persistent `›` in the pinned cell; footnote collapsed into `<details>`; row tap opens SecurityDetail |
-| Portfolio › Performance | pattern **A**, grouping key pinned (its `th` is `{by}` — lowercase, changes with the `<select>`). Row count is bounded by the grouping dimension (max 8), so the whole table is on screen and `max-height: 60svh` never bites |
-| Portfolio › Dividends | crosstab pattern **A** (grows in columns, so h-scroll never expires); payment ledger pattern **B** cards; `LabelList` dropped below 640 |
-| Portfolio › Options | contract ledger **A** — pinned Underlying; it already has an `overflow-x: auto` wrapper at `:70`, so this keeps behaviour rather than replacing it. By-ticker and by-type unchanged (273/261px, they genuinely fit); monthly P/L halved to 6 bars with a reserved band so negative labels clear the ticks. *(The merged `Contract` cell has landed — asserted; the pin has not.)* |
+| Portfolio › Holdings | ~~pattern **A**: Security pinned, h-scroll inside the wrapper, sticky `th` stays put as the wrapper scrolls; `tr:active` feedback and a persistent `›` in the pinned cell; footnote collapsed into `<details>`~~ **landed** — all of it asserted by `pinned.spec.js`, at seven viewports rather than at 390 alone. What is left here is eyes-only: row tap opens SecurityDetail, and whether the pin reads as an identity |
+| Portfolio › Performance | ~~pattern **A**, grouping key pinned (its `th` is `{by}` — lowercase, changes with the `<select>`)~~ **landed** — the `{by}` header is asserted by name, which is what says the *grouping key* got pinned rather than a label. Row count is bounded by the grouping dimension (max 8), so the whole table is on screen and `max-height: 60svh` never bites — asserted as the short half of the cap's one-rule claim |
+| Portfolio › Dividends | ~~crosstab pattern **A** (grows in columns, so h-scroll never expires)~~ **landed**; payment ledger pattern **B** cards; `LabelList` dropped below 640 |
+| Portfolio › Options | ~~contract ledger **A** — pinned Underlying; it already has an `overflow-x: auto` wrapper at `:70`, so this keeps behaviour rather than replacing it~~ **landed** — the wrapper's own 480px cap moved to `.selfscroll` so the phone tier's `60svh` can win over it, which an inline `max-height` could not. By-ticker and by-type unchanged (273/261px, they genuinely fit); monthly P/L halved to 6 bars with a reserved band so negative labels clear the ticks. *(The merged `Contract` cell landed earlier — asserted.)* |
 | Portfolio › Transactions | pattern **B** cards |
-| Portfolio › SecurityDetail | txn history **B**; dividend history **B**; options history **A**, pinning the merged two-line `Contract` cell. Three tables, two patterns, deliberately. `← Holdings` is a ≥44px target and is the **only** way back — there is no router. *(The merged cell itself has landed at every width — asserted; only the pin is left.)* |
+| Portfolio › SecurityDetail | txn history **B**; dividend history **B**; ~~options history **A**, pinning the merged two-line `Contract` cell~~ **landed**. Three tables, two patterns, deliberately. `← Holdings` is a ≥44px target and is the **only** way back — there is no router. *(This view is the one place the pane still scrolls sideways after the pin: the 914px txn history is what sets the width, and it waits for **B**.)* |
 | Net Worth | editor floor; line chart has a **DOM key, not `<Legend>`**; Breakdown and History wrapped in `overflow-x: auto`; ~~`100svh`~~ *(the shell's, landed and asserted)* |
 | Spending › Overview | donut gone below 640, list is the chart; Top Line Items pattern **B** (471px — A's pin would be the 232px Line item, 70% of the viewport). Both halves of the `.grid2` end up as ranked lists |
 | Spending › By Category | donut gone below 640; Categories pattern **A** with the name column pinned — it keeps its own `▸`/`▾` and does **not** get the persistent `›`; drilled transactions render as **B** cards **below the table**, not as a nested row, headed by subcategory + count + aggregate |
 | Spending › Classify | editor floor; `.fillpane` neutralised so the page scrolls as one; **⇅ Reorder hidden on phone**; `RuleModal` uses `svh`. *(The `textarea`'s styling has landed — asserted.)* |
-| Spending › Recurring | monitor **A** *(open call)* and candidates **A**; three `.link-btn`s at 44px square; **two nested scroll regions** — the feel check |
+| Spending › Recurring | ~~monitor **A** *(open call)* and candidates **A**~~ **landed** — both pinned; the open call is untouched by that, since it asks whether this view wants a different information design rather than whether the reflow works. **Only the candidates table is asserted**: the owner tracks nothing, so `/api/spending/recurring` is `[]` in the committed fixtures and the monitor never mounts. `pinned.spec.js` annotates that gap on every run rather than closing it with an invented row — so the monitor's pin is an eyes-only check here. Three `.link-btn`s at 44px square; **two nested scroll regions** — the feel check |
 | Spending › Transactions | pattern **B** cards |
 | Sign-in | ~~`100vh` → `100svh` at `auth.jsx:50` and `:125`~~ **landed** — asserted, along with the box filling the screen, optical centring and the absence of any phone rule. GSI button **carved out** of the 44px floor; no `env()` padding anywhere. What is left here is eyes-only: whether the carved-out button looks right beside a 44px world |
 
@@ -156,8 +161,28 @@ Things the build session must be told, not left to discover.
   **519px** with the live DB's longest subcategory name. `auto-fit` still behaves; the column just spills
   inside itself between 1024 and ~1256.
 - **`640` is a literal in three places**: `styles.css`'s `max-width: 639.98px`, `tests/viewports.js`'s
-  `PHONE_TIER_BELOW` / `PHONE_TIER_MEDIA`, and — once the charts land — the `matchMedia` hook. No
-  single source of truth without a build step. Every site cross-references the others in a comment.
+  `PHONE_TIER_BELOW` / `PHONE_TIER_EDGE`, and `Holdings.jsx`'s `startsCollapsed` — the app's first
+  `matchMedia` read, which arrived with the pinned column rather than with the charts as the map
+  expected. The charts will be the **fourth**. No single source of truth without a build step. Every
+  site cross-references the others in a comment.
+- **`1024` is now a literal in two places** for the same reason: `styles.css`'s `max-width: 1023.98px`
+  and `tests/viewports.js`'s `PIN_TIER_BELOW` / `PIN_TIER_EDGE`. It is the same number as
+  `HSCROLL_GATE_APPLIES_BELOW` and deliberately not the same constant — the gate is exempt above 1024
+  *because* the pattern stops there, so a ticket that takes the pin to desktop moves one and not both.
+- **`border-collapse: separate` does not paint a border declared on a `<tr>` at all.** It is the
+  trap behind the trap: switching a table to `separate` to keep the sticky borders silently deletes any
+  row-level rule in it. `Dividends`' 2px total rule was one, and is `.totalrow` on the cells now.
+- **A pinned first cell must not be a `colSpan` banner.** `Holdings`' group rows are excluded from the
+  pin by `:not(.grouprow)` — pinning a seven-column banner parks a subtotal over the numbers the
+  sideways scroll exists to reach. The label slides away instead; its background is what keeps the row
+  identifiable once it has. Any new grouped pattern-A table needs the same class.
+- **An inline `max-height` beats the phone tier's `60svh`.** `Options`' trades wrapper shipped its cap
+  inline; it is `.selfscroll` now precisely so the cascade can reach it. Nothing else may put a height
+  on a `.pinned` wrapper inline.
+- **A row with `opacity` below 1 makes its own pinned cell translucent**, so the columns scrolling under
+  it ghost through at ~30%. Live on `Holdings`' closed positions (behind a checkbox) and `Recurring`'s
+  inactive rows. Accepted rather than fixed: the alternative is changing how those rows dim at every
+  width, which is a desktop change nobody asked for.
 - In `.main`, the padding **longhands must follow the shorthand** — the shorthand resets all four sides.
 - ~~**`.main`'s phone `padding-top` guards `env(safe-area-inset-top)` and must stop once the app bar
   lands.**~~ **Discharged** by the shell: the pane's top is a bare `14px` now and the app bar carries
@@ -179,7 +204,9 @@ Things the build session must be told, not left to discover.
   rule that hides the strip is `.main > .tabs`; a bare `.tabs` deletes that heading and the year picker
   with it, and the view still renders, so nothing fails loudly.
 - Sticky + pinned cells require `border-collapse: separate; border-spacing: 0`; under `collapse` they
-  lose their borders.
+  lose their borders. *(Landed, and `pinned.spec.js` asserts both the border model and the resulting
+  1px rules on the header and the pinned column — the model alone would pass while the borders were
+  gone for some other reason.)*
 - `display: none` starves `ResponsiveContainer` to 0×0 — drop chart *chrome* via `matchMedia`, never the
   container.
 
