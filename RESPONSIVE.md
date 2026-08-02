@@ -112,7 +112,7 @@ criteria **instead of** the universal list — reading comfort, row density and 
 | Portfolio › SecurityDetail | ~~txn history **B**~~ **landed**; ~~dividend history **B**~~ **landed but never rendered** — PLTR is the row the suite drills into because it has 73 option trades, and it has no dividends at all, so `cards.spec.js` annotates that gap on every run rather than closing it with an invented row; ~~options history **A**, pinning the merged two-line `Contract` cell~~ **landed**. Three tables, two patterns, deliberately. `← Holdings` is a ≥44px target and is the **only** way back — there is no router. *(The pane no longer scrolls sideways here below 640: the 914px txn history is cards now. At 640 and above it still does, and that is the tablet tier's.)* |
 | Net Worth | editor floor; line chart has a **DOM key, not `<Legend>`**; Breakdown and History wrapped in `overflow-x: auto`; ~~`100svh`~~ *(the shell's, landed and asserted)* |
 | Spending › Overview | donut gone below 640, list is the chart; ~~Top Line Items pattern **B** (471px — A's pin would be the 232px Line item, 70% of the viewport)~~ **landed**, and it is the row that proves the map's claim about the leftover overflow: this view fell 114 → 74 / 84 → 44 / 44 → 4 and landed **exactly** on the three other `.grid2` views. Both halves of the `.grid2` end up as ranked lists |
-| Spending › By Category | donut gone below 640; Categories pattern **A** with the name column pinned — it keeps its own `▸`/`▾` and does **not** get the persistent `›`; drilled transactions render as **B** cards **below the table**, not as a nested row, headed by subcategory + count + aggregate. **The only grouped B table in the spec, and therefore the only group header** — `cards.jsx` ships none, because the six tables card-per-row landed on are all flat and an unused component is a header no test can reach. The drill's own slice adds it alongside the lift |
+| Spending › By Category | donut gone below 640; ~~Categories pattern **A** with the name column pinned — it keeps its own `▸`/`▾` and does **not** get the persistent `›`~~ **landed** — `pinned.spec.js` carries this view like the other six and `drill.spec.js` asserts the carve-out by name, plus the `.rowtap` feedback it takes *instead* of the chevron; ~~drilled transactions render as **B** cards **below the table**, headed by subcategory + count + aggregate~~ **landed**, and they leave the `.grid2` entirely rather than merely the table — inside that card they would be 386px wide in a 362px pane, clipped by the 420px track floor no ticket owns rather than by the nesting this ticket fixes. **The only grouped B table in the spec, so `CardGroup` in `cards.jsx` has exactly one call site** — it landed here because until now there was nothing grouped to head. What is left is eyes-only: whether three levels of drill read as one structure once the third leaves the grid |
 | Spending › Classify | editor floor; `.fillpane` neutralised so the page scrolls as one; **⇅ Reorder hidden on phone**; `RuleModal` uses `svh`. *(The `textarea`'s styling has landed — asserted.)* |
 | Spending › Recurring | ~~monitor **A** *(open call)* and candidates **A**~~ **landed** — both pinned; the open call is untouched by that, since it asks whether this view wants a different information design rather than whether the reflow works. **Only the candidates table is asserted**: the owner tracks nothing, so `/api/spending/recurring` is `[]` in the committed fixtures and the monitor never mounts. `pinned.spec.js` annotates that gap on every run rather than closing it with an invented row — so the monitor's pin is an eyes-only check here. Three `.link-btn`s at 44px square; **two nested scroll regions** — the feel check |
 | Spending › Transactions | ~~pattern **B** cards~~ **landed** — the six-field shape the whole pattern was measured on: merchant, one amount, and four muted fields on a second line, with no key/value block at all. Its excluded rows keep their dimming, but **no fixture holds one** — every captured transaction is counted spend and `include_excluded=true` was never captured, so both renderings are equally unexercised and `cards.spec.js` asserts the two agree on 0.55 rather than observing either |
@@ -144,7 +144,10 @@ Failing these **changes a decision**, rather than reporting a bug.
 - **Whether a phone list of 1001 cards is usable.** `spending/Transactions` fetches `limit=1000` and the
   card is ~2× an A row's height, so the pattern's own list is the app's longest render. The map routed the
   row-cap question to observation during verification and it is still open; nothing about it is decidable
-  at a desk, and the table it replaced was equally uncapped.
+  at a desk, and the table it replaced was equally uncapped. **The By Category drill is now the second
+  instance and is on screen too** — same `limit=1000`, and "Dining Out" alone is 285 transactions in one
+  year in the live DB, against the 16 the committed fixture drills into. The fixture cannot show you the
+  bad case; a real phone on the live database can.
 
 *(`Options.jsx:71` left this list: resolved to **A**, on the measurement that a 9-field card is 4 rows per
 screen against A's 12 — the same reasoning that rejected B for Holdings at 3.)*
@@ -163,7 +166,16 @@ Things the build session must be told, not left to discover.
   one is now pinnable. The rule still applies to every *other* A table — check the pin actually tells you
   which row you are on.
 - **A nested `<table>` inherits its parent's width**, so it sets the parent's min-content. This is why the
-  By Category drilldown leaves the table on phone rather than becoming cards in place.
+  By Category drilldown leaves the table on phone rather than becoming cards in place. **Leaving the
+  table is not enough** — landed, and measured: cards placed in the categories card are still 386px in a
+  362px pane, because `.grid2`'s 420px track floor (the trap below) reaches them there. They leave the
+  whole grid.
+- **A card that overflows the pane reports nothing to `scrollWidth`** — it fits its own contents
+  perfectly; what is off screen is the box it sits in. And measuring its right edge in *viewport*
+  coordinates does not catch it either, because clicking a row has already scrolled `.main` sideways and
+  dragged the card back into view. `drill.spec.js` adds `scrollLeft` back and compares in the pane's
+  scroll space; built against the rejected layout, that is the difference between a 27px failure and a
+  green run.
 - `.grid2`'s `minmax(420px, 1fr)` is **~100px optimistic against real data** — `spending/Overview.jsx:36`'s card needs
   **519px** with the live DB's longest subcategory name. `auto-fit` still behaves; the column just spills
   inside itself between 1024 and ~1256.

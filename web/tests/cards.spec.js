@@ -20,6 +20,12 @@
  * does. The rotation test is the one that separates a live hook from a read at mount: a
  * rotated phone is 844px wide and must get its table back without a reload.
  *
+ * A SEVENTH CARD LIST IS NOT IN THIS FILE, and that is a reachability fact rather than an
+ * omission. The spending drill's third level is card-per-row too, but it exists only behind
+ * two taps — `openView` opens a view, it does not drill one — and it is the only *grouped*
+ * list in the spec, so its group header has gates none of the six below do. `drill.spec.js`
+ * owns it, and `cards.jsx`'s `CardGroup` is the markup they share.
+ *
  * WHAT THE FIXTURES CANNOT REACH. Two things, both annotated on every run rather than
  * quietly narrowed away. The dimmed treatment for excluded spending rows has no row to land
  * on — every captured transaction is counted spend — so it is asserted as a declaration and
