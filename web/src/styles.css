@@ -143,6 +143,13 @@ tr:hover td { background: var(--hover); }
    row already takes on hover costs desktop nothing, and the alternative was a second rule
    in a tablet tier whose whole claim is that it holds exactly one. */
 tr.rowlink:active > td { background: var(--hover); }
+/* The same feedback, for the rows that expand IN PLACE rather than navigating. They are the
+   one carve-out from the chevron below — a `›` on a row that opens nothing is a lie about
+   where the tap goes — so this is the whole of what says "that tap registered" on touch, and
+   the coloured `▸`/`▾` is what says the row is tappable at all. Same declaration block as the
+   two rules above on purpose: the build folds them into one, and a literal here is how one
+   feedback state quietly becomes two. */
+tr.rowtap:active > td { background: var(--hover); }
 /* Dividends' total rule, moved off the `<tr>` and onto its cells. `border-collapse:
    separate` — which the pinned block below switches that table to — does not paint a border
    declared on a row at all. Identical under both modes, so it is unconditional. */
@@ -233,7 +240,8 @@ tr.rowlink:active > td { background: var(--hover); }
   /* The pinned cell is opaque, so it needs the row's two feedback states restated on it or
      it stays flat while the rest of the row lights up. */
   .pinned tbody > tr:not(.grouprow):hover > :first-child,
-  .pinned tbody > tr.rowlink:active > :first-child { background: var(--hover); }
+  .pinned tbody > tr.rowlink:active > :first-child,
+  .pinned tbody > tr.rowtap:active > :first-child { background: var(--hover); }
   /* The chevron: persistent, at the right edge of the *pinned* cell, so "this row opens
      something" is visible without hovering and cannot be scrolled away. Absolutely
      positioned against the sticky cell with the padding reserving its lane, so it never
@@ -286,6 +294,29 @@ tr.rowlink:active > td { background: var(--hover); }
   font-size: 12px; }
 .rc-kv .k { flex: none; color: var(--mut); }
 .rc-kv .v { text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* THE GROUP HEADER — the other half of the job pattern B took off the `<thead>`, and the only
+   place in the app it is visible. `cards.jsx` deliberately shipped none: all six tables that
+   pattern landed on are flat, so the header's remaining job there is the row count and the
+   card title carries it. The spending drill is the one grouped B list in the spec — the
+   transactions behind one subcategory, lifted out of the categories grid entirely — so it is
+   the only list whose header has an *aggregate* to state as well as a count.
+
+   Written unconditionally, like every other `.rc-*`/`.cards` rule and for the same reason:
+   the tier is `usePhone()` and nothing else. Above 640 this list is not rendered at all, so a
+   media query around these rules would be 640 written a sixth time.
+
+   Nothing truncates, for the reason the cards do not: the name here is a subcategory straight
+   out of the database, and the longest one in the live data is 30 characters in a 362px pane.
+   It wraps. */
+.cardgroup { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+  padding: 2px 2px 6px; }
+.cardgroup .cg-nm { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.cardgroup .cg-n { flex: none; color: var(--mut); font-size: 11px; }
+/* Right-aligned and tabular like the hero it sits above — it is the same column of money one
+   level up, and the group's total lining up with the rows it totals is the point of it. */
+.cardgroup .cg-total { flex: none; text-align: right; font-weight: 700;
+  font-variant-numeric: tabular-nums; }
 
 /* Holdings' footnote as a disclosure — five lines of prose above a table that wants every
    row it can get. The summary is hidden by default and turned on in the phone block, which
