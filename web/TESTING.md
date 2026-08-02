@@ -49,7 +49,7 @@ none of it renders. It shares
 `foundations.spec.js`'s CSSOM reader (`tests/support/css.js`) for the two criteria that are
 about a notch and therefore have no geometric form in Chromium.
 
-`tests/pinned.spec.js` — pattern A: seven tables across six views that pin an identity column and
+`tests/pinned.spec.js` — pattern A: eight tables across seven views that pin an identity column and
 scroll the rest sideways below **1024px**, not 640. It is the one spec whose tier is the pin tier,
 because the pin is worth more as the window narrows: the same gates run at seven viewports and the
 other three assert the inverse — that the desktop table is untouched. It also carries the two gates
@@ -67,6 +67,17 @@ around those rules would be 640 written twice. It drives a rotation at one proje
 gate that can tell a live `matchMedia` from a read at mount, and it names two things the fixtures
 cannot reach: no captured spending row is excluded, and the security the suite drills into has no
 dividends.
+
+`tests/drill.spec.js` — the one view where both patterns land on the same thing. `By Category` is a
+three-level drill, not two tables: categories and subcategories are rows and take the pin, and the
+transactions behind a subcategory take cards — but they cannot stay nested, because a nested one
+inherits a width that puts their amounts off the screen. So this spec gates the *structure* the two
+patterns meet in, and leaves each pattern's own gates to the two files above. Its sharpest assertion
+is the one that reads most like the others and is not: a card's right edge is compared in the pane's
+**scroll space**, because clicking a row has already scrolled `.main` sideways, and in viewport
+coordinates the rejected layout passes. It also carries the group header — the only one in the app —
+and the chevron carve-out, which is the only place pattern A's affordance rule is deliberately not
+applied.
 
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no `100vh` survives under `web/src`, the viewport meta's

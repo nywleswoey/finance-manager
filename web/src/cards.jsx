@@ -71,13 +71,33 @@ export function Cards({ children }) {
 }
 
 /**
- * THE GROUP HEADER IS NOT HERE, and its absence is the ticket boundary rather than a gap.
- * None of the six tables this pattern lands on is grouped — the one grouped B table in the
- * whole spec is the spending drill's third level, which leaves its parent table entirely and
- * is headed by subcategory, count and aggregate. That structure belongs to the drill's own
- * ticket, which is blocked on this module existing; it adds the header alongside the lift.
- * Shipping an unused component here would be a header no test could reach.
+ * THE GROUP HEADER — the rest of the job the missing `<thead>` handed over, and the one part
+ * of this pattern with exactly one call site.
+ *
+ * It landed with the spending drill rather than with the rest of this module, because until
+ * then there was nothing grouped to head: all six tables card-per-row first landed on are
+ * flat, and an unused component is a header no test can reach. The drill's third level is the
+ * only grouped B list in the spec — the transactions behind one subcategory, lifted out of
+ * the categories grid because a nested one would inherit a width that clips their amounts —
+ * so it is the only place a group's *aggregate* is stated in this pattern at all.
+ *
+ * It lives here rather than in that view for the reason `Cards` and `RowCard` do: this module
+ * is where the pattern's markup is decided, and a header written beside its one caller is how
+ * the second grouped list ends up with a different one.
+ *
+ * `n` is the number of cards UNDER this header, not the number the server holds — same
+ * reading the card titles take, for the same reason: the count a missing header owes you is
+ * the count on the screen.
  */
+export function CardGroup({ name, n, total }) {
+  return (
+    <div className="cardgroup">
+      <span className="cg-nm">{name}</span>
+      <span className="cg-n">{n} txn{n === 1 ? "" : "s"}</span>
+      <span className="cg-total">{total}</span>
+    </div>
+  );
+}
 
 /**
  * One row, as a card.

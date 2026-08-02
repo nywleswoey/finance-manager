@@ -1,7 +1,7 @@
 /**
  * Pattern A: the pinned identity column, and the scroll ownership that comes with it.
  *
- * Seven tables across six views exist so you can compare a number DOWN the column. Below
+ * Eight tables across seven views exist so you can compare a number DOWN the column. Below
  * 1024px they are read through a window: the identity column is pinned, the rest scrolls
  * horizontally inside a wrapper, and the header stays put while the rows go by. This file
  * is the gate on all three halves plus the traps that make them fragile.
@@ -60,6 +60,9 @@ const PINNED = [
   { view: "Portfolio › Dividends", tables: [{ pin: "Bucket", cols: null }] },
   { view: "Portfolio › Options", tables: [{ pin: "Underlying", cols: 8 }] },
   { view: "Portfolio › SecurityDetail", tables: [{ pin: "Contract", cols: 6 }] },
+  // Levels one and two of the spending drill. Level three is not a table on a phone at all —
+  // `drill.spec.js` owns that half, and the structure the two levels meet in.
+  { view: "Spending › By Category", tables: [{ pin: "Category", cols: 4 }] },
   {
     view: "Spending › Recurring",
     tables: [{ pin: "Merchant", cols: 7 }],

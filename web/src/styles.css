@@ -143,6 +143,25 @@ tr:hover td { background: var(--hover); }
    row already takes on hover costs desktop nothing, and the alternative was a second rule
    in a tablet tier whose whole claim is that it holds exactly one. */
 tr.rowlink:active > td { background: var(--hover); }
+/* The same feedback, for the rows that expand IN PLACE rather than navigating. They are the
+   one carve-out from the chevron below — a `›` on a row that opens nothing is a lie about
+   where the tap goes — so this is the whole of what says "that tap registered" on touch, and
+   the coloured `▸`/`▾` is what says the row is tappable at all. The token rather than a
+   literal for the reason the rule above uses it: the pinned cell has to restate this colour,
+   and a second literal is how one feedback state quietly becomes two. */
+tr.rowtap:active > td { background: var(--hover); }
+/* The drill's second level, tinted so it reads as nested under the category above it.
+   A CLASS RATHER THAN THE INLINE STYLE IT REPLACES, and the pin is why. An opaque pinned cell
+   paints its own background, so it has to restate whatever the row it sits in is doing — the
+   same reason `--hover` is written twice in the pinned block — and CSS cannot read an inline
+   value, so as an inline style this tint stopped dead at the pinned column: the name cell
+   rendered `--panel` while its own three number cells stayed `--panel2`. Only visible below
+   1024px, because that is where the pin exists.
+   WRITTEN AFTER `tr:hover td` ON PURPOSE. Equal specificity, so source order decides, and
+   after is what preserves today's desktop exactly: an inline background already beat hover on
+   these rows, so they have never lit up on hover and still do not. `:active` carries more
+   specificity than this and so still flashes, which is the point of `.rowtap`. */
+tr.subrow > td { background: var(--panel2); }
 /* Dividends' total rule, moved off the `<tr>` and onto its cells. `border-collapse:
    separate` — which the pinned block below switches that table to — does not paint a border
    declared on a row at all. Identical under both modes, so it is unconditional. */
@@ -230,10 +249,16 @@ tr.rowlink:active > td { background: var(--hover); }
      keeps the row identifiable once it has. */
   .pinned tbody > tr:not(.grouprow) > :first-child {
     position: sticky; left: 0; z-index: 2; background: var(--panel); }
+  /* The tint restated on the pinned cell — same job the two feedback states below have, and
+     the same reason: the cell is opaque, so whatever the row is doing has to be said again
+     here or the pin renders in the wrong colour while the rest of the row is right. Written
+     after the rule above at equal specificity, so source order is what makes it win. */
+  .pinned tbody > tr.subrow > :first-child { background: var(--panel2); }
   /* The pinned cell is opaque, so it needs the row's two feedback states restated on it or
      it stays flat while the rest of the row lights up. */
   .pinned tbody > tr:not(.grouprow):hover > :first-child,
-  .pinned tbody > tr.rowlink:active > :first-child { background: var(--hover); }
+  .pinned tbody > tr.rowlink:active > :first-child,
+  .pinned tbody > tr.rowtap:active > :first-child { background: var(--hover); }
   /* The chevron: persistent, at the right edge of the *pinned* cell, so "this row opens
      something" is visible without hovering and cannot be scrolled away. Absolutely
      positioned against the sticky cell with the padding reserving its lane, so it never
@@ -286,6 +311,30 @@ tr.rowlink:active > td { background: var(--hover); }
   font-size: 12px; }
 .rc-kv .k { flex: none; color: var(--mut); }
 .rc-kv .v { text-align: right; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+
+/* THE GROUP HEADER — the other half of the job pattern B took off the `<thead>`, and the only
+   place in the app it is visible. `cards.jsx` deliberately shipped none: all six tables that
+   pattern landed on are flat, so the header's remaining job there is the row count and the
+   card title carries it. The spending drill is the one grouped B list in the spec — the
+   transactions behind one subcategory, lifted out of the categories grid entirely — so it is
+   the only list whose header has an *aggregate* to state as well as a count.
+
+   Written unconditionally, like every other `.rc-*`/`.cards` rule and for the same reason:
+   the tier is `usePhone()` and nothing else. Above 640 this list is not rendered at all, so a
+   media query around these rules would be 640 written a fifth time — `RESPONSIVE.md`'s Traps
+   counts the four that exist and reserves the fifth for the charts.
+
+   Nothing truncates, for the reason the cards do not: the name here is a subcategory straight
+   out of the database, and the longest one in the live data is 30 characters in a 362px pane.
+   It wraps. */
+.cardgroup { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px;
+  padding: 2px 2px 6px; }
+.cardgroup .cg-nm { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.cardgroup .cg-n { flex: none; color: var(--mut); font-size: 11px; }
+/* Right-aligned and tabular like the hero it sits above — it is the same column of money one
+   level up, and the group's total lining up with the rows it totals is the point of it. */
+.cardgroup .cg-total { flex: none; text-align: right; font-weight: 700;
+  font-variant-numeric: tabular-nums; }
 
 /* Holdings' footnote as a disclosure — five lines of prose above a table that wants every
    row it can get. The summary is hidden by default and turned on in the phone block, which
@@ -418,7 +467,7 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
   /* The desktop strip goes whole, `.tabs-right` with it: the six tabs become the app bar's
      `<select>` and Refresh becomes its icon. Nothing in that group needs a phone home.
 
-     `.main > .tabs`, not `.tabs`. `ByCategory.jsx:95` borrows this class for its own view
+     `.main > .tabs`, not `.tabs`. `ByCategory.jsx:132` borrows this class for its own view
      header — an `<h3>` and a year `<select>` — for the flex row and nothing else, with the
      border overridden inline. It is nested inside the view, so the child combinator is what
      separates the navigation strip from a heading that happens to reuse its layout. */

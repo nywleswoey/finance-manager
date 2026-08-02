@@ -1,11 +1,33 @@
 import React, { useEffect, useRef, useState } from "react";
 import { get, sgd, fmt } from "../../api.js";
 import { COLORS, Donut } from "../../charts.jsx";
+import { CardGroup, Cards, RowCard, usePhone } from "../../cards.jsx";
 
 // Expenses for a single calendar year, broken down by category. The year selector loads that
 // year's window (from=YYYY-01-01, to=YYYY-12-31) through the existing spending endpoints;
 // clicking a category drills into its subcategories, and a subcategory into its transactions
 // for the same window.
+//
+// ONE THREE-LEVEL DRILL, NOT TWO TABLES, and that is why the two responsive patterns meet
+// here rather than being assigned independently. The drilled transactions used to render as a
+// nested grid inside a `colSpan` cell — and a nested one inherits its parent's width, so the
+// child was setting the parent's min-content: 334px collapsed, 413px with subcategories open,
+// 567px once a subcategory was drilled.
+//
+// Levels one and two stay rows and take the pinned pattern, with the name column pinned.
+// LEVEL THREE LEAVES on a phone. Its pattern is forced by identity rather than by
+// measurement — these are the same `cash_txn` rows `spending/Transactions` renders, from the
+// same endpoint, a strict subset of its columns, and that view is already card-per-row — but
+// cards cannot live in the `colSpan` cell: they would inherit its 413px inside a 330px card,
+// putting the hero amount off the edge behind a swipe, which is the exact property cards were
+// chosen for. So below 640px they render below the grid instead, headed by the subcategory,
+// its count and its aggregate.
+//
+// BELOW THE `.grid2` RATHER THAN INSIDE THE CARD, which is a second width problem and not the
+// same one. `.grid2`'s track floor is `minmax(420px, 1fr)` and does not fit the 362px pane —
+// the residual four views share and no ticket owns (`RESPONSIVE.md`'s Traps). Cards placed
+// inside that card would be 388px wide in a 362px pane and clipped again, by a cause this
+// view cannot reach. Outside the grid they take the pane's own width.
 export default function SpendByCategory() {
   const [years, setYears] = useState(null);   // null=loading, []=no data
   const [yearsErr, setYearsErr] = useState(false);
@@ -15,6 +37,10 @@ export default function SpendByCategory() {
   const [openSub, setOpenSub] = useState(null); // expanded subcategory within `open`
   const [rows, setRows] = useState(null);     // transactions for `open` + `openSub`
   const [undated, setUndated] = useState(null);
+  // Live rather than read once at mount, like the other card lists: a rotated phone is 844px
+  // wide, has left the tier, and must get its nested drill back without a reload — with the
+  // drill still open and without re-fetching it.
+  const phone = usePhone();
   // Request generation: every year switch / category click bumps it, and a response may only
   // land if it is still the newest one. Without it a slow earlier fetch resolves last and
   // paints its numbers under the newly selected year's label.
@@ -89,6 +115,17 @@ export default function SpendByCategory() {
   const total = sum && !sum.error ? sum.total_sgd : 0;
   const count = groups.reduce((a, g) => a + g.n, 0);
   const top = groups[0];
+  // The row the third level was drilled from, which is where the lifted list gets its header:
+  // it carries the same name and the same aggregate the row above it shows, so one group does
+  // not state itself two ways.
+  //
+  // The COUNT is the one thing the header does not take from here — it is `rows.length`, what
+  // is on screen, and above 1000 that is deliberately less than this row's `n`, because the
+  // fetch is capped at `limit=1000`. A header that promised 1,284 above 1,000 cards would be
+  // the missing `<thead>`'s job done wrong rather than done elsewhere.
+  const drilledSub = open && openSub
+    ? (subsOf[open] || []).find((sc) => sc.sub === openSub)
+    : null;
 
   return (
     <div>
@@ -113,41 +150,62 @@ export default function SpendByCategory() {
             <Donut title={`By Category · ${year}`} data={groups} />
             <div className="card">
               <h3>Categories</h3>
-              <table>
-                <thead><tr><th className="l">Category</th><th>Spend</th><th>%</th><th>Txns</th></tr></thead>
-                <tbody>
-                  {groups.map((g, i) => (
-                    <React.Fragment key={g.name}>
-                      <tr onClick={() => g.cat && toggle(g.cat)} style={{ cursor: g.cat ? "pointer" : "default" }}>
-                        <td className="l">
-                          <span style={{ color: COLORS[i % COLORS.length] }}>{g.cat ? (open === g.cat ? "▾" : "▸") : "·"}</span> {g.name}
-                        </td>
-                        <td>{sgd(g.value)}</td>
-                        <td className="mut">{fmt((g.value / total) * 100, 1)}%</td>
-                        <td className="mut">{g.n}</td>
-                      </tr>
-                      {open === g.cat && g.cat && (subsOf[g.cat] || []).map((sc) => (
-                        <React.Fragment key={g.cat + "/" + sc.name}>
-                          <tr onClick={() => sc.sub && toggleSub(g.cat, sc.sub)}
-                              style={{ cursor: sc.sub ? "pointer" : "default", background: "var(--panel2)" }}>
-                            <td className="l" style={{ paddingLeft: 26, fontSize: 12 }}>
-                              <span className="mut">{sc.sub ? (openSub === sc.sub ? "▾" : "▸") : "·"}</span> {sc.name}
-                            </td>
-                            <td style={{ fontSize: 12 }}>{sgd(sc.value)}</td>
-                            <td className="mut" style={{ fontSize: 12 }}>{fmt((sc.value / g.value) * 100, 1)}%</td>
-                            <td className="mut" style={{ fontSize: 12 }}>{sc.n}</td>
-                          </tr>
-                          {openSub === sc.sub && sc.sub && (
-                            <tr><td colSpan={4} style={{ padding: 0 }}><TxnList rows={rows} /></td></tr>
-                          )}
-                        </React.Fragment>
-                      ))}
-                    </React.Fragment>
-                  ))}
-                </tbody>
-              </table>
+              {/* Levels one and two, read through the pinned pattern below 1024px: the name
+                  column stays put and Spend / % / Txns scroll under it. The pin is 212px
+                  rather than ~186px because of the inline 26px indent on the subcategory
+                  cell below — an inline value the stylesheet cannot reach. */}
+              <div className="pinned">
+                <table>
+                  <thead><tr><th className="l">Category</th><th>Spend</th><th>%</th><th>Txns</th></tr></thead>
+                  <tbody>
+                    {groups.map((g, i) => (
+                      <React.Fragment key={g.name}>
+                        {/* `rowtap`, not `rowlink`. Both take the same `:active` flash, and
+                            only `rowlink` grows the persistent `›` in the pinned cell — which
+                            means "this row navigates away". These expand in place, and the
+                            coloured marker already says so, so this is the one carve-out from
+                            that affordance rule. */}
+                        <tr className={g.cat ? "rowtap" : undefined}
+                            onClick={() => g.cat && toggle(g.cat)} style={{ cursor: g.cat ? "pointer" : "default" }}>
+                          <td className="l">
+                            <span style={{ color: COLORS[i % COLORS.length] }}>{g.cat ? (open === g.cat ? "▾" : "▸") : "·"}</span> {g.name}
+                          </td>
+                          <td>{sgd(g.value)}</td>
+                          <td className="mut">{fmt((g.value / total) * 100, 1)}%</td>
+                          <td className="mut">{g.n}</td>
+                        </tr>
+                        {open === g.cat && g.cat && (subsOf[g.cat] || []).map((sc) => (
+                          <React.Fragment key={g.cat + "/" + sc.name}>
+                            {/* `subrow` carries the tint that was an inline background until
+                                the pin arrived — an opaque pinned cell cannot read one, so
+                                the name column rendered a different colour from its own
+                                numbers. See `styles.css`. */}
+                            <tr className={"subrow" + (sc.sub ? " rowtap" : "")}
+                                onClick={() => sc.sub && toggleSub(g.cat, sc.sub)}
+                                style={{ cursor: sc.sub ? "pointer" : "default" }}>
+                              <td className="l" style={{ paddingLeft: 26, fontSize: 12 }}>
+                                <span className="mut">{sc.sub ? (openSub === sc.sub ? "▾" : "▸") : "·"}</span> {sc.name}
+                              </td>
+                              <td style={{ fontSize: 12 }}>{sgd(sc.value)}</td>
+                              <td className="mut" style={{ fontSize: 12 }}>{fmt((sc.value / g.value) * 100, 1)}%</td>
+                              <td className="mut" style={{ fontSize: 12 }}>{sc.n}</td>
+                            </tr>
+                            {/* Level three, above the tier only — see the header. On a phone
+                                it is the lifted card list below this grid instead. */}
+                            {!phone && openSub === sc.sub && sc.sub && (
+                              <tr><td colSpan={4} style={{ padding: 0 }}><TxnList rows={rows} /></td></tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
+
+          {phone && drilledSub && <DrilledCards sub={drilledSub} rows={rows} />}
         </>
       )}
 
@@ -157,6 +215,38 @@ export default function SpendByCategory() {
           which carry no date and so fall in no year.
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Level three on a phone: the drilled subcategory's transactions, out of the grid entirely.
+ *
+ * The card shape is `spending/Transactions`' minus the two fields this context already
+ * answers — the source pill and the category, since you arrived here by tapping the category
+ * and the subcategory. Merchant is the identity and the SGD amount the hero, as there.
+ *
+ * `CardGroup` is the header the pattern has been missing — see `cards.jsx`, which is where it
+ * lives and why. It is handed the count on screen and the aggregate of the row that was
+ * tapped, so the subcategory row and its lifted list state one group the same way.
+ *
+ * No `dim`: this fetch does not pass `include_excluded`, so every row it can return is
+ * counted spend. The dimming is `spending/Transactions`' business, where the filter exists.
+ */
+function DrilledCards({ sub, rows }) {
+  if (!rows) return <div className="loading" style={{ padding: "12px 0" }}>Loading…</div>;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <Cards>
+        <CardGroup name={sub.name} n={rows.length} total={sgd(sub.value)} />
+        {rows.length ? rows.map((r, i) => (
+          <RowCard key={i}
+            name={r.merchant || r.description}
+            hero={sgd(Number(r.amount_sgd))}
+            heroClass={Number(r.amount_sgd) < 0 ? "neg" : "pos"}
+            meta={[r.txn_date || "—"]} />
+        )) : <div className="mut" style={{ fontSize: 12 }}>No transactions.</div>}
+      </Cards>
     </div>
   );
 }
