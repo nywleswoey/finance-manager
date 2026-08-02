@@ -106,7 +106,7 @@ criteria **instead of** the universal list — reading comfort, row density and 
 | Portfolio › Overview | tiles reflow to 2 columns; **donuts gone below 640**. *(`.grid2` collapsing to one column and the S2 inline rows have landed — both asserted.)* |
 | Portfolio › Holdings | ~~pattern **A**: Security pinned, h-scroll inside the wrapper, sticky `th` stays put as the wrapper scrolls; `tr:active` feedback and a persistent `›` in the pinned cell; footnote collapsed into `<details>`~~ **landed** — all of it asserted by `pinned.spec.js`, at seven viewports rather than at 390 alone. What is left here is eyes-only: row tap opens SecurityDetail, and whether the pin reads as an identity |
 | Portfolio › Performance | ~~pattern **A**, grouping key pinned (its `th` is `{by}` — lowercase, changes with the `<select>`)~~ **landed** — the `{by}` header is asserted by name, which is what says the *grouping key* got pinned rather than a label. Row count is bounded by the grouping dimension (max 8), so the whole table is on screen and `max-height: 60svh` never bites — asserted as the short half of the cap's one-rule claim |
-| Portfolio › Dividends | ~~crosstab pattern **A** (grows in columns, so h-scroll never expires)~~ **landed**; ~~payment ledger pattern **B** cards~~ **landed** — asserted by `cards.spec.js`, including that the 520px scroll box the table sits in does *not* come with the cards: a capped box inside a page that already scrolls is a second scroll region. `LabelList` dropped below 640 |
+| Portfolio › Dividends | ~~crosstab pattern **A** (grows in columns, so h-scroll never expires)~~ **landed**; ~~payment ledger pattern **B** cards~~ **landed** — asserted by `cards.spec.js`, including that the 520px scroll box the table sits in does *not* come with the cards: a capped box inside a page that already scrolls is a second scroll region. Its `payments` pill now counts what is **rendered** rather than what the server holds, because under cards that pill is where the missing header's count went and the flagged-only filter moves it. The two `title=` explanations on `Declared /u` / `Implied /u` go with the `<thead>` — no loss on touch, where a tooltip never existed, and the kv keys carry the labels. `LabelList` dropped below 640 |
 | Portfolio › Options | ~~contract ledger **A** — pinned Underlying; it already has an `overflow-x: auto` wrapper at `:70`, so this keeps behaviour rather than replacing it~~ **landed** — the wrapper's own 480px cap moved to `.selfscroll` so the phone tier's `60svh` can win over it, which an inline `max-height` could not. By-ticker and by-type unchanged (273/261px, they genuinely fit); monthly P/L halved to 6 bars with a reserved band so negative labels clear the ticks. *(The merged `Contract` cell landed earlier — asserted.)* |
 | Portfolio › Transactions | ~~pattern **B** cards~~ **landed** — eight fields, but still one amount, so the trade is the row and the cash it moved is the hero; Qty and Price take the key/value block. Asserted at every viewport, including that the table is what renders at 640 and above |
 | Portfolio › SecurityDetail | ~~txn history **B**~~ **landed**; ~~dividend history **B**~~ **landed but never rendered** — PLTR is the row the suite drills into because it has 73 option trades, and it has no dividends at all, so `cards.spec.js` annotates that gap on every run rather than closing it with an invented row; ~~options history **A**, pinning the merged two-line `Contract` cell~~ **landed**. Three tables, two patterns, deliberately. `← Holdings` is a ≥44px target and is the **only** way back — there is no router. *(The pane no longer scrolls sideways here below 640: the 914px txn history is cards now. At 640 and above it still does, and that is the tablet tier's.)* |
@@ -137,7 +137,7 @@ Failing these **changes a decision**, rather than reporting a bug.
   design entirely, not a reflow.
 - Recurring's two nested scroll regions — geometry is fine; whether it *feels* confusing is not
   measurable from here.
-- `SecurityDetail.jsx:48` txn history stays **B**, but it measures the same ~4 cards per screen that
+- `SecurityDetail.jsx:49` txn history stays **B**, but it measures the same ~4 cards per screen that
   overturned B for the options table beside it (8 cols, 914px, up to 71 rows, four numbers per row). If it
   reads as cramped, it wants **A** and SecurityDetail becomes B, A, A. **Now buildable rather than
   hypothetical** — the cards are on screen, so this is a look rather than a thought experiment.
@@ -153,7 +153,7 @@ screen against A's 12 — the same reasoning that rejected B for Holdings at 3.)
 
 Things the build session must be told, not left to discover.
 
-- `Transactions.jsx:35` carries an inline `fontSize: 13` — **CSS cannot reach it**; the rule silently
+- `spending/Transactions.jsx:40` carries an inline `fontSize: 13` — **CSS cannot reach it**; the rule silently
   no-ops until that style moves to a class.
 - `Classify.jsx:126` carries an inline `maxHeight: 232` — same problem, accepted as-is.
 - `ByCategory.jsx:133` carries an inline `paddingLeft: 26` — same family. It is what makes that table's
@@ -164,7 +164,7 @@ Things the build session must be told, not left to discover.
   which row you are on.
 - **A nested `<table>` inherits its parent's width**, so it sets the parent's min-content. This is why the
   By Category drilldown leaves the table on phone rather than becoming cards in place.
-- `.grid2`'s `minmax(420px, 1fr)` is **~100px optimistic against real data** — `Overview:33`'s card needs
+- `.grid2`'s `minmax(420px, 1fr)` is **~100px optimistic against real data** — `spending/Overview.jsx:36`'s card needs
   **519px** with the live DB's longest subcategory name. `auto-fit` still behaves; the column just spills
   inside itself between 1024 and ~1256.
 - **The 420px track floor is also the last unowned entry in the horizontal ratchet, and no ticket has

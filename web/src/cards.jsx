@@ -26,6 +26,10 @@ import React, { useEffect, useState } from "react";
  * NOTHING IS CLIPPED. No ellipsis, no `white-space: nowrap` — long names wrap instead. The
  * prototype truncated, and truncation is the one failure this pattern cannot afford: a card
  * you have to widen to read is a table with extra steps.
+ *
+ * A MISSING VALUE IS AN EM DASH HERE WHERE THE TABLE LEAVES THE CELL BLANK, and that is the
+ * one place a card deliberately says something its row did not. An empty cell in a column of
+ * numbers reads as "nothing here"; an empty hero reads as broken.
  */
 
 /**
@@ -93,7 +97,7 @@ export function RowCard({ name, hero, heroClass, meta, fields, dim }) {
     <div className={"rowcard" + (dim ? " dim" : "")}>
       <div className="rc-head">
         <span className="rc-nm">{name}</span>
-        <span className={"rc-hero " + (heroClass || "")}>{hero}</span>
+        <span className={"rc-hero" + (heroClass ? " " + heroClass : "")}>{hero}</span>
       </div>
       {meta && meta.length > 0 && (
         <div className="rc-sub">
@@ -105,7 +109,7 @@ export function RowCard({ name, hero, heroClass, meta, fields, dim }) {
           {fields.map((f, i) => (
             <div key={i}>
               <span className="k">{f.k}</span>
-              <span className={"v " + (f.cls || "")}>{f.v}</span>
+              <span className={"v" + (f.cls ? " " + f.cls : "")}>{f.v}</span>
             </div>
           ))}
         </div>

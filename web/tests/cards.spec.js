@@ -240,7 +240,9 @@ test("the count the missing header gave up is in the card title", async ({ page,
   // at 640 is a second thing to keep in step.
   const titles = [
     { view: "Portfolio › Transactions", rows: () => readFixture("transactions.json").length },
-    { view: "Portfolio › Dividends", rows: () => readFixture("dividend-details.json").total },
+    // `rows.length`, not the fixture's `total`: the two are equal only because the flagged
+    // filter is off, and the count the title owes the missing header is the one on screen.
+    { view: "Portfolio › Dividends", rows: () => readFixture("dividend-details.json").rows.length },
     {
       view: "Portfolio › SecurityDetail",
       rows: () => readFixture("holding-pltr.json").transactions.length,

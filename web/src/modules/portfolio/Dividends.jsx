@@ -86,7 +86,12 @@ export default function Dividends() {
       <div className="card">
         <h3>Dividend Detail — qty held &amp; declared rate&nbsp;
           <span className="pill">SGD · latest FX</span>
-          {det && <span className="pill" style={{ marginLeft: 6 }}>{det.total} payments</span>}
+          {/* The count of what is RENDERED, not what the server holds — `det.total` ignores
+              the flagged-only filter, and under the card pattern this pill is where the
+              missing header's count went, so a title that disagrees with the cards below it
+              is the one thing it must not do. The `shownSgd` pill beside it was already
+              filter-aware; these two now say the same thing about the same list. */}
+          {det && <span className="pill" style={{ marginLeft: 6 }}>{rows.length} payments</span>}
           {det && <span className="pill" style={{ marginLeft: 6 }}>{sgd(shownSgd)}</span>}
           {det && det.flagged > 0 &&
             <span className="pill" style={{ marginLeft: 6, color: "var(--neg)" }}>{det.flagged} need manual input</span>}
@@ -104,7 +109,11 @@ export default function Dividends() {
             {rows.map((r) => (
               <RowCard key={r.id}
                 name={<>{r.name} {r.ticker && <span className="pill">{r.ticker}</span>}</>}
-                hero={money(r.gross_sgd, "SGD", 2)} heroClass="pos"
+                // No colour class on the hero: the table's Gross SGD cell is unclassed, and a
+                // hero that is green here and plain at 641px would be the pattern restating a
+                // decision it only inherited. SecurityDetail's dividend hero IS `pos`, because
+                // that table's cell is.
+                hero={money(r.gross_sgd, "SGD", 2)}
                 meta={[
                   r.pay_date || "—",
                   r.account,
