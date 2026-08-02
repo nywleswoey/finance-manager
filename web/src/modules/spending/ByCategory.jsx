@@ -116,9 +116,14 @@ export default function SpendByCategory() {
   const count = groups.reduce((a, g) => a + g.n, 0);
   const top = groups[0];
   // The row the third level was drilled from, which is where the lifted list gets its header:
-  // the same name and the same aggregate the row itself shows, so the two renderings of one
-  // group cannot disagree.
-  const drilled = open && openSub
+  // it carries the same name and the same aggregate the row above it shows, so one group does
+  // not state itself two ways.
+  //
+  // The COUNT is the one thing the header does not take from here — it is `rows.length`, what
+  // is on screen, and above 1000 that is deliberately less than this row's `n`, because the
+  // fetch is capped at `limit=1000`. A header that promised 1,284 above 1,000 cards would be
+  // the missing `<thead>`'s job done wrong rather than done elsewhere.
+  const drilledSub = open && openSub
     ? (subsOf[open] || []).find((sc) => sc.sub === openSub)
     : null;
 
@@ -171,9 +176,13 @@ export default function SpendByCategory() {
                         </tr>
                         {open === g.cat && g.cat && (subsOf[g.cat] || []).map((sc) => (
                           <React.Fragment key={g.cat + "/" + sc.name}>
-                            <tr className={sc.sub ? "rowtap" : undefined}
+                            {/* `subrow` carries the tint that was an inline background until
+                                the pin arrived — an opaque pinned cell cannot read one, so
+                                the name column rendered a different colour from its own
+                                numbers. See `styles.css`. */}
+                            <tr className={"subrow" + (sc.sub ? " rowtap" : "")}
                                 onClick={() => sc.sub && toggleSub(g.cat, sc.sub)}
-                                style={{ cursor: sc.sub ? "pointer" : "default", background: "var(--panel2)" }}>
+                                style={{ cursor: sc.sub ? "pointer" : "default" }}>
                               <td className="l" style={{ paddingLeft: 26, fontSize: 12 }}>
                                 <span className="mut">{sc.sub ? (openSub === sc.sub ? "▾" : "▸") : "·"}</span> {sc.name}
                               </td>
@@ -196,7 +205,7 @@ export default function SpendByCategory() {
             </div>
           </div>
 
-          {phone && drilled && <DrilledCards sub={drilled} rows={rows} />}
+          {phone && drilledSub && <DrilledCards sub={drilledSub} rows={rows} />}
         </>
       )}
 

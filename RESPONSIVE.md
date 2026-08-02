@@ -159,7 +159,7 @@ Things the build session must be told, not left to discover.
 - `spending/Transactions.jsx:40` carries an inline `fontSize: 13` — **CSS cannot reach it**; the rule silently
   no-ops until that style moves to a class.
 - `Classify.jsx:126` carries an inline `maxHeight: 232` — same problem, accepted as-is.
-- `ByCategory.jsx:133` carries an inline `paddingLeft: 26` — same family. It is what makes that table's
+- `ByCategory.jsx:186` carries an inline `paddingLeft: 26` — same family. It is what makes that table's
   pinned column 212px rather than ~186px.
 - **A pinned column is only useful if its column is an identity.** `SecurityDetail`'s options table used to
   lead with `Type` (`Put`/`Put`/`Call`); the merged `Contract` cell that replaced it has landed, so that
@@ -245,7 +245,7 @@ Things the build session must be told, not left to discover.
 - **The app bar is `box-sizing: content-box`** against the app-wide `border-box`, so the top inset adds
   to its 48px instead of eating it. 48px is the number the whole drawer-versus-bottom-bar trade was
   decided on; under `border-box` a 47px inset would crush the bar to a line.
-- **`.tabs` is not only the navigation strip.** `ByCategory.jsx:95` borrows the class for its own view
+- **`.tabs` is not only the navigation strip.** `ByCategory.jsx:132` borrows the class for its own view
   header — an `<h3>` and a year `<select>` — with the border overridden inline. That is why the phone
   rule that hides the strip is `.main > .tabs`; a bare `.tabs` deletes that heading and the year picker
   with it, and the view still renders, so nothing fails loudly.

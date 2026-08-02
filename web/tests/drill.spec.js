@@ -109,6 +109,42 @@ test.describe("Spending › By Category", () => {
         "the cards are still nested inside the table they were lifted out of").toBe(0);
     });
 
+  test("the second level is pinned too, and its pinned cell keeps the row's own tint",
+    async ({ page, baseURL }, testInfo) => {
+      const vp = viewportOf(testInfo.project.name);
+      await openView(page, baseURL, "Spending › By Category");
+      await rowFor(page, CATEGORY).click();
+
+      // `pinned.spec.js` carries this view, but `openView` does not drill — so every gate it
+      // holds runs against level-one rows only, and level two is where this pattern is at its
+      // most fragile. The subcategory row is the one row in the app with a background of its
+      // own, and an opaque pinned cell paints over it: the cell has to restate the tint or the
+      // name column renders a different colour from its own three numbers. That was an inline
+      // style CSS could not reach, which is the third instance of a family `RESPONSIVE.md`
+      // already names — and it failed silently, because nothing drilled.
+      // The pinned cell is compared against a SIBLING CELL rather than against the `<tr>`.
+      // The tint sits on the cells — it has to, because `border-collapse: separate` and an
+      // opaque pin both ignore a background declared on a row — so the row itself is
+      // transparent and comparing to it would pass whenever the pin was transparent too,
+      // which is the failure. The two cells either match or the column is visibly wrong.
+      const seen = await rowFor(page, SUB).evaluate((tr) => ({
+        position: getComputedStyle(tr.children[0]).position,
+        left: getComputedStyle(tr.children[0]).left,
+        pin: getComputedStyle(tr.children[0]).backgroundColor,
+        sibling: getComputedStyle(tr.children[1]).backgroundColor,
+      }));
+
+      if (vp.width >= PIN_TIER_BELOW) {
+        expect.soft(seen.position, "the pin reached desktop").toBe("static");
+        return;
+      }
+      expect.soft(seen.position, "the subcategory row's identity column is not pinned")
+        .toBe("sticky");
+      expect.soft(seen.left, "the subcategory row's pin is not at the left edge").toBe("0px");
+      expect.soft(seen.pin, "the pinned cell paints over the second level's tint")
+        .toBe(seen.sibling);
+    });
+
   test("the lifted cards carry a header with the subcategory, its count and its aggregate",
     async ({ page, baseURL }, testInfo) => {
       const vp = viewportOf(testInfo.project.name);
@@ -159,7 +195,11 @@ test.describe("Spending › By Category", () => {
         const main = document.querySelector(".main");
         const origin = main.getBoundingClientRect().left - main.scrollLeft;
         const found = [];
-        for (const card of main.querySelectorAll(".cards > .rowcard")) {
+        // THE GROUP HEADER IS MEASURED WITH THE CARDS, not left out as chrome. It is the only
+        // new markup this ticket adds, it holds the 30-character subcategory name beside an
+        // aggregate, and it is a sibling of the cards rather than one of them — so a selector
+        // that said `.rowcard` alone would skip the widest string on the screen.
+        for (const card of main.querySelectorAll(".cards > .rowcard, .cards > .cardgroup")) {
           const box = card.getBoundingClientRect();
           const right = box.right - origin;
           if (right > main.clientWidth + 1) {
