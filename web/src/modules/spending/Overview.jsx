@@ -5,10 +5,12 @@ import {
 } from "recharts";
 import { get, sgd, fmt } from "../../api.js";
 import { COLORS, Donut } from "../../charts.jsx";
+import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
 export default function SpendOverview() {
   const [sum, setSum] = useState(null);
   const [trend, setTrend] = useState(null);
+  const phone = usePhone();
   useEffect(() => { get("/api/spending/summary").then(setSum).catch(() => setSum({ error: true })); }, []);
   useEffect(() => { get("/api/spending/trends").then(setTrend).catch(() => setTrend({ groups: [], series: [] })); }, []);
   if (!sum) return <div className="loading">Loading…</div>;
@@ -17,6 +19,7 @@ export default function SpendOverview() {
   const groups = sum.by_group.map((g) => ({ name: g.category, value: Number(g.v) }));
   const total = sum.total_sgd;
   const top = groups[0];
+  const lines = sum.by_subcategory.slice(0, 14);
 
   return (
     <div>
@@ -29,11 +32,33 @@ export default function SpendOverview() {
       <div className="grid2">
         <Donut title="Spending by Category" data={groups} />
         <div className="card">
-          <h3>Top Line Items</h3>
+          {/* The count is in the title because the card list below 640 has no header to
+              carry it — see `cards.jsx`. It is the number of rows rendered, which is the
+              top 14 rather than every line item. */}
+          <h3>Top Line Items ({lines.length})</h3>
+          {phone ? (
+            /* Four columns, so this table was in the "already fits" bucket until it was
+               measured: 471px, because the line-item column is unbounded free text from the
+               database and the longest real one is 30 characters. Pattern A was rejected on
+               the same number — pinning a 232px identity column is 70% of a 330px pane. The
+               line item is the identity, its spend is the hero, and the category and share
+               ride underneath: a ranked list, which is what the donut beside it becomes too. */
+            <Cards>
+              {lines.map((r, i) => (
+                <RowCard key={i}
+                  name={r.subcategory || "—"}
+                  hero={sgd(Number(r.v))}
+                  // The table renders a null category as an empty cell rather than naming
+                  // it, so the card drops the item instead of printing an empty span.
+                  meta={[...(r.category ? [r.category] : []),
+                         `${fmt((Number(r.v) / total) * 100, 1)}%`]} />
+              ))}
+            </Cards>
+          ) : (
           <table>
             <thead><tr><th className="l">Category</th><th className="l">Line item</th><th>Spend</th><th>%</th></tr></thead>
             <tbody>
-              {sum.by_subcategory.slice(0, 14).map((r, i) => (
+              {lines.map((r, i) => (
                 <tr key={i}>
                   <td className="l mut">{r.category}</td>
                   <td className="l">{r.subcategory || "—"}</td>
@@ -43,6 +68,7 @@ export default function SpendOverview() {
               ))}
             </tbody>
           </table>
+          )}
         </div>
       </div>
       {trend && trend.series.length > 0 && (

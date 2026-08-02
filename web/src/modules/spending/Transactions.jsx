@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { get, sgd } from "../../api.js";
+import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
 const SOURCES = { "": "All sources", dbs: "DBS bank", trust: "Trust card", hsbc: "HSBC card" };
 
@@ -9,6 +10,7 @@ export default function SpendTransactions() {
   const [source, setSource] = useState("");
   const [excluded, setExcluded] = useState(false);
   const [rows, setRows] = useState(null);
+  const phone = usePhone();
 
   useEffect(() => { get("/api/spending/categories").then(setCats).catch(() => {}); }, []);
   useEffect(() => {
@@ -24,7 +26,10 @@ export default function SpendTransactions() {
 
   return (
     <div className="card">
-      <h3>Transactions
+      {/* The count moves into the title because the card list has no header to carry it —
+          see `cards.jsx`. Written at every width: it is the same number either way, and one
+          title beats a title that changes shape at 640. */}
+      <h3>Transactions{rows ? ` (${rows.length})` : ""}
         <select value={group} onChange={(e) => setGroup(e.target.value)} style={{ marginLeft: 12 }}>
           <option value="">All categories</option>
           {groups.map((g) => <option key={g} value={g}>{g}</option>)}
@@ -36,7 +41,28 @@ export default function SpendTransactions() {
           <input type="checkbox" checked={excluded} onChange={(e) => setExcluded(e.target.checked)} /> show excluded
         </label>
       </h3>
-      {!rows ? <div className="loading">Loading…</div> : (
+      {!rows ? <div className="loading">Loading…</div> : phone ? (
+        /* Pattern B, and the shape it was measured on: six fields, one amount, two lines.
+           Merchant is the identity and the SGD amount is the hero; date, source, category
+           and the exclusion flag flow underneath as muted text. No key/value block — this
+           row carries no second number, which is the whole test that assigned it here. */
+        <Cards>
+          {rows.map((r, i) => (
+            <RowCard key={i} dim={!r.is_spend}
+              name={r.merchant || r.description}
+              hero={sgd(Number(r.amount_sgd))}
+              heroClass={Number(r.amount_sgd) < 0 ? "neg" : "pos"}
+              meta={[
+                r.txn_date || "—",
+                <span className="pill">{r.account_label}</span>,
+                // Unclassified spend has a null category, and the table renders that cell
+                // empty rather than inventing a word for it — so the card drops the item.
+                ...(r.category ? [r.category + (r.subcategory ? ` · ${r.subcategory}` : "")] : []),
+                ...(r.is_spend ? [] : [<span className="pill">{r.exclude_reason || "excluded"}</span>]),
+              ]} />
+          ))}
+        </Cards>
+      ) : (
         <table>
           <thead><tr>
             <th className="l">Date</th><th className="l">Source</th><th className="l">Merchant</th>

@@ -59,6 +59,15 @@ drops a column" is the criterion a build could satisfy every *geometric* gate wh
 `contain`, chaining is the decision, and a synthetic scroll does not chain, so there is nothing to
 measure.
 
+`tests/cards.spec.js` — pattern B: six tables across five views that stop being tables below **640px**
+and become one card per row. The mirror image of `pinned.spec.js` in every way that matters: its tier
+is the phone rather than the pin, its markup is *different* rather than restyled, and so the thing it
+has to gate is that the tier lives in `usePhone()` and **nowhere in the stylesheet** — a media query
+around those rules would be 640 written twice. It drives a rotation at one project, which is the only
+gate that can tell a live `matchMedia` from a read at mount, and it names two things the fixtures
+cannot reach: no captured spending row is excluded, and the security the suite drills into has no
+dividends.
+
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no `100vh` survives under `web/src`, the viewport meta's
 `viewport-fit=cover`, the viewport list against `RESPONSIVE.md`, and the fixtures' own

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { get, fmt, sgd, money, pct, cls } from "../../api.js";
+import { Cards, RowCard, usePhone } from "../../cards.jsx";
 import { ContractCell } from "./contract.jsx";
 
 export default function SecurityDetail({ ticker, bucket, onBack }) {
   const [d, setD] = useState(null);
+  const phone = usePhone();
   useEffect(() => {
     setD(null);
     get(`/api/holding?ticker=${encodeURIComponent(ticker)}&bucket=${bucket}`)
@@ -45,6 +47,29 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
 
       <div className="card" style={{ marginBottom: 18 }}>
         <h3>Transaction history ({d.transactions.length}) · running balance</h3>
+        {phone ? (
+          /* Pattern B — and the open call the map left on it: this row carries four numbers,
+             which measures the same ~4 cards per screen that overturned B for the options
+             table beside it. It stays B on the reading job rather than the count: what you do
+             with one security's own ledger is read a trade, not compare a column. If it reads
+             as cramped on a real phone the view becomes B, A, A, which is why the assignment
+             is recorded in `RESPONSIVE.md` as an open call rather than a gate.
+             Every row is the same security, so the identity is when and what — the date with
+             the action beside it — and the cash the trade moved is the hero. */
+          <Cards>
+            {d.transactions.map((t, i) => (
+              <RowCard key={i}
+                name={<>{t.trade_date || "—"} <span className="pill">{t.action}</span></>}
+                hero={t.gross_amount == null ? "—" : money(t.gross_amount, t.currency, 2)}
+                meta={[t.account, t.source_file]}
+                fields={[
+                  { k: "Qty", v: `${t.qty_signed > 0 ? "+" : ""}${fmt(t.qty_signed, 2)}`, cls: cls(t.qty_signed) },
+                  { k: "Balance", v: fmt(t.balance, 2) },
+                  { k: "Price", v: t.price == null ? "—" : fmt(t.price, 4), cls: "mut" },
+                ]} />
+            ))}
+          </Cards>
+        ) : (
         <table>
           <thead><tr>
             <th className="l">Date</th><th className="l">Account</th><th className="l">Action</th>
@@ -65,12 +90,31 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
             ))}
           </tbody>
         </table>
+        )}
       </div>
 
       <div className="card">
         <h3>Dividend history ({d.dividends.length})
           <span className="pill" style={{ marginLeft: 8 }}>{sgd(divTotalSgd)} · latest FX</span></h3>
-        {d.dividends.length === 0 ? <p className="mut">No dividends recorded.</p> : (
+        {d.dividends.length === 0 ? <p className="mut">No dividends recorded.</p> : phone ? (
+          /* Pattern B: six fields, one amount. Same identity choice as the ledger above —
+             the payment date with its kind beside it, because every row is this security. */
+          <Cards>
+            {d.dividends.map((x, i) => (
+              <RowCard key={i}
+                name={<>{x.pay_date || "—"} <span className="pill">{x.kind}</span></>}
+                hero={money(x.gross_sgd, "SGD", 2)} heroClass="pos"
+                meta={[
+                  x.account,
+                  ...(x.currency !== "SGD" ? [money(x.gross, x.currency, 2)] : []),
+                ]}
+                fields={[
+                  { k: "Qty held", v: x.units == null ? "—" : fmt(x.units, 2), cls: "mut" },
+                  { k: "Rate/unit", v: money(x.rate, x.currency, 4), cls: "mut" },
+                ]} />
+            ))}
+          </Cards>
+        ) : (
           <table>
             <thead><tr>
               <th className="l">Date</th><th className="l">Account</th><th className="l">Kind</th>

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
 import { get, fmt, sgd, money } from "../../api.js";
+import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
 const BUCKET_LABEL = { cash: "Cash", srs: "SRS", cpf: "CPF" };
 
@@ -8,6 +9,7 @@ export default function Dividends() {
   const [ann, setAnn] = useState(null);
   const [det, setDet] = useState(null);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const phone = usePhone();
   useEffect(() => {
     get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {} }));
     get("/api/dividend-details").then(setDet).catch(() => setDet({ rows: [], flagged: 0, total: 0, total_sgd: 0 }));
@@ -84,7 +86,12 @@ export default function Dividends() {
       <div className="card">
         <h3>Dividend Detail — qty held &amp; declared rate&nbsp;
           <span className="pill">SGD · latest FX</span>
-          {det && <span className="pill" style={{ marginLeft: 6 }}>{det.total} payments</span>}
+          {/* The count of what is RENDERED, not what the server holds — `det.total` ignores
+              the flagged-only filter, and under the card pattern this pill is where the
+              missing header's count went, so a title that disagrees with the cards below it
+              is the one thing it must not do. The `shownSgd` pill beside it was already
+              filter-aware; these two now say the same thing about the same list. */}
+          {det && <span className="pill" style={{ marginLeft: 6 }}>{rows.length} payments</span>}
           {det && <span className="pill" style={{ marginLeft: 6 }}>{sgd(shownSgd)}</span>}
           {det && det.flagged > 0 &&
             <span className="pill" style={{ marginLeft: 6, color: "var(--neg)" }}>{det.flagged} need manual input</span>}
@@ -93,6 +100,37 @@ export default function Dividends() {
             &nbsp;flagged only
           </label>
         </h3>
+        {phone ? (
+          /* Pattern B. Three numbers besides the hero — qty held and the two per-unit rates —
+             so this ledger takes the key/value block. The 520px scroll box above does NOT
+             come with it: a capped box inside a page that already scrolls is a second scroll
+             region, and the pattern's whole claim is one list you read straight down. */
+          <Cards>
+            {rows.map((r) => (
+              <RowCard key={r.id}
+                name={<>{r.name} {r.ticker && <span className="pill">{r.ticker}</span>}</>}
+                // No colour class on the hero: the table's Gross SGD cell is unclassed, and a
+                // hero that is green here and plain at 641px would be the pattern restating a
+                // decision it only inherited. SecurityDetail's dividend hero IS `pos`, because
+                // that table's cell is.
+                hero={money(r.gross_sgd, "SGD", 2)}
+                meta={[
+                  r.pay_date || "—",
+                  r.account,
+                  ...(r.currency !== "SGD" ? [money(r.gross, r.currency, 2)] : []),
+                  r.flags.length
+                    ? <span className="pill" style={{ color: "var(--neg)" }}>{r.flags.join("; ")}</span>
+                    : <>✓ {r.rate_source}</>,
+                ]}
+                fields={[
+                  { k: "Qty held", v: `${r.qty == null ? "—" : fmt(r.qty, 0)}${r.qty_source === "ledger" ? " (led)" : ""}` },
+                  { k: "Declared /u", v: money(r.declared_rate, r.currency, 4),
+                    cls: r.declared_rate == null ? "mut" : "pos" },
+                  { k: "Implied /u", v: money(r.implied_rate, r.currency, 4), cls: "mut" },
+                ]} />
+            ))}
+          </Cards>
+        ) : (
         <div style={{ maxHeight: 520, overflow: "auto" }}>
           <table>
             <thead><tr>
@@ -128,6 +166,7 @@ export default function Dividends() {
             </tbody>
           </table>
         </div>
+        )}
       </div>
     </>
   );
