@@ -23,7 +23,7 @@
  * Above 1024px there is no gate and therefore no entries here — `HSCROLL_GATE_APPLIES_BELOW`
  * in `viewports.js` says why those three viewports are exempt.
  *
- * LOWERED FIVE TIMES SO FAR.
+ * LOWERED SIX TIMES SO FAR.
  *
  * 1. The unconditional fixes. `.grid2`'s `auto-fit` did most of it: two 419px tracks side by
  *    side became one, so `Portfolio › Overview` went 619 → 288 at 360px, `Spending › By
@@ -81,13 +81,42 @@
  *    `Spending › Overview` is the one that reads oddly and is the most informative: it falls
  *    114 → 74, 84 → 44, 44 → 4, landing **exactly on `Portfolio › Overview`, `Options` and
  *    `By Category`**. The 40px it shed was the Top Line Items table; what it is left holding
- *    is the same `.grid2` 420px track floor the other three carry, which no ticket owns and
+ *    is the same `.grid2` 420px track floor the other three carry, which is #44's and
  *    which neither pattern can reach. Four views, one residual, now identical to the pixel —
  *    which is the strongest evidence yet that the remaining phone overflow has a single
  *    cause and is not four separate table problems.
  *
  *    `Net Worth` is untouched and still the largest phone number here. It waits for the
  *    editors' floor; neither table pattern applies to a form.
+ *
+ * 6. The editors' floor. **One view moves and no other row changes by a pixel** — `Net Worth`,
+ *    the row the entry above named as waiting, and it is the last table-shaped number in the
+ *    file. Two wrappers did all of it: Breakdown and History now absorb their own width
+ *    instead of handing it to the pane. Not a *pattern* — both table patterns assume
+ *    read-only rows and these cells hold live inputs and selects — and not a phone rule
+ *    either: it is written below 1024, which is why the drop is the whole overflow at
+ *    640, 834 and 844 as well as on the three phones.
+ *
+ *    `Classify` does not appear in this entry because it had nothing to give: it has been
+ *    zero at every gated viewport since entry 3, its two page-level tables contained for free
+ *    because each already sat in a box with a *vertical* overflow setting, which forces
+ *    `overflow-x` from `visible` to `auto` alongside it. (Its third table, `MatchTable`, was
+ *    contained for free too — by the rule modal's own `overflow: auto` — and took a wrapper
+ *    anyway, because a sheet that slides sideways is not a container that is a table.) Its
+ *    half of this ticket is vertical — the nested scroll neutralised below 640 — which this
+ *    file cannot see by construction.
+ *
+ *    WHERE NET WORTH LANDS IS THE POINT. 74 / 44 / 4 / 0 / 8 / 0 / 0 — **exactly** the row
+ *    `Portfolio › Overview`, `Options` and `By Category` already share, to the pixel, at all
+ *    seven gated viewports. Four views, one residual, and it is `.grid2`'s
+ *    `minmax(420px, 1fr)` track floor against a 362px pane. `Spending › Overview` is the
+ *    fifth on six of the seven and the exception is worth the sentence: it is **48** at 640
+ *    rather than 8, so it carries 40px of its own on top of the shared floor at that one
+ *    viewport. Every remaining non-zero number below 640 now has that single cause, and it is
+ *    **#44's** — the usual remedy, written down here since entry 4, is
+ *    `minmax(min(420px, 100%), 1fr)`. What is
+ *    left at 640/834/844 for both `Transactions` ledgers and `SecurityDetail` is the tablet
+ *    tier's, and is the only table-shaped overflow the file still holds.
  */
 export const HSCROLL_BASELINE = {
   "small-phone": {
@@ -98,7 +127,7 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Options": 74,
     "Portfolio › Transactions": 0,
     "Portfolio › SecurityDetail": 0,
-    "Net Worth": 349,
+    "Net Worth": 74,
     "Spending › Overview": 74,
     "Spending › By Category": 74,
     "Spending › Classify": 0,
@@ -113,7 +142,7 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Options": 44,
     "Portfolio › Transactions": 0,
     "Portfolio › SecurityDetail": 0,
-    "Net Worth": 319,
+    "Net Worth": 44,
     "Spending › Overview": 44,
     "Spending › By Category": 44,
     "Spending › Classify": 0,
@@ -128,7 +157,7 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Options": 4,
     "Portfolio › Transactions": 0,
     "Portfolio › SecurityDetail": 0,
-    "Net Worth": 279,
+    "Net Worth": 4,
     "Spending › Overview": 4,
     "Spending › By Category": 4,
     "Spending › Classify": 0,
@@ -143,7 +172,7 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Options": 0,
     "Portfolio › Transactions": 0,
     "Portfolio › SecurityDetail": 0,
-    "Net Worth": 70,
+    "Net Worth": 0,
     "Spending › Overview": 0,
     "Spending › By Category": 0,
     "Spending › Classify": 0,
@@ -158,7 +187,7 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Options": 8,
     "Portfolio › Transactions": 825,
     "Portfolio › SecurityDetail": 444,
-    "Net Worth": 283,
+    "Net Worth": 8,
     "Spending › Overview": 48,
     "Spending › By Category": 8,
     "Spending › Classify": 0,
@@ -173,7 +202,7 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Options": 0,
     "Portfolio › Transactions": 621,
     "Portfolio › SecurityDetail": 240,
-    "Net Worth": 79,
+    "Net Worth": 0,
     "Spending › Overview": 0,
     "Spending › By Category": 0,
     "Spending › Classify": 0,
@@ -188,7 +217,7 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Options": 0,
     "Portfolio › Transactions": 631,
     "Portfolio › SecurityDetail": 250,
-    "Net Worth": 89,
+    "Net Worth": 0,
     "Spending › Overview": 0,
     "Spending › By Category": 0,
     "Spending › Classify": 0,

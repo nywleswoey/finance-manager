@@ -31,13 +31,25 @@ import { openView } from "./support/app.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
 
-/** Every element matching `sel`, as `{ w, h }` border boxes, measured in the page. */
+/**
+ * Every element matching `sel` that actually renders, as `{ w, h }` border boxes.
+ *
+ * `display: none` is filtered out rather than measured, and the distinction is the same one
+ * this file's header draws about the refresh control: a floor applies to controls that are
+ * *there*, and an element the tier removed is not a 0x0 control failing at 24px — it is not
+ * a control at that viewport at all. Classify's ⇅ Reorder is the case that forced this,
+ * hidden below 640 because the modal it opens has no touch equivalent. Filtered by the
+ * measurement rather than by the selector so that a control which is merely *crushed* to
+ * zero still fails: `getClientRects()` is empty only when nothing is laid out.
+ */
 function boxes(page, sel) {
   return page.$$eval(sel, (els) =>
-    els.map((el) => {
-      const r = el.getBoundingClientRect();
-      return { w: r.width, h: r.height, text: (el.textContent ?? "").trim().slice(0, 30) };
-    })
+    els
+      .filter((el) => el.getClientRects().length > 0)
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return { w: r.width, h: r.height, text: (el.textContent ?? "").trim().slice(0, 30) };
+      })
   );
 }
 
