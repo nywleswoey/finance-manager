@@ -5,8 +5,11 @@ carries most of it.
 
 **The regression trigger is the suite, and the command is `make test-web`.** Ten named viewports ×
 thirteen views, run against a production build through vite's preview server with every API call
-served from committed fixtures: **1,237 assertions, ~8 minutes on an unloaded machine**, green as of
-this reconciliation. `web/TESTING.md` says what each spec claims. The table-inventory grep this file used to ask a human
+served from committed fixtures: **1,237 passed, 308 skipped, 0 failed, ~8 minutes on an unloaded
+machine**, as of this reconciliation. The skips are structural rather than disabled tests — a gate
+whose subject does not render at a viewport skips there, which is what makes "no card-per-row at 640
+and above" and "the desktop table is untouched" separate claims from their positive halves.
+`web/TESTING.md` says what each spec claims. The table-inventory grep this file used to ask a human
 to run is inside that suite now, so nothing here is a check you have to remember.
 
 **So this file holds what is left for a human, and only that.** Every gate the suite asserts has been
@@ -259,7 +262,11 @@ than in the gate list because eyeballing an unbuilt rule is not a check, and bec
 no owner is precisely how four tables went unassigned through the whole map.
 
 - **The 44px tap floor never reached the content controls, and 16px form controls never landed at
-  all.** `--tap: 44px` is declared and used by `.navitem`, `.logout-btn`, `.bar-btn`, `.tabsel` and
+  all.** **Decided in `.wayfinder/tickets/015-touch-targets-type-scale.md`, which is closed, and
+  never given a build issue** — every ticket that could have carried it was scoped to a pattern or a
+  view, and the rules are neither. **It has no issue number yet, and that is the first thing to fix
+  about it**: the entry below is the evidence a ticket needs, not the ticket.
+  `--tap: 44px` is declared and used by `.navitem`, `.logout-btn`, `.bar-btn`, `.tabsel` and
   `.tablenote > summary` — the navigation shell and the footnote disclosure, no more. The rest of
   what was decided is absent from `styles.css`: `input, select, textarea { font-size: 16px }`,
   `th, td { padding: 11px 8px }` (the 44px row pitch), and the square floor on `.link-btn`,

@@ -1,19 +1,11 @@
 # Frontend
 
 **The definition of done for anything you change under `web/src` is
-[`../RESPONSIVE.md`](../RESPONSIVE.md).** Read it before changing layout, not after.
+[`../RESPONSIVE.md`](../RESPONSIVE.md).** Read it before changing layout, not after. It holds only
+what the suite cannot assert, so a check written there is genuinely yours to run.
 
-**The regression trigger is the suite, and the command is `make test-web`** (from the repo root).
-It builds the frontend and runs ten named viewports × thirteen views against the production build,
-with every API call served from committed fixtures. A full run is ~8 minutes; one viewport is
-`cd web && npx playwright test --project=design-width`. First run on a machine also needs
-`cd web && npx playwright install chromium`.
+**The regression trigger is the suite: `make test-web`**, from the repo root, on any change under
+`web/src`. [`TESTING.md`](TESTING.md) beside this file says what it runs, what each spec claims, and
+what none of them can.
 
-`RESPONSIVE.md` holds only what the suite cannot assert: five gates that need a real iPhone and one
-observation that needs an iPad, the rest of the observations with their measured values, the open
-calls, and one section of rules that were decided and never built. Every
-gate the suite covers has been deleted from it rather than struck through — so if a check is written
-there, it is genuinely yours to run.
-
-`TESTING.md` in this directory says what each spec claims and, more usefully, what it cannot.
-`RESPONSIVE.md`'s **Traps** section is the list of things that look like tidying and are not.
+Nothing else about the suite is repeated here on purpose — this file points, it does not restate.

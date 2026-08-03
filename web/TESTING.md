@@ -2,9 +2,10 @@
 
 **The definition of done for anything you change under `web/src` is [`../RESPONSIVE.md`](../RESPONSIVE.md).**
 It is the checklist — and since the sweep reconciled it against this suite, it holds **only what
-this suite cannot assert**: five items that need a real iPhone or iPad, the observations with their
-measured values, the open calls, and one section of rules that were decided and never built. Every
-gate that moved in here was deleted from there. Read it before changing layout, not after.
+this suite cannot assert**: five gates that need a real iPhone and one observation that needs an
+iPad, the rest of the observations with their measured values, the open calls, and one section of
+rules that were decided and never built. Every gate that moved in here was deleted from there. Read
+it before changing layout, not after.
 
 **The command is `make test-web`** (from the repo root). It builds the frontend and runs the
 Playwright viewport suite against the production build through vite's preview server.
@@ -21,9 +22,9 @@ First run on a machine also needs the browser: `cd web && npx playwright install
 
 `tests/baseline.spec.js` — ten named viewports × thirteen views. Its header docstring is the
 authority on what it asserts and, more importantly, **what it can never assert**. Read that
-before treating a green run as "verified on a phone"; it is not. Five things need a real
-device and are named there — the fifth arrived with the tablet tier, which put the navigation
-shell on a height guard the 44px tap floor deliberately did not follow.
+before treating a green run as "verified on a phone"; it is not. Five gates need a real iPhone and
+one observation needs an iPad, all six named there — the fifth gate arrived with the tablet tier,
+which put the navigation shell on a height guard the 44px tap floor deliberately did not follow.
 
 **Where the shell is the phone's, "open a view" means different clicks**, and
 `tests/support/app.js` makes them: the hamburger, then the section in the drawer, then the tab in
