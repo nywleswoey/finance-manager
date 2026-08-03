@@ -55,6 +55,19 @@ export default function SpendOverview() {
               ))}
             </Cards>
           ) : (
+          /* Pattern A above the card tier, and the smallest overflow in the ticket: 443px
+             natural against a 388px card at 640 — 40px, the last table-shaped number left in
+             the ratchet at that viewport once the two ledgers were pinned. It reaches zero
+             everywhere else in the tier, which is what a `max-content` table in an `auto-fit`
+             track looks like: 478px in a 478px card at 768 and wider.
+
+             `Category` IS THE PIN, AND THE 390px REJECTION DOES NOT TRANSFER. Pattern A was
+             turned down for this table on a phone because pinning `Line item` — unbounded
+             free text, 232px measured — is 70% of a 330px pane. That is not what happens
+             here: the column that is already first is `Category`, 82px, and `Line item` sits
+             beside it inside the window at every width in the tier, so the pin costs 19% and
+             hides nothing. */
+          <div className="pinned">
           <table>
             <thead><tr><th className="l">Category</th><th className="l">Line item</th><th>Spend</th><th>%</th></tr></thead>
             <tbody>
@@ -68,6 +81,7 @@ export default function SpendOverview() {
               ))}
             </tbody>
           </table>
+          </div>
           )}
         </div>
       </div>

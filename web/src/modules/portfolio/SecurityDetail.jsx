@@ -70,6 +70,14 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
             ))}
           </Cards>
         ) : (
+        /* Pattern A above the card tier, which makes this page B-then-A rather than the
+           B, A, A the phone renders — the third table below was already pinned at every
+           width under 1024. 839px natural against a 440px pane at 640.
+
+           The pin is `Date`, and on this table it is the identity outright rather than a
+           second-best: every row is the same security, so what tells two rows apart is when
+           the trade happened — which is exactly what the card beside it leads with. */
+        <div className="pinned">
         <table>
           <thead><tr>
             <th className="l">Date</th><th className="l">Account</th><th className="l">Action</th>
@@ -90,6 +98,7 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
             ))}
           </tbody>
         </table>
+        </div>
         )}
       </div>
 
@@ -115,6 +124,16 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
             ))}
           </Cards>
         ) : (
+          /* Pattern A above the card tier, on the same `Date` identity as the ledger above
+             and for the same reason: one security, so the row is its payment date.
+
+             THE ONE TABLE IN THIS TICKET THE FIXTURES CANNOT REACH. PLTR is the row the suite
+             drills into — 73 option trades, the longest options history captured — and it has
+             no dividends at all, so this branch never mounts under test. `pinned.spec.js`
+             annotates that on every run rather than closing it with an invented row. The
+             wrapper is here because the table overflows the tier's pane by measurement
+             (~580px natural against 440 at 640), not because a gate asked for it. */
+          <div className="pinned">
           <table>
             <thead><tr>
               <th className="l">Date</th><th className="l">Account</th><th className="l">Kind</th>
@@ -137,6 +156,7 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

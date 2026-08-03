@@ -38,51 +38,12 @@ import { expect, test } from "@playwright/test";
 import { HSCROLL_GATE_APPLIES_BELOW, PHONE_TIER_BELOW, VIEWPORTS } from "./viewports.js";
 import { openView } from "./support/app.js";
 import { declarationsFor } from "./support/css.js";
+// One reader for both halves of this criterion — `support/tables.js` says why it is shared.
+import { tableFacts } from "./support/tables.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
 
 const EDITORS = ["Net Worth", "Spending › Classify"];
-
-/**
- * Every `<table>` under `.main`, with the nearest ancestor that absorbs its sideways
- * scroll — and whether that ancestor is a box holding the table and nothing else.
- *
- * "Visibly is a table" is not a claim about appearance that a test can make. What it
- * reduces to structurally is: the scrolling box wraps the table alone, so what slides under
- * your finger is the grid of numbers rather than the card, the heading and the save button
- * with it. A sheet or a card with `overflow: auto` on it satisfies "the pane does not
- * scroll" and fails this.
- */
-function tableContainment(page) {
-  return page.evaluate(() => {
-    const main = document.querySelector(".main");
-    const name = (el) => {
-      const cls = typeof el.className === "string" && el.className
-        ? "." + el.className.trim().split(/\s+/).join(".") : "";
-      return el.tagName.toLowerCase() + cls;
-    };
-    return [...main.querySelectorAll("table")].map((t) => {
-      let box = null;
-      for (let el = t.parentElement; el && el !== main; el = el.parentElement) {
-        const ox = getComputedStyle(el).overflowX;
-        if (ox === "auto" || ox === "scroll") { box = el; break; }
-      }
-      const headers = [...t.querySelectorAll("thead th")]
-        .map((th) => th.textContent.trim()).filter(Boolean);
-      return {
-        table: headers.slice(0, 2).join("/") || "(unheaded)",
-        container: box ? name(box) : null,
-        // The box holds the table and nothing else.
-        wrapsTableAlone: box ? box.children.length === 1 && box.firstElementChild === t : null,
-        // ...and does not itself push its parent wide, which is how an "absorbing" wrapper
-        // that absorbs nothing passes the first two checks and still overflows the pane.
-        fitsItsParent: box
-          ? box.getBoundingClientRect().width <= box.parentElement.clientWidth + 1
-          : null,
-      };
-    });
-  });
-}
 
 /**
  * Every element under `.main` carrying a `title=`, described.
@@ -106,7 +67,7 @@ test.describe("sideways scroll is confined to a container that is the table alon
   for (const viewName of EDITORS) {
     test(viewName, async ({ page, baseURL }) => {
       await openView(page, baseURL, viewName);
-      const tables = await tableContainment(page);
+      const tables = await tableFacts(page);
       expect(tables.length, `${viewName} rendered no table`).toBeGreaterThan(0);
 
       for (const t of tables) {

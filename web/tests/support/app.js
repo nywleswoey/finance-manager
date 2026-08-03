@@ -6,16 +6,21 @@
  * test, not a shortcut: the same clicks are what a person does, which is what makes the
  * gates measure a real render rather than a mounted component.
  *
- * BELOW 640px THE CLICKS ARE DIFFERENT ONES, because the navigation is. The rail is behind
- * a hamburger and the tab strip is a native `<select>`, so `openView` branches on the
- * viewport rather than on a flag: every caller keeps asking for "Spending › Recurring" and
- * gets there the way a person on that viewport would. This is the whole reason the phone
- * shell is the ticket that unblocks the rest — until it lands, no phone behaviour past the
- * first screen can be reached at all.
+ * WHERE THE SHELL IS THE PHONE'S, THE CLICKS ARE DIFFERENT ONES, because the navigation is.
+ * The rail is behind a hamburger and the tab strip is a native `<select>`, so `openView`
+ * branches on the viewport rather than on a flag: every caller keeps asking for
+ * "Spending › Recurring" and gets there the way a person on that viewport would. This is the
+ * whole reason the phone shell is the ticket that unblocks the rest — until it lands, no
+ * phone behaviour past the first screen can be reached at all.
+ *
+ * THAT BRANCH IS NOT "BELOW 640px" ANY MORE. The tablet tier put the shell on a height guard
+ * as well, so 844×390 gets the drawer and the picker with a 844px width — see `onPhoneShell`
+ * in `viewports.js`. Every gate that reaches a view at that viewport goes through this file,
+ * so the guard is exercised thirteen views deep rather than only where it is asserted.
  */
 import { expect } from "@playwright/test";
 import { fixtureFor } from "../fixtures/index.js";
-import { PHONE_TIER_BELOW } from "../viewports.js";
+import { onPhoneShell } from "../viewports.js";
 
 /**
  * Serve every API call from committed fixtures and cut the page off from the network.
@@ -84,8 +89,17 @@ async function settle(page, anchor) {
   await expect(anchor(page).first()).toBeVisible({ timeout: 20_000 });
 }
 
-/** True when the viewport is inside the phone tier, where navigation is the drawer. */
-export const onPhone = (page) => page.viewportSize().width < PHONE_TIER_BELOW;
+/**
+ * True when the viewport gets the phone navigation shell, where navigation is the drawer.
+ *
+ * WIDTH *OR* HEIGHT, since the tablet tier landed. A rotated phone is 844px wide and so
+ * leaves the phone tier by width, but its 390px of height is what the drawer was chosen
+ * against in the first place — so the shell follows `(max-height: 500px)` too, and this
+ * helper has to ask the same question the stylesheet does or every gate at 844×390 would go
+ * looking for a tab strip that is `display: none`. It is the navigation alone: the pin, the
+ * cards, the charts and the gutter are all still width-only.
+ */
+export const onPhone = (page) => onPhoneShell(page.viewportSize());
 
 /** The drawer's parts, named once so a rename breaks in one place rather than eleven. */
 export const menuButton = (page) => page.getByTestId("menu");

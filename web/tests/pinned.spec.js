@@ -1,16 +1,30 @@
 /**
  * Pattern A: the pinned identity column, and the scroll ownership that comes with it.
  *
- * Eight tables across seven views exist so you can compare a number DOWN the column. Below
- * 1024px they are read through a window: the identity column is pinned, the rest scrolls
- * horizontally inside a wrapper, and the header stays put while the rows go by. This file
- * is the gate on all three halves plus the traps that make them fragile.
+ * Fourteen tables across ten views are read through a window below 1024px: the identity
+ * column is pinned, the rest scrolls horizontally inside a wrapper, and the header stays put
+ * while the rows go by. This file is the gate on all three halves plus the traps that make
+ * them fragile.
  *
  * WHY THE TIER IS 1024 AND NOT 640. The pin is worth *more* as the window narrows. At 640,
  * behind the 200px rail, the desktop table shows two identity columns and not one number,
  * and because `.main` owns the scroll there, reaching a number takes the identity away with
  * it — strictly worse than the phone. So every gate here runs at seven of the ten viewports,
  * and the other three assert the inverse: that nothing changed above the tier.
+ *
+ * EIGHT OF THE FOURTEEN EXIST BECAUSE A TABLE IS READ DOWN A COLUMN. The other six are the
+ * tablet tier's one rule: any table that overflows between 640 and 1024 is pinned regardless
+ * of its phone assignment, so both `Transactions` ledgers, `SecurityDetail`'s two histories,
+ * `Spending › Overview`'s top line items and `Dividends`' detail ledger joined — all of them
+ * tables that are a card list below 640 and so not in the DOM there at all. `tablesAt` is
+ * what keeps the two populations straight; `cardsBelow` on the entry is what marks them.
+ *
+ * THE SIXTH WAS FOUND BY A GATE RATHER THAN BY THE INVENTORY, which is worth the sentence.
+ * `Dividends`' detail ledger was already inside an inline `{ maxHeight: 520, overflow:
+ * "auto" }` box, so it never appeared in the pane-overflow ratchet and read as done — the
+ * same shape of blind spot that let four tables through the whole planning effort. What
+ * caught it is `tablet.spec.js` asserting that a *contained* table is not the tier's rule;
+ * the rule is the pin.
  *
  * WHAT IS ASSERTED AS A DECLARATION RATHER THAN AS GEOMETRY, and why — the same reasoning
  * `foundations.spec.js` opens with. `overscroll-behavior` being *unset* has no geometry: the
@@ -46,6 +60,14 @@ const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName
  * Dividends is `null` because its column count is one per year and grows with time — which
  * is exactly why that table got horizontal scroll rather than anything that expires.
  *
+ * `cardsBelow` is the tablet tier showing through, and it is why this list is filtered by
+ * viewport rather than read straight. Five wrappers arrived with that tier — the pin now
+ * reaches any table that overflows between 640 and 1024, whatever its phone assignment — and
+ * every one of them sits in a branch `usePhone()` swaps for a card list below 640. So those
+ * tables are not merely unpinned on a phone, they are not in the DOM: the count of `.pinned`
+ * wrappers in a view is a function of the viewport, and `SecurityDetail`'s pinned tables even
+ * change *index*, which is the sort of thing a fixed list gets quietly wrong.
+ *
  * `unrendered` is the seam showing through, and it is written down rather than left as a
  * shorter list. Recurring's tracked monitor is behind a non-empty tracked list and the owner
  * tracks nothing, so the committed fixture is `[]` and that table does not render at all —
@@ -57,9 +79,35 @@ const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName
 const PINNED = [
   { view: "Portfolio › Holdings", tables: [{ pin: "Security", cols: 13 }] },
   { view: "Portfolio › Performance", tables: [{ pin: "market", cols: 9 }] },
-  { view: "Portfolio › Dividends", tables: [{ pin: "Bucket", cols: null }] },
+  {
+    // The crosstab, then the detail ledger — which the tablet tier reached and which had
+    // been hiding behind an inline `{ maxHeight: 520, overflow: "auto" }`: contained, so the
+    // pane ratchet read zero for this view, and unpinned, so scrolling that box sideways at
+    // 640 lost the security name along with the date.
+    view: "Portfolio › Dividends",
+    tables: [{ pin: "Bucket", cols: null }, { pin: "Date", cols: 8, cardsBelow: true }],
+  },
   { view: "Portfolio › Options", tables: [{ pin: "Underlying", cols: 8 }] },
-  { view: "Portfolio › SecurityDetail", tables: [{ pin: "Contract", cols: 6 }] },
+  {
+    // Card-per-row on a phone, so at 390 there is one wrapper here and it is the options
+    // ledger; from 640 up there are two and the options ledger is the *second*. That index
+    // shift is the whole reason `tablesAt` exists rather than a per-view count.
+    view: "Portfolio › Transactions",
+    tables: [{ pin: "Date", cols: 8, cardsBelow: true }],
+  },
+  {
+    view: "Portfolio › SecurityDetail",
+    tables: [
+      { pin: "Date", cols: 8, cardsBelow: true },
+      { pin: "Contract", cols: 6 },
+    ],
+    unrendered: [
+      "SecurityDetail.jsx's dividend history (6 cols, pin `Date`) — PLTR is the row the " +
+      "suite drills into because it has the longest options history in the fixtures, and " +
+      "it has no dividends at all, so that branch never mounts",
+    ],
+  },
+  { view: "Spending › Overview", tables: [{ pin: "Category", cols: 4, cardsBelow: true }] },
   // Levels one and two of the spending drill. Level three is not a table on a phone at all —
   // `drill.spec.js` owns that half, and the structure the two levels meet in.
   { view: "Spending › By Category", tables: [{ pin: "Category", cols: 4 }] },
@@ -71,7 +119,19 @@ const PINNED = [
       "is `[]` in the committed fixtures, so the table is never mounted",
     ],
   },
+  { view: "Spending › Transactions", tables: [{ pin: "Date", cols: 6, cardsBelow: true }] },
 ];
+
+/**
+ * The tables of one view that are actually in the DOM at one viewport, in DOM order.
+ *
+ * Width alone, not the shell's width-or-height: card-per-row follows `usePhone()`, which the
+ * tablet tier deliberately left width-only. At 844×390 the navigation is the drawer and the
+ * tables are still tables — which is the split the tier was decided on, and this line is
+ * where the suite would notice it eroding.
+ */
+const tablesAt = (view, vp) =>
+  view.tables.filter((t) => !(t.cardsBelow && vp.width < PHONE_TIER_BELOW));
 
 /** The measurements one wrapper can be asked for, taken in a single round trip. */
 const wrapperFacts = (page, index) =>
@@ -110,11 +170,13 @@ const wrapperFacts = (page, index) =>
     };
   });
 
-for (const { view, tables, unrendered } of PINNED) {
+for (const entry of PINNED) {
+  const { view, unrendered } = entry;
   test.describe(view, () => {
     test("pins its identity column and scrolls the rest, with the header and its borders intact",
       async ({ page, baseURL }, testInfo) => {
         const vp = viewportOf(testInfo.project.name);
+        const tables = tablesAt(entry, vp);
         await openView(page, baseURL, view);
 
         for (const gap of unrendered ?? []) {
@@ -181,6 +243,7 @@ for (const { view, tables, unrendered } of PINNED) {
     test("the identity stays put while the numbers scroll under it", async ({ page, baseURL }, testInfo) => {
       const vp = viewportOf(testInfo.project.name);
       test.skip(vp.width >= PIN_TIER_BELOW, "above the tier there is no pin to hold still");
+      const tables = tablesAt(entry, vp);
       await openView(page, baseURL, view);
 
       for (let i = 0; i < tables.length; i++) {
@@ -213,6 +276,7 @@ for (const { view, tables, unrendered } of PINNED) {
     test("the header stays put while the rows go by", async ({ page, baseURL }, testInfo) => {
       const vp = viewportOf(testInfo.project.name);
       test.skip(vp.width >= PIN_TIER_BELOW, "above the tier the wrapper is not a scroll box");
+      const tables = tablesAt(entry, vp);
       await openView(page, baseURL, view);
 
       for (let i = 0; i < tables.length; i++) {
@@ -250,11 +314,12 @@ test.describe("the height that makes the sticky header work", () => {
 
       // Every wrapper first, because the criterion is about all of them and the pair below
       // only proves the two ends of it.
-      for (const { view, tables } of PINNED) {
+      for (const entry of PINNED) {
+        const { view } = entry;
         await openView(page, baseURL, view);
         const heights = await page.locator(".pinned")
           .evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
-        expect(heights, `${view}: pattern-A wrappers`).toHaveLength(tables.length);
+        expect(heights, `${view}: pattern-A wrappers`).toHaveLength(tablesAt(entry, vp).length);
         for (const [i, h] of heights.entries()) {
           expect.soft(h, `${view} table ${i + 1} is taller than the cap`).toBeLessThanOrEqual(cap + 1);
         }
@@ -428,14 +493,16 @@ test.describe("Holdings' footnote", () => {
     });
 });
 
-test("numbers stay right-aligned and tabular in every pinned table", async ({ page, baseURL }) => {
+test("numbers stay right-aligned and tabular in every pinned table", async ({ page, baseURL }, testInfo) => {
+  const vp = viewportOf(testInfo.project.name);
   // Most of why the pattern won: you are reading the real table through a window rather than
   // a translation of it, so the two properties that make a column of money comparable at a
   // glance are untouched. They are asserted at every viewport including desktop, because the
   // claim is that the pattern costs them nothing anywhere.
-  for (const { view, tables } of PINNED) {
+  for (const entry of PINNED) {
+    const { view } = entry;
     await openView(page, baseURL, view);
-    for (let i = 0; i < tables.length; i++) {
+    for (let i = 0; i < tablesAt(entry, vp).length; i++) {
       const numeric = await page.locator(".pinned").nth(i).evaluate((wrap) => {
         // The first body cell with no `.l` — the app marks left-aligned columns and leaves
         // the numeric ones to the sheet's default.
