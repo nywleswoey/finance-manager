@@ -45,6 +45,39 @@ export const PHONE_TIER_BELOW = 640;
 export const PHONE_TIER_EDGE = "639.98px";
 
 /**
+ * The height at and below which the *navigation shell* is the phone's, whatever the width.
+ *
+ * The tablet tier's landscape answer, and the second place `500` is written — `styles.css`'s
+ * shell block is the other, and the two cross-reference in comments for the reason `640`
+ * does across four files: JS cannot read a custom property and this repo takes no build step
+ * to make one.
+ *
+ * IT IS A HEIGHT AND NOT AN ORIENTATION, and only the shell has it. The shell was chosen on
+ * a vertical budget — 48px of chrome against a bottom bar's 147px — so height is the axis it
+ * was arguing about; tables and charts were chosen on horizontal room and stay width-only,
+ * which is why `usePhone()` is untouched by the tier. At 844×390 the tablet tier's own chrome
+ * costs 27% of the screen, where the shell rejected its own alternative at 21%.
+ *
+ * Every phone landscape height is at most 430 and every iPad landscape height is at least
+ * 744, so 500 has ~314px of slack on both sides and `rotated-phone` is the only viewport in
+ * the suite that trips it.
+ */
+export const SHELL_HEIGHT_GUARD = 500;
+export const SHELL_GUARD_EDGE = "500px";
+
+/**
+ * True when a viewport gets the phone navigation shell — the drawer, the app bar and the tab
+ * picker — rather than the rail and the strip.
+ *
+ * Two arms, because the shell has two conditions. Everything else in the suite that asks
+ * "is this the phone tier" still asks about width alone, and that is the split the tier
+ * decided rather than an inconsistency: the pin, the cards, the charts and the gutter all
+ * follow width, and only the navigation follows height as well.
+ */
+export const onPhoneShell = (vp) =>
+  vp.width < PHONE_TIER_BELOW || vp.height <= SHELL_HEIGHT_GUARD;
+
+/**
  * The width below which the pinned-column pattern applies — the phone tier and the tablet
  * tier together, because the pin is worth *more* as the window narrows, not less.
  *

@@ -52,6 +52,21 @@ export default function Transactions() {
           ))}
         </Cards>
       ) : (
+        /* Pattern A above the card tier, and the tablet tier is the whole of why: this table
+           is 1220px natural against a 440px pane at 640, so "untouched" means Date and Acct
+           and not one number — and because `.main` owns the scroll, reaching the amount takes
+           the date away with it. Card-per-row is not the alternative here by decision: it
+           trades density for readability on a 390px measurement, and this ledger is read at
+           tablet widths with room the phone did not have.
+
+           THE PIN IS `Date`, THE COLUMN THAT IS ALREADY FIRST. No merge, no reorder, nothing
+           that reaches desktop. `contract.jsx`'s merged identity cell exists because that
+           table led with `Type` — 46px of Put / Put / Call, a column that cannot tell any two
+           rows apart however wide the screen. A date is not that: it varies per row and the
+           ledger arrives ordered by it, so scrolling right keeps you on a row you can name.
+           Residual, written down rather than fixed: two trades on the same day are told apart
+           by `Security`, which is 269px wide and one scroll-step to the right of the pin. */
+        <div className="pinned">
         <table>
           <thead><tr>
             <th className="l">Date</th><th className="l">Acct</th><th className="l">Security</th>
@@ -72,6 +87,7 @@ export default function Transactions() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

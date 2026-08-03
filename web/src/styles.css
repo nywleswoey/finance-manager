@@ -177,7 +177,10 @@ tr.subrow > td { background: var(--panel2); }
 
 /* The two wrappers that predate this pattern, keeping the behaviour they shipped with so the
    pin is additive rather than a replacement — and so both still hold above 1024, where
-   `.pinned` does nothing. Dividends' crosstab is `.hscroll`; the trades ledger is both.
+   `.pinned` does nothing. Dividends' crosstab is `.hscroll`; the trades ledger is both, and
+   so is Dividends' detail ledger, which took `.selfscroll` when the tablet tier reached it —
+   its inline `maxHeight: 520` was the exact trap the paragraph below describes, and 480 is
+   what it costs to have one self-scrolling box in the app rather than two constants.
 
    Classes rather than the inline styles they replace, and declared ABOVE the pattern rather
    than below it, for one reason each. Inline first: `.selfscroll`'s 480px would otherwise
@@ -188,7 +191,15 @@ tr.subrow > td { background: var(--panel2); }
    unguarded, so `pinned.spec.js` measures every wrapper against the cap rather than trusting
    it. That gate caught this exact rule in the wrong place. */
 .hscroll { overflow-x: auto; }
-.selfscroll { overflow: auto; max-height: 480px; }
+/* `--selfscroll` IS HOW THE SECOND CALL SITE KEEPS ITS OWN NUMBER WITHOUT KEEPING AN INLINE
+   `max-height`. The two boxes were written at different heights — Options' trades ledger at
+   480, Dividends' detail ledger at 520 — and "desktop is unchanged" is a locked claim, so
+   unifying them on one literal was not free. A custom property in an inline style is not a
+   `max-height` declaration, so it does not join the specificity fight the paragraph above
+   describes: `.pinned`'s `60svh` still wins below 1024, and above it each box is the height
+   it always was. The fallback is the value with no override, so the token has one consumer
+   rather than two. */
+.selfscroll { overflow: auto; max-height: var(--selfscroll, 480px); }
 
 /* THE EDITORS' CONTAINMENT — the two desktop-optimised views' answer to "sideways scroll
    is confined to a container that visibly is a table". Not a pattern: `A` and `B` both
@@ -227,6 +238,23 @@ tr.subrow > td { background: var(--panel2); }
    because `.main` owns the scroll there, reaching a number takes the identity away with it —
    strictly worse than the phone. Above 1024 none of this applies and the desktop table is
    what it always was; pattern A at desktop widths is a separate, open question.
+
+   THE PATTERN NOW REACHES TABLES CARD-PER-ROW OWNS ON A PHONE, and that is the tablet tier's
+   one rule rather than a second decision here: any table that overflows between 640 and 1024
+   is pinned, *regardless of its phone assignment*. Six wrappers arrived that way — both
+   `Transactions` ledgers, `SecurityDetail`'s two histories, `Spending › Overview`'s top line
+   items and `Dividends`' detail ledger — and every one of them renders only above the card
+   tier, because `usePhone()` swaps the whole table out below it. So these selectors gain
+   nothing on a phone and the two patterns never meet on one screen; the tier is the hook
+   below 640 and this media query from 640 to 1024. Card-per-row does not follow: it trades
+   density for readability on a 390px measurement, and a ledger that fits outright at 900
+   would lose rows and buy nothing.
+
+   THE SIXTH IS THE ONE WORTH KNOWING ABOUT, because it says what "overflows" means here.
+   `Dividends`' detail ledger already sat in a `max-height` scroll box, so it never overflowed
+   `.main` and never showed up in the pane ratchet — it read as done. What it overflowed was
+   *its own box*, which is the failure this pattern exists for rather than a smaller version
+   of it. A table can be contained and still lose its identity column the moment you swipe.
 
    THE TRAP. Under `border-collapse: collapse` the borders belong to the *table*'s border
    grid, and a cell that has left the flow leaves them behind — a sticky header and a pinned
@@ -444,6 +472,86 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
 .logout-btn { font-size: 12px; font-weight: 600; color: var(--mut); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
 .logout-btn:hover { color: var(--txt); border-color: var(--mut); }
 
+/* ─── the navigation shell ──────────────────────────────────────────────────────────────
+   The drawer, the app bar, its toast strip and the scrim — everything that makes the
+   navigation a phone's rather than a desktop's. The shell becomes a column and the two bars
+   become ordinary flex children of it; the rail leaves the flow entirely, so `.main` is the
+   only thing left to take the width and stays the scroll owner it already was.
+
+   TWO CONDITIONS, NOT ONE, AND THE SECOND IS A HEIGHT. This is the tablet tier's landscape
+   answer, and it splits on how each decision was originally made rather than on taste. The
+   shell was chosen on a *vertical* budget — 48px of chrome against a bottom section bar's
+   147px, 181px with the home bar, 21% of an 844px screen — so height is the axis it was
+   always arguing about. Tables and charts were chosen on *horizontal* room, so they stay
+   width-only, which is also what leaves `cards.jsx`'s `matchMedia` hook untouched: the tier
+   costs the JS side nothing at all.
+
+   FORCED BY MEASUREMENT. At 844×390 the tablet tier's own chrome — the 200px rail plus a
+   `.tabs` strip that wraps to two lines — costs 107px, 27% of the screen, where the shell
+   rejected its own always-visible variant at 21%. The rail is not the whole cause: without
+   it the strip still wraps, 788px of content against ~850px needed. The phone shell costs
+   48px, 12%, on the same screen.
+
+   `500px` RATIFIED. Every phone landscape height is at most 430 (430×932 rotated is the
+   tallest phone in the suite); every iPad landscape height is at least 744. There is no
+   device between them, so the number has ~314px of slack on both sides. It does also fire
+   on a desktop window dragged below 500px tall, and that is accepted: a 1440×450 window has
+   the same vertical problem a rotated phone does, and the alternative — `(orientation:
+   landscape)` — fires on every desktop monitor ever made.
+
+   `640` IS NOT WRITTEN A FIFTH TIME HERE. This block shares the phone tier's own edge as
+   the first arm of its condition; `inventory.spec.js` counts *files*, and this is the same
+   file. What is new is `500`, which is written twice — here and in `tests/viewports.js` —
+   for the reason `640` is written four times: no build step makes a shared constant. */
+@media (max-width: 639.98px), (max-height: 500px) {
+  .app { flex-direction: column; }
+  .bar { display: flex; }
+  .toast { display: block; }
+  /* The desktop strip goes whole, `.tabs-right` with it: the six tabs become the app bar's
+     `<select>` and Refresh becomes its icon. Nothing in that group needs a phone home.
+
+     `.main > .tabs`, not `.tabs`. `ByCategory.jsx:132` borrows this class for its own view
+     header — an `<h3>` and a year `<select>` — for the flex row and nothing else, with the
+     border overridden inline. It is nested inside the view, so the child combinator is what
+     separates the navigation strip from a heading that happens to reuse its layout. */
+  .main > .tabs { display: none; }
+
+  /* TODAY'S RAIL, RESTYLED — not a second navigation built beside it. There is exactly one
+     `.side` in the app, so "the drawer holds every item the sidebar holds" is a structural
+     fact rather than two lists somebody has to keep in step; brand, sections, the dimmed
+     Settings entry and the signed-in footer all arrive unchanged.
+
+     `absolute`, never `fixed` — see `.app`'s comment. `visibility` alongside the transform
+     because a panel that is only translated off-canvas is still in the focus order, which
+     is how a keyboard or switch user lands on items they cannot see; it animates because
+     `visibility` transitions discretely, flipping at the far end of the slide out.
+
+     The `env()` guard here stays INSIDE the block, unlike the app bar's. The bar renders
+     wherever it is turned on, so its guard has to outlive the condition; the drawer does not
+     exist outside this rule at all — `position: absolute` and the transform are in it too —
+     so hoisting one declaration out of a rule the element depends on would leave a guard for
+     a rail. The whole rule travelled here together, guard included, which is what makes the
+     drawer's landscape inset live at 844×390 rather than in a block that width exits.
+
+     THE RAIL ABOVE THIS BLOCK STILL HAS NO GUARD, and that is now a smaller residual than it
+     was: the only landscape screens that keep the rail are tablets, which have no side
+     notch. */
+  .side { position: absolute; top: 0; bottom: 0; left: 0; z-index: 6; width: 246px;
+    display: flex; flex-direction: column; overflow-y: auto;
+    transform: translateX(-100%); visibility: hidden;
+    transition: transform .2s, visibility .2s;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    padding-left: max(0px, env(safe-area-inset-left)); }
+  .side.on { transform: none; visibility: visible; }
+  .scrim { display: block; position: absolute; inset: 0; z-index: 5;
+    background: rgba(0, 0, 0, .55); opacity: 0; visibility: hidden; pointer-events: none;
+    transition: opacity .18s, visibility .18s; }
+  .scrim.on { opacity: 1; visibility: visible; pointer-events: auto; }
+  /* `.side` is a flex column only here, so this is where `margin-top: auto` can sink the
+     footer to the bottom of the drawer. Wherever the rail is a rail it keeps its 24px. */
+  .side-user { margin-top: auto; }
+}
+
 /* ─── the phone tier ────────────────────────────────────────────────────────────────────
    One block, literal values, no token layer. Most of what a phone changes cannot be
    expressed as a token override at all — the shell flips to a column, charts lose chrome,
@@ -503,57 +611,26 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
      being one. The flex centres the label in the box `min-height` grew — `.nw-del`'s shape. */
   .navitem { min-height: var(--tap); min-width: var(--tap); display: flex; align-items: center; }
 
-  /* ── the navigation shell ──
-     The shell becomes a column and the two bars become ordinary flex children of it. The
-     rail leaves the flow entirely — it is the drawer now — so `.main` is the only thing
-     left to take the width, and it stays the scroll owner it already was. */
-  .app { flex-direction: column; }
-  .bar { display: flex; }
-  .toast { display: block; }
-  /* The desktop strip goes whole, `.tabs-right` with it: the six tabs become the app bar's
-     `<select>` and Refresh becomes its icon. Nothing in that group needs a phone home.
-
-     `.main > .tabs`, not `.tabs`. `ByCategory.jsx:132` borrows this class for its own view
-     header — an `<h3>` and a year `<select>` — for the flex row and nothing else, with the
-     border overridden inline. It is nested inside the view, so the child combinator is what
-     separates the navigation strip from a heading that happens to reuse its layout. */
-  .main > .tabs { display: none; }
-
-  /* TODAY'S RAIL, RESTYLED — not a second navigation built beside it. There is exactly one
-     `.side` in the app, so "the drawer holds every item the sidebar holds" is a structural
-     fact rather than two lists somebody has to keep in step; brand, sections, the dimmed
-     Settings entry and the signed-in footer all arrive unchanged.
-
-     `absolute`, never `fixed` — see `.app`'s comment. `visibility` alongside the transform
-     because a panel that is only translated off-canvas is still in the focus order, which
-     is how a keyboard or switch user lands on items they cannot see; it animates because
-     `visibility` transitions discretely, flipping at the far end of the slide out.
-
-     The `env()` guard here stays INSIDE the block, unlike the app bar's. The bar renders
-     wherever it is turned on, so its guard has to outlive the width condition; the drawer
-     does not exist outside this rule at all — `position: absolute` and the transform are
-     in it too — so hoisting one declaration out of a rule the element depends on would
-     leave a guard for a rail. When the tablet tier brings this shell to 844×390 on its
-     height guard, the whole rule travels and the guard travels with it. */
-  .side { position: absolute; top: 0; bottom: 0; left: 0; z-index: 6; width: 246px;
-    display: flex; flex-direction: column; overflow-y: auto;
-    transform: translateX(-100%); visibility: hidden;
-    transition: transform .2s, visibility .2s;
-    padding-bottom: max(16px, env(safe-area-inset-bottom));
-    padding-left: max(0px, env(safe-area-inset-left)); }
-  .side.on { transform: none; visibility: visible; }
-  .scrim { display: block; position: absolute; inset: 0; z-index: 5;
-    background: rgba(0, 0, 0, .55); opacity: 0; visibility: hidden; pointer-events: none;
-    transition: opacity .18s, visibility .18s; }
-  .scrim.on { opacity: 1; visibility: visible; pointer-events: auto; }
-  /* `.side` is a flex column only here, so this is where `margin-top: auto` can sink the
-     footer to the bottom of the drawer. Above the tier it keeps its 24px. */
-  .side-user { margin-top: auto; }
   /* Square, like every other call site of `--tap` — a floor one selector writes differently
-     stops being a floor. Free here: the label is already ~76px wide. */
+     stops being a floor. Free here: the label is already ~76px wide.
+
+     A TAP FLOOR, NOT A SHELL RULE, which is why it stayed behind when the drawer left this
+     block for the height guard below. The tier that brings the drawer to 844×390 lists 44px
+     targets under "explicitly not done" — so the drawer a rotated phone opens holds ~38px
+     rows, and that is the boundary being enforced rather than an oversight. It costs a
+     landscape phone comfort on a control it opens by choice; extending the floor on height
+     would hand it to any short desktop window too, which is the tier's own "desktop is
+     unchanged" line. */
   .logout-btn { min-height: var(--tap); min-width: var(--tap); }
 
-  /* PATTERN A'S HEIGHT IS NOT HERE, and its absence is the decision. `60svh` reads like a
+  /* THE NAVIGATION SHELL IS NOT HERE ANY MORE — see the `(max-height: 500px)` block above.
+     It moved out whole rather than being duplicated: the shell was chosen on a *vertical*
+     budget (48px of chrome against a bottom bar's 147px), so height is the condition it was
+     always arguing about, and a rotated phone at 844×390 is exactly the screen that argument
+     was about. What stayed here is what was chosen on horizontal room: the 14px gutter, the
+     tap floors, the footnote disclosure and the editors' floor.
+
+     PATTERN A'S HEIGHT IS NOT HERE EITHER, and its absence is the decision. `60svh` reads like a
      phone rule and 020 wrote it as one, but the height is what makes the sticky header work
      at all — and a phone-only version would leave the header broken from 640 to 1024 and,
      because a rotated phone is 844px wide, in landscape too. It travels with the pattern

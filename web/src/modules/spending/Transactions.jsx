@@ -63,6 +63,18 @@ export default function SpendTransactions() {
           ))}
         </Cards>
       ) : (
+        /* Pattern A above the card tier — the same reasoning as `portfolio/Transactions`, on
+           a table that is 1196px natural against a 440px pane at 640.
+
+           THE PIN IS `Date`, AND HERE THAT IS A CHOICE RATHER THAN THE DEFAULT. `Merchant` is
+           the identity this row's card leads with, and pinning it was rejected on one
+           measurement: the column is 561px, because the merchant string is unbounded free
+           text out of the bank statements and the longest real one is what sets the width. A
+           561px pin in a 440px window is a pinned column that covers the whole screen and
+           never lets a number through — the pattern inverted. Bounding it would mean a second
+           rule in a tier whose whole claim is that it holds exactly one, so the pin takes the
+           column that was already first and `Merchant` stays one scroll-step to its right. */
+        <div className="pinned">
         <table>
           <thead><tr>
             <th className="l">Date</th><th className="l">Source</th><th className="l">Merchant</th>
@@ -81,6 +93,7 @@ export default function SpendTransactions() {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   );

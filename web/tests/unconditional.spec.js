@@ -26,7 +26,7 @@
  * `HSCROLL_GATE_APPLIES_BELOW`.
  */
 import { expect, test } from "@playwright/test";
-import { PHONE_TIER_BELOW, VIEWPORTS } from "./viewports.js";
+import { VIEWPORTS, onPhoneShell } from "./viewports.js";
 import { openView } from "./support/app.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
@@ -54,13 +54,17 @@ function boxes(page, sel) {
 }
 
 test.describe("the refresh control keeps its natural size and its label on one line", () => {
-  // Scoped to 640 and up when the phone shell landed, because below it this control no
-  // longer exists to measure: the labelled button and the whole `.tabs-right` group it sits
-  // in are `display: none`, and Refresh is an icon in the app bar instead. The claim itself
-  // did not weaken — a labelled button that fits on one line is still unconditional
-  // *wherever the label renders*. `shell.spec.js` owns the icon's own gates below 640.
-  test.skip(({ viewport }) => viewport.width < PHONE_TIER_BELOW,
-    "below 640 the labelled control is replaced by the app bar's icon");
+  // Scoped to where the strip renders when the phone shell landed, because elsewhere this
+  // control does not exist to measure: the labelled button and the whole `.tabs-right` group
+  // it sits in are `display: none`, and Refresh is an icon in the app bar instead. The claim
+  // itself did not weaken — a labelled button that fits on one line is still unconditional
+  // *wherever the label renders*. `shell.spec.js` owns the icon's own gates.
+  //
+  // `onPhoneShell`, NOT `< 640`. The tablet tier put the shell on a height guard as well, so
+  // 844×390 is 844px wide and has no labelled Refresh either — a width test alone looks for
+  // a button that is `display: none` and reads its box as `null`.
+  test.skip(({ viewport }) => onPhoneShell(viewport),
+    "where the shell is the phone's, the labelled control is replaced by the app bar's icon");
 
   test("Portfolio › Overview", async ({ page, baseURL }) => {
     await openView(page, baseURL, "Portfolio › Overview");

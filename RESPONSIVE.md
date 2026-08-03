@@ -37,6 +37,15 @@ drift apart.
 where the spec knowingly ships a compromise. 10 exists because one desktop width cannot tell "the tab
 strip fits" from "the tab strip fits at exactly 1280".
 
+**The tablet tier is covered at three of these — 640, 834 and 844×390 — and that is two short of the
+four widths its own criteria name.** 768 and 1000 are not in the list and are not being added: the
+suite is ten projects deep already and both sit inside a band whose two ends are measured. They were
+measured by hand at the tier's landing instead, on the production build against the committed
+fixtures, and every view read **0** at both. 640 is the worst case in the tier by construction — the
+narrowest pane behind the widest rail — so a width that passes at 640 and at 834 passing between them
+is an interpolation rather than an assumption. Recorded here because an untested width should be
+written down rather than implied by a green run.
+
 **Chrome device emulation is sufficient for 1–10 except four items**, which need a real iPhone:
 
 - iOS focus-zoom on form controls — emulation does not reproduce Safari's zoom at all
@@ -48,24 +57,29 @@ strip fits" from "the tab strip fits at exactly 1280".
 
 Applied to all 12 tab views, SecurityDetail, and sign-in. Must pass.
 
-1. **`.main` never scrolls horizontally.** Sideways scroll is confined to a container that is visibly a
-   table. *(Not "no horizontal page scroll" — `.main { overflow: auto }` absorbs everything before it
-   reaches the page, so that criterion can never fail.)* **Five of the thirteen views now hold it
-   outright at every gated viewport** — Holdings, Performance, Dividends and Recurring, because the
-   pinned column took their scroll off the pane, plus Classify, which was already there. **Card-per-row
-   adds three more *below 640* — both Transactions ledgers and SecurityDetail — but not at 640 and above,
-   because that pattern is phone-only by decision.** The ratchet in `hscroll-baseline.js` records what is
-   left and why: those three at 640/834/844 wait for the tablet tier's pin, and **four views now share
-   one residual to the pixel** — `.grid2`'s 420px track floor against a 362px pane, which **Net Worth
-   joined exactly when the editors' floor landed**. `Spending › Overview` is the fifth at six of the
-   seven gated viewports and carries 40px of its own at 640. Every remaining non-zero number below 640
-   now has that one cause, and it is **#44**'s — filed once this was the only thing left holding those
-   five rows.
+1. ~~**`.main` never scrolls horizontally.** Sideways scroll is confined to a container that is visibly a
+   table.~~ **Landed for every table in the app**, which is the tablet tier's one rule finishing a job
+   five tickets started. *(Not "no horizontal page scroll" — `.main { overflow: auto }` absorbs
+   everything before it reaches the page, so that criterion can never fail.)* Eight of the thirteen
+   views hold it outright at every gated viewport, and **two whole viewports — `ipad-portrait` and
+   `rotated-phone` — are now zero across all thirteen**. `tablet.spec.js` asserts the structural half
+   directly: every table that overflows **its own container** has a wrapper, the wrapper holds the table
+   and nothing else, it fits its parent, and the identity column inside it is `sticky`. That last clause
+   is what found the sixth table — `Dividends`' detail ledger had been inside an inline 520px scroll box
+   since before this work, so it was *contained* and never appeared in the ratchet at all.
+   **What is left is not a table.** Five views — `Portfolio › Overview`, `Options`, `Net Worth` and both
+   `Spending` views — share one residual to the pixel at all seven gated viewports: `.grid2`'s
+   `minmax(420px, 1fr)` track floor against a narrower pane. It is **#44**'s, and it is the only thing
+   standing between `hscroll-baseline.js` and being deleted for a `<= 0` gate.
 2. No overlapping or clipped content.
-3. Every control reachable and tappable — **44px square** in fully-responsive views. *(The 24px
-   editor floor has landed and is asserted by `unconditional.spec.js`; it is not checked here any
-   more. Recurring's three `.link-btn`s take their width from the 44px rule rather than twice, so
-   they are still this line's business.)*
+3. Every control reachable and tappable — **44px square** in fully-responsive views, **below 640 only**.
+   *(The 24px editor floor has landed and is asserted by `unconditional.spec.js`; it is not checked here
+   any more. Recurring's three `.link-btn`s take their width from the 44px rule rather than twice, so
+   they are still this line's business.)* **The tablet tier keeps 33px rows by decision and
+   `tablet.spec.js` asserts it** — above WCAG 2.5.8's 24px floor, below comfort; `@media (pointer:
+   coarse)` was rejected for firing on touchscreen laptops. The residual worth an eye on a real device
+   is the one this creates: at **844×390 the drawer is open on a phone with ~38px rows**, because the
+   shell travels on the height guard and the tap floor deliberately does not.
 4. ~~Navigation reachable from every screen: drawer opens, scrim tap closes it, the tab `<select>`
    works.~~ **Landed** — `shell.spec.js` asserts the drawer, the scrim, the picker and the app bar,
    and the suite now *drives* every phone viewport through them, so all thirteen views being
@@ -126,16 +140,16 @@ criteria **instead of** the universal list — reading comfort, row density and 
 | Portfolio › Overview | tiles reflow to 2 columns; ~~**donuts gone below 640**~~ **landed** — `charts.spec.js` asserts both of this view's donuts absent below the tier, present at 640 and above, and the `.barrow` list filling the card at every width. *(`.grid2` collapsing to one column and the S2 inline rows landed earlier — both asserted.)* |
 | Portfolio › Holdings | ~~pattern **A**: Security pinned, h-scroll inside the wrapper, sticky `th` stays put as the wrapper scrolls; `tr:active` feedback and a persistent `›` in the pinned cell; footnote collapsed into `<details>`~~ **landed** — all of it asserted by `pinned.spec.js`, at seven viewports rather than at 390 alone. What is left here is eyes-only: row tap opens SecurityDetail, and whether the pin reads as an identity |
 | Portfolio › Performance | ~~pattern **A**, grouping key pinned (its `th` is `{by}` — lowercase, changes with the `<select>`)~~ **landed** — the `{by}` header is asserted by name, which is what says the *grouping key* got pinned rather than a label. Row count is bounded by the grouping dimension (max 8), so the whole table is on screen and `max-height: 60svh` never bites — asserted as the short half of the cap's one-rule claim |
-| Portfolio › Dividends | ~~crosstab pattern **A** (grows in columns, so h-scroll never expires)~~ **landed**; ~~payment ledger pattern **B** cards~~ **landed** — asserted by `cards.spec.js`, including that the 520px scroll box the table sits in does *not* come with the cards: a capped box inside a page that already scrolls is a second scroll region. Its `payments` pill now counts what is **rendered** rather than what the server holds, because under cards that pill is where the missing header's count went and the flagged-only filter moves it. The two `title=` explanations on `Declared /u` / `Implied /u` go with the `<thead>` — no loss on touch, where a tooltip never existed, and the kv keys carry the labels. ~~`LabelList` dropped below 640~~ **landed** — asserted by count against the fixture's eleven years, and the chart itself stays: dropping chrome is not dropping the chart, and the shape of the series is the one thing the crosstab above does not carry. Its `height="100%"`-inside-a-220px-wrapper is `height={220}` on the container now — never live, fixed while here |
-| Portfolio › Options | ~~contract ledger **A** — pinned Underlying; it already has an `overflow-x: auto` wrapper at `:70`, so this keeps behaviour rather than replacing it~~ **landed** — the wrapper's own 480px cap moved to `.selfscroll` so the phone tier's `60svh` can win over it, which an inline `max-height` could not. By-ticker and by-type unchanged (273/261px, they genuinely fit); ~~monthly P/L halved to 6 bars with a reserved band so negative labels clear the ticks~~ **landed** — 6 bars below the tier against 24 above it, labels raised 9px → 11px (the app's stated minimum, and this chart's labels are the only place its numbers appear anywhere), and the band **only when the window actually holds a loss** — it shrinks the scale's range from the bottom, so on a positive-only window it lifts the baseline clear of the axis and leaves every bar floating above a rule it should stand on. Both branches are exercised: the phone's six-month window is all positive in the fixture and asserts the *absence* of a band, and the 24-month window above the tier carries three losses, so the criterion itself — no value label overlapping an axis tick — is measured against real negative labels rather than asserted vacuously. Its bare `<ResponsiveContainer>`s carry explicit heights now. *(The merged `Contract` cell landed earlier — asserted.)* |
-| Portfolio › Transactions | ~~pattern **B** cards~~ **landed** — eight fields, but still one amount, so the trade is the row and the cash it moved is the hero; Qty and Price take the key/value block. Asserted at every viewport, including that the table is what renders at 640 and above |
-| Portfolio › SecurityDetail | ~~txn history **B**~~ **landed**; ~~dividend history **B**~~ **landed but never rendered** — PLTR is the row the suite drills into because it has 73 option trades, and it has no dividends at all, so `cards.spec.js` annotates that gap on every run rather than closing it with an invented row; ~~options history **A**, pinning the merged two-line `Contract` cell~~ **landed**. Three tables, two patterns, deliberately. `← Holdings` is a ≥44px target and is the **only** way back — there is no router. *(The pane no longer scrolls sideways here below 640: the 914px txn history is cards now. At 640 and above it still does, and that is the tablet tier's.)* |
+| Portfolio › Dividends | ~~crosstab pattern **A** (grows in columns, so h-scroll never expires)~~ **landed**; ~~payment ledger pattern **B** cards~~ **landed** — asserted by `cards.spec.js`, including that the 520px scroll box the table sits in does *not* come with the cards: a capped box inside a page that already scrolls is a second scroll region. ~~That table at 640 and above~~ **landed with the tablet tier, and it is the one this work nearly missed**: it was already inside an inline `{ maxHeight: 520, overflow: "auto" }` box, so it never overflowed the pane and never appeared in the ratchet — *contained* read as done. Contained is not pinned: at 640 you scrolled that box sideways and lost the security name with the date. It takes **A** on `Date`, and the inline `max-height` had to go, because an inline declaration beats any stylesheet and 520px would have overridden the pattern's `60svh` outright. The *number* stays, as `--selfscroll: 520px` — a custom property is not a `max-height`, so it loses to the pattern below 1024 and still gives this box the height it has always had above it. **Desktop is unchanged to the pixel**, which is what ruled out simply taking `.selfscroll`'s 480. Its `payments` pill now counts what is **rendered** rather than what the server holds, because under cards that pill is where the missing header's count went and the flagged-only filter moves it. The two `title=` explanations on `Declared /u` / `Implied /u` go with the `<thead>` — no loss on touch, where a tooltip never existed, and the kv keys carry the labels. ~~`LabelList` dropped below 640~~ **landed** — asserted by count against the fixture's eleven years, and the chart itself stays: dropping chrome is not dropping the chart, and the shape of the series is the one thing the crosstab above does not carry. Its `height="100%"`-inside-a-220px-wrapper is `height={220}` on the container now — never live, fixed while here |
+| Portfolio › Options | ~~contract ledger **A** — pinned Underlying; it already has an `overflow-x: auto` wrapper at `:70`, so this keeps behaviour rather than replacing it~~ **landed** — the wrapper's own 480px cap moved to `.selfscroll` so the pattern's `60svh` can win over it, which an inline `max-height` could not. **`.selfscroll` has two call sites now** — Dividends' detail ledger joined it with the tablet tier, for the same reason, and its 480px became `var(--selfscroll, 480px)` so the second site keeps its own 520 without keeping an inline declaration the pattern cannot beat. By-ticker and by-type unchanged (273/261px, they genuinely fit); ~~monthly P/L halved to 6 bars with a reserved band so negative labels clear the ticks~~ **landed** — 6 bars below the tier against 24 above it, labels raised 9px → 11px (the app's stated minimum, and this chart's labels are the only place its numbers appear anywhere), and the band **only when the window actually holds a loss** — it shrinks the scale's range from the bottom, so on a positive-only window it lifts the baseline clear of the axis and leaves every bar floating above a rule it should stand on. Both branches are exercised: the phone's six-month window is all positive in the fixture and asserts the *absence* of a band, and the 24-month window above the tier carries three losses, so the criterion itself — no value label overlapping an axis tick — is measured against real negative labels rather than asserted vacuously. Its bare `<ResponsiveContainer>`s carry explicit heights now. *(The merged `Contract` cell landed earlier — asserted.)* |
+| Portfolio › Transactions | ~~pattern **B** cards~~ **landed** — eight fields, but still one amount, so the trade is the row and the cash it moved is the hero; Qty and Price take the key/value block. Asserted at every viewport, including that the table is what renders at 640 and above. ~~And that table waits for the tablet tier~~ **landed** — it takes **A** from 640 to 1024, pinning `Date`, the column that was already first. 1220px against a 440px pane at 640, so "untouched" was Date and Acct and not one number. Residual written down rather than fixed: two trades on the same day are told apart by `Security`, 269px and one scroll-step to the right — a merged identity cell on `contract.jsx`'s precedent was rejected because a date, unlike `Put / Put / Call`, varies per row and the ledger arrives ordered by it |
+| Portfolio › SecurityDetail | ~~txn history **B**~~ **landed**; ~~dividend history **B**~~ **landed but never rendered** — PLTR is the row the suite drills into because it has 73 option trades, and it has no dividends at all, so `cards.spec.js` annotates that gap on every run rather than closing it with an invented row; ~~options history **A**, pinning the merged two-line `Contract` cell~~ **landed**. Three tables, two patterns below 640 — and **B, A, A above it**, since the tablet tier gives both histories the pin as well: `Date` is the identity on this page outright rather than second-best, because every row is the same security. The dividend history's wrapper is the one thing in the tier no fixture can reach, and `pinned.spec.js` annotates it. `← Holdings` is a ≥44px target and is the **only** way back — there is no router. *(The pane no longer scrolls sideways here at any gated viewport: cards below 640, the pin from 640 to 1024.)* |
 | Net Worth | editor floor; ~~line chart has a **DOM key, not `<Legend>`**~~ **landed** — and it was the only chart in the app with no legend of any kind at any width, so `name="Net Worth"` / `name="Excl. Housing"` reached the tooltip and nowhere else. Two anonymous coloured lines, on desktop as much as on touch. Asserted by the key's text *and* by its chips matching the lines' own strokes — a key with an independent palette goes wrong silently. ~~Breakdown and History wrapped in `overflow-x: auto`~~ **landed** — as `.contained`, **below 1024 rather than unconditionally**, because an `overflow-x: auto` wrapper is the sticky scrollport for the `th` inside it and a scrollport sized to its content never scrolls: unconditional, it would kill a header that sticks to `.main` today at every width, and "unchanged at 1024 and above" has to include what a wrapper kills silently. Below the tier the header stops sticking and that is accepted — row density is below this floor by decision. It is the whole of Net Worth's phone overflow: 349 → 74 at 360, and the view lands **exactly** on the `.grid2` residual `Portfolio › Overview`, `Options` and `By Category` already share, to the pixel, at all seven gated viewports. ~~The row grid is unchanged~~ **asserted** rather than merely left alone — one rule, no media query, its 120px and 70px tracks measured, because the instinct is to shrink the column that at this gutter is 124px and not the ~200px it looks like; ~~`100svh`~~ *(the shell's, landed and asserted)* |
-| Spending › Overview | ~~donut gone below 640, list is the chart~~ **landed and asserted**; the stacked bar chart's `<Legend>` is a `.chartkey` now, which is **the only chart change the suite cannot see** — `/api/spending/trends` was captured as a 500 from the live database, so `trend.series.length > 0` is false and that chart never mounts. `inventory.spec.js` gates it from the source instead, and `charts.spec.js` annotates the gap on every run; ~~Top Line Items pattern **B** (471px — A's pin would be the 232px Line item, 70% of the viewport)~~ **landed**, and it is the row that proves the map's claim about the leftover overflow: this view fell 114 → 74 / 84 → 44 / 44 → 4 and landed **exactly** on the three other `.grid2` views. Both halves of the `.grid2` end up as ranked lists |
+| Spending › Overview | ~~donut gone below 640, list is the chart~~ **landed and asserted**; the stacked bar chart's `<Legend>` is a `.chartkey` now, which is **the only chart change the suite cannot see** — `/api/spending/trends` was captured as a 500 from the live database, so `trend.series.length > 0` is false and that chart never mounts. `inventory.spec.js` gates it from the source instead, and `charts.spec.js` annotates the gap on every run; ~~Top Line Items pattern **B** (471px — A's pin would be the 232px Line item, 70% of the viewport)~~ **landed**, and it is the row that proves the map's claim about the leftover overflow: this view fell 114 → 74 / 84 → 44 / 44 → 4 and landed **exactly** on the three other `.grid2` views. Both halves of the `.grid2` end up as ranked lists. **The table above 640 takes A, pinning `Category`** — the 390px rejection does not transfer, because the column that is already first is 82px rather than the 232px `Line item`, and `Line item` sits beside it inside the window at every width in the tier. It shed the last 40px this view carried alone at 640 |
 | Spending › By Category | ~~donut gone below 640~~ **landed and asserted**; ~~Categories pattern **A** with the name column pinned — it keeps its own `▸`/`▾` and does **not** get the persistent `›`~~ **landed** — `pinned.spec.js` carries this view like the other six and `drill.spec.js` asserts the carve-out by name, plus the `.rowtap` feedback it takes *instead* of the chevron; ~~drilled transactions render as **B** cards **below the table**, headed by subcategory + count + aggregate~~ **landed**, and they leave the `.grid2` entirely rather than merely the table — inside that card they would be 386px wide in a 362px pane, clipped by the 420px track floor #44 owns rather than by the nesting this ticket fixes. **The only grouped B table in the spec, so `CardGroup` in `cards.jsx` has exactly one call site** — it landed here because until now there was nothing grouped to head. What is left is eyes-only: whether three levels of drill read as one structure once the third leaves the grid |
 | Spending › Classify | editor floor; ~~`.fillpane` neutralised so the page scrolls as one~~ **landed** — `.fillpane` and `.grow` become blocks below 640 and `.scroll` is **deliberately untouched**: it keeps the `overflow: auto` that still confines the table sideways, and with no flex parent left to cap it, it sizes to its own content, so the scrollport that remains never scrolls. `overflow-x: auto; overflow-y: visible` is not available — the first forces the second. This deletes the app's deepest nesting; what survives is the rules list's inline `maxHeight: 232`, which CSS cannot reach and which is accepted (see the trap). ~~**⇅ Reorder hidden on phone**~~ **landed** — `display: none`, not `disabled`, because a control that is present and does nothing is what criterion 4 forbids; the reorder modal is therefore unreachable below the tier **by design**. ~~`RuleModal` uses `svh`~~ **landed**, and `inventory.spec.js`'s `100vh` gate widened to the *unit* on the way past — `6vh`/`84vh` were the whole remaining population. Its two control rows wrap and `CatSelect` takes `max-width: 100%`, without which a 19-option select plus its button pushed the 358px sheet into a sideways scroll and took Cancel with it; `MatchTable` is `.contained` for the same reason. *(The `textarea`'s styling has landed — asserted.)* |
 | Spending › Recurring | ~~monitor **A** *(open call)* and candidates **A**~~ **landed** — both pinned; the open call is untouched by that, since it asks whether this view wants a different information design rather than whether the reflow works. **Only the candidates table is asserted**: the owner tracks nothing, so `/api/spending/recurring` is `[]` in the committed fixtures and the monitor never mounts. `pinned.spec.js` annotates that gap on every run rather than closing it with an invented row — so the monitor's pin is an eyes-only check here. Three `.link-btn`s at 44px square; **two nested scroll regions** — the feel check |
-| Spending › Transactions | ~~pattern **B** cards~~ **landed** — the six-field shape the whole pattern was measured on: merchant, one amount, and four muted fields on a second line, with no key/value block at all. Its excluded rows keep their dimming, but **no fixture holds one** — every captured transaction is counted spend and `include_excluded=true` was never captured, so both renderings are equally unexercised and `cards.spec.js` asserts the two agree on 0.55 rather than observing either |
+| Spending › Transactions | ~~pattern **B** cards~~ **landed** — the six-field shape the whole pattern was measured on: merchant, one amount, and four muted fields on a second line, with no key/value block at all. Its excluded rows keep their dimming, but **no fixture holds one** — every captured transaction is counted spend and `include_excluded=true` was never captured, so both renderings are equally unexercised and `cards.spec.js` asserts the two agree on 0.55 rather than observing either. ~~The table at 640 and above waits for the tablet tier~~ **landed** — **A**, pinning `Date`, and that pin is a *choice* rather than the default: `Merchant` is what the card leads with and its column measures **561px**, unbounded free text out of the statements, which in a 440px window is a pinned column that covers the screen and never lets a number through. Bounding it would be a second rule in a tier that holds exactly one |
 | Sign-in | ~~`100vh` → `100svh` at `auth.jsx:50` and `:125`~~ **landed** — asserted, along with the box filling the screen, optical centring and the absence of any phone rule. GSI button **carved out** of the 44px floor; no `env()` padding anywhere. What is left here is eyes-only: whether the carved-out button looks right beside a 44px world |
 
 ## Observations
@@ -204,9 +218,10 @@ Things the build session must be told, not left to discover.
   Overview`, `Options`, `By Category` **and now `Net Worth`** all carry the *same* residual —
   74 / 44 / 4 / 0 / 8 / 0 / 0 by viewport, one cause, no table involved. `Net Worth` joined the moment
   the editors' floor took its two tables off the pane, which is the strongest evidence the file can
-  offer that the remaining phone overflow is one defect rather than four. `Spending › Overview` is on
-  the same number at six of the seven and **48 rather than 8 at 640**, so it carries 40px of its own
-  there on top of the shared floor. The pinned column
+  offer that the remaining phone overflow is one defect rather than four. **`Spending › Overview` is
+  the fifth and is now on that number at all seven** — the 40px it used to carry alone at 640 was the
+  Top Line Items table, and the tablet tier's pin took it. So the ratchet is five views, one cause,
+  and nothing else at all. The pinned column
   cannot reach it and neither can card-per-row or the editors' floor. The usual remedy is
   `minmax(min(420px, 100%), 1fr)`. **Written down here because a residual with no owner is precisely
   how the four unassigned tables happened.**
@@ -221,6 +236,12 @@ Things the build session must be told, not left to discover.
   and it checks the two JS queries **character for character** against the tier edge. Counting is not
   agreeing — `(max-width: 640px)` in `cards.jsx` keeps the count at four, keeps every comment true to
   the word, and moves the whole card-per-row tier into the 1px dead zone the `.98` exists to prevent.
+- **`500` is the tier's own second number, written twice**: `styles.css`'s shell block and
+  `tests/viewports.js`'s `SHELL_GUARD_EDGE` / `SHELL_HEIGHT_GUARD`. It is gated differently from the
+  other two and deliberately so — `tablet.spec.js` **enumerates every media condition in the shipped
+  sheet** and names each by the number that identifies it, which is stronger than a count of source
+  sites: it reads what the build actually emitted, so `500` appearing on the wrong block, or a fourth
+  block appearing at all, fails there. It also fails if the shell's two arms stop being one condition.
 - **The two `matchMedia` readers differ on purpose, and the difference is not an inconsistency.**
   `Holdings.jsx` reads the query **once, at mount**, because it only seeds a disclosure's initial state
   and the user then owns it — a footnote that reopens itself on rotate is worse than a stale one.
@@ -252,7 +273,12 @@ Things the build session must be told, not left to discover.
   identifiable once it has. Any new grouped pattern-A table needs the same class.
 - **An inline `max-height` beats the pattern's `60svh`.** `Options`' trades wrapper shipped its cap
   inline; it is `.selfscroll` now precisely so the cascade can reach it. Nothing else may put a height
-  on a `.pinned` wrapper inline.
+  on a `.pinned` wrapper inline. **`Dividends`' detail ledger is the second instance and shows the way
+  out when the two boxes disagree on the number**: `.selfscroll` reads `var(--selfscroll, 480px)` and
+  that site sets `--selfscroll: 520px` inline. A custom property is not a `max-height` declaration, so
+  it never enters the specificity fight — the pattern still wins below 1024, and desktop keeps the
+  height it always had. Reach for that, not for a second class and not for a shared literal that
+  quietly moves one of the two.
 - **`overflow-x: auto` forces `overflow-y` from `visible` to `auto`.** So a `.pinned` wrapper is the
   sticky scrollport for its own header *whether or not anyone gave it a height* — and a scrollport that
   sizes to content never scrolls, so the header rides the page away instead of sticking. Measured at
@@ -289,9 +315,27 @@ Things the build session must be told, not left to discover.
   and landscape is the only orientation where the notch is at the side. Same for `.main`'s
   `max(28px, env(...))`. The *value* follows the width; the *guard* does not. The **drawer's**
   guard is the exception and stays inside the block, because `position: absolute` and the transform
-  are in that rule too — the whole rule travels together when the tablet tier's height guard brings
-  it to 844×390. **`.side` as a *rail* — 640 and up — has no guard at all**, so in landscape above
-  the tier the notch cuts into the sidebar. That belongs to the tablet tier, not the shell.
+  are in that rule too — and the whole rule **has now travelled** onto the shell's
+  `(max-height: 500px)` arm, guard included, which is what puts it on the one screen it was written
+  for. **`.side` as a *rail* still has no guard at all**, and that residual is smaller than it looks:
+  the only landscape screens that keep the rail are tablets, which have no side notch.
+- **The shell follows *height*; everything else follows *width*.** This is the tablet tier's landscape
+  answer and the easiest thing in the stylesheet to get wrong, because the two blocks now sit next to
+  each other and their conditions differ by one clause. The split is not taste — each half follows the
+  axis its own decision was argued on. The shell was chosen on a vertical budget (48px against a bottom
+  bar's 147px), so it takes `(max-height: 500px)`; the pin, the cards, the charts, the gutter and the
+  44px floor were all chosen on horizontal room and stay width-only, which is also why `usePhone()` is
+  untouched by the tier and why `640` is still a literal in exactly four files. Two consequences to
+  keep straight: at **844×390 the navigation is a phone's and the content is not**, and the height arm
+  fires on a desktop window under 500px tall, which is accepted — that window has the same vertical
+  problem a rotated phone does. Adding a rule to the shell block that belongs to the phone hands it to
+  that window too; `tablet.spec.js` asserts the tap floor did not make that move.
+- **A table can be *contained* and still not pinned, and the ratchet cannot tell.** `Dividends`' detail
+  ledger sat in an inline `{ maxHeight: 520, overflow: "auto" }` box, so it never overflowed `.main`
+  and read as done through five tickets — while at 640 you scrolled it sideways and lost the identity
+  column exactly as the untouched tables did. Two lessons, both now gates: the pane-overflow number is
+  evidence about the *pane*, not about a table, and a scroll box that predates the pattern has to be a
+  **class** before the pattern can reach it, because an inline `max-height` beats any stylesheet.
 - **The app bar is `box-sizing: content-box`** against the app-wide `border-box`, so the top inset adds
   to its 48px instead of eating it. 48px is the number the whole drawer-versus-bottom-bar trade was
   decided on; under `border-box` a 47px inset would crush the bar to a line.

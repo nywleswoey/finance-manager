@@ -23,7 +23,7 @@
  * Above 1024px there is no gate and therefore no entries here — `HSCROLL_GATE_APPLIES_BELOW`
  * in `viewports.js` says why those three viewports are exempt.
  *
- * LOWERED SIX TIMES SO FAR.
+ * LOWERED SEVEN TIMES SO FAR.
  *
  * 1. The unconditional fixes. `.grid2`'s `auto-fit` did most of it: two 419px tracks side by
  *    side became one, so `Portfolio › Overview` went 619 → 288 at 360px, `Spending › By
@@ -117,6 +117,31 @@
  *    `minmax(min(420px, 100%), 1fr)`. What is
  *    left at 640/834/844 for both `Transactions` ledgers and `SecurityDetail` is the tablet
  *    tier's, and is the only table-shaped overflow the file still holds.
+ *
+ * 7. The tablet tier. **Every table-shaped number left in this file goes to zero, and two
+ *    whole viewports go to zero with them.** The tier holds one rule — the pin extends to any
+ *    table that overflows between 640 and 1024, whatever its phone assignment — so the three
+ *    rows the entry above named as waiting are gone: both `Transactions` ledgers from 825 and
+ *    801 at 640, `SecurityDetail` from 444, all at 640, 834 and 844 alike. `Spending ›
+ *    Overview` sheds the 40px it carried alone at 640 and joins the shared residual, so the
+ *    five `.grid2` views are now identical to the pixel at every gated viewport rather than
+ *    at six of seven.
+ *
+ *    THE TWO ROWS THAT WENT TO ZERO OUTRIGHT ARE THE CLEAREST READING OF THE TIER. `ipad-
+ *    portrait` is the pin doing the whole job on its own: 834px is above every `.grid2`
+ *    collapse, so nothing was left there but tables. `rotated-phone` is the pin *and* the
+ *    height guard together — the shell's `(max-height: 500px)` arm hands 844×390 the drawer,
+ *    which takes the 200px rail out of the flow, and the pin absorbs what is left. Neither
+ *    number could have reached zero without the other: at 844×390 the ledgers still wanted
+ *    1196px against a 788px pane once the rail had gone.
+ *
+ *    WHAT IS LEFT IS ONE CAUSE AT SEVEN VIEWPORTS AND FIVE VIEWS: 74 / 44 / 4 / 0 / 8 / 0 / 0
+ *    on `Portfolio › Overview`, `Options`, `Net Worth`, `Spending › Overview` and `By
+ *    Category`, which is `.grid2`'s `minmax(420px, 1fr)` track floor against a pane narrower
+ *    than 420. It is **#44's**, the remedy has been written here since entry 4
+ *    (`minmax(min(420px, 100%), 1fr)`), and this file now holds nothing else. When it lands,
+ *    every number here is zero and the file can be deleted for the `<= 0` gate it was always
+ *    standing in for.
  */
 export const HSCROLL_BASELINE = {
   "small-phone": {
@@ -185,43 +210,45 @@ export const HSCROLL_BASELINE = {
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 8,
-    "Portfolio › Transactions": 825,
-    "Portfolio › SecurityDetail": 444,
+    "Portfolio › Transactions": 0,
+    "Portfolio › SecurityDetail": 0,
     "Net Worth": 8,
-    "Spending › Overview": 48,
+    "Spending › Overview": 8,
     "Spending › By Category": 8,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
-    "Spending › Transactions": 801,
+    "Spending › Transactions": 0,
   },
+  // Zero, every view. The pin and the shell's height guard together — see entry 7.
   "rotated-phone": {
     "Portfolio › Overview": 0,
     "Portfolio › Holdings": 0,
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 0,
-    "Portfolio › Transactions": 621,
-    "Portfolio › SecurityDetail": 240,
+    "Portfolio › Transactions": 0,
+    "Portfolio › SecurityDetail": 0,
     "Net Worth": 0,
     "Spending › Overview": 0,
     "Spending › By Category": 0,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
-    "Spending › Transactions": 597,
+    "Spending › Transactions": 0,
   },
+  // Zero, every view. Above every `.grid2` collapse, so the pin was the whole job here.
   "ipad-portrait": {
     "Portfolio › Overview": 0,
     "Portfolio › Holdings": 0,
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
     "Portfolio › Options": 0,
-    "Portfolio › Transactions": 631,
-    "Portfolio › SecurityDetail": 250,
+    "Portfolio › Transactions": 0,
+    "Portfolio › SecurityDetail": 0,
     "Net Worth": 0,
     "Spending › Overview": 0,
     "Spending › By Category": 0,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
-    "Spending › Transactions": 607,
+    "Spending › Transactions": 0,
   },
 };

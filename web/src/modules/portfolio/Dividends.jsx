@@ -142,7 +142,25 @@ export default function Dividends() {
             ))}
           </Cards>
         ) : (
-        <div style={{ maxHeight: 520, overflow: "auto" }}>
+        /* Pattern A above the card tier — the sixth table the tablet tier's one rule reaches,
+           and the one that was hiding. Its inline `{ maxHeight: 520, overflow: "auto" }` box
+           already stopped the width reaching `.main`, so the pane-overflow ratchet has read
+           zero for this view since the phone gutter landed. Contained is not pinned: at 640
+           you scrolled that box sideways and lost the security name along with the date.
+
+           IT ALSO EXPLAINS WHY THE TABLE OVERFLOWED AT ALL WITHOUT EVER OVERFLOWING THE PANE.
+           The tier's rule is "any table that overflows", and this one overflows *its own box*
+           — which is the failure the pin exists for, not a smaller version of it: you swipe
+           the box sideways to reach `Gross SGD` and the date and the security name go with it.
+
+           THE INLINE `max-height` HAD TO GO, WHICH IS THE TRAP `.selfscroll` WAS EXTRACTED FOR.
+           An inline declaration beats any stylesheet, so a 520px box would have overridden the
+           pattern's `60svh` outright — 520 against 234 at 844×390 — and the sticky header the
+           cap exists to make work would have gone with it. The NUMBER stays, as `--selfscroll`:
+           a custom property is not a `max-height`, so it loses to the pattern below 1024 and
+           still gives this box the 520px it has always had above it. Desktop is unchanged to
+           the pixel, which is the claim that ruled out simply taking `.selfscroll`'s 480. */
+        <div className="pinned selfscroll" style={{ "--selfscroll": "520px" }}>
           <table>
             <thead><tr>
               <th className="l">Date</th><th className="l">Security</th><th className="l">Acct</th>

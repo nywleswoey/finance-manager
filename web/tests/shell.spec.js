@@ -17,13 +17,24 @@
  *
  * THE LANDSCAPE CRITERION, PRECISELY. A rotated phone is 844px wide and therefore *exits*
  * the `max-width: 639.98px` block entirely, which is why the app bar's inset guard is
- * written unconditionally rather than inside it. The height guard that will make the shell
- * itself appear at 844×390 belongs to the tablet tier, not here; what this ticket owes is
- * that the guard is already in place wherever the bar renders. Both halves are asserted
- * below: the declaration is unconditional, and it is *not* in the phone block.
+ * written unconditionally rather than inside it. Both halves are asserted below: the
+ * declaration is unconditional, and it is *not* in the phone block.
+ *
+ * THE HEIGHT GUARD HAS LANDED, and it changed what this file covers rather than adding a
+ * section to it. `(max-height: 500px)` is the shell's second condition, so 844×390 now gets
+ * the drawer, the picker and the app bar — which means every gate in the first group runs
+ * there too and the guard is exercised eleven tests deep. What it did *not* bring is the tap
+ * floors: 44px targets are on the tier's "explicitly not done" list, so those stay behind
+ * `max-width` and the drawer at 844×390 holds ~38px rows. That split is asserted twice —
+ * once as geometry inside the drawer, once as a fact about which block each rule sits in.
  */
 import { expect, test } from "@playwright/test";
-import { PHONE_TIER_BELOW, PHONE_TIER_EDGE } from "./viewports.js";
+import {
+  PHONE_TIER_BELOW,
+  PHONE_TIER_EDGE,
+  SHELL_GUARD_EDGE,
+  onPhoneShell,
+} from "./viewports.js";
 import {
   VIEWS,
   drawer,
@@ -54,12 +65,18 @@ const boxOf = (locator) => locator.evaluate((el) => {
 
 // ─── the phone tier ─────────────────────────────────────────────────────────────────────
 
-test.describe("below 640px the navigation is a drawer and a picker", () => {
+test.describe("where the shell is the phone's, the navigation is a drawer and a picker", () => {
   // The `viewport` option fixture is the project's own size, which is what makes this read
-  // as "this group is the phone tier" rather than as a lookup into a table of names.
+  // as "this group is the shell's tier" rather than as a lookup into a table of names.
+  //
+  // WIDTH *OR* HEIGHT since the tablet tier landed, and that is the point of the group name
+  // changing: every gate below now runs at 844×390 as well, so the height guard is not
+  // asserted once in a dedicated test but exercised by the whole file. The three tests that
+  // still say "below 640" inside themselves are the tap floors, which the tier keeps
+  // width-only on purpose.
   test.skip(
-    ({ viewport }) => viewport.width >= PHONE_TIER_BELOW,
-    "the phone tier only — above 640 the rail and the tab strip are the navigation"
+    ({ viewport }) => !onPhoneShell(viewport),
+    "the shell's tier only — elsewhere the rail and the tab strip are the navigation"
   );
 
   test("the app bar replaces the rail and the strip", async ({ page, baseURL }) => {
@@ -117,7 +134,7 @@ test.describe("below 640px the navigation is a drawer and a picker", () => {
     });
 
   test("the drawer is the rail itself, holding every item it holds today",
-    async ({ page, baseURL }) => {
+    async ({ page, baseURL, viewport }) => {
       await openView(page, baseURL, "Portfolio › Overview");
       await menuButton(page).click();
 
@@ -150,11 +167,19 @@ test.describe("below 640px the navigation is a drawer and a picker", () => {
         })
       );
       expect(targets.length).toBeGreaterThan(0);
+
+      // THE FLOOR IS WIDTH-ONLY, AND THIS IS WHERE THAT DECISION IS VISIBLE. The drawer
+      // reaches 844×390 on the tablet tier's height guard, but 44px targets are on that
+      // tier's "explicitly not done" list — so at that one viewport the drawer holds the
+      // ~38px rows the rail has always had. Asserted as a *floor of its own* rather than
+      // skipped, because "the tap rule stopped applying" and "the drawer stopped rendering
+      // its items" look identical from a skip: 24px is WCAG 2.5.8, which holds everywhere.
+      const floor = viewport.width < PHONE_TIER_BELOW ? 44 : 24;
       for (const t of targets) {
         // Square, not tall: `--tap` was decided as a square floor, and `min(w, h)` is what
         // stops one selector writing it as height-only.
         expect.soft(Math.min(t.w, t.h), `"${t.text}" is ${Math.round(t.w)}x${Math.round(t.h)}`)
-          .toBeGreaterThanOrEqual(44);
+          .toBeGreaterThanOrEqual(floor);
       }
     });
 
@@ -339,8 +364,11 @@ test.describe("below 640px the navigation is a drawer and a picker", () => {
 
 // ─── above the tier ─────────────────────────────────────────────────────────────────────
 
-test.describe("at 640px and above the navigation is untouched", () => {
-  test.skip(({ viewport }) => viewport.width < PHONE_TIER_BELOW, "the tablet tier and up");
+test.describe("where the rail survives, the navigation is untouched", () => {
+  // The inverse of the group above, and it has to be written as the inverse rather than as
+  // "≥ 640": 844×390 is 844px wide and gets the drawer, so a width test alone would go
+  // looking for a 200px rail that is off-canvas and fail on the tier working correctly.
+  test.skip(({ viewport }) => onPhoneShell(viewport), "the tablet tier and up, in portrait");
 
   test("the rail is a rail, the strip is a strip, and the shell's new parts do not render",
     async ({ page, baseURL }) => {
@@ -393,9 +421,14 @@ test("the app bar's safe-area guard is unconditional, not inside the phone block
       .toBe("content-box");
 
     const phone = rules.filter((r) => r.media?.includes(PHONE_TIER_EDGE));
-    expect(phone, "`.bar` has more than a display flip in the phone block").toHaveLength(1);
-    expect(Object.keys(phone[0].decls), "the phone block should only turn the bar on")
+    expect(phone, "`.bar` has more than a display flip in the shell block").toHaveLength(1);
+    expect(Object.keys(phone[0].decls), "the shell block should only turn the bar on")
       .toEqual(["display"]);
+    // ...and it is the *shell* block, not the phone block. The bar is what a rotated phone
+    // navigates by, so a `display: flex` behind width alone would leave 844×390 with a
+    // hidden bar, no rail-replacement and no way to change tab at all.
+    expect(phone[0].media, "the app bar is turned on by width alone — 844×390 gets no bar")
+      .toContain(SHELL_GUARD_EDGE);
   });
 
 test("the content pane's landscape guard is unconditional too", async ({ page, baseURL }) => {

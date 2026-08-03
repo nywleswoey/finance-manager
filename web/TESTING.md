@@ -22,17 +22,25 @@ authority on what it asserts and, more importantly, **what it can never assert**
 before treating a green run as "verified on a phone"; it is not. Four things need a real
 iPhone and are named there.
 
-**Below 640px, "open a view" means different clicks**, and `tests/support/app.js` makes them:
-the hamburger, then the section in the drawer, then the tab in the `<select>`. Every spec keeps
-asking for `"Spending › Recurring"` and gets there the way a person on that viewport would. So
-the phone half of the whole suite depends on the navigation shell — which is why that ticket
-landed before the tables and the charts.
+**Where the shell is the phone's, "open a view" means different clicks**, and
+`tests/support/app.js` makes them: the hamburger, then the section in the drawer, then the tab in
+the `<select>`. Every spec keeps asking for `"Spending › Recurring"` and gets there the way a
+person on that viewport would. So the phone half of the whole suite depends on the navigation
+shell — which is why that ticket landed before the tables and the charts.
+
+**That is not "below 640" any more.** The tablet tier put the shell on a *height* guard as well —
+`(max-height: 500px)` — so 844×390 gets the drawer and the picker at 844px wide. `onPhoneShell` in
+`tests/viewports.js` is the one place that question is answered, and only the *navigation* asks
+it: the pin, the cards, the charts and the content gutter are all still width-only, which is the
+split the tier was decided on. A spec that skips on `viewport.width < 640` when it means "where
+the strip renders" will go looking for a control that is `display: none`.
 
 `tests/unconditional.spec.js` — the gates that hold at *every* width, checked at every width their
 subject exists at, and only on the views that carry them: `.grid2`'s collapse, the wrapping tab
 strip, the editors' 24px floor, the rule textarea's styling, the S2 list rows, the merged options
-identity cell, and the labelled refresh control — that last one at 640 and up, because below it
-the label does not render at all. Each one moved **out of** `RESPONSIVE.md` when it moved in here.
+identity cell, and the labelled refresh control — that last one wherever the tab strip renders,
+because elsewhere the label does not exist to measure. Each one moved **out of** `RESPONSIVE.md`
+when it moved in here.
 
 `tests/foundations.spec.js` — the mechanism every phone rule sits in: the shell's `100svh`, the
 `viewport-fit=cover` opt-in, the `max(<literal>, env(...))` content gutter inside the one
@@ -44,13 +52,31 @@ answers the session endpoint 401.
 
 `tests/shell.spec.js` — the phone navigation shell: the drawer and its scrim, the native tab
 picker at 16px, the icon-only refresh with its toast strip *displacing* content rather than
-covering it and then leaving on its own, the `100svh` column, and — at 640 and above — that
-none of it renders. It shares
-`foundations.spec.js`'s CSSOM reader (`tests/support/css.js`) for the two criteria that are
-about a notch and therefore have no geometric form in Chromium.
+covering it and then leaving on its own, the `100svh` column, and — wherever the rail survives —
+that none of it renders. Since the height guard landed, its first group **runs at 844×390 too**,
+so the guard is exercised eleven tests deep rather than asserted once; what did *not* travel with
+the shell is the 44px tap floor, and that split is asserted both as geometry inside the drawer and
+as a fact about which media block each rule sits in. It shares `foundations.spec.js`'s CSSOM
+reader (`tests/support/css.js`) for the two criteria that are about a notch and therefore have no
+geometric form in Chromium.
 
-`tests/pinned.spec.js` — pattern A: eight tables across seven views that pin an identity column and
-scroll the rest sideways below **1024px**, not 640. It is the one spec whose tier is the pin tier,
+`tests/tablet.spec.js` — the tablet tier, 640–1024. The shortest spec with the strongest claim:
+the tier holds **exactly one rule**, so most of this file asserts that things did *not* happen —
+no card-per-row at 640 and above, no enlarged tap targets, no resized inputs, and no media block
+of the tier's own in the shipped sheet (a `min-width` condition appearing at all is the second
+design the brief forbids). What it does assert positively is the rule itself, as a sweep over the
+eleven fully-responsive views: any table that overflows **its own container** gets a wrapper, the
+wrapper holds the table and nothing else, it fits its parent, and — the part a scroll box alone
+does not give you — the identity column inside it is `sticky`. That last gate is what found the
+sixth table: `Dividends`' detail ledger had been inside an inline 520px scroll box since long
+before this work, so it never appeared in the pane ratchet and read as done.
+
+`tests/pinned.spec.js` — pattern A: fourteen tables across ten views that pin an identity column and
+scroll the rest sideways below **1024px**, not 640. Eight of them are tables you read *down* a
+column; the other six arrived with the tablet tier, which extends the pin to anything that
+overflows in it regardless of that table's phone assignment — and every one of those six is a card
+list below 640, so the wrapper count in a view is a function of the viewport and `SecurityDetail`'s
+pinned tables change *index* across the tier boundary. It is the one spec whose tier is the pin tier,
 because the pin is worth more as the window narrows: the same gates run at seven viewports and the
 other three assert the inverse — that the desktop table is untouched. It also carries the two gates
 that have no geometry. **The column count of every pinned table is asserted**, because "no table
@@ -137,11 +163,13 @@ tickets. Three prototypes live in `web/prototypes/`.
 
 ## Two things to know before you touch the suite
 
-**`tests/hscroll-baseline.js` is a list of defects, not a specification.** The main pane
-overflows horizontally at every viewport below 1024px today — that is the problem the
-responsive work exists to fix. The suite ratchets against the measured numbers so it can run
-green now and still catch a regression. Lower them as the work lands; never raise one to make
-a test pass.
+**`tests/hscroll-baseline.js` is a list of defects, not a specification.** The suite ratchets
+against the measured numbers so it can run green now and still catch a regression. Lower them as
+the work lands; never raise one to make a test pass. **It is nearly done**: seven lowerings in,
+two of the seven gated viewports are zero across all thirteen views and every number left is the
+same one cause — `.grid2`'s `minmax(420px, 1fr)` track floor against a narrower pane, which is
+#44's. Nothing table-shaped is left in it, and `tablet.spec.js` asserts that half separately,
+because the ratchet would go green on a build that swapped one table's overflow for another's.
 
 **No screenshots, ever.** Geometry and structure only. Visual-regression diffing is out of
 scope by decision, and a test asserts that no `toHaveScreenshot` creeps in.
