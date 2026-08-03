@@ -40,9 +40,13 @@
  *
  * 3. **Sign-in's Google button.** Not reachable here at all — sign-in is not one of the
  *    thirteen views, and `mockApi`'s seam aborts Google's script by design, so the button
- *    never exists in this suite. It is carved out of the floor in the stylesheet too, and #34
- *    measured it off-suite at 177.39 × 40px: under 44, so the carve-out is load-bearing rather
- *    than moot. `RESPONSIVE.md`'s Observations holds the number.
+ *    never exists in this suite. **There is no carve-out for it in the stylesheet, and it does
+ *    not need one**: GIS injects a `div[role="button"]`, and `auth.jsx` carries no `<button>`,
+ *    `<input>` or `<select>` of its own, so nothing in the floor's selector list reaches that
+ *    screen. It is unaffected rather than exempted, and the distinction is worth writing down
+ *    because a future sign-in control *would* take the floor without anyone deciding it should.
+ *    #34 measured the button off-suite at 177.39 × 40px — under 44, which is why the number is
+ *    recorded rather than shrugged at. `RESPONSIVE.md`'s Observations holds it.
  *
  * WHAT THIS CANNOT CHECK. Whether 44px is *comfortable* — that is item 4 on the real-device
  * list and it stays there. Geometry is all this file claims.
@@ -71,12 +75,19 @@ const EDITORS = new Set(["Net Worth", "Spending › Classify"]);
 /**
  * Everything that answers a tap, as a selector list.
  *
- * The interactive elements plus the two row classes that *are* controls — `tr.rowlink` opens
- * SecurityDetail and `tr.rowtap` drills a category, and neither is a `<button>`, so a sweep
- * of form controls alone would walk straight past the largest tap targets in the app. 015
- * refused a carve-out for full-bleed rows on purpose: exempting them means every table needs
- * a class declaring whether it is tappable, so the row pitch is what fixes these rather than
- * a rule of their own.
+ * The interactive elements plus the three row classes that *are* controls — `tr.rowlink` opens
+ * SecurityDetail, `tr.rowtap` drills a category, `tr.grouprow` collapses a Holdings group —
+ * and none of them is a `<button>`, so a sweep of form controls alone would walk straight past
+ * the largest tap targets in the app. 015 refused a carve-out for full-bleed rows on purpose:
+ * exempting them means every table needs a class declaring whether it is tappable, so the row
+ * pitch is what fixes these rather than a rule of their own.
+ *
+ * A TAPPABLE ROW IS THE ONE THING THIS SWEEP STILL HAS TO BE TOLD ABOUT, and that is a
+ * property of React rather than a shortcut: an `onClick` prop leaves no `onclick` attribute in
+ * the DOM, so there is nothing to query for. `tr.grouprow` was found by reading `Holdings.jsx`
+ * after the first version of this file shipped without it — it passes at 44px today, so the
+ * cost of the omission was an ungated pass rather than a missed failure, which is exactly the
+ * shape of the bug this whole file exists for. A new tappable row class needs adding here.
  *
  * `input` is here whole and split later — a checkbox is a control, it is just not measured
  * where it is drawn. `summary` is the footnote disclosure. `a` catches SecurityDetail's back
@@ -92,6 +103,7 @@ const CONTROL = [
   "a",
   "tr.rowlink",
   "tr.rowtap",
+  "tr.grouprow",
 ].map((s) => `.main ${s}`).join(", ");
 
 /**
@@ -249,7 +261,9 @@ test.describe("the two editors keep the 24px floor and do not get the phone one"
       const exempt = buttons.filter((c) => c.h < TAP);
       expect(
         exempt.length,
-        `${name} has no button under ${TAP}px — the phone floor has leaked into an editor`
+        `every button in ${name} is now ${TAP}px or taller. Either the phone floor has leaked ` +
+          `into an editor — check the \`:not(.editor *)\` clauses — or these buttons grew for ` +
+          `some other reason and this band needs a different subject to measure`
       ).toBeGreaterThan(0);
     });
   }

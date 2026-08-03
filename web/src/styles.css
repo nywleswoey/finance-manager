@@ -679,7 +679,11 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
      015 forecast ~45px -> ~88px and was right about the direction only — the cell already
      carried more than the two buttons, so the floor cost 18px rather than 43.
 
-     `:not(.editor *)` IS THE TWO-POPULATION SPLIT, WRITTEN ONCE. `.link-btn` is one class in
+     `:not(.editor *)` IS THE TWO-POPULATION SPLIT, AND IT IS ON EVERY MEMBER OF THE LIST —
+     including `a.backlink` and `.taplabel`, neither of which appears in an editor today. A
+     floor that is exempt-by-ancestor for four selectors and unconditional for two is not
+     exempt-by-ancestor; the next `.taplabel` to land inside NetWorth would take the phone
+     floor with nobody deciding it should. `.link-btn` is one class in
      views with different obligations — seven instances in `Classify`, three in `Recurring` —
      and 44px square inside Classify's rules table is not a padding tweak but the editor
      redesign the map ruled out (three of them sit side by side in one cell). `.editor` marks
@@ -702,8 +706,8 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
   select:not(.editor *),
   textarea:not(.editor *),
   input:not([type="checkbox"]):not(.editor *),
-  a.backlink,
-  .taplabel {
+  a.backlink:not(.editor *),
+  .taplabel:not(.editor *) {
     min-height: var(--tap);
     min-width: var(--tap);
   }

@@ -86,7 +86,10 @@ at 24px by decision and the exemption is **asserted as a band** rather than skip
 if their floor disappears and if the phone one leaks in; a checkbox is measured on the `<label>` that
 wraps it, because clicking a label toggles the box and a 44px checkbox is not what a square floor
 means; and sign-in's Google button is unreachable here at all — the seam aborts Google's script — and
-was measured off-suite at 40px, which is why the carve-out is load-bearing. It is width-scoped, so
+has **no carve-out in the stylesheet because it needs none**: it is a `div[role="button"]` Google
+injects, and sign-in carries no form control of its own, so no selector in the floor reaches that
+screen. It was measured off-suite at 40px, which is why the number is written down rather than
+shrugged at. It is width-scoped, so
 844×390 gets the drawer and **no tap floor**, which is the same boundary `tablet.spec.js` asserts
 from above.
 

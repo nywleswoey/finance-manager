@@ -168,7 +168,7 @@ person still looks at, and "—" means the suite has all of it.
 | Spending › Classify | editor floor · `.fillpane`/`.grow` become blocks below 640 so the page scrolls as one, `.scroll` deliberately untouched · ⇅ Reorder `display: none`, so the reorder modal is unreachable below the tier by design · `RuleModal` on `svh`, its control rows wrap, `CatSelect` capped at `max-width: 100%`, `MatchTable` `.contained` | readable · `MatchTable` renders only after a POST the GET-captured fixtures do not carry — `editors.spec.js` annotates that gap |
 | Spending › Recurring | monitor **A** · candidates **A** | the monitor never mounts — the owner tracks nothing, so `/api/spending/recurring` is `[]` and its pin is eyes-only (`pinned.spec.js` annotates it) · the **two nested scroll regions**, which is the feel check |
 | Spending › Transactions | **B** below 640 — six fields, merchant, one amount, four muted on a second line, no key/value block · **A** on `Date` from 640 to 1024, a *choice* rather than the default: `Merchant` measures **561px** of unbounded free text against a 440px window | excluded rows keep their dimming but **no fixture holds one**, so both renderings are unexercised — `cards.spec.js` asserts the two agree on 0.55 rather than observing either |
-| Sign-in | `100svh` at `auth.jsx:50` and `:125` · the box fills the screen and centres optically · **no phone rule at all** · GSI button carved out of the 44px floor | whether a **40px** button (measured) looks right beside a 44px world |
+| Sign-in | `100svh` at `auth.jsx:50` and `:125` · the box fills the screen and centres optically · **no phone rule at all** · the GSI button is **untouched by** the 44px floor rather than carved out of it — it is a `div[role="button"]` Google injects, and this screen has no form control of its own, so no selector reaches it | whether a **40px** button (measured) looks right beside a 44px world |
 
 ## Observations
 
@@ -313,7 +313,9 @@ Things the build session must be told, not left to discover.
   style beats is the same property, not the element. The trap is real for anyone trying to change
   its type size, and only that.
 - **A floor is one rule, and a population is one class.** The 44px square floor is written once, as
-  one selector list with one `:not(.editor *)` on it. `.editor` marks the two desktop-optimised
+  one selector list — and `:not(.editor *)` is on **every member of it**, including the two that
+  appear in no editor today, because a floor that is exempt-by-ancestor for some of its selectors
+  and unconditional for the rest is not exempt-by-ancestor at all. `.editor` marks the two desktop-optimised
   views' roots and does *nothing else* — it is not `.fillpane`, which is Classify's flex machinery
   and happens to sit on the same element. The two are separate on purpose: a later ticket that
   restructures Classify's scroll ownership must not silently hand it a 44px floor by deleting a
