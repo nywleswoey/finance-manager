@@ -13,7 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { HSCROLL_GATE_APPLIES_BELOW, VIEWPORTS } from "./viewports.js";
+import { HSCROLL_GATE_APPLIES_BELOW, PHONE_TIER_EDGE, VIEWPORTS } from "./viewports.js";
 import { HSCROLL_BASELINE } from "./hscroll-baseline.js";
 import { PATHOLOGICAL, readFixture } from "./fixtures/index.js";
 import { VIEWS } from "./support/app.js";
@@ -27,6 +27,16 @@ function sourceFiles(dir) {
     return e.isDirectory() ? sourceFiles(full) : [full];
   });
 }
+
+/**
+ * Source with its comments removed — `/* *\/` and `//` alike, which covers JS and CSS both.
+ *
+ * Three gates below forbid a construct, and every file that dropped that construct explains
+ * at length what it dropped and why. A grep that cannot tell prose from markup makes the
+ * explanation the violation, and what gets deleted then is the explanation.
+ */
+const stripComments = (src) =>
+  src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
 test("the table inventory is 22", () => {
   // The same count `RESPONSIVE.md` asks a human to run by hand:
@@ -52,6 +62,98 @@ test("exactly one donut implementation exists", () => {
   expect(pies, "files rendering a <PieChart> — the donut is shared, not copied").toHaveLength(1);
 });
 
+test("no chart renders the library's own legend", () => {
+  // `<Legend>` is a chart child, so its space comes out of the plot — measured at ~75px of
+  // the stacked bar chart's 300px, a quarter of the drawing spent on eight words. Every key
+  // in the app is DOM under the container instead.
+  //
+  // Source-grepped rather than measured in a browser because the one chart that had a
+  // `<Legend>` is the one the suite cannot reach: `/api/spending/trends` was captured as a
+  // 500 from the live database, so `trend.series.length > 0` is false and the chart never
+  // mounts. `charts.spec.js` asserts the absence in the DOM for everything that does render;
+  // this is what covers the surface that does not.
+  //
+  // Comments are stripped first, for the reason the `100vh` gate strips them: four files
+  // explain at length what `<Legend>` did and why it is gone, and a gate that cannot tell
+  // prose from markup gets the explanation deleted rather than the defect.
+  const offenders = sourceFiles(path.join(WEB, "src"))
+    .filter((f) => /<Legend[\s/>]/.test(stripComments(fs.readFileSync(f, "utf8"))))
+    .map((f) => path.relative(WEB, f));
+  expect(offenders, "render the key as DOM — `ChartKey` in `charts.jsx`").toEqual([]);
+});
+
+test("both multi-series charts carry a DOM key", () => {
+  // The counterpart of the gate above: forbidding `<Legend>` is satisfied by having no key
+  // at all, which is exactly the state `NetWorth` shipped in — two coloured lines named only
+  // in a tooltip that touch never opens. Named files rather than a count, because "multi-
+  // series" is not greppable and a third one arriving should have to be added here by hand.
+  //
+  // Comments stripped, like its two siblings — and here the direction of the mistake is the
+  // interesting one. The `<Legend>` gate forbids a construct, so a prose mention would fail it
+  // wrongly; this gate *requires* one, so a prose mention would PASS it wrongly. `charts.jsx`
+  // names `<ChartKey>` in its own docstring, which is exactly the shape that would.
+  const wanted = ["src/modules/networth/NetWorth.jsx", "src/modules/spending/Overview.jsx"];
+  const keyed = sourceFiles(path.join(WEB, "src"))
+    .filter((f) => /<ChartKey[\s/>]/.test(stripComments(fs.readFileSync(f, "utf8"))))
+    .map((f) => path.relative(WEB, f))
+    .sort();
+  expect(keyed, "a multi-series chart with no key is anonymous on touch").toEqual(wanted);
+});
+
+test("`640` is written in exactly four places", () => {
+  // The stylesheet, the suite, `Holdings.jsx`'s read-at-mount and `cards.jsx`'s `usePhone` —
+  // no build step makes a single source of truth possible, so what is left is counting them
+  // and cross-referencing in comments. The map expected the charts to add a fifth; they read
+  // `usePhone()` instead, and this is what keeps that decision from eroding.
+  //
+  // FILES, not occurrences. `viewports.js` writes the number four times — two exported
+  // constants and two viewport rows either side of the edge — and those are one site by any
+  // reading that matters: they are in one file, under one comment, and they move together.
+  // What this is counting is the number of places a reader has to know about.
+  //
+  // Comments are excluded, because every one of these four sites explains at length where the
+  // other three are — a gate that counts its own cross-references counts twelve.
+  const sites = [...new Set(
+    [
+      ...sourceFiles(path.join(WEB, "src")),
+      ...sourceFiles(path.join(WEB, "tests")).filter((f) => f.endsWith("viewports.js")),
+    ]
+      .filter((f) => /639\.98|\b640\b/.test(stripComments(fs.readFileSync(f, "utf8"))))
+      .map((f) => path.relative(WEB, f))
+  )].sort();
+  expect(sites, "a new literal 640 — reuse `usePhone()` or add the site to every comment")
+    .toEqual([
+      "src/cards.jsx",
+      "src/modules/portfolio/Holdings.jsx",
+      "src/styles.css",
+      "tests/viewports.js",
+    ]);
+});
+
+test("both JavaScript media queries say exactly what the stylesheet says", () => {
+  // COUNTING THE SITES IS NOT CHECKING THEY AGREE, and the gate above only counts. Rewrite
+  // `cards.jsx`'s query as `(max-width: 640px)` and the count is still four, every comment is
+  // still true to the word, and the whole card-per-row tier has silently moved into the 1px
+  // dead zone against the tablet tier's `min-width: 640px` — which is the entire reason the
+  // number is `639.98` and not `639`. This is the assertion the spec asked for by name.
+  //
+  // The stylesheet side is `foundations.spec.js`'s job: it reads the *shipped* CSS, where the
+  // build has rewritten `@media (max-width: 639.98px)` into range syntax and only the number
+  // survives. So the two halves meet at `PHONE_TIER_EDGE` rather than at each other.
+  const want = `(max-width: ${PHONE_TIER_EDGE})`;
+  const queries = [
+    ["src/cards.jsx", "usePhone — the live layout hook"],
+    ["src/modules/portfolio/Holdings.jsx", "startsCollapsed — the read at mount"],
+  ].map(([file, what]) => {
+    const src = stripComments(fs.readFileSync(path.join(WEB, file), "utf8"));
+    return [what, src.match(/matchMedia\(\s*"([^"]*)"|"(\(max-width:[^"]*\))"/)?.slice(1).find(Boolean)];
+  });
+  for (const [what, query] of queries) {
+    expect(query, `${what}: its media query must be the tier edge, character for character`)
+      .toBe(want);
+  }
+});
+
 test("no `100vh` survives anywhere under web/src", () => {
   // The shell and sign-in both moved to `svh`, for two different reasons: `height: 100vh`
   // leaves a permanently *unreachable* strip in a shell that owns its own scroll, and
@@ -61,8 +163,6 @@ test("no `100vh` survives anywhere under web/src", () => {
   // Comments are stripped first — both files explain at length what `100vh` did and why it
   // is gone, and a gate that forbids naming the thing it forbids is a gate that gets the
   // explanation deleted rather than the defect.
-  const stripComments = (src) =>
-    src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
   const offenders = sourceFiles(path.join(WEB, "src"))
     .filter((f) => /100vh/.test(stripComments(fs.readFileSync(f, "utf8"))))
     .map((f) => path.relative(WEB, f));

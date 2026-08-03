@@ -39,7 +39,7 @@ export default defineConfig({
     { name: "inventory", testMatch: /inventory\.spec\.js/ },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
-      testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill)\.spec\.js/,
+      testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts)\.spec\.js/,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: v.width, height: v.height },

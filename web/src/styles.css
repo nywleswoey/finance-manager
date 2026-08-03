@@ -372,10 +372,18 @@ button { min-height: 24px; }
   min-height: 38px; padding: 0 8px; border-radius: 4px; overflow: hidden; }
 .barfill { position: absolute; left: 0; top: 0; bottom: 0; opacity: .3; border-radius: 4px; }
 .barrow > .chip, .barrow > .nm, .barrow > .val { position: relative; }
-.barrow .chip { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+/* One swatch, two lists. The donut's rows and a multi-series key are the same thing — a
+   colour standing for a series — so they take one rule rather than two identical ones. */
+.barrow .chip, .chartkey .chip { flex: none; width: 8px; height: 8px; border-radius: 2px; }
 .barrow .nm { flex: 1 1 auto; min-width: 0; color: var(--txt); font-size: 13px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .barrow .val { flex: none; color: var(--mut); font-size: 13px; font-variant-numeric: tabular-nums; }
+/* The multi-series key, as DOM under the plot rather than as recharts' `<Legend>` — which is
+   a chart child and takes its ~75px out of the drawing. Wraps, because that is the whole
+   advantage of being ordinary text; 11px is the app's stated type minimum and this sits above
+   it. No media query: a key is worth the same on a desktop that has no hover state either. */
+.chartkey { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; padding: 0 8px; }
+.ck-item { display: inline-flex; align-items: center; gap: 6px; color: var(--mut); font-size: 12px; }
 /* `textarea` joins the rule it was always missing from: it is styled nowhere else in the
    app, so it rendered UA-default — a white box on a dark modal — at every width. */
 input, select, textarea { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);
@@ -414,11 +422,16 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
    `639.98px` rather than `639px` so no fractional viewport width lands in a 1px dead zone
    against the tablet tier's `min-width: 640px`.
 
-   640 is a literal in three places: here, `tests/viewports.js`, and `Holdings.jsx`'s
+   640 is a literal in FOUR places: here, `tests/viewports.js`, `Holdings.jsx`'s
    `startsCollapsed` — the app's first `matchMedia` read, which landed with the pinned column
-   rather than with the charts as expected. JS cannot read a custom property and this repo
-   takes no build step to make one, so the sides cross-reference in comments instead of
-   sharing a constant. The charts will be the fourth site, not the third. */
+   rather than with the charts as expected — and `cards.jsx`'s `usePhone`, which landed with
+   card-per-row. JS cannot read a custom property and this repo takes no build step to make
+   one, so the sides cross-reference in comments instead of sharing a constant.
+
+   THE CHARTS DID NOT ADD A FIFTH, which the map expected them to: `charts.jsx` and
+   `Options.jsx` drop chart chrome through `usePhone()` rather than reading the query
+   themselves. `inventory.spec.js` asserts the count of sites, so a fifth cannot arrive
+   quietly. */
 @media (max-width: 639.98px) {
   /* The content gutter, and the app's first safe-area handling.
 

@@ -14,12 +14,14 @@ const GROUPS = {                                   // group key -> label
 const NCOLS = 12;
 
 /**
- * The phone tier, as JavaScript says it — and the third place `640` is written as a literal.
+ * The phone tier, as JavaScript says it — one of the four places `640` is written as a literal.
  *
- * `styles.css` says `max-width: 639.98px` and `tests/viewports.js` says `< 640`; JS cannot
- * read a CSS custom property and this repo takes no build step to make one, so the three
- * sites cross-reference in comments rather than share a constant. `RESPONSIVE.md`'s Traps
- * names all of them.
+ * `styles.css` says `max-width: 639.98px`, `tests/viewports.js` says `< 640`, and `cards.jsx`'s
+ * `usePhone` reads the same query for the layout itself. JS cannot read a CSS custom property
+ * and this repo takes no build step to make one, so the four sites cross-reference in comments
+ * rather than share a constant. `RESPONSIVE.md`'s Traps names all of them, and
+ * `inventory.spec.js` both counts the sites and checks the two JS queries against the
+ * stylesheet's edge — the charts were forecast as a fifth site and reuse `usePhone()` instead.
  *
  * Read ONCE, at mount, deliberately: it seeds the footnote's initial state and nothing more.
  * A live `matchMedia` listener here would fight the user's own toggle on every rotation, and

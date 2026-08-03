@@ -79,10 +79,26 @@ coordinates the rejected layout passes. It also carries the group header — the
 and the chevron carve-out, which is the only place pattern A's affordance rule is deliberately not
 applied.
 
+`tests/charts.spec.js` — the six chart surfaces. Below 640 the donuts are not rendered and the
+`.barrow` list beneath them becomes the chart, which is the one gate here that asserts an *absence*:
+`display: none` starves a `ResponsiveContainer` to 0×0, so a hidden chart and a collapsed chart are
+the same DOM and the treatment has to be a hook rather than a rule. Everything else it checks holds at
+every width — that no container collapses in either dimension, that a multi-series chart names its
+series in DOM rather than in a `<Legend>` that eats a quarter of the plot, and that no value label is
+printed on top of an axis tick — the criterion stated as the collision it forbids rather than as the
+prop that prevents it, which is what lets the same gate check that the reserved band is *absent* on a
+window with no loss in it to reserve for. It waits for the bar animation before counting a single
+label, because recharts renders a `LabelList` only once that has ended and a gate expecting none
+would otherwise pass for the wrong reason. One thing it cannot reach: the stacked bar chart, whose
+fixture is a 500.
+
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
-single donut implementation, that no `100vh` survives under `web/src`, the viewport meta's
-`viewport-fit=cover`, the viewport list against `RESPONSIVE.md`, and the fixtures' own
-integrity.
+single donut implementation, that no chart renders a `<Legend>` and that both multi-series charts
+carry a `<ChartKey>`, that `640` is a literal in exactly four files **and that the two JavaScript
+media queries say character for character what the stylesheet says** — counting the sites is not
+checking they agree, and `(max-width: 640px)` would keep the count at four while moving the tier into
+a 1px dead zone — that no `100vh` survives under `web/src`, the viewport meta's `viewport-fit=cover`,
+the viewport list against `RESPONSIVE.md`, and the fixtures' own integrity.
 
 `tests/viewports.js` — the ten viewports, declared once. They mirror `RESPONSIVE.md`'s table
 one-for-one and a test fails if the two lists drift apart.

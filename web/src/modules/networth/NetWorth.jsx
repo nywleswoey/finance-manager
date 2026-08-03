@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import posthog from "posthog-js";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { get, post, patch, del, sgd, money, fmt, cls } from "../../api.js";
+import { ChartKey } from "../../charts.jsx";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -85,6 +86,19 @@ function SummaryCards({ m }) {
   );
 }
 
+/**
+ * The two lines, named once — the chart reads this for its `stroke` and the key reads it for
+ * its chip, so they cannot disagree.
+ *
+ * This view's chart was the least broken surface in the app at 390px and had the one defect
+ * nothing else did: no legend of any kind, ever, at any width. `name=` reaches the tooltip
+ * and nowhere else, and touch has no hover, so both series were anonymous coloured lines.
+ */
+const SERIES = [
+  { key: "net_worth", name: "Net Worth", colour: "#388bfd" },
+  { key: "excl_housing", name: "Excl. Housing", colour: "#2ea043" },
+];
+
 function Trend({ snaps }) {
   const data = [...snaps].reverse().map((s) => ({
     date: String(s.date), net_worth: s.net_worth, excl_housing: s.net_worth_excl_housing,
@@ -93,18 +107,24 @@ function Trend({ snaps }) {
     <div className="card">
       <h3>Net Worth Over Time</h3>
       {data.length < 2 ? <div className="mut">Need ≥2 snapshots to chart.</div> : (
-        <ResponsiveContainer width="100%" height={240}>
-          <LineChart data={data}>
-            <CartesianGrid stroke="#20262e" />
-            <XAxis dataKey="date" stroke="#8b97a5" fontSize={11} />
-            <YAxis stroke="#8b97a5" fontSize={11} tickFormatter={(v) => fmt(v / 1000) + "k"} />
-            <Tooltip formatter={(v) => sgd(v)}
-                     contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
-                     itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
-            <Line type="monotone" dataKey="net_worth" stroke="#388bfd" strokeWidth={2} dot={false} name="Net Worth" />
-            <Line type="monotone" dataKey="excl_housing" stroke="#2ea043" strokeWidth={2} dot={false} name="Excl. Housing" />
-          </LineChart>
-        </ResponsiveContainer>
+        <>
+          <ResponsiveContainer width="100%" height={240}>
+            <LineChart data={data}>
+              <CartesianGrid stroke="#20262e" />
+              <XAxis dataKey="date" stroke="#8b97a5" fontSize={11} />
+              <YAxis stroke="#8b97a5" fontSize={11} tickFormatter={(v) => fmt(v / 1000) + "k"} />
+              <Tooltip formatter={(v) => sgd(v)}
+                       contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
+                       itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
+              {SERIES.map((s) => (
+                <Line key={s.key} type="monotone" dataKey={s.key} stroke={s.colour}
+                      strokeWidth={2} dot={false} name={s.name} />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+          {/* DOM, not `<Legend>` — the chart keeps its declared 240px. */}
+          <ChartKey items={SERIES} />
+        </>
       )}
     </div>
   );
