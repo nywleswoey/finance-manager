@@ -421,8 +421,17 @@ tr.subrow > td { background: var(--panel2); }
    The *vertical* half is app-wide, because it costs nothing horizontally. The *horizontal*
    half is scoped to the two editors — `.fillpane` is Classify, `.nw-del` is Net Worth —
    because widening a `✕` inside a table cell widens the table, and Recurring's three
-   `.link-btn`s are in a fully-responsive view whose floor is 44px square, not 24px. They
-   get their width from that rule, in the phone tier, rather than twice. */
+   `.link-btn`s are in a fully-responsive view whose floor is 44px square, not 24px — so
+   their width was left to that rule rather than written twice.
+
+   THAT RULE DOES NOT EXIST YET, and this comment used to imply it did. The 44px floor
+   reached the navigation shell and the footnote disclosure only; `.link-btn`,
+   `.refresh-btn`, `select`, the SecurityDetail back link and the "show excluded" label
+   never got it, and `input, select, textarea { font-size: 16px }` never landed at all.
+   Measured at 390x844: Recurring alone carries 38 controls under 44px square. Recorded
+   with the rest of the evidence under "Not built yet" in `RESPONSIVE.md`, and owned by
+   issue #47. Until it lands, Recurring's three buttons are 24px tall and 24px is the whole
+   of their floor. */
 button { min-height: 24px; }
 .fillpane button, .nw-del { min-width: 24px; }
 /* S2 inline: one line per entry, the proportional fill *behind* the text rather than beside
