@@ -81,7 +81,7 @@
  *    `Spending › Overview` is the one that reads oddly and is the most informative: it falls
  *    114 → 74, 84 → 44, 44 → 4, landing **exactly on `Portfolio › Overview`, `Options` and
  *    `By Category`**. The 40px it shed was the Top Line Items table; what it is left holding
- *    is the same `.grid2` 420px track floor the other three carry, which no ticket owns and
+ *    is the same `.grid2` 420px track floor the other three carry, which is #44's and
  *    which neither pattern can reach. Four views, one residual, now identical to the pixel —
  *    which is the strongest evidence yet that the remaining phone overflow has a single
  *    cause and is not four separate table problems.
@@ -112,8 +112,9 @@
  *    `minmax(420px, 1fr)` track floor against a 362px pane. `Spending › Overview` is the
  *    fifth on six of the seven and the exception is worth the sentence: it is **48** at 640
  *    rather than 8, so it carries 40px of its own on top of the shared floor at that one
- *    viewport. Every remaining non-zero number below 640 now has that single cause, and
- *    **no ticket owns it** — the usual remedy is `minmax(min(420px, 100%), 1fr)`. What is
+ *    viewport. Every remaining non-zero number below 640 now has that single cause, and it is
+ *    **#44's** — the usual remedy, written down here since entry 4, is
+ *    `minmax(min(420px, 100%), 1fr)`. What is
  *    left at 640/834/844 for both `Transactions` ledgers and `SecurityDetail` is the tablet
  *    tier's, and is the only table-shaped overflow the file still holds.
  */
