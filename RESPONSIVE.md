@@ -162,6 +162,14 @@ Record the value. These **cannot fail** — nothing here changes the work.
 - **Whether iPadOS Safari focus-zooms form controls.** The spec assumes it does not, and keeps 16px
   inputs phone-only on that basis. This is the least-verified claim in the whole map.
 - Rows actually achieved vs the spec's 12–13 portrait / 4 landscape on Holdings.
+- **The drawer's row height at 844×390**, which is the residual the tablet tier's height guard creates
+  and the one place two of that tier's decisions pull against each other. The shell travels to a
+  rotated phone on `(max-height: 500px)`; the 44px floor stays behind `max-width`, because 44px targets
+  are on the tier's "explicitly not done" list. The result is a phone, in the hand, with ~38px
+  navigation rows — above WCAG 2.5.8's 24px floor and below the comfort target the same effort set for
+  the same control in portrait. `shell.spec.js` asserts a 24px floor there rather than skipping, so the
+  geometry is gated; what is not gated is whether it is *comfortable*, which is the fourth iPhone item
+  in a new place. If it reads badly, the fix is one condition on one rule and the tier's boundary moves.
 
 ## Open calls
 
@@ -182,6 +190,25 @@ Failing these **changes a decision**, rather than reporting a bug.
   instance and is on screen too** — same `limit=1000`, and "Dining Out" alone is 285 transactions in one
   year in the live DB, against the 16 the committed fixture drills into. The fixture cannot show you the
   bad case; a real phone on the live database can.
+
+- **Whether a date is enough of an identity on the two multi-security ledgers.** The tablet tier pins
+  the column that was already first, which on `Portfolio › Transactions` and `Spending › Transactions`
+  is `Date`. That is a real identity — it varies per row and both ledgers arrive ordered by it, which
+  is exactly what `contract.jsx`'s merged cell existed to supply for a column of `Put / Put / Call`.
+  What it does not do is separate two rows on the same day: on those you are reading the pin, seeing
+  one date twice, and relying on `Security` or `Merchant` being one scroll-step to the right.
+  **The alternative was rejected on a measurement, not on principle** — `Merchant` is 561px of
+  unbounded free text against a 440px window at 640, so pinning it covers the screen and never lets a
+  number through, and bounding it would be a second rule in a tier whose whole claim is that it holds
+  one. If reading a same-day run is genuinely confusing on a tablet, the answer is a merged identity
+  cell on `contract.jsx`'s precedent — which changes those tables at *every* width, and is therefore a
+  decision rather than a fix.
+- **Whether 768 and 1000 deserve to be viewports.** The tier's own criteria name four widths and the
+  suite gates three of them (640, 834, and 844×390 for the height guard). Both missing widths sit
+  strictly inside a band whose ends are measured, and both read **0** on every view when measured by
+  hand at the tier's landing — but that measurement is a moment in time and the suite is what makes a
+  fact durable. Adding them is two more projects on a suite that is already ten deep and ~10 minutes
+  per full run, which is the cost side. Decide it once, here, rather than each time someone notices.
 
 *(`Options.jsx:71` left this list: resolved to **A**, on the measurement that a 9-field card is 4 rows per
 screen against A's 12 — the same reasoning that rejected B for Holdings at 3.)*
