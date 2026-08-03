@@ -429,8 +429,9 @@ tr.subrow > td { background: var(--panel2); }
    `.refresh-btn`, `select`, the SecurityDetail back link and the "show excluded" label
    never got it, and `input, select, textarea { font-size: 16px }` never landed at all.
    Measured at 390x844: Recurring alone carries 38 controls under 44px square. Recorded
-   with the rest of the evidence under "Not built yet" in `RESPONSIVE.md`. Until it lands,
-   Recurring's three buttons are 24px tall and 24px is the whole of their floor. */
+   with the rest of the evidence under "Not built yet" in `RESPONSIVE.md`, and owned by
+   issue #47. Until it lands, Recurring's three buttons are 24px tall and 24px is the whole
+   of their floor. */
 button { min-height: 24px; }
 .fillpane button, .nw-del { min-width: 24px; }
 /* S2 inline: one line per entry, the proportional fill *behind* the text rather than beside

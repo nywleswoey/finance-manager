@@ -262,10 +262,10 @@ than in the gate list because eyeballing an unbuilt rule is not a check, and bec
 no owner is precisely how four tables went unassigned through the whole map.
 
 - **The 44px tap floor never reached the content controls, and 16px form controls never landed at
-  all.** **Decided in `.wayfinder/tickets/015-touch-targets-type-scale.md`, which is closed, and
-  never given a build issue** — every ticket that could have carried it was scoped to a pattern or a
-  view, and the rules are neither. **It has no issue number yet, and that is the first thing to fix
-  about it**: the entry below is the evidence a ticket needs, not the ticket.
+  all.** Decided in `.wayfinder/tickets/015-touch-targets-type-scale.md`, which is closed, and never
+  given a build issue until the sweep went looking — every ticket after it was scoped to a *pattern*
+  or a *view*, and these are two rules about every fully-responsive screen, so each one reasonably
+  assumed the foundations ticket had them. **It is #47's now.**
   `--tap: 44px` is declared and used by `.navitem`, `.logout-btn`, `.bar-btn`, `.tabsel` and
   `.tablenote > summary` — the navigation shell and the footnote disclosure, no more. The rest of
   what was decided is absent from `styles.css`: `input, select, textarea { font-size: 16px }`,
