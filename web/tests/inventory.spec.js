@@ -154,19 +154,27 @@ test("both JavaScript media queries say exactly what the stylesheet says", () =>
   }
 });
 
-test("no `100vh` survives anywhere under web/src", () => {
+test("no `vh` unit survives anywhere under web/src", () => {
   // The shell and sign-in both moved to `svh`, for two different reasons: `height: 100vh`
   // leaves a permanently *unreachable* strip in a shell that owns its own scroll, and
   // `min-height: 100vh` leaves a *scrollable* one that pushes centred content ~32px low.
   // Neither reproduces in a browser with no retractable toolbar, so this grep is the only
   // gate the suite can hold on it — and the same one a reviewer would run by eye.
-  // Comments are stripped first — both files explain at length what `100vh` did and why it
+  //
+  // WIDENED FROM `100vh` TO THE UNIT, when the rule modal's `6vh` / `84vh` became `svh`.
+  // `100vh` was the whole population at the time and the gate was written to the population
+  // rather than to the rule; the two fractions in that modal are the same defect at a
+  // smaller number, and the sheet's cap growing past the screen is exactly the failure
+  // `lvh` produces. `\d…vh` does not match `100svh` — the character before `vh` is `s` —
+  // so the correct unit is not caught by the gate that forbids the wrong one.
+  //
+  // Comments are stripped first — three files explain at length what `vh` did and why it
   // is gone, and a gate that forbids naming the thing it forbids is a gate that gets the
   // explanation deleted rather than the defect.
   const offenders = sourceFiles(path.join(WEB, "src"))
-    .filter((f) => /100vh/.test(stripComments(fs.readFileSync(f, "utf8"))))
+    .filter((f) => /\d(?:\.\d+)?vh\b/.test(stripComments(fs.readFileSync(f, "utf8"))))
     .map((f) => path.relative(WEB, f));
-  expect(offenders, "`100vh` is `100lvh` by spec — use `100svh`").toEqual([]);
+  expect(offenders, "`vh` is `lvh` by spec — use `svh`").toEqual([]);
 });
 
 test("the viewport meta opts into the safe area", () => {

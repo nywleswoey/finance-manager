@@ -132,6 +132,14 @@ body { margin: 0; background: var(--bg); color: var(--txt);
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .card h3 { margin: 0 0 12px; font-size: 14px; color: var(--mut); text-transform: uppercase; letter-spacing: .04em; }
+/* A card heading with controls on its right. The one call site is Classify's rules card,
+   where the group was a `float: right` — and a float is out of flow, so it never moves to a
+   second line however narrow the card gets: at 390px it printed over the "priority order"
+   pill and clipped its own leading glyph. `margin-left: auto` puts it in the same place at
+   any width it fits on one line, so nothing above the phone moves. Unconditional for that
+   reason: there is no width at which the float was better. */
+.cardhead { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.cardhead-actions { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
 th, td { padding: 7px 10px; text-align: right; border-bottom: 1px solid #20262e; white-space: nowrap; }
 th { color: var(--mut); font-size: 11px; text-transform: uppercase; position: sticky; top: 0; background: var(--panel); }
@@ -181,6 +189,31 @@ tr.subrow > td { background: var(--panel2); }
    it. That gate caught this exact rule in the wrong place. */
 .hscroll { overflow-x: auto; }
 .selfscroll { overflow: auto; max-height: 480px; }
+
+/* THE EDITORS' CONTAINMENT — the two desktop-optimised views' answer to "sideways scroll
+   is confined to a container that visibly is a table". Not a pattern: `A` and `B` both
+   assume read-only rows, and these cells hold live `input`s and `select`s.
+   `NetWorth`'s Breakdown and History and `Classify`'s `MatchTable` are its three call
+   sites; Classify's other two tables are contained already, for free, because each already
+   sits in a box with a *vertical* overflow setting — and setting `overflow-y` to anything
+   but `visible` forces `overflow-x` from `visible` to `auto` alongside it.
+
+   BELOW 1024, not unconditional, and the reason is a rule this file already documents
+   twice: `overflow-x: auto` forces `overflow-y` from `visible` to `auto`, which makes this
+   wrapper the sticky scrollport for the `th` inside it — and a scrollport that sizes to its
+   content never scrolls, so the header rides the *page* away instead of sticking. On
+   `NetWorth` that header sticks to `.main` today and would stop, at every width. The
+   editors are unchanged at 1024 and above by decision, and "unchanged" has to include the
+   things a wrapper kills silently. Below the tier the header stops sticking and that is
+   accepted: reading comfort and row density are below this floor deliberately.
+
+   `1023.98px` for the second time in this file, and still the same number as
+   `PIN_TIER_BELOW` in `tests/viewports.js` — see `.pinned`'s block. Deliberately NOT
+   `.pinned`'s own block: this is a different claim about the same width, and a ticket that
+   takes the pin to desktop must not drag containment along with it. */
+@media (max-width: 1023.98px) {
+  .contained { overflow-x: auto; }
+}
 
 /* ─── pattern A: the pinned identity column ──────────────────────────────────────────────
    For the tables that exist so you can compare a number DOWN the column. You read the real
@@ -534,4 +567,39 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
      `min-height` rather than flex centring for the same reason. */
   .tablenote > summary { display: list-item; min-height: var(--tap); padding: 11px 0;
     color: var(--mut); font-size: 12px; font-weight: 600; cursor: pointer; }
+
+  /* ── the editors' phone floor ──
+     Two rules, both about `Classify`. `NetWorth` has none: its containment is the `.contained`
+     block above, which is a claim about 1024 rather than about the phone, and its row grid is
+     unchanged here BY DECISION — at this gutter the label column is 124px rather than the
+     ~200px it looks like, the column you would instinctively shrink is the one the 16px input
+     rule protects, and stacking turns 17 rows into ~34 lines while destroying the right-aligned
+     column that makes the form scannable. Horizontally scrolling a *form* fails criterion 1
+     outright, so there is no third option either.
+
+     ⇅ REORDER, HIDDEN. Drag has no touch equivalent, and the rules list carries no drag at
+     all — reordering lives entirely behind this one button and the modal it opens. Hiding it
+     makes that modal unreachable below the tier, which is the decision rather than a
+     casualty of it: it also halves the modal question to `RuleModal` alone. `display: none`
+     rather than `disabled`, because a control that is present and does nothing is precisely
+     what criterion 4 forbids. */
+  .reorder-btn { display: none; }
+
+  /* THE NESTED SCROLL, NEUTRALISED. `.fillpane`/`.grow`/`.scroll` has exactly one user in
+     the whole app and it is this view, so this rule deletes the app's deepest nesting
+     rather than merely tolerating it: below the tier the screen scrolls as one page.
+
+     `.scroll` IS DELIBERATELY UNTOUCHED, and that is the whole mechanism. It keeps
+     `overflow: auto`, which is what still confines the unclassified table's sideways scroll
+     — criterion 1 — and with no flex parent left to cap its height it sizes to its own
+     content, so a scrollport that never scrolls is what the vertical half becomes. Giving
+     it `overflow-x: auto; overflow-y: visible` instead is not available: `overflow-x: auto`
+     forces `overflow-y` to `auto`, which is the same trap the `.pinned` block documents.
+
+     `overflow: visible` on `.grow` is load-bearing, not tidying. Its `hidden` exists to
+     stop a flex child overflowing a box the flex algorithm gave a height; a block that
+     sizes to content has no such box, so `hidden` would clip the funnel at whatever height
+     it happened to compute, with nothing to scroll it back. */
+  .fillpane { display: block; flex: none; }
+  .fillpane > .grow { display: block; flex: none; overflow: visible; }
 }

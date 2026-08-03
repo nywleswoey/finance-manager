@@ -97,8 +97,22 @@ single donut implementation, that no chart renders a `<Legend>` and that both mu
 carry a `<ChartKey>`, that `640` is a literal in exactly four files **and that the two JavaScript
 media queries say character for character what the stylesheet says** — counting the sites is not
 checking they agree, and `(max-width: 640px)` would keep the count at four while moving the tier into
-a 1px dead zone — that no `100vh` survives under `web/src`, the viewport meta's `viewport-fit=cover`,
+a 1px dead zone — that **no `vh` unit** survives under `web/src` — widened from `100vh` when the rule modal's `6vh`/`84vh` became `svh`, since `\dvh` does not match `100svh` and so does not catch the unit that is correct — the viewport meta's `viewport-fit=cover`,
 the viewport list against `RESPONSIVE.md`, and the fixtures' own integrity.
+
+`tests/editors.spec.js` — the two editors' floor. `Classify` and `NetWorth` are desktop-optimised by
+decision and are checked against four criteria *instead of* the universal list, so this is the one
+spec whose subject is a view the rest of the suite deliberately holds to a lower standard. It carries
+two tiers rather than one, and neither is the other's: containment is asserted **below 1024**, because
+an `overflow-x: auto` wrapper is the sticky scrollport for the header inside it and writing it
+unconditionally would kill a header that works today; the hidden ⇅ Reorder and the neutralised nested
+scroll are **below 640**, the phone tier. "A container that visibly is a table" is asserted as *the box
+wraps the table and nothing else* — the rule modal's own `overflow: auto` absorbs its table's width and
+would pass any weaker reading while sliding the buttons off the edge. It is also the only spec that
+opens a modal to measure it, and the only one asserting a `title=` attribute is **absent**: a tooltip
+does not exist on touch, so a gate on the five that existed would not stop a sixth. One thing it cannot
+reach: `MatchTable` renders only after a POST the GET-captured fixtures do not carry, and that gap is
+annotated on every run.
 
 `tests/viewports.js` — the ten viewports, declared once. They mirror `RESPONSIVE.md`'s table
 one-for-one and a test fails if the two lists drift apart.

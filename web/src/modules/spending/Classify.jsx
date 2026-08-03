@@ -31,7 +31,11 @@ function Pill({ source }) {
 
 function CatSelect({ cats, value, onChange }) {
   return (
-    <select value={value} onChange={(e) => onChange(e.target.value)}>
+    // `maxWidth` because a `<select>`'s intrinsic width is its longest option — "Personal ·
+    // Life/Health/Surgical Insurance" — and a flex item does not shrink below min-content.
+    // Inside the 358px rule modal at 390px that alone pushed the sheet into a sideways
+    // scroll, taking Cancel and Create with it.
+    <select value={value} onChange={(e) => onChange(e.target.value)} style={{ maxWidth: "100%" }}>
       <option value="">— category —</option>
       {cats.map((c, i) => (
         <option key={c.id} value={i}>{c.category} · {c.subcategory}</option>
@@ -111,12 +115,21 @@ export default function Classify() {
 
       {/* ---- rules dashboard ---- */}
       <div className="card">
-        <h3>
-          Rules&nbsp;<span className="pill">priority order</span>
-          <span style={{ float: "right", display: "flex", gap: 8, alignItems: "center" }}>
+        {/* A wrapping flex row, not the `float: right` this shipped with. A float is taken out
+            of flow and never pushed to a second line, so at 390px the action group printed
+            straight over the "priority order" pill and clipped its own ↻ — the one overlap
+            either editor had, and criterion 2. `margin-left: auto` right-aligns it identically
+            wherever it fits on one line, which is every width the editors claim to be
+            unchanged at. */}
+        <h3 className="cardhead">
+          Rules <span className="pill">priority order</span>
+          <span className="cardhead-actions">
             {msg && <span className="mut" style={{ fontSize: 12 }}>{msg}</span>}
-            <button className="link-btn" onClick={reapply} title="Re-sweep unclassified with active rules">↻ Re-apply</button>
-            <button className="link-btn" onClick={() => setReordering(true)} disabled={rules.length < 2} title="Reorder rule priority">⇅ Reorder</button>
+            {/* No `title=` on either: a tooltip does not exist on touch, so an explanation
+                that only lives in one is no explanation. Both labels carry their own verb,
+                and the "priority order" pill beside the heading is already visible text. */}
+            <button className="link-btn" onClick={reapply}>↻ Re-apply</button>
+            <button className="link-btn reorder-btn" onClick={() => setReordering(true)} disabled={rules.length < 2}>⇅ Reorder</button>
             <button onClick={() => setModal(newModal())}>+ Propose a rule</button>
           </span>
         </h3>
@@ -140,7 +153,13 @@ export default function Classify() {
                     <td style={{ whiteSpace: "nowrap" }}>
                       <button className="link-btn" onClick={() => setModal(editModal(r))}>Edit</button>&nbsp;
                       <button className="link-btn mut" onClick={() => toggleActive(r)}>{r.active ? "Deactivate" : "Activate"}</button>&nbsp;
-                      <button className="link-btn" onClick={() => removeRule(r)} title="Delete (only if no classified spends)">✕</button>
+                      {/* A word rather than the `✕` it was, because the `✕`'s only
+                          explanation was a `title=` — and the constraint that tooltip
+                          carried ("only if no classified spends") is a 409 the server
+                          answers with, which already lands in `msg` beside the heading as
+                          visible text. A glyph whose meaning lives in a tooltip is exactly
+                          what criterion 4 rules out. */}
+                      <button className="link-btn" onClick={() => removeRule(r)}>Delete</button>
                     </td>
                   </tr>
                 ))}
@@ -243,7 +262,7 @@ function ReorderModal({ rules, setReordering, onDone }) {
                    background: dragId === r.id ? "var(--panel2)" : "var(--panel)",
                    opacity: r.active ? 1 : 0.5,
                  }}>
-              <span className="mut" title="drag">⠿</span>
+              <span className="mut">⠿</span>
               <span className="mut" style={{ width: 18, textAlign: "right", fontVariantNumeric: "tabular-nums" }}>{i + 1}</span>
               <span style={{ fontWeight: 600, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.nl_text}</span>
               <span className="mut" style={{ fontSize: 12, whiteSpace: "nowrap" }}>{r.category} · {r.subcategory}</span>
@@ -330,7 +349,7 @@ function RuleModal({ modal, setModal, cats, onDone }) {
 
   return (
     <div style={overlay} onClick={() => setModal(null)}>
-      <div style={sheet} onClick={(e) => e.stopPropagation()}>
+      <div style={sheet} data-testid="rule-sheet" onClick={(e) => e.stopPropagation()}>
         <h3 style={{ marginTop: 0 }}>{isEdit ? "Edit rule" : "Propose a rule"}</h3>
         <textarea
           value={modal.nl_text}
@@ -339,7 +358,7 @@ function RuleModal({ modal, setModal, cats, onDone }) {
           rows={2}
           style={{ width: "100%", boxSizing: "border-box" }}
         />
-        <div style={{ margin: "8px 0", display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ ...controlRow, margin: "8px 0" }}>
           <button onClick={parse} disabled={modal.busy || !modal.nl_text.trim()}>{modal.busy ? "…" : (isEdit ? "Re-parse" : "Parse & preview")}</button>
           {isEdit && <span className="mut" style={{ fontSize: 12 }}>current target: {modal.curCat}</span>}
         </div>
@@ -357,7 +376,7 @@ function RuleModal({ modal, setModal, cats, onDone }) {
         {p?.status === "ok" && (
           <>
             <div style={{ marginBottom: 8 }}><Chips conditions={p.conditions} /></div>
-            <div style={{ marginBottom: 8, display: "flex", gap: 8, alignItems: "center" }}>
+            <div style={{ ...controlRow, marginBottom: 8 }}>
               <CatSelect cats={cats} value={modal.cat} onChange={(v) => set({ cat: v, preview: null })} />
               {isEdit
                 ? <button onClick={preview} disabled={modal.busy}>Preview changes</button>
@@ -395,23 +414,49 @@ function MatchTable({ rows, title }) {
   return (
     <div>
       <div className="mut" style={{ fontSize: 12, marginBottom: 4 }}>{title}</div>
-      <table>
-        <thead><tr><th className="l">Date</th><th className="l">Merchant</th><th>Amount</th></tr></thead>
-        <tbody>
-          {rows.slice(0, 50).map((r) => (
-            <tr key={r.id}><td className="l mut">{r.txn_date || "—"}</td><td className="l">{r.merchant || "—"}</td><td>{mag(r.amount_sgd)}</td></tr>
-          ))}
-        </tbody>
-      </table>
+      {/* `.contained` rather than leaning on the sheet's own `overflow: auto`, which does
+          absorb this table's width but is not a container that visibly is a table: the
+          whole modal slides, buttons and heading with it. Merchant is unbounded free text
+          — 65 characters at its worst in the live database — so this table overflows 358px
+          the moment it renders at all. */}
+      <div className="contained">
+        <table>
+          <thead><tr><th className="l">Date</th><th className="l">Merchant</th><th>Amount</th></tr></thead>
+          <tbody>
+            {rows.slice(0, 50).map((r) => (
+              <tr key={r.id}><td className="l mut">{r.txn_date || "—"}</td><td className="l">{r.merchant || "—"}</td><td>{mag(r.amount_sgd)}</td></tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
 
+/**
+ * `svh` on both, and it is the modal's only real defect at 390px — it is already responsive
+ * horizontally. `vh` is spec-defined to equal `lvh`, the height *as if* the mobile toolbar
+ * had retracted, so `6vh` of inset plus an `84vh` cap describe a sheet that runs off the
+ * bottom of a screen whose toolbar is still showing. `svh` is the same unit the shell and
+ * sign-in already use; `inventory.spec.js` forbids `vh` under `web/src` outright, so this is
+ * the whole population.
+ *
+ * `position: fixed` STAYS. The app's "nothing is fixed" gate is about chrome inside a
+ * `100svh` shell that owns its own scroll; a modal overlay is the one thing that genuinely
+ * wants the viewport as its containing block, and it renders only while it is open.
+ */
 const overlay = {
   position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
-  display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 50, padding: "6vh 16px",
+  display: "flex", alignItems: "flex-start", justifyContent: "center", zIndex: 50, padding: "6svh 16px",
 };
 const sheet = {
   background: "var(--panel, #161b22)", border: "1px solid var(--border, #30363d)", borderRadius: 8,
-  padding: 16, width: "min(720px, 100%)", maxHeight: "84vh", overflow: "auto",
+  padding: 16, width: "min(720px, 100%)", maxHeight: "84svh", overflow: "auto",
 };
+/**
+ * The modal's control rows wrap rather than overflowing. At 390px the sheet is 358px wide
+ * and a `<select>` plus its button does not fit on one line; without this the sheet becomes
+ * a horizontal scroller and Cancel slides off the edge with everything else — which fails
+ * criterion 1 twice over, since a scrolling sheet is not a container that is a table.
+ */
+const controlRow = { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" };

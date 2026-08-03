@@ -240,37 +240,51 @@ function Breakdown({ detail, onSaved, setErr }) {
     <div className="card" style={{ marginTop: 22 }} data-testid="networth-breakdown">
       <h3>Breakdown&nbsp;<span className="pill">{String(detail.date)}</span>
         {dirty && <span className="pill" style={{ background: "#d29922" }}>unsaved</span>}</h3>
-      <table>
-        <thead><tr>
-          <th style={{ textAlign: "left" }}>Item</th><th>Native</th><th className="l">Ccy</th>
-          <th>Rate</th><th>SGD</th><th></th>
-        </tr></thead>
-        <tbody>
-          {detail.values.map((v) => {
-            const r = val(v);
-            return (
-              <tr key={v.code}>
-                <td style={{ textAlign: "left" }}>{v.label}
-                  {v.kind === "liability" && <span className="pill">liab</span>}</td>
-                <td>{v.is_manual ? (
-                  <input type="number" step="0.01" value={r.native_value} style={{ width: 110 }}
-                         data-testid={"bd-input-" + v.code}
-                         onChange={(e) => set(v.code, "native_value", e.target.value)} />
-                ) : fmt(v.native_value, 2)}</td>
-                <td className="l">{v.is_manual && v.currency !== "SGD" ? (
-                  <select value={r.currency} onChange={(e) => set(v.code, "currency", e.target.value)}>
-                    {["SGD", "USD", "HKD"].map((c) => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                ) : v.currency}</td>
-                <td className="mut">{fmt(v.rate_to_sgd, 4)}</td>
-                <td>{money(v.value_sgd, "SGD", 0)}</td>
-                <td>{v.is_manual ? <span className="pill">manual</span>
-                                 : <span className="pill" title="pulled from statements">auto</span>}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
+      {/* The `manual` / `auto` split, as visible text. It was a `title="pulled from
+          statements"` on the `auto` pill — the only tooltip in either editor carrying
+          something a reader could not get anywhere else, and the whole explanation of why
+          some rows have an input and the rest show a number you cannot touch. A tooltip
+          does not exist on touch, so a row that will not take an edit read as a control
+          that silently does nothing. */}
+      <div className="mut" style={{ fontSize: 12, marginBottom: 8 }} data-testid="breakdown-legend">
+        <span className="pill">manual</span> rows you edit here · <span className="pill">auto</span> rows
+        are pulled from statements and the live portfolio.
+      </div>
+      {/* `.contained` — below 1024 this box absorbs the table's width instead of the pane
+          taking it. See `styles.css` for why it is that tier and not the phone's. */}
+      <div className="contained">
+        <table>
+          <thead><tr>
+            <th style={{ textAlign: "left" }}>Item</th><th>Native</th><th className="l">Ccy</th>
+            <th>Rate</th><th>SGD</th><th></th>
+          </tr></thead>
+          <tbody>
+            {detail.values.map((v) => {
+              const r = val(v);
+              return (
+                <tr key={v.code}>
+                  <td style={{ textAlign: "left" }}>{v.label}
+                    {v.kind === "liability" && <span className="pill">liab</span>}</td>
+                  <td>{v.is_manual ? (
+                    <input type="number" step="0.01" value={r.native_value} style={{ width: 110 }}
+                           data-testid={"bd-input-" + v.code}
+                           onChange={(e) => set(v.code, "native_value", e.target.value)} />
+                  ) : fmt(v.native_value, 2)}</td>
+                  <td className="l">{v.is_manual && v.currency !== "SGD" ? (
+                    <select value={r.currency} onChange={(e) => set(v.code, "currency", e.target.value)}>
+                      {["SGD", "USD", "HKD"].map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  ) : v.currency}</td>
+                  <td className="mut">{fmt(v.rate_to_sgd, 4)}</td>
+                  <td>{money(v.value_sgd, "SGD", 0)}</td>
+                  <td>{v.is_manual ? <span className="pill">manual</span>
+                                   : <span className="pill">auto</span>}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
       <button className="refresh-btn" style={{ marginTop: 12 }} onClick={save}
               disabled={busy || !dirty} data-testid="breakdown-save">
         {busy ? "Saving…" : dirty ? "Save manual fields" : "No changes"}
@@ -284,29 +298,35 @@ function History({ snaps, onSelect, onDelete }) {
   return (
     <div className="card" style={{ marginTop: 22 }}>
       <h3>History</h3>
-      <table data-testid="networth-history">
-        <thead>
-          <tr>
-            <th style={{ textAlign: "left" }}>Date</th>
-            <th>Total Assets</th><th>Total Liab</th><th>Net Worth</th>
-            <th>Excl. Housing</th><th>Excl. Hou+CPF</th><th></th>
-          </tr>
-        </thead>
-        <tbody>
-          {snaps.map((s) => (
-            <tr key={s.id} style={{ cursor: "pointer" }} onClick={() => onSelect(s.id)}>
-              <td style={{ textAlign: "left" }}>{String(s.date)}</td>
-              <td>{sgd(s.total_assets)}</td>
-              <td>{sgd(s.total_liabilities)}</td>
-              <td className={cls(s.net_worth)}>{sgd(s.net_worth)}</td>
-              <td>{sgd(s.net_worth_excl_housing)}</td>
-              <td>{sgd(s.net_worth_excl_housing_cpf)}</td>
-              <td><button className="nw-del" data-testid={"delete-" + s.id}
-                          onClick={(e) => { e.stopPropagation(); onDelete(s.id); }}>✕</button></td>
+      <div className="contained">
+        <table data-testid="networth-history">
+          <thead>
+            <tr>
+              <th style={{ textAlign: "left" }}>Date</th>
+              <th>Total Assets</th><th>Total Liab</th><th>Net Worth</th>
+              <th>Excl. Housing</th><th>Excl. Hou+CPF</th><th></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {snaps.map((s) => (
+              <tr key={s.id} style={{ cursor: "pointer" }} onClick={() => onSelect(s.id)}>
+                <td style={{ textAlign: "left" }}>{String(s.date)}</td>
+                <td>{sgd(s.total_assets)}</td>
+                <td>{sgd(s.total_liabilities)}</td>
+                <td className={cls(s.net_worth)}>{sgd(s.net_worth)}</td>
+                <td>{sgd(s.net_worth_excl_housing)}</td>
+                <td>{sgd(s.net_worth_excl_housing_cpf)}</td>
+                {/* `aria-label` rather than the `title=` the shape invites: a tooltip is
+                    invisible on touch, and this glyph is the row's only destructive
+                    control. */}
+                <td><button className="nw-del" aria-label="Delete snapshot"
+                            data-testid={"delete-" + s.id}
+                            onClick={(e) => { e.stopPropagation(); onDelete(s.id); }}>✕</button></td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
