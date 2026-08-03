@@ -5,8 +5,8 @@ carries most of it.
 
 **The regression trigger is the suite, and the command is `make test-web`.** Ten named viewports ×
 thirteen views, run against a production build through vite's preview server with every API call
-served from committed fixtures: **1,237 passed, 308 skipped, 0 failed, ~8 minutes on an unloaded
-machine**, as of this reconciliation. The skips are structural rather than disabled tests — a gate
+served from committed fixtures: **1,345 passed, 470 skipped, 0 failed, ~7.5 minutes on an unloaded
+machine**, as of #47. The skips are structural rather than disabled tests — a gate
 whose subject does not render at a viewport skips there, which is what makes "no card-per-row at 640
 and above" and "the desktop table is untouched" separate claims from their positive halves.
 `web/TESTING.md` says what each spec claims. The table-inventory grep this file used to ask a human
@@ -25,10 +25,11 @@ stop being trusted:
 - **Open calls** — failing one **changes a decision** rather than reporting a bug.
 
 **One thing is none of the three, and it is written down under [Not built yet](#not-built-yet)
-instead of hiding in a gate**: two of the universal criteria — the 44px tap floor and 16px form
-controls in fully-responsive views — describe rules that were decided and never built. They are not
-manual checks, they are outstanding work, and a checklist that lists unbuilt rules as things to
-eyeball is how they stay unbuilt for another five tickets.
+instead of hiding in a gate**: a rule that was decided and never built. It is not a manual check, it
+is outstanding work, and a checklist that lists unbuilt rules as things to eyeball is how they stay
+unbuilt for another five tickets. **That section held two entries and holds one** — the 44px tap
+floor and 16px form controls landed as #47, which is what took universal gate 4 from one control to
+every control; `.grid2`'s track floor is what is left, and it is #44's.
 
 Visual-regression diffing remains out of scope by decision, and a test asserts no screenshot
 assertion creeps in.
@@ -85,8 +86,14 @@ the only gates left in this file:
 2. **`env(safe-area-inset-*)`.** Desktop Chrome reports **0** at every viewport in both
    orientations; the shell prototype had to fake them.
 3. **The nested-scroll feel on Recurring.** Geometry is fine; whether it confuses is not.
-4. **Touch-target comfort at 44px**, wherever the floor landed — the drawer in portrait, the app
-   bar, the tab picker, the footnote disclosure.
+4. **Touch-target comfort at 44px**, wherever the floor landed — which since #47 is **every control
+   in the eleven fully-responsive views**, not only the navigation. The drawer in portrait, the app
+   bar, the tab picker and the footnote disclosure had it before; the tables' own controls, the
+   filter `<select>`s, the checkbox labels, `Recurring`'s `+ Track` / `✕` pairs and the 44px row
+   pitch under every `tr.rowlink` and `tr.rowtap` have it now. `tap.spec.js` gates the geometry at
+   four phone viewports; **whether it is comfortable is still an eye**, and the two places to look
+   first are the ones where 44px cost something visible: `Recurring`'s action column (100.72 →
+   118.8px) and `Holdings`, which lost two rows a screen.
 5. **Touch-target comfort at 844×390, where the floor deliberately did *not* travel.** The shell
    follows `(max-height: 500px)` and the tap floor follows `max-width`, so a rotated phone opens a
    drawer with **39px** rows (measured — see [Observations](#observations)). `shell.spec.js` asserts
@@ -118,10 +125,12 @@ What is left:
 3. **The bottom of a scrolled list is reachable and sign-in does not rubber-band.** `100svh` and its
    consequences are asserted as declarations and as geometry; the **symptom** stays an iPhone check,
    because emulation has no retractable toolbar and so cannot see the strip either way.
-4. **iOS focus-zoom does not fire on the one control that was given 16px** — the tab picker.
-   `shell.spec.js` asserts the computed 16px; whether that actually suppresses Safari's zoom is the
-   least-verified claim in the whole effort. *(Every other form control on a phone is not a check —
-   see [Not built yet](#not-built-yet).)*
+4. **iOS focus-zoom does not fire on any form control.** `tap.spec.js` sweeps every rendered
+   `input`, `select` and `textarea` in all thirteen views at every phone viewport and asserts the
+   computed 16px; `shell.spec.js` holds the tab picker's separately, since that one is in the app
+   bar rather than under `.main`. Whether 16px actually suppresses Safari's zoom is still the
+   least-verified claim in the whole effort — but it is no longer also the narrowest. *(Until #47
+   the rule protected exactly one control, and this gate said so.)*
 
 ## The two editors
 
@@ -152,14 +161,14 @@ person still looks at, and "—" means the suite has all of it.
 | Portfolio › Dividends | crosstab **A** (grows in columns, so h-scroll never expires) · payment ledger **B** below 640, **A** on `Date` from 640 to 1024 · `LabelList` dropped below 640 · `--selfscroll: 520px` keeps desktop's box height without an inline `max-height` | — |
 | Portfolio › Options | contract ledger **A**, pinning `Underlying` · by-ticker and by-type unchanged (273/261px — they genuinely fit) · monthly P/L 6 bars below the tier against 24 above it, with the reserved band only when the window holds a loss | — |
 | Portfolio › Transactions | **B** below 640 · **A** on `Date` from 640 to 1024 | — *(telling two same-day trades apart is an [open call](#open-calls), not a check)* |
-| Portfolio › SecurityDetail | txn history **B** · dividend history **B** · options history **A**, pinning the merged two-line `Contract` cell — and **B, A, A** above 640, since the tier gives both histories the pin on `Date` · `← Holdings` is a ≥44px target and the only way back | the dividend history renders for no fixture (PLTR has none) — its wrapper is the one thing in the tier no fixture reaches, and `pinned.spec.js` annotates that on every run |
+| Portfolio › SecurityDetail | txn history **B** · dividend history **B** · options history **A**, pinning the merged two-line `Contract` cell — and **B, A, A** above 640, since the tier gives both histories the pin on `Date` · `← Holdings` is `a.backlink`, a ≥44px target below the tier and the only way back — it was 17px until #47, see [Observations](#observations) | the dividend history renders for no fixture (PLTR has none) — its wrapper is the one thing in the tier no fixture reaches, and `pinned.spec.js` annotates that on every run |
 | Net Worth | editor floor · line chart carries a DOM `.chartkey`, not `<Legend>` · Breakdown and History `.contained` **below 1024**, not unconditionally · row grid unchanged | readable — the editors' remaining criterion |
 | Spending › Overview | donut dropped below 640, the list is the chart · stacked bar chart's `<Legend>` is a `.chartkey` · Top Line Items **B** below 640, **A** on `Category` from 640 to 1024 | the stacked bar chart itself: `/api/spending/trends` was captured as a **500**, so it never mounts under test. `inventory.spec.js` gates it from source and `charts.spec.js` annotates the gap. Closes when **#35** does |
 | Spending › By Category | donut dropped below 640 · Categories **A** with the name column pinned, keeping its own `▸`/`▾` and the `.rowtap` flash *instead of* the persistent `›` · drilled transactions **B**, **outside the `.grid2` entirely** rather than merely outside the table | whether three levels of drill read as one structure once the third leaves the grid |
 | Spending › Classify | editor floor · `.fillpane`/`.grow` become blocks below 640 so the page scrolls as one, `.scroll` deliberately untouched · ⇅ Reorder `display: none`, so the reorder modal is unreachable below the tier by design · `RuleModal` on `svh`, its control rows wrap, `CatSelect` capped at `max-width: 100%`, `MatchTable` `.contained` | readable · `MatchTable` renders only after a POST the GET-captured fixtures do not carry — `editors.spec.js` annotates that gap |
 | Spending › Recurring | monitor **A** · candidates **A** | the monitor never mounts — the owner tracks nothing, so `/api/spending/recurring` is `[]` and its pin is eyes-only (`pinned.spec.js` annotates it) · the **two nested scroll regions**, which is the feel check |
 | Spending › Transactions | **B** below 640 — six fields, merchant, one amount, four muted on a second line, no key/value block · **A** on `Date` from 640 to 1024, a *choice* rather than the default: `Merchant` measures **561px** of unbounded free text against a 440px window | excluded rows keep their dimming but **no fixture holds one**, so both renderings are unexercised — `cards.spec.js` asserts the two agree on 0.55 rather than observing either |
-| Sign-in | `100svh` at `auth.jsx:50` and `:125` · the box fills the screen and centres optically · **no phone rule at all** · GSI button carved out of the 44px floor | whether a **40px** button (measured) looks right beside a 44px world |
+| Sign-in | `100svh` at `auth.jsx:50` and `:125` · the box fills the screen and centres optically · **no phone rule at all** · the GSI button is **untouched by** the 44px floor rather than carved out of it — it is a `div[role="button"]` Google injects, and this screen has no form control of its own, so no selector reaches it | whether a **40px** button (measured) looks right beside a 44px world |
 
 ## Observations
 
@@ -179,23 +188,41 @@ reconciliation unless marked otherwise.
 - **Whether iPadOS Safari focus-zooms form controls — NOT RECORDED.** Needs a real iPad. The spec
   assumes it does not, and keeps 16px inputs phone-only on that basis. This remains the
   least-verified claim in the whole map.
-- **Holdings rows achieved — 12 portrait, 4 landscape. Both predictions met.**
-  At **390×844**: 12 rows fully on screen (11 data + 1 group row), 13 counting the one cut by the
-  fold — against a predicted 12–13. At **844×390**: 4 fully on screen (3 data + 1 group), 5 counting
-  the partial — against a predicted 4. A data row is **52.5px**, a group row **36px**.
-  Two things worth knowing about *how* it was met. The prediction was taken at a 44px cell pitch that
-  [was never built](#not-built-yet); the count lands in range anyway because the pinned `Security`
-  cell is two lines, which makes a data row 52.5px on its own. And at 844×390 the footnote
-  disclosure is **open**, because `Holdings.jsx` reads its query by *width*, once, at mount — 844 is
-  not the phone tier — so the landscape count is with the footnote expanded, which is the harder
-  case rather than the easier one.
+- **Holdings rows achieved — 10 portrait, 4 landscape. Re-measured after #47, and the portrait
+  prediction is now MISSED by two.**
+  At **390×844**: **10** rows fully on screen (9 data + 1 group row), 11 counting the one cut by the
+  fold — against a predicted 12–13. At **844×390**: **4** fully on screen (3 data + 1 group), 5
+  counting the partial — against a predicted 4, unchanged. A data row is **60.5px** portrait and
+  **52.5px** landscape; a group row **44px** and **36px**.
+  **The two numbers differ because the tap floor is width-scoped**, which is the tier's own split
+  showing up in a row count: 844 is not the phone tier, so a rotated phone gets the old 7px cell
+  padding and the old row heights. Landscape did not change at all.
+  Portrait did, and the prediction was wrong in both directions at once. 015 forecast a 44px pitch
+  and 12 rows; the pitch it actually produces here is **60.5px**, because the pinned `Security` cell
+  is two lines and 11px of padding is paid on both of them. The count was *met* before #47 for the
+  same reason — the two-line cell made a row 52.5px without any pitch rule at all — so the earlier
+  reading of "prediction met" was a coincidence of the wrong cause. **Two rows is the price of the
+  floor on this screen**, and 015 stated the bill as 15 → 12 on a one-line cell.
+  At 844×390 the footnote disclosure is **open**, because `Holdings.jsx` reads its query by *width*,
+  once, at mount — so the landscape count is with the footnote expanded, the harder case.
+- **`SecurityDetail`'s `← Holdings` — 76.45 × 44px below the tier, 76.45 × 17px above it.** Recorded
+  because the per-view table asserted it was "a ≥44px target" and **it was not**: a bare `<a>` with
+  an `onClick` and no `href` is inline and had no box at all, so it measured 17px tall until #47 gave
+  it `a.backlink` and the inline-flex. It is the one claim in this file the sweep found to be simply
+  false rather than unbuilt. Above 640 it is still 17px, by the same decision that leaves a rotated
+  phone with 39px drawer rows.
+- **`Recurring`'s action column — 100.72px → 118.8px** below the tier, against 015's forecast of
+  ~45px → ~88px. Right direction, wrong magnitude in both readings: the cell already carried more
+  than the bare buttons, so the floor cost **18px** rather than the 43px predicted. Paid in scroll
+  distance inside a pinned table, which is what the forecast said it would be.
 - **The drawer's row height at 844×390 — 39px** (`Settings`, the dim one, 37.5px), against **44px**
   for the same rows at 390×844. Predicted ~38px. This is the residual the tablet tier's height guard
   creates and the one place two of that tier's decisions pull against each other: the shell travels
   to a rotated phone on `(max-height: 500px)`, and the 44px floor stays behind `max-width` because
   44px targets are on the tier's "explicitly not done" list. Above WCAG 2.5.8's 24px floor, below
   the comfort target the same effort set for the same control in portrait. The comfort half is
-  iPhone item 5.
+  iPhone item 5. **Re-measured after #47 and still 39px**, which was the point of measuring it: that
+  ticket gave a rotated phone every new rule for its *content* and none for its navigation.
 
 ## Real-device log
 
@@ -207,7 +234,7 @@ it implied — an unrecorded device check is indistinguishable from one that nev
 | 1 | iOS focus-zoom on the tab picker at 390×844 | — | — | **not yet run** |
 | 2 | notch and home-bar seam under `viewport-fit=cover`, both orientations | — | — | **not yet run** |
 | 3 | Recurring's two nested scroll regions — does it confuse | — | — | **not yet run** |
-| 4 | 44px comfort where the floor landed: drawer, app bar, picker, footnote summary | — | — | **not yet run** |
+| 4 | 44px comfort where the floor landed — since #47, every control in the eleven fully-responsive views | — | — | **not yet run** |
 | 5 | 39px drawer rows at 844×390 — comfortable, or does the floor need the height arm | — | — | **not yet run** |
 | 6 | *(observation)* does iPadOS Safari focus-zoom form controls — an iPad, not an iPhone | — | — | **not yet run** |
 
@@ -261,35 +288,14 @@ Neither gates nor observations: **rules that were decided and never built**. The
 than in the gate list because eyeballing an unbuilt rule is not a check, and because a residual with
 no owner is precisely how four tables went unassigned through the whole map.
 
-- **The 44px tap floor never reached the content controls, and 16px form controls never landed at
-  all.** Decided in `.wayfinder/tickets/015-touch-targets-type-scale.md`, which is closed, and never
-  given a build issue until the sweep went looking — every ticket after it was scoped to a *pattern*
-  or a *view*, and these are two rules about every fully-responsive screen, so each one reasonably
-  assumed the foundations ticket had them. **It is #47's now.**
-  `--tap: 44px` is declared and used by `.navitem`, `.logout-btn`, `.bar-btn`, `.tabsel` and
-  `.tablenote > summary` — the navigation shell and the footnote disclosure, no more. The rest of
-  what was decided is absent from `styles.css`: `input, select, textarea { font-size: 16px }`,
-  `th, td { padding: 11px 8px }` (the 44px row pitch), and the square floor on `.link-btn`,
-  `.refresh-btn`, `select`, `SecurityDetail`'s back link and `Transactions`' "show excluded" label.
-  **Measured at 390×844 against the committed fixtures**, counting only fully-responsive views —
-  the two editors are exempt at 24px and clear it:
+**This section held two entries and holds one.** The 44px tap floor and 16px form controls — decided
+in `.wayfinder/tickets/015-touch-targets-type-scale.md`, absent from `styles.css` for five tickets,
+found by measuring rather than by reading — **landed as #47** and are gated by `tap.spec.js`, which
+is a sweep of everything the page renders rather than a list of selectors, because a named-selector
+gate is exactly what could not notice them. What each view carried before it landed is in that
+issue; the numbers are not repeated here, since a checklist that keeps its own history stops being
+a checklist.
 
-  | view | controls under 44px square | form controls not at 16px |
-  |---|---|---|
-  | Portfolio › Holdings | grouping `<select>` 104×31 · checkbox 13×13 | 2 (12px) |
-  | Portfolio › Performance | grouping `<select>` 168×33 | 1 (14px) |
-  | Portfolio › Dividends | checkbox 13×13 | 1 (11.2px) |
-  | Portfolio › Transactions | account `<select>` 158×33 · text input 100×35 | 2 (14px) |
-  | Spending › By Category | 4 | 1 |
-  | Spending › Recurring | 38 — the three `.link-btn`s per row, at ~21px tall | 5 |
-  | Spending › Transactions | 3 | 3 |
-
-  `Portfolio › Overview`, `Options`, `SecurityDetail` and `Spending › Overview` carry no control
-  that fails, and sign-in's only one is the carved-out GSI button. **The 16px half is what the
-  entire iOS-focus-zoom decision rests on**, so today that decision protects one control — the tab
-  picker — and nothing else. `tablet.spec.js` already asserts the *inverse* above 640 ("tap targets
-  are not enlarged and inputs are not resized"), so the tier boundary is gated from one side only.
-  The stylesheet comment at `styles.css:414` reads as though the phone rule exists; it does not.
 - **`.grid2`'s `minmax(420px, 1fr)` track floor is the last horizontal overflow below 640, and it is
   **#44**'s.** Five views — `Portfolio › Overview`, `Options`, `Net Worth` and both `Spending`
   views — share it *to the pixel* at all seven gated viewports: 74 / 44 / 4 / 0 / 8 / 0 / 0. One
@@ -301,7 +307,27 @@ no owner is precisely how four tables went unassigned through the whole map.
 Things the build session must be told, not left to discover.
 
 - `spending/Transactions.jsx:40` carries an inline `fontSize: 13` — **CSS cannot reach it**; a rule
-  targeting it silently no-ops until that style moves to a class.
+  targeting it silently no-ops until that style moves to a class. **Narrower than it reads, and #47
+  is the proof**: only the *declared* property is out of reach. That label now carries `.taplabel`
+  and takes its `min-height` and its `display` from the stylesheet perfectly well; what an inline
+  style beats is the same property, not the element. The trap is real for anyone trying to change
+  its type size, and only that.
+- **A floor is one rule, and a population is one class.** The 44px square floor is written once, as
+  one selector list — and `:not(.editor *)` is on **every member of it**, including the two that
+  appear in no editor today, because a floor that is exempt-by-ancestor for some of its selectors
+  and unconditional for the rest is not exempt-by-ancestor at all. `.editor` marks the two desktop-optimised
+  views' roots and does *nothing else* — it is not `.fillpane`, which is Classify's flex machinery
+  and happens to sit on the same element. The two are separate on purpose: a later ticket that
+  restructures Classify's scroll ownership must not silently hand it a 44px floor by deleting a
+  layout class. And the exemption is **asserted as a band** in `tap.spec.js` — at least 24px, and
+  something genuinely under 44 — so dropping the `:not()` fails there rather than being noticed the
+  next time somebody opens the rules table on a phone.
+- **A checkbox's tap target is its `<label>`, not its box.** All three checkboxes in the app are
+  wrapped in one and carry `.taplabel`; the floor is on the label and the box stays 13×13, because a
+  44px checkbox is a different thing from a 44px target. `tap.spec.js` resolves a checkbox to its
+  labelling ancestor before measuring, so a *new* checkbox with no label fails there — which is
+  correct, since nothing would be enlarging its target. A `<label>` is inline and has no box to
+  size, so the rule carries `display: inline-flex` with it; the same is true of `a.backlink`.
 - `Classify.jsx:126` carries an inline `maxHeight: 232` — same problem, accepted as-is, and it is
   **the one nested scroll region left in the app below 640**: the `.fillpane` machinery around it is
   neutralised there, so the rules list is the only thing on that screen that scrolls inside the page.
@@ -465,7 +491,7 @@ Things the build session must be told, not left to discover.
 ## Re-running
 
 **The trigger is the suite. The command is `make test-web`.** It builds the frontend and runs all
-ten viewport projects plus the file-reading `inventory` project; a full run is ~8 minutes.
+ten viewport projects plus the file-reading `inventory` project; a full run is ~7.5 minutes.
 
 ```
 make test-web                                          # everything
