@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from "react";
 import {
   ResponsiveContainer, Tooltip,
-  BarChart, Bar, XAxis, YAxis, Legend, CartesianGrid,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { get, sgd, fmt } from "../../api.js";
-import { COLORS, Donut } from "../../charts.jsx";
+import { COLORS, ChartKey, Donut } from "../../charts.jsx";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
 export default function SpendOverview() {
@@ -82,12 +82,15 @@ export default function SpendOverview() {
               <Tooltip formatter={(v) => sgd(v)}
                        contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
                        itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
-              <Legend wrapperStyle={{ fontSize: 12 }} />
               {trend.groups.map((g, i) => (
                 <Bar key={g} dataKey={g} stackId="s" fill={COLORS[i % COLORS.length]} />
               ))}
             </BarChart>
           </ResponsiveContainer>
+          {/* The `<Legend>` this replaces was inside the chart, so its ~75px came out of the
+              300px plot. Same colours, same order — both read `COLORS[i % COLORS.length]`
+              off the same index, which is what keeps the key honest. */}
+          <ChartKey items={trend.groups.map((g, i) => ({ name: g, colour: COLORS[i % COLORS.length] }))} />
         </div>
       )}
     </div>

@@ -68,15 +68,26 @@ export default function Dividends() {
             </tbody>
           </table>
         </div>
-        <div style={{ height: 220, marginTop: 16 }}>
-          <ResponsiveContainer width="100%" height="100%">
+        {/* `height={220}` ON THE CONTAINER, not `height="100%"` inside a 220px wrapper.
+            The wrapper made this render correctly and made it a trap: a percentage height
+            resolves against a parent that has one, so the day someone makes that wrapper
+            flex-derived the chart silently collapses to 0×0 with no error anywhere. It was
+            never live — this is the defensive fix, taken while here. */}
+        <div style={{ marginTop: 16 }}>
+          <ResponsiveContainer width="100%" height={220}>
             <BarChart data={chart} margin={{ top: 20, right: 8, bottom: 0, left: 8 }}>
               <XAxis dataKey="year" fontSize={12} />
               <YAxis fontSize={12} tickFormatter={(v) => fmt(v, 0)} width={56} />
               <Tooltip formatter={(v) => [sgd(v), "Total"]} />
               <Bar dataKey="total" fill="var(--pos, #2e9e5b)" radius={[3, 3, 0, 0]}>
-                <LabelList dataKey="total" position="top" fill="#c9d1d9" fontSize={11}
-                           formatter={(v) => sgd(v)} />
+                {/* DROPPED BELOW 640, because the Total row of the real table ~40px above is
+                    this exact series, year by year, in full `S$` format. The labels print
+                    numbers already on the screen; the chart keeps its shape and loses
+                    nothing. The chrome goes, never the container. */}
+                {!phone && (
+                  <LabelList dataKey="total" position="top" fill="#c9d1d9" fontSize={11}
+                             formatter={(v) => sgd(v)} />
+                )}
               </Bar>
             </BarChart>
           </ResponsiveContainer>

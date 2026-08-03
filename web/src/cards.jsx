@@ -38,7 +38,14 @@ import React, { useEffect, useState } from "react";
  * `styles.css` says `max-width: 639.98px`, `tests/viewports.js` says `< 640`, and
  * `Holdings.jsx` reads the same query for its footnote. JS cannot read a CSS custom property
  * and this repo takes no build step to make one, so the four sites cross-reference in
- * comments rather than share a constant. `RESPONSIVE.md`'s Traps names all of them.
+ * comments rather than share a constant. `RESPONSIVE.md`'s Traps names all of them, and
+ * `inventory.spec.js` asserts this string *character for character* against the tier edge the
+ * suite and the stylesheet agree on — a comment cannot catch `640px` written for `639.98px`,
+ * which is the 1px dead zone the `.98` exists to prevent.
+ *
+ * THE CHARTS READ THIS RATHER THAN ADDING A FIFTH SITE. `charts.jsx` drops the donut below the
+ * tier and `Options.jsx` halves its monthly series; the map forecast both as new `matchMedia`
+ * calls, and reusing the hook is what kept the count at four.
  */
 const PHONE = "(max-width: 639.98px)";
 
