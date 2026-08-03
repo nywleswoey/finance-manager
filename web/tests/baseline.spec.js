@@ -8,12 +8,20 @@
  * derived once from the live database. This is the same substitution shape the backend
  * suite uses at the persistence boundary, one layer down.
  *
- * WHAT THIS SUITE ASSERTS TODAY. Only what already holds. This file is the baseline the
- * mobile-responsive work is measured against, so it must run green against the code as
- * it stands, before any layout change lands — otherwise "desktop is unchanged" is an
- * assertion nobody can check. The suite grows as behaviour lands; the per-view gates in
- * `RESPONSIVE.md` (pinned columns, card patterns, the drawer, 44px targets, 16px form
- * controls) are deliberately not here yet, because none of them are true yet.
+ * WHAT THIS FILE ASSERTS. The gates that are true of *every* view at *every* viewport, and
+ * nothing else: that the view rendered from fixtures at all, that nothing computes to
+ * `position: fixed`, and the horizontal-overflow ratchet. It began as the baseline the
+ * mobile-responsive work was measured against — green against the code as it stood, before
+ * any layout change landed, so that "desktop is unchanged" was an assertion somebody could
+ * check — and every pattern that landed since took its gates to its own spec rather than
+ * here: the pin to `pinned.spec.js`, the cards to `cards.spec.js`, the drawer to
+ * `shell.spec.js`, the tier to `tablet.spec.js`.
+ *
+ * TWO OF `RESPONSIVE.md`'S UNIVERSAL CRITERIA HAVE NO SPEC AT ALL, and that is not an
+ * omission here: the 44px tap floor on content controls and 16px form controls were decided
+ * and never built, so there is nothing to assert. They are recorded under that file's
+ * "Not built yet" with the measured evidence. Do not add a gate for them before the rules
+ * exist — a suite that fails for behaviour nobody has written is a suite people switch off.
  *
  * WHAT THIS SUITE CANNOT CHECK, EVER. A green run is not "verified on a phone":
  *
@@ -26,14 +34,18 @@
  *     paints under the home indicator with no seam.
  *   - Touch-target comfort and nested-scroll feel. 44px is measurable; whether a target
  *     is comfortable, and whether two nested scroll regions feel confusing rather than
- *     merely being geometrically fine, are subjective by construction.
+ *     merely being geometrically fine, are subjective by construction. There are two
+ *     places for this rather than one since the tablet tier: the drawer at 390x844, where
+ *     the floor applies and measures 44px, and the drawer at 844x390, where it
+ *     deliberately does not and measures 39px.
  *   - Every open call. An open call changes a decision rather than failing a check —
  *     whether the recurring-spend monitor wants a redesign rather than a reflow, whether
  *     any phone list needs a row cap, whether SecurityDetail's transaction history reads
  *     as cramped. None of those are assertions.
  *
- * The manual checklist therefore shrinks rather than dies: it keeps those four items,
- * the observations, and the open calls.
+ * The manual checklist therefore shrinks rather than dies: it keeps those items, the
+ * observations, and the open calls — and nothing else. The sweep reconciled it against
+ * this suite, so a gate written there is one a person genuinely has to run.
  *
  * ONE GATE IS SCOPED, AND IT IS A RATCHET RATHER THAN A LINE. The horizontal-scroll gate
  * applies only below 1024px — `HSCROLL_GATE_APPLIES_BELOW` says why the wider two are
