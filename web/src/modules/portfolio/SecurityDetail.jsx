@@ -13,7 +13,7 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
   }, [ticker, bucket]);
 
   if (!d) return <div className="loading">Loading {ticker}…</div>;
-  if (d.error || !d.summary) return <div className="loading">No data for {ticker}. <a onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)" }}>← back</a></div>;
+  if (d.error || !d.summary) return <div className="loading">No data for {ticker}. <a className="backlink" onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)" }}>← back</a></div>;
   const s = d.summary;
   // SGD, like every other tile — a native sum would be wrong anyway for a security paid in
   // more than one currency (e.g. an EUR REIT with SGD-settled lots).
@@ -24,7 +24,12 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
   return (
     <div>
       <div style={{ marginBottom: 14 }}>
-        <a onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)", fontWeight: 600 }}>← Holdings</a>
+        {/* `backlink`, because this is the only way out of this view and a bare `<a>` with an
+            `onClick` and no `href` is inline — it has no box for a tap floor to size. It
+            measured 76.45x17 before the class landed; the phone rule gives it the inline-flex
+            and the 44px square. */}
+        <a className="backlink" onClick={onBack}
+           style={{ cursor: "pointer", color: "var(--acc)", fontWeight: 600 }}>← Holdings</a>
       </div>
       <div className="hd-row" style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
         <h2 style={{ margin: 0 }}>{s.name}</h2>

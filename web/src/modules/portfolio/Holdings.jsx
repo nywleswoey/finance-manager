@@ -151,7 +151,10 @@ export default function Holdings() {
             {Object.entries(GROUPS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
         </label>
-        <label className="mut" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
+        {/* `taplabel`: the label is the tap target, not the 13x13 box inside it — clicking it
+            toggles the checkbox, so a 44px checkbox would be the wrong reading of a square
+            floor. The same class is on the other two checkbox labels in the app. */}
+        <label className="mut taplabel" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
           <input type="checkbox" checked={showClosed} onChange={(e) => setShowClosed(e.target.checked)} />
           Show closed positions
         </label>

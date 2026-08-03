@@ -3,9 +3,9 @@
 **The definition of done for anything you change under `web/src` is [`../RESPONSIVE.md`](../RESPONSIVE.md).**
 It is the checklist — and since the sweep reconciled it against this suite, it holds **only what
 this suite cannot assert**: five gates that need a real iPhone and one observation that needs an
-iPad, the rest of the observations with their measured values, the open calls, and one section of
-rules that were decided and never built. Every gate that moved in here was deleted from there. Read
-it before changing layout, not after.
+iPad, the rest of the observations with their measured values, the open calls, and one rule that was
+decided and never built. Every gate that moved in here was deleted from there. Read it before
+changing layout, not after.
 
 **The command is `make test-web`** (from the repo root). It builds the frontend and runs the
 Playwright viewport suite against the production build through vite's preview server.
@@ -74,6 +74,21 @@ wrapper holds the table and nothing else, it fits its parent, and — the part a
 does not give you — the identity column inside it is `sticky`. That last gate is what found the
 sixth table: `Dividends`' detail ledger had been inside an inline 520px scroll box since long
 before this work, so it never appeared in the pane ratchet and read as done.
+
+`tests/tap.spec.js` — the phone tier's two rules about every fully-responsive *screen*: 16px form
+controls and a 44px square tap floor, below 639.98px. **The only spec in the suite that is a sweep
+rather than a list**, and the reason is the bug it exists for: both rules were decided in ticket 015,
+built for the navigation shell alone, and went unnoticed for five tickets because every gate here
+asserts a selector somebody named — and a named-selector gate cannot see a control nobody named.
+This one asks the page what it renders and measures all of it, so a control added next year fails
+without anyone remembering it. Three carve-outs, each with its own reason: the two editors are exempt
+at 24px by decision and the exemption is **asserted as a band** rather than skipped, so it fails both
+if their floor disappears and if the phone one leaks in; a checkbox is measured on the `<label>` that
+wraps it, because clicking a label toggles the box and a 44px checkbox is not what a square floor
+means; and sign-in's Google button is unreachable here at all — the seam aborts Google's script — and
+was measured off-suite at 40px, which is why the carve-out is load-bearing. It is width-scoped, so
+844×390 gets the drawer and **no tap floor**, which is the same boundary `tablet.spec.js` asserts
+from above.
 
 `tests/pinned.spec.js` — pattern A: fourteen tables across ten views that pin an identity column and
 scroll the rest sideways below **1024px**, not 640. Eight of them are tables you read *down* a

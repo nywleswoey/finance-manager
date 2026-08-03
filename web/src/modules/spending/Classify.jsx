@@ -104,8 +104,13 @@ export default function Classify() {
   const classified = q.total_spend - q.unclassified;
   const progress = q.total_spend ? Math.round((classified / q.total_spend) * 100) : 0;
 
+  /* `editor` alongside `fillpane`, and the two are not the same job: `fillpane` is the flex
+     machinery this view's scroll ownership is built on, `editor` marks it as one of the two
+     desktop-optimised views the phone tier's 44px square floor exempts by ancestor. Both
+     modals render inside this element, so the exemption reaches them too — which is the
+     point, since `RuleModal` is where the sheet is narrowest. */
   return (
-    <div className="fillpane">
+    <div className="fillpane editor">
       <div className="tiles">
         <Tile lbl="Spends" val={q.total_spend} />
         <Tile lbl="Unclassified" val={q.unclassified} cls={q.unclassified ? "neg" : ""} />

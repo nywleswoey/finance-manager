@@ -106,7 +106,8 @@ export default function Dividends() {
           {det && <span className="pill" style={{ marginLeft: 6 }}>{sgd(shownSgd)}</span>}
           {det && det.flagged > 0 &&
             <span className="pill" style={{ marginLeft: 6, color: "var(--neg)" }}>{det.flagged} need manual input</span>}
-          <label style={{ marginLeft: 12, fontWeight: 400, fontSize: ".8em" }}>
+          {/* `taplabel` — the label is the target, not the 13x13 box. See Holdings. */}
+          <label className="taplabel" style={{ marginLeft: 12, fontWeight: 400, fontSize: ".8em" }}>
             <input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} />
             &nbsp;flagged only
           </label>

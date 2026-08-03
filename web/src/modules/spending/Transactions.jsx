@@ -37,7 +37,11 @@ export default function SpendTransactions() {
         <select value={source} onChange={(e) => setSource(e.target.value)} style={{ marginLeft: 8 }}>
           {Object.entries(SOURCES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
-        <label style={{ marginLeft: 12, fontSize: 13, fontWeight: 400 }}>
+        {/* `taplabel` — 015 named this exact label when it wrote the rule: the label is the
+            target and `<label>` is inline, so it needs the flex to have a box at all. The
+            inline `fontSize: 13` stays out of reach of CSS and is left alone; nothing here
+            is a claim about its type size. */}
+        <label className="taplabel" style={{ marginLeft: 12, fontSize: 13, fontWeight: 400 }}>
           <input type="checkbox" checked={excluded} onChange={(e) => setExcluded(e.target.checked)} /> show excluded
         </label>
       </h3>

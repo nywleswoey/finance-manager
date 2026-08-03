@@ -424,14 +424,15 @@ tr.subrow > td { background: var(--panel2); }
    `.link-btn`s are in a fully-responsive view whose floor is 44px square, not 24px — so
    their width was left to that rule rather than written twice.
 
-   THAT RULE DOES NOT EXIST YET, and this comment used to imply it did. The 44px floor
-   reached the navigation shell and the footnote disclosure only; `.link-btn`,
-   `.refresh-btn`, `select`, the SecurityDetail back link and the "show excluded" label
-   never got it, and `input, select, textarea { font-size: 16px }` never landed at all.
-   Measured at 390x844: Recurring alone carries 38 controls under 44px square. Recorded
-   with the rest of the evidence under "Not built yet" in `RESPONSIVE.md`, and owned by
-   issue #47. Until it lands, Recurring's three buttons are 24px tall and 24px is the whole
-   of their floor. */
+   THAT RULE EXISTS NOW — the square-floor block at the bottom of this file, #47. For five
+   tickets it did not, and this comment implied it did: the 44px floor had reached the
+   navigation shell and the footnote disclosure only, so Recurring's three buttons were 24px
+   tall and 24px was the whole of their floor. Below 640 their width is that rule's now, and
+   this one is what still holds them above it, on the desktop the editors are optimised for.
+
+   THE TWO RULES STAY SEPARATE, and the split is the reason: this one is unconditional and
+   `.fillpane`-scoped, that one is `max-width: 639.98px` and `:not(.editor *)`. Folding them
+   together would either take 44px to desktop or take the editors' 24px away below 640. */
 button { min-height: 24px; }
 .fillpane button, .nw-del { min-width: 24px; }
 /* S2 inline: one line per entry, the proportional fill *behind* the text rather than beside
@@ -631,6 +632,82 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
      would hand it to any short desktop window too, which is the tier's own "desktop is
      unchanged" line. */
   .logout-btn { min-height: var(--tap); min-width: var(--tap); }
+
+  /* ── the two rules about every fully-responsive screen ──
+     015 decided both and neither was built for five tickets, because every ticket after it
+     was scoped to a *pattern* or a *view* and these are neither — so each one reasonably
+     assumed the foundations ticket had them. #34's sweep found the gap by measuring instead
+     of reading; they are #47's, and they are here now. `tests/tap.spec.js` is the gate, and
+     it is a sweep rather than a selector list for the same reason the gap existed: a
+     named-selector gate cannot notice a control nobody thought to name.
+
+     EXPLICIT 16px, NOT INHERITED. `input, select, textarea` take `font: inherit` from their
+     base rule and the body stays 14px by decision — raising it would invalidate every row-count and
+     column-width measurement in the spec — so this has to name the size rather than pick it
+     up. It is the whole of the defence against iOS Safari's focus-zoom, which re-scales the
+     layout when a control under 16px takes focus, and it applies to the two editors too:
+     their exemption is about tap *targets*, and NetWorth's 17-row form is the densest set of
+     inputs in the app rather than an accepted casualty. Accepted consequence, 015's: form
+     controls render visibly larger than the text around them, which is what iOS users see
+     across most of the web anyway. */
+  input, select, textarea { font-size: 16px; }
+
+  /* THE 44px ROW PITCH: 11 + 21 (14px x 1.5) + 11 + 1px border. Horizontal 10 -> 8 is not a
+     rounding — it returns ~40px of scroll distance on a ten-column table, so this makes the
+     widest tables *narrower* while making their rows tappable.
+
+     No carve-out for full-bleed rows, and that is a decision rather than an oversight: 015
+     refused one because exempting them means every table needs a class declaring whether it
+     is tappable and every table added later needs a judgement call. So this rule is also
+     what fixes `tr.rowtap` and `tr.rowlink` — a `min-height` on a `<tr>` is ignored by table
+     layout, and the cells are the only thing that can grow a row.
+
+     44px IS THE FLOOR, NOT THE PITCH, and the difference is measurable: a `.pinned` table
+     whose identity cell wraps to two lines pays the 11px on both of them, so Holdings' data
+     rows are 60.5px rather than 44 and the screen holds ten instead of the forecast twelve.
+     Recorded under Observations in `RESPONSIVE.md` rather than tuned away — a pitch that
+     shrinks when a cell wraps would not be a floor.
+
+     Global, editors included: it is what gives Classify's tables 44px rows for free, and
+     their floor was only ever about horizontal room inside a cell. */
+  th, td { padding: 11px 8px; }
+
+  /* THE SQUARE FLOOR. Square rather than height-only because the shape exists for bare glyph
+     buttons sitting adjacent, and `Recurring.jsx` is the view it was written for: `+ Track`
+     at 55x24 and `✕ dismiss` at 21.9x24 in the same cell. Cost, measured after the fact: that
+     action column goes 100.72px -> 118.8px, paid in scroll distance rather than in clipping.
+     015 forecast ~45px -> ~88px and was right about the direction only — the cell already
+     carried more than the two buttons, so the floor cost 18px rather than 43.
+
+     `:not(.editor *)` IS THE TWO-POPULATION SPLIT, WRITTEN ONCE. `.link-btn` is one class in
+     views with different obligations — seven instances in `Classify`, three in `Recurring` —
+     and 44px square inside Classify's rules table is not a padding tweak but the editor
+     redesign the map ruled out (three of them sit side by side in one cell). `.editor` marks
+     the two roots and nothing else; the unconditional 24px floor above stays written as
+     `.fillpane button, .nw-del` rather than being folded in here, because that one is a
+     claim about every width and widening its selector would change desktop.
+
+     CHECKBOXES ARE EXCLUDED AND TARGETED THROUGH THEIR LABEL. A 44px checkbox is not what a
+     square floor means; clicking a label toggles the box it wraps, so `.taplabel` is the
+     target and the box is a glyph inside it. 015 wrote exactly this for Transactions' "show
+     excluded"; Holdings' and Dividends' checkboxes have the same shape and take the same
+     class. The label needs the flex to have a box at all — `<label>` is inline, and so is
+     `SecurityDetail`'s back link, which is a bare `<a>` with an `onClick` and no `href`.
+
+     NOT ON THE SHELL'S ARM. This block is `max-width` only; the drawer travels to 844x390 on
+     `(max-height: 500px)` and this floor deliberately does not follow, which is what leaves a
+     rotated phone with 39px drawer rows. Extending it on height would hand it to any desktop
+     window under 500px tall — the tier's own "desktop is unchanged" line. */
+  button:not(.editor *),
+  select:not(.editor *),
+  textarea:not(.editor *),
+  input:not([type="checkbox"]):not(.editor *),
+  a.backlink,
+  .taplabel {
+    min-height: var(--tap);
+    min-width: var(--tap);
+  }
+  a.backlink, .taplabel { display: inline-flex; align-items: center; }
 
   /* THE NAVIGATION SHELL IS NOT HERE ANY MORE — see the `(max-height: 500px)` block above.
      It moved out whole rather than being duplicated: the shell was chosen on a *vertical*
