@@ -128,8 +128,17 @@ body { margin: 0; background: var(--bg); color: var(--txt);
    sites have exactly two children, so a third column is impossible however wide the monitor.
    420 is min-content over representative data — it sets where the grid collapses, not a
    promise that nothing spills inside a column (`spending/Overview`'s card needs 519 against
-   the live DB's longest subcategory name). */
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 18px; }
+   the live DB's longest subcategory name).
+   `min(420px, 100%)` RATHER THAN `420px`, AND THE PERCENTAGE IS THE WHOLE OF IT. A bare
+   `420px` is a hard floor `auto-fit` cannot collapse below, so on a 362px phone pane the
+   single track was still 420 wide and the pane scrolled sideways by the difference — the
+   last horizontal overflow below 640, carried identically by all five call sites. The
+   percentage resolves against the grid container, so the floor reads "420px, or the whole
+   pane, whichever is smaller" and gives way only where there is no room. It moves the
+   floor, NOT the collapse point: two tracks still need 420 + 18 + 420 = 858px of grid box,
+   which is what `unconditional.spec.js` asserts at ten viewports, and above that width the
+   `min()` resolves to 420px and desktop is unchanged to the pixel. */
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 18px; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .card h3 { margin: 0 0 12px; font-size: 14px; color: var(--mut); text-transform: uppercase; letter-spacing: .04em; }
 /* A card heading with controls on its right. The one call site is Classify's rules card,
@@ -462,7 +471,15 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
 .loading { color: var(--mut); padding: 40px; }
 
 /* net worth */
-.nw-formhead { display: flex; gap: 14px; margin-bottom: 12px; }
+/* `flex-wrap: wrap` IS NOT COSMETIC AND IT IS NOT THE `.grid2` FLOOR. Date and Note are two
+   flex items of 176px and 177px against 298px of card once the track collapses, so the row's
+   own min-content is 367 and the pane took the difference — 38px at 360 and 8px at 390, which
+   is what was left of `Net Worth` after `min(420px, 100%)` landed and the only thing in the
+   whole ratchet that #44 did not predict. Wrap rather than shrink: each label fits the card on
+   a line of its own, where shrinking both would leave a ~159px date field for a ten-character
+   date and its picker glyph. Unconditional, and desktop is unchanged for the ordinary flex
+   reason — 367px has room above the collapse, so nothing wraps there. */
+.nw-formhead { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 12px; }
 .nw-formhead label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--mut); }
 .nw-group { margin-bottom: 12px; }
 .nw-grouptitle { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--mut); margin: 8px 0 4px; }

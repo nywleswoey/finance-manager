@@ -27,9 +27,11 @@ stop being trusted:
 **One thing is none of the three, and it is written down under [Not built yet](#not-built-yet)
 instead of hiding in a gate**: a rule that was decided and never built. It is not a manual check, it
 is outstanding work, and a checklist that lists unbuilt rules as things to eyeball is how they stay
-unbuilt for another five tickets. **That section held two entries and holds one** — the 44px tap
+unbuilt for another five tickets. **That section held two entries and holds none** — the 44px tap
 floor and 16px form controls landed as #47, which is what took universal gate 4 from one control to
-every control; `.grid2`'s track floor is what is left, and it is #44's.
+every control, and `.grid2`'s track floor landed as #44, which took `hscroll-baseline.js` to zero.
+An empty section is the point of the section; the moment a rule is decided and not built, it goes
+back.
 
 Visual-regression diffing remains out of scope by decision, and a test asserts no screenshot
 assertion creeps in.
@@ -288,19 +290,23 @@ Neither gates nor observations: **rules that were decided and never built**. The
 than in the gate list because eyeballing an unbuilt rule is not a check, and because a residual with
 no owner is precisely how four tables went unassigned through the whole map.
 
-**This section held two entries and holds one.** The 44px tap floor and 16px form controls — decided
-in `.wayfinder/tickets/015-touch-targets-type-scale.md`, absent from `styles.css` for five tickets,
-found by measuring rather than by reading — **landed as #47** and are gated by `tap.spec.js`, which
-is a sweep of everything the page renders rather than a list of selectors, because a named-selector
-gate is exactly what could not notice them. What each view carried before it landed is in that
-issue; the numbers are not repeated here, since a checklist that keeps its own history stops being
-a checklist.
+**This section held two entries and holds none.** Both landed by measuring rather than by reading,
+which is the only thing an unbuilt-rule list is really for.
 
-- **`.grid2`'s `minmax(420px, 1fr)` track floor is the last horizontal overflow below 640, and it is
-  **#44**'s.** Five views — `Portfolio › Overview`, `Options`, `Net Worth` and both `Spending`
-  views — share it *to the pixel* at all seven gated viewports: 74 / 44 / 4 / 0 / 8 / 0 / 0. One
-  cause, no table involved, and nothing else at all in the ratchet. The usual remedy is
-  `minmax(min(420px, 100%), 1fr)`. Until it lands, `hscroll-baseline.js` cannot become a `<= 0` gate.
+The 44px tap floor and 16px form controls — decided in
+`.wayfinder/tickets/015-touch-targets-type-scale.md`, absent from `styles.css` for five tickets —
+**landed as #47** and are gated by `tap.spec.js`, which is a sweep of everything the page renders
+rather than a list of selectors, because a named-selector gate is exactly what could not notice
+them. What each view carried before it landed is in that issue; the numbers are not repeated here,
+since a checklist that keeps its own history stops being a checklist.
+
+`.grid2`'s `minmax(420px, 1fr)` track floor — the last horizontal overflow below 640, shared to the
+pixel by five views — **landed as #44** as `minmax(min(420px, 100%), 1fr)`, and `hscroll-baseline.js`
+is now zero at every gated viewport and every view. Its header says what deleting it costs and why
+that is a separate ticket. What the five identical rows turned out to be hiding is in Traps below.
+
+*(The section is empty and is meant to stay readable that way. Add an entry the moment a rule is
+decided and not built.)*
 
 ## Traps
 
@@ -339,17 +345,36 @@ Things the build session must be told, not left to discover.
   pin actually tells you which row you are on.
 - **A nested `<table>` inherits its parent's width**, so it sets the parent's min-content. This is
   why the By Category drilldown leaves the table on phone rather than becoming cards in place.
-  **Leaving the table is not enough** — cards placed in the categories card are still 386px in a
-  362px pane, because `.grid2`'s 420px track floor reaches them there. They leave the whole grid.
+  **Leaving the table is not enough** — cards placed in the categories card were still 386px in a
+  362px pane when `.grid2`'s track floor was a hard 420px and reached them there. They leave the
+  whole grid. #44 has since collapsed that floor, so the *arithmetic* no longer forces it; the
+  decision stands anyway, because a drilldown that renders in place inside a category card is a
+  card inside a card inside a grid track, and the layout was rejected on that as well as on width.
+- **Rows that agree to the pixel are evidence of a shared cause and are not proof of a single one.**
+  `Portfolio › Overview`, `Options`, `Net Worth` and both `Spending` views read 74 / 44 / 4 / 0 / 8 /
+  0 / 0 across all seven gated viewports for four tickets, and #44 was filed on that agreement. Four
+  of them went to zero together when the track floor collapsed; `Net Worth` went to **38 / 8** and
+  stopped, because it carried a second cause the shared number had been sitting on top of —
+  `.nw-formhead`'s Date and Note are 176 and 177 wide against the 298px card a collapsed track hands
+  them, so that row's own min-content is 367 and the pane took the difference. `flex-wrap: wrap`
+  fixed it. **The way to tell one cause from two is to fix the cause and see which rows fail to
+  move**, which only works if you fix before you rewrite the baseline — measure the survivors, and
+  do not zero a row you have not watched go to zero.
 - **A card that overflows the pane reports nothing to `scrollWidth`** — it fits its own contents
   perfectly; what is off screen is the box it sits in. And measuring its right edge in *viewport*
   coordinates does not catch it either, because clicking a row has already scrolled `.main`
   sideways and dragged the card back into view. `drill.spec.js` adds `scrollLeft` back and compares
   in the pane's scroll space; built against the rejected layout, that is the difference between a
   27px failure and a green run.
-- `.grid2`'s `minmax(420px, 1fr)` is **~100px optimistic against real data** —
+- `.grid2`'s 420px is **~100px optimistic against real data**, and **#44 did not change that** —
   `spending/Overview.jsx:36`'s card needs **519px** with the live DB's longest subcategory name.
-  `auto-fit` still behaves; the column just spills inside itself between 1024 and ~1256.
+  `auto-fit` still behaves; the column just spills inside itself between 1024 and ~1256. The floor
+  is `min(420px, 100%)` now, which is a claim about the *pane* and reads as if it fixed this: it
+  does not, because 100% is never the binding term above the collapse. Content spilling inside a
+  track and a track spilling out of a pane are two problems, and only the second one has landed.
+  #44 was filed expecting this to be worth 40px at 640 on `Spending › Overview` and asked for it to
+  be measured rather than assumed — measured, it is **zero**, and has been since the tablet tier;
+  `hscroll-baseline.js`'s entry 7 is where it went. Nothing below 1024 carries it.
 - **`640` is a literal in four places, and the charts did not make it five**: `styles.css`'s
   `max-width: 639.98px`, `tests/viewports.js`'s `PHONE_TIER_BELOW` / `PHONE_TIER_EDGE`,
   `Holdings.jsx`'s `startsCollapsed` — the app's first `matchMedia` read — and `cards.jsx`'s

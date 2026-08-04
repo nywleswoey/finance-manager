@@ -1,29 +1,42 @@
 /**
  * How far the main pane overflows itself horizontally today, per viewport and per view.
  *
- * THIS FILE IS A LIST OF DEFECTS, NOT A SPECIFICATION. Every non-zero number is the
- * mobile-responsive problem stated in pixels: at 390px, Holdings puts 1201px of table
- * past the edge of the pane, which is why you see the Security column and not one number.
+ * **NOTHING IS LEFT. EVERY NUMBER IN THIS FILE IS ZERO** — all thirteen views at all seven
+ * gated viewports — which is the first time that has been true since the harness was
+ * written, and it is what the file existed to reach rather than a fact about it.
  *
- * The suite gates against these numbers rather than against zero because this harness had
- * to run green against today's code, before any layout change landed — a baseline that
- * fails on arrival measures nothing and gets switched off within a week. So the gate is a
- * ratchet: it fails when a number goes UP, which is the regression it can actually catch
- * today, and every later slice of the responsive work lowers numbers toward zero. When
- * they are all zero, delete this file and assert `<= 0` directly, which is the gate the
- * spec actually describes.
+ * THIS FILE WAS A LIST OF DEFECTS, NOT A SPECIFICATION, and its own instruction for this
+ * moment is the one below: it is now a table of zeroes standing in for `<= 0`, and the gate
+ * the spec actually describes is `expect(overflow).toBeLessThanOrEqual(0)` with no table at
+ * all. **DELETING IT IS THE NEXT TICKET'S, AND IT IS THREE EDITS**: `baseline.spec.js`'s
+ * lookup, `inventory.spec.js`'s key-parity test — which exists to catch a stale entry and
+ * has nothing left to guard once the entries are gone — and this file. It was deliberately
+ * not folded into #44, whose subject is a CSS track floor: a layout change and a harness
+ * change land better apart, and a green ratchet is worth one ticket's wait.
  *
- * Do not raise a number to make a test pass. A raised number is the defect getting worse.
+ * The suite gated against these numbers rather than against zero because this harness had
+ * to run green against the code as it stood, before any layout change landed — a baseline
+ * that fails on arrival measures nothing and gets switched off within a week. So the gate is
+ * a ratchet: it fails when a number goes UP, which was the regression it could actually
+ * catch on day one, and every later slice of the responsive work lowered numbers toward
+ * zero. Eight slices did it.
  *
- * Measured against the committed fixtures on a production build. They are stable to the
- * pixel across runs, and the differences between viewports track viewport width exactly
- * (Holdings: 1231 at 360, 1201 at 390, 1161 at 430), so a number that moves means the
- * layout moved rather than that the measurement is noisy.
+ * Do not raise a number to make a test pass. A raised number is the defect coming back —
+ * and from here every raise is a *regression* rather than a defect getting worse, because
+ * there is no longer any defect for it to be worse than.
+ *
+ * Measured against the committed fixtures on a production build. They were stable to the
+ * pixel across runs, and the differences between viewports tracked viewport width exactly
+ * (Holdings: 1231 at 360, 1201 at 390, 1161 at 430), so a number that moved meant the
+ * layout moved rather than that the measurement was noisy.
  *
  * Above 1024px there is no gate and therefore no entries here — `HSCROLL_GATE_APPLIES_BELOW`
- * in `viewports.js` says why those three viewports are exempt.
+ * in `viewports.js` says why those three viewports are exempt. **That exemption is the only
+ * horizontal overflow the app still has anywhere**, and it is not this file's: the widest
+ * position table measures 1272px against 1024px of content at 1280. Whoever takes the pin to
+ * desktop widths owns it.
  *
- * LOWERED SEVEN TIMES SO FAR.
+ * LOWERED EIGHT TIMES, AND THE EIGHTH WAS THE LAST.
  *
  * 1. The unconditional fixes. `.grid2`'s `auto-fit` did most of it: two 419px tracks side by
  *    side became one, so `Portfolio › Overview` went 619 → 288 at 360px, `Spending › By
@@ -143,6 +156,38 @@
  *    every number here is zero and the file can be deleted for the `<= 0` gate it was always
  *    standing in for.
  *
+ * 8. The 420px track floor. **The last entry, and it takes the file to zero.** One character
+ *    class of a change — `minmax(420px, 1fr)` became `minmax(min(420px, 100%), 1fr)` — and
+ *    the shared residual the last four entries have been naming goes with it: `Portfolio ›
+ *    Overview`, `Portfolio › Options`, `Spending › Overview` and `Spending › By Category`
+ *    fall 74 / 44 / 4 / 0 / 8 / 0 / 0 → zero at all seven, together, to the pixel. The
+ *    percentage resolves against the grid container, so the track floor became "420px, or
+ *    the whole pane, whichever is smaller" and `auto-fit` could finally collapse below a
+ *    number it had been given as a hard one. It moved the floor and not the collapse point:
+ *    `unconditional.spec.js`'s gate — one track below 858px of grid box, two above it, never
+ *    three — passes **unchanged at all ten viewports**, which is also the whole of the
+ *    desktop claim, since above 858 the `min()` resolves to 420px and there is nothing left
+ *    to differ.
+ *
+ *    `Spending › Overview` IS NOT THE EXCEPTION THIS TICKET WAS WRITTEN EXPECTING. #44 was
+ *    filed against entry 6's reading, where that view carried 48 at 640 rather than 8, and it
+ *    asked for the extra 40px to be measured rather than assumed to fall with the floor.
+ *    Measured: **it is zero, and it was already zero before this entry** — entry 7's tablet
+ *    tier took it, which is recorded there. The instruction was still the right one; the
+ *    answer had simply arrived one ticket early. The 519px `spending/Overview.jsx` needs
+ *    against the live DB's longest subcategory name is a *different* claim, is still true,
+ *    and is still not this file's: it spills inside a track between 1024 and ~1256, where
+ *    there is no gate. `RESPONSIVE.md`'s Traps keeps it.
+ *
+ *    `Net Worth` IS THE ONE THIS TICKET DID NOT PREDICT, and it is the reason the ticket
+ *    said measure rather than assume. It shared the 74 / 44 / 4 to the pixel and did **not**
+ *    go to zero with the other four: `min(420px, 100%)` left 38 at 360 and 8 at 390, because
+ *    a collapsed track handed its `New Snapshot` card 298px and `.nw-formhead` — Date and
+ *    Note, two flex items of 176 and 177 — has a min-content of 367 and no way to wrap. Two
+ *    causes reading as one number is exactly what four identical rows can hide, and the only
+ *    reason it was caught is that the four were fixed first and this one did not follow.
+ *    `flex-wrap: wrap` on that one row is the whole of it. Nothing else in the file moved.
+ *
  * NOT LOWERED, AND NOT RAISED, BY #35 — recorded because that ticket predicted otherwise.
  * `/api/spending/trends` used to 500 and `Spending › Overview` rendered with no stacked chart
  * at all, so the fix was expected to move that row, and to be the one legitimate reason to
@@ -154,46 +199,46 @@
  */
 export const HSCROLL_BASELINE = {
   "small-phone": {
-    "Portfolio › Overview": 74,
+    "Portfolio › Overview": 0,
     "Portfolio › Holdings": 0,
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
-    "Portfolio › Options": 74,
+    "Portfolio › Options": 0,
     "Portfolio › Transactions": 0,
     "Portfolio › SecurityDetail": 0,
-    "Net Worth": 74,
-    "Spending › Overview": 74,
-    "Spending › By Category": 74,
+    "Net Worth": 0,
+    "Spending › Overview": 0,
+    "Spending › By Category": 0,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
     "Spending › Transactions": 0,
   },
   "design-width": {
-    "Portfolio › Overview": 44,
+    "Portfolio › Overview": 0,
     "Portfolio › Holdings": 0,
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
-    "Portfolio › Options": 44,
+    "Portfolio › Options": 0,
     "Portfolio › Transactions": 0,
     "Portfolio › SecurityDetail": 0,
-    "Net Worth": 44,
-    "Spending › Overview": 44,
-    "Spending › By Category": 44,
+    "Net Worth": 0,
+    "Spending › Overview": 0,
+    "Spending › By Category": 0,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
     "Spending › Transactions": 0,
   },
   "large-phone": {
-    "Portfolio › Overview": 4,
+    "Portfolio › Overview": 0,
     "Portfolio › Holdings": 0,
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
-    "Portfolio › Options": 4,
+    "Portfolio › Options": 0,
     "Portfolio › Transactions": 0,
     "Portfolio › SecurityDetail": 0,
-    "Net Worth": 4,
-    "Spending › Overview": 4,
-    "Spending › By Category": 4,
+    "Net Worth": 0,
+    "Spending › Overview": 0,
+    "Spending › By Category": 0,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
     "Spending › Transactions": 0,
@@ -214,21 +259,22 @@ export const HSCROLL_BASELINE = {
     "Spending › Transactions": 0,
   },
   "tablet-tier-first-pixel": {
-    "Portfolio › Overview": 8,
+    "Portfolio › Overview": 0,
     "Portfolio › Holdings": 0,
     "Portfolio › Performance": 0,
     "Portfolio › Dividends": 0,
-    "Portfolio › Options": 8,
+    "Portfolio › Options": 0,
     "Portfolio › Transactions": 0,
     "Portfolio › SecurityDetail": 0,
-    "Net Worth": 8,
-    "Spending › Overview": 8,
-    "Spending › By Category": 8,
+    "Net Worth": 0,
+    "Spending › Overview": 0,
+    "Spending › By Category": 0,
     "Spending › Classify": 0,
     "Spending › Recurring": 0,
     "Spending › Transactions": 0,
   },
-  // Zero, every view. The pin and the shell's height guard together — see entry 7.
+  // Reached zero at entry 7, and by both halves of the tablet tier at once: the pin, and
+  // the shell's `(max-height: 500px)` arm taking the 200px rail out of the flow.
   "rotated-phone": {
     "Portfolio › Overview": 0,
     "Portfolio › Holdings": 0,
@@ -244,7 +290,8 @@ export const HSCROLL_BASELINE = {
     "Spending › Recurring": 0,
     "Spending › Transactions": 0,
   },
-  // Zero, every view. Above every `.grid2` collapse, so the pin was the whole job here.
+  // Reached zero at entry 7. Above every `.grid2` collapse, so the pin was the whole job
+  // here and entry 8's track floor never applied.
   "ipad-portrait": {
     "Portfolio › Overview": 0,
     "Portfolio › Holdings": 0,

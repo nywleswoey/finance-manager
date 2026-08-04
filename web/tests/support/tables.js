@@ -28,12 +28,15 @@
  *     views owe this one; the editors' cells hold live inputs and neither table pattern
  *     applies to them.
  *
- * `room` IS THE TABLE'S OWN PARENT, NOT THE PANE, and the difference is a whole other ticket.
- * `.grid2`'s `minmax(420px, 1fr)` track floor is wider than a 360px pane, so on four views a
- * table that fits its card perfectly well sits inside a box that does not fit the pane.
- * Measured against the pane those read as unpinned overflowing tables and a sweep would
- * demand a wrapper that fixes nothing; measured against the parent they are what they are —
- * #44's residual, and the pane ratchet's.
+ * `room` IS THE TABLE'S OWN PARENT, NOT THE PANE, and the distinction outlived the case that
+ * forced it. `.grid2`'s track floor used to be a hard `minmax(420px, 1fr)` — wider than a 360px
+ * pane — so on four views a table that fitted its card perfectly well sat inside a box that did
+ * not fit the pane. Measured against the pane those read as unpinned overflowing tables and a
+ * sweep would have demanded a wrapper that fixed nothing; measured against the parent they were
+ * what they were, and #44's `min(420px, 100%)` is what actually moved them. **Keep the parent.**
+ * A table is responsible for fitting the box it was put in; whether that box fits the pane is
+ * the box's problem and a different fix, and reading the pane here would make every future
+ * ancestor-width bug look like a missing wrapper.
  */
 export function tableFacts(page) {
   return page.evaluate(() => {
