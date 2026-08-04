@@ -92,7 +92,8 @@ the only gates left in this file:
    in the eleven fully-responsive views**, not only the navigation. The drawer in portrait, the app
    bar, the tab picker and the footnote disclosure had it before; the tables' own controls, the
    filter `<select>`s, the checkbox labels, `Recurring`'s `+ Track` / `✕` pairs and the 44px row
-   pitch under every `tr.rowlink` and `tr.rowtap` have it now. `tap.spec.js` gates the geometry at
+   floor under every `tr.rowlink` and `tr.rowtap` have it now (a floor, not a pitch — a row whose
+   pinned cell wraps is taller; see [Observations](#observations)). `tap.spec.js` gates the geometry at
    four phone viewports; **whether it is comfortable is still an eye**, and the two places to look
    first are the ones where 44px cost something visible: `Recurring`'s action column (100.72 →
    118.8px) and `Holdings`, which lost two rows a screen.
@@ -205,6 +206,9 @@ reconciliation unless marked otherwise.
   same reason — the two-line cell made a row 52.5px without any pitch rule at all — so the earlier
   reading of "prediction met" was a coincidence of the wrong cause. **Two rows is the price of the
   floor on this screen**, and 015 stated the bill as 15 → 12 on a one-line cell.
+  **10 was accepted rather than tuned away** — decided in #50, reasoned in the map's line for ticket
+  015, which is where the two rejected alternatives are weighed. Recorded here because this entry is
+  the measured value the map and tickets 013/015/020/022 now defer to; nothing in the build moved.
   At 844×390 the footnote disclosure is **open**, because `Holdings.jsx` reads its query by *width*,
   once, at mount — so the landscape count is with the footnote expanded, the harder case.
 - **`SecurityDetail`'s `← Holdings` — 76.45 × 44px below the tier, 76.45 × 17px above it.** Recorded
@@ -282,7 +286,9 @@ Failing these **changes a decision**, rather than reporting a bug.
   notices.
 
 *(`Options.jsx:71` left this list: resolved to **A**, on the measurement that a 9-field card is 4
-rows per screen against A's 12 — the same reasoning that rejected B for Holdings at 3.)*
+rows per screen against A's 12 — the same reasoning that rejected B for Holdings at 3. A's 12 was a
+forecast at 44px; the one A row measured is Holdings' at 60.5px, so read it as nearer 8. Four is on
+the rejected side either way, so the resolution stands — see [Observations](#observations).)*
 
 ## Not built yet
 

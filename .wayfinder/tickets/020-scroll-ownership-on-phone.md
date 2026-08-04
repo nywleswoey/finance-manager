@@ -115,6 +115,18 @@ The trade is binary — the two halves cannot both be had:
    | portrait 390×844 | 529px box → **11 rows** | 625px → **13 rows** |
    | landscape 844×390 | 161px box → **2 rows** | 221px → **4 rows** |
 
+   **Correction (#50): every cell above is computed at a pitch neither orientation has.** 44px is a
+   *floor*, not a pitch, and Holdings' pinned cell is two lines, so portrait's real data row is
+   **60.5px**; landscape's is **52.5px**, because this block is `max-width`-scoped and 844 is not the
+   phone tier, so a rotated phone kept the old 7px padding. Shipped (#49, at 390×844 and 844×390):
+   **portrait 10**, against the 13 this table forecast for the collapsed state. **Landscape 4 — with
+   the disclosure OPEN**, i.e. the *footnote-full* column, which forecast 2. `Holdings.jsx` reads its
+   query by width, once, at mount, so landscape gets the `<details>` markup but not the phone's
+   collapse; landscape therefore came out **better** than this table predicted for the state it is
+   actually in, not "unchanged". **The finding is untouched** — the footnote is still the lever, and
+   which cell you land in still turns on whether it is open. What is dead is the arithmetic, not the
+   design. Nobody has measured collapsed landscape post-#47 and this correction does not claim to.
+
    Rejected moving the footnote *inside* the wrapper: a block child of an `overflow-x: auto` container
    sizes to the container, not the table, so the paragraph would sit at the far left and slide out of
    view as you scrolled right to read columns. `<details>` is real UI, which 018 forbade for the cheap

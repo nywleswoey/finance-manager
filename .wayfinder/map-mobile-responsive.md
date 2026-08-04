@@ -84,7 +84,8 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
 - [Wide numeric tables on a phone](tickets/013-wide-tables-on-phone.md) — **two patterns, assigned by
   one test: does the table exist to compare a number down the column, or to read one row at a time?**
   Compare → **the real table, horizontally scrolled behind a pinned identity column** (measured **15
-  rows** on screen vs 3 for cards; every column keeps its alignment, `tabular-nums` and sticky headers
+  rows** on screen vs 3 for cards — the prototype figure, pre-tap-floor; it shipped at **10** and the
+  argument holds at 10-vs-3, see 015 below; every column keeps its alignment, `tabular-nums` and sticky headers
   intact — the trap is that sticky cells need `border-collapse: separate`). Read → **card per row**
   (a ledger row has six fields, reads top-to-bottom, and fits two lines with nothing hidden and no
   interaction). **A third bucket the inventory missed: the 8 views hold 13 tables, and four are ≤4
@@ -128,8 +129,22 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   **11px holds everywhere, no floor** (it is *at* iOS HIG's 11pt line, and the one place a bump helps most
   — `th` — is where it costs most, since the uppercase header is often the widest thing in a short numeric
   column). **No carve-out for table rows**: `th, td { padding: 11px 8px }` puts the pitch at a true 44px,
-  and **the stated bill is 013's 15 rows on screen becoming 12** — its 15-vs-3 argument against cards
-  survives, so no pattern assignment changes. Mechanism is **literal values in one
+  and the stated bill was **013's 15 rows on screen becoming 12** — its 15-vs-3 argument against cards
+  survives, so no pattern assignment changes. **The bill came in at 10, not 12, and 10 was accepted**
+  (#50) — the correction every other row-count figure in this map and its tickets now defers to.
+  **`44px` is the floor, not the pitch, and this bullet conflated them**: the rule gives a 44px row for
+  a *one-line* cell, and Holdings' pinned `Security` cell is **two** lines, so the 11px is paid on both
+  and a data row lands at **60.5px** — **10 rows portrait** (9 data + 1 group) against the forecast 12,
+  and **4 landscape**, which is what 844×390 already held before the floor, since this whole block is
+  `max-width`-scoped and 844 is not the phone tier. Measured in #49 after #47, recorded under
+  Observations in [`RESPONSIVE.md`](../RESPONSIVE.md). Accepted rather than tuned away on this bullet's
+  own argument, which survives the smaller number: the density case was **15-vs-3 against cards** and is
+  still **10-vs-3**. Both alternatives cost more than the two rows — a one-line pin spends content on the
+  identity column pattern A exists to make readable, and scoping the padding away from `.pinned` tables
+  makes the floor a different number per selector, the thing this bullet already refuses twice.
+  **The earlier "prediction met" was a coincidence of the wrong cause**: #34 read 12 rows as meeting
+  the forecast, but measured *before the pitch rule existed* — the two-line cell alone made a row
+  52.5px — so the forecast was never tested against the thing it forecast. Mechanism is **literal values in one
   `@media (max-width: 639.98px)` block**, not a token layer — most of what phone changes (012's column
   flip, 014's deleted donuts, 013's table surgery) *can't* be a token override, so tokens would split the
   phone story across two mechanisms; `--tap: 44px` is the single exception, being the one number that
@@ -221,7 +236,9 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   `.main` stops scrolling** — a side effect of pattern A, not anyone's decision. **Ratified**, because the
   trade is binary (shrinking wrapper → sticky `th` works; `flex: none` → pane scrolls, header dead) and
   re-measuring reproduces **exactly the 15 rows** 013 reported, so its prototype already assumed this and
-  its "sticky headers survive under A" claim depends on it. Item 1's nested-scroll worry largely dissolves:
+  its "sticky headers survive under A" claim depends on it. (15 is the pre-#47 prototype figure, and stands
+  as the historical measurement it was — what it ratified was the scroll *owner*, which no row count
+  changes. The shipped count is **10 portrait / 4 landscape**; see 015 above.) Item 1's nested-scroll worry largely dissolves:
   `.main` stops scrolling, so Holdings has **one** scrollable region, not two. But the behaviour is free
   only for a **direct flex child of `.main`** — and only `Holdings.jsx:142` is one; the other three
   pattern-A tables sit inside `.card`, where the wrapper never scrolls and **the sticky header is dead**.
@@ -234,6 +251,12 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   columns-for-rows trade** (844px shows 8+ of Holdings' 13 columns vs 2–3 in portrait; a header that
   vanishes on rotate would be worse than a short table), with Holdings' footnote becoming a phone
   `<details>` — the real lever, measured at 44px pitch: portrait **11 → 13 rows**, landscape **2 → 4**.
+  **Both pairs are arithmetically stale (#50)**, computed at a pitch neither orientation has —
+  portrait's row is 60.5px (see 015 above) and landscape's is 52.5px, the pre-floor number, since 844
+  is outside this `max-width` block. Shipped: **portrait 10** against the 13 forecast for collapsed;
+  **landscape 4 with the disclosure open**, i.e. the footnote-*full* column, which forecast 2 —
+  `Holdings.jsx` reads its query by width once at mount, so landscape gets the markup but not the
+  collapse. The lever itself is unaffected: the footnote is still what moves the count.
   **Two live desktop defects recorded, not fixed**: `Dividends.jsx:30` already has a dead sticky header
   (provably harmless — `CONTEXT.md:18` fixes funding buckets as a closed set of three, so it is 3 rows plus
   a Total and can never scroll), and Classify's rules cap is **inline** at `Classify.jsx:126`, unreachable
@@ -292,7 +315,10 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   second-widest table** at **921px with 2 of 9 columns visible** — a whole Portfolio tab, → **A**, and the
   *cheapest* A in the map because its row count is bounded by the grouping dimension (max 8), making 020's
   `60svh` cap a permanent no-op. **013's least-certain B is overturned to A** for `Options.jsx:71` *and*
-  `SecurityDetail.jsx:102`: a 9-field card measures **121px → 4 rows per screen** against A's 12, where 013
+  `SecurityDetail.jsx:102`: a 9-field card measures **121px → 4 rows per screen** against A's 12 (a
+  *forecast* at 44px; the one A row anyone has measured is Holdings' at 60.5px, and this table's pin is
+  two lines too, so read A as probably nearer 8 — unmeasured, and 4 sits on the rejected side at either
+  number, so the call is unchanged — #50), where 013
   rejected B for Holdings at 3 and accepted it at 9 — **`ledger → B` over-generalised on the word *ledger***,
   and the real test is how many numbers a row carries (a cash ledger has one; an options row has five).
   `Options:71` already ships `overflow-x: auto` today, so A *keeps* behaviour. **013's "pin the first `.l`
@@ -331,11 +357,14 @@ body `font: 14px/1.5` (:7), and the nested-scroll machinery `.fillpane`/`.grow`/
   the Options monthly series halved to 6 bars — so there is no plausible re-render cost the desktop
   build doesn't already pay. What remains is whether the scrolled-table pattern from ticket 013 needs
   a row cap on a phone — and [Touch targets & type scale](tickets/015-touch-targets-type-scale.md) has
-  moved the goalposts: the 44px row pitch means **12 rows on screen, not 15**, so any cap is now judged
-  against a viewport that holds ~20% less. [The four unassigned tables](tickets/022-unassigned-tables.md)
+  moved the goalposts: the 44px floor means **10 rows on screen, not 15** — forecast as 12 and measured
+  at 10 after #47, because 44px is a floor and Holdings' two-line pin makes the pitch 60.5px (#50) — so
+  any cap is now judged against a viewport that holds a **third** less, not ~20%. [The four unassigned tables](tickets/022-unassigned-tables.md)
   sharpened the worst case without making it decidable: the longest render in the app is not a table at all
   but the **By Category drilldown**, which fetches `limit=1000` and becomes **B cards at ~2× an A row's
-  height** (121px vs 44px) — and "Dining Out" alone is 285 transactions in one year in the live DB.
+  height** (121px vs a *forecast* 44px; the only A row anyone has measured is Holdings' at **60.5px**,
+  at which the ratio is the ~2× this line already claimed — #50) — and "Dining Out" alone is 285
+  transactions in one year in the live DB.
   `SecurityDetail:102` is likewise uncapped at 73 rows. Still unknown, and still not answerable at a desk;
   019's routing to observation during verification stands.
 
