@@ -11,7 +11,9 @@ the same is_spend / date / category filters.
 
 Note: summary() and trends() bucket by month with Postgres `to_char`, so their SQL is
 Postgres-only; transactions(), categories(), years() and undated() are portable (covered by
-tests/test_spending.py).
+tests/test_spending.py). trends() keeps its payload-shaping in `_trend_shape`, which is not
+Postgres-anything and is tested directly — that fold is where unclassified spend gets its
+name, and where it used to raise.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending.py -q
 """
@@ -73,6 +75,55 @@ def summary(frm=None, to=None, s=None):
     }
 
 
+#: What unclassified spend (`category IS NULL`) is called in the trends payload. The word
+#: is also `catName` in `web/src/api.js`, which names the same rows wherever the null
+#: reaches the frontend as a *value* — one name for one thing, on both sides of the wire
+#: because only one of them can defer (see `_trend_shape`). Change it here, change it there.
+#: `CONTEXT.md`'s Spending glossary is where the term itself is pinned.
+UNCLASSIFIED = "Uncategorized"
+
+
+def _trend_shape(rows):
+    """Fold `(ym, category, v)` rows into the stacked-series payload.
+
+    Split out of trends() because the query around it is Postgres-only (`to_char`) and this
+    is not, and because this is where the null category is decided — see
+    tests/test_spending.py::TestTrendShape, which is the only coverage the endpoint has.
+
+    THE NULL GROUP IS NAMED HERE, WHICH IS WHERE summary() AND trends() PART. summary()
+    leaves it null, and can: its `category` is a *value* on a by_group record, so the
+    frontend is free to name it at the point of render. These group strings are the *keys*
+    of every series row — the frontend feeds each one straight into `<Bar dataKey={g}>` —
+    and JSON has no null key, so a `None` here does not survive as a null anyway: it
+    serializes to the string "null". The group ends up named either way; naming it
+    deliberately is the difference between "Uncategorized" and that.
+
+    It sorts last rather than alphabetically among the real categories, so the unclassified
+    band sits at the top of the stack and reads as the residue it is. A real category
+    literally named "Uncategorized" would merge into that band and sort with it; the
+    classifier does not produce one, and a stack cannot draw two bands under one dataKey
+    anyway, so this is the honest failure rather than a silent one to guard against.
+
+    Summing rather than assigning: NULL and '' are distinct GROUP BY keys in SQL and both
+    fold to UNCLASSIFIED here, so one month can arrive as two rows for one group. Assignment
+    would silently keep the later one and the stack would stop reconciling with summary().
+    """
+    def name(category):
+        return category or UNCLASSIFIED
+
+    groups = sorted({name(r["category"]) for r in rows},
+                    key=lambda g: (g == UNCLASSIFIED, g))
+    series: dict[str, dict] = {}
+    for r in rows:
+        m = series.setdefault(r["ym"], {"ym": r["ym"]})
+        g = name(r["category"])
+        m[g] = m.get(g, 0) + float(r["v"])
+    # Every group as a key on every month, zero where absent: a stacked chart reads one
+    # dataKey across the whole series, and a missing key is a gap in the stack.
+    out = [{**{g: 0 for g in groups}, **m} for m in series.values()]
+    return {"groups": groups, "series": sorted(out, key=lambda x: x["ym"])}
+
+
 def trends(frm=None, to=None, s=None):
     """Monthly spend split by group — a stacked time series (one key per group)."""
     where, p = _where(frm=frm, to=to)
@@ -80,13 +131,7 @@ def trends(frm=None, to=None, s=None):
         rows = s.execute(text(
             f"SELECT to_char(txn_date,'YYYY-MM') ym, category, ROUND(SUM(-amount_sgd),2) v "
             f"FROM cash_txn WHERE {where} GROUP BY ym, category ORDER BY ym"), p).mappings().all()
-    groups = sorted({r["category"] for r in rows})
-    series: dict[str, dict] = {}
-    for r in rows:
-        m = series.setdefault(r["ym"], {"ym": r["ym"]})
-        m[r["category"]] = float(r["v"])
-    out = [{**{g: 0 for g in groups}, **m} for m in series.values()]
-    return {"groups": groups, "series": sorted(out, key=lambda x: x["ym"])}
+    return _trend_shape(rows)
 
 
 def transactions(frm=None, to=None, group=None, subcategory=None, source=None,

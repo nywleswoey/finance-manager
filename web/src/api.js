@@ -45,3 +45,13 @@ export const sgd = (n) => "S$" + fmt(n, 0);
 export const money = (n, ccy, d = 2) =>
   n == null ? "—" : (SYM[ccy] || (ccy ? ccy + " " : "")) + fmt(n, d);
 export const cls = (n) => (n == null ? "" : n >= 0 ? "pos" : "neg");
+// Unclassified spend — `category IS NULL` — as the app names it. Beside the formatters
+// because that is what it is: the null is the value, this is how the value reads.
+//
+// `portfolio/spending.py` carries the same word for the same rows, and that is not a
+// duplicate to collapse. Two endpoints hand the null over differently and only one of them
+// can defer: `summary()` returns `category` as a *value* on a record, so it arrives here
+// null and is named here; `trends()`' group strings are the *keys* of every series row, fed
+// straight to `<Bar dataKey>`, and JSON has no null key — so that one must be named before
+// it is serialized or it becomes the string "null". Change the word and change it in both.
+export const catName = (c) => c || "Uncategorized";

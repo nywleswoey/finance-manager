@@ -114,8 +114,10 @@ export const PATHOLOGICAL = [
     name: "the null-category row",
     // Unclassified spend, where `category` is NULL. It renders as "Uncategorized", is
     // deliberately not drillable, and is the one row in the category table with a
-    // different shape. It is also what makes /api/spending/trends return a 500 today,
-    // which is why that fixture records a 500 rather than a chart.
+    // different shape. It is also what used to make /api/spending/trends return a 500 —
+    // `sorted()` over {str, None} — so this row is what the stacked chart's
+    // "Uncategorized" band is drawn from, and dropping it from the database would take
+    // that band with it.
     fixture: "spending-summary.json",
     holds: (body) => {
       const groups = body.by_group ?? [];

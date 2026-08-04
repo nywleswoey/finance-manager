@@ -67,11 +67,12 @@ test("no chart renders the library's own legend", () => {
   // the stacked bar chart's 300px, a quarter of the drawing spent on eight words. Every key
   // in the app is DOM under the container instead.
   //
-  // Source-grepped rather than measured in a browser because the one chart that had a
-  // `<Legend>` is the one the suite cannot reach: `/api/spending/trends` was captured as a
-  // 500 from the live database, so `trend.series.length > 0` is false and the chart never
-  // mounts. `charts.spec.js` asserts the absence in the DOM for everything that does render;
-  // this is what covers the surface that does not.
+  // Source-grepped as well as measured, and it stays that way now that both can be. The one
+  // chart that had a `<Legend>` used to be the one surface the suite could not reach at all —
+  // `/api/spending/trends` was captured as a 500, so `trend.series.length > 0` was false and
+  // the chart never mounted, leaving this grep as its only coverage. The endpoint is fixed
+  // and `charts.spec.js` now asserts that chart's key in the DOM, but a grep still catches
+  // what a DOM gate cannot: a `<Legend>` added to a chart no fixture happens to mount.
   //
   // Comments are stripped first, for the reason the `100vh` gate strips them: four files
   // explain at length what `<Legend>` did and why it is gone, and a gate that cannot tell

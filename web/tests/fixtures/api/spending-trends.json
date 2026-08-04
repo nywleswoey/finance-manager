@@ -1,3 +1,143 @@
 {
- "detail": "internal error"
+ "groups": [
+  "Housing",
+  "Personal",
+  "Transport",
+  "Uncategorized"
+ ],
+ "series": [
+  {
+   "Housing": 735.0,
+   "Personal": 4494.03,
+   "Transport": 0,
+   "Uncategorized": 8.4,
+   "ym": "2025-01"
+  },
+  {
+   "Housing": 795.3,
+   "Personal": 2458.2,
+   "Transport": 0,
+   "Uncategorized": 44.0,
+   "ym": "2025-02"
+  },
+  {
+   "Housing": 1715.8,
+   "Personal": 2227.4,
+   "Transport": 0,
+   "Uncategorized": 346.7,
+   "ym": "2025-03"
+  },
+  {
+   "Housing": 817.4,
+   "Personal": 5974.72,
+   "Transport": 0,
+   "Uncategorized": 58.8,
+   "ym": "2025-04"
+  },
+  {
+   "Housing": 785.0,
+   "Personal": 3273.86,
+   "Transport": 0,
+   "Uncategorized": 222.6,
+   "ym": "2025-05"
+  },
+  {
+   "Housing": 803.3,
+   "Personal": 3669.32,
+   "Transport": 0,
+   "Uncategorized": 358.4,
+   "ym": "2025-06"
+  },
+  {
+   "Housing": 836.45,
+   "Personal": 5141.01,
+   "Transport": 0,
+   "Uncategorized": 3371.76,
+   "ym": "2025-07"
+  },
+  {
+   "Housing": 1165.75,
+   "Personal": 3268.36,
+   "Transport": 67.29,
+   "Uncategorized": 80.0,
+   "ym": "2025-08"
+  },
+  {
+   "Housing": 1585.65,
+   "Personal": 5713.52,
+   "Transport": 258.95,
+   "Uncategorized": 90.0,
+   "ym": "2025-09"
+  },
+  {
+   "Housing": 1625.7,
+   "Personal": 9912.87,
+   "Transport": 109.51,
+   "Uncategorized": 150.5,
+   "ym": "2025-10"
+  },
+  {
+   "Housing": 1566.75,
+   "Personal": 7825.32,
+   "Transport": 194.19,
+   "Uncategorized": 759.07,
+   "ym": "2025-11"
+  },
+  {
+   "Housing": 1882.58,
+   "Personal": 5731.15,
+   "Transport": 112.88,
+   "Uncategorized": 542.02,
+   "ym": "2025-12"
+  },
+  {
+   "Housing": 1692.03,
+   "Personal": 6584.07,
+   "Transport": 74.72,
+   "Uncategorized": 309.7,
+   "ym": "2026-01"
+  },
+  {
+   "Housing": 1769.06,
+   "Personal": 10811.45,
+   "Transport": 177.16,
+   "Uncategorized": 100.95,
+   "ym": "2026-02"
+  },
+  {
+   "Housing": 1671.43,
+   "Personal": 5735.74,
+   "Transport": 151.96,
+   "Uncategorized": 3279.1,
+   "ym": "2026-03"
+  },
+  {
+   "Housing": 1644.73,
+   "Personal": 6810.18,
+   "Transport": 123.71,
+   "Uncategorized": 43.35,
+   "ym": "2026-04"
+  },
+  {
+   "Housing": 1511.96,
+   "Personal": 6002.68,
+   "Transport": 141.22,
+   "Uncategorized": 165.58,
+   "ym": "2026-05"
+  },
+  {
+   "Housing": 1060.04,
+   "Personal": 7442.07,
+   "Transport": 51.14,
+   "Uncategorized": 999.52,
+   "ym": "2026-06"
+  },
+  {
+   "Housing": 0,
+   "Personal": 0,
+   "Transport": 0,
+   "Uncategorized": 599.58,
+   "ym": "2026-07"
+  }
+ ]
 }

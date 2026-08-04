@@ -22,10 +22,6 @@
  *
  * WHAT THE FIXTURES CANNOT REACH, annotated on every run rather than quietly narrowed away:
  *
- *   - `/api/spending/trends` was captured as a 500 from the live database, so the stacked bar
- *     chart — the surface that actually had a `<Legend>` — never mounts here. Its key is
- *     asserted in `inventory.spec.js`, from the source, which is the only place it is
- *     reachable at all.
  *   - The last six realized months in `options.json` are all positive, so the phone window
  *     has no negative bar to print a label under. The reserved band is asserted as geometry
  *     instead — the strip below the baseline that no bar can enter — which holds whatever
@@ -145,12 +141,6 @@ test.describe("every chart", () => {
           .toBeGreaterThan(0);
       }
     }
-    testInfo.annotations.push({
-      type: "not-covered-by-fixtures",
-      description:
-        "Spending › Overview's stacked bar chart is not among the containers measured here — " +
-        "/api/spending/trends was captured as a 500, so it never mounts",
-    });
   });
 
   test("names its series in the DOM rather than in a tooltip", async ({ page, baseURL }, testInfo) => {
@@ -173,12 +163,35 @@ test.describe("every chart", () => {
     expect.soft(await page.locator(".main .recharts-legend-wrapper").count(),
       "recharts' own `<Legend>` takes its space out of the plot — the key is DOM").toBe(0);
 
-    testInfo.annotations.push({
-      type: "not-covered-by-fixtures",
-      description:
-        "the stacked bar chart's key is source-asserted in inventory.spec.js — its fixture " +
-        "is a 500 and the chart never mounts",
-    });
+    // The other multi-series chart, and until `/api/spending/trends` stopped 500ing this was
+    // the one surface the suite could not reach in a browser at all — `inventory.spec.js`
+    // source-asserted its key instead. Now it mounts, so it is asserted where it renders.
+    //
+    // The names come from the fixture rather than a literal, because they ARE the payload's
+    // `groups` — the frontend passes each one to `<Bar dataKey>` and to the key, so a group
+    // that renders under a different name is a group whose bar drew nothing. "Uncategorized"
+    // is in that list, and it is the whole of issue #35: the backend names the null category
+    // there because these strings are object keys and JSON has no null one.
+    await openView(page, baseURL, "Spending › Overview");
+    await barsSettled(page);
+    const stacked = page.locator(".main .chartkey");
+    await expect.soft(stacked).toHaveCount(1);
+    await expect.soft(stacked.locator(".ck-item"))
+      .toHaveText(readFixture("spending-trends.json").groups);
+
+    // One fill per *series*, not per bar: `.recharts-bar` is the series group, and its
+    // rectangles all carry the series' colour, so the first one speaks for it. Comparing
+    // against the chips both ways round is what makes this more than a count — an empty
+    // list of series would not equal four chips, so "the bars drew" needs no separate
+    // assertion.
+    const stackedChips = await stacked.locator(".chip").evaluateAll((els) =>
+      els.map((el) => getComputedStyle(el).backgroundColor));
+    const perSeries = await page.locator(".main .recharts-bar").evaluateAll((els) =>
+      els.map((el) => {
+        const rect = el.querySelector(".recharts-bar-rectangle path");
+        return rect ? getComputedStyle(rect).fill : null;
+      }));
+    expect.soft(stackedChips, "the key's chips do not match the bars they name").toEqual(perSeries);
   });
 });
 

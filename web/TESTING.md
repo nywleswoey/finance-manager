@@ -137,8 +137,11 @@ printed on top of an axis tick — the criterion stated as the collision it forb
 prop that prevents it, which is what lets the same gate check that the reserved band is *absent* on a
 window with no loss in it to reserve for. It waits for the bar animation before counting a single
 label, because recharts renders a `LabelList` only once that has ended and a gate expecting none
-would otherwise pass for the wrong reason. One thing it cannot reach: the stacked bar chart, whose
-fixture is a 500.
+would otherwise pass for the wrong reason. The stacked bar chart used to be the one surface it could
+not reach — its fixture was a 500 — so its key was source-grepped in `inventory.spec.js` instead.
+#35 fixed the endpoint, and the key is asserted here now, against the fixture's own `groups` rather
+than a literal: those strings are `<Bar dataKey>`s, so a group that renders under a different name is
+a group whose bar drew nothing. The grep stays for the charts no fixture happens to mount.
 
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no chart renders a `<Legend>` and that both multi-series charts

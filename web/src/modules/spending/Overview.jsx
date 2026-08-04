@@ -3,7 +3,7 @@ import {
   ResponsiveContainer, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
-import { get, sgd, fmt } from "../../api.js";
+import { get, sgd, fmt, catName } from "../../api.js";
 import { COLORS, ChartKey, Donut } from "../../charts.jsx";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
@@ -16,7 +16,12 @@ export default function SpendOverview() {
   if (!sum) return <div className="loading">Loading…</div>;
   if (sum.error) return <div className="loading">API not reachable.</div>;
 
-  const groups = sum.by_group.map((g) => ({ name: g.category, value: Number(g.v) }));
+  // `catName` because a null category is unclassified spend, not a nameless one. It was an
+  // empty `.nm` span here — a nameless slice in the donut and a nameless row in the list
+  // under it — and that stayed invisible for as long as the stacked chart below was 500ing.
+  // Now that the chart renders and names that group itself, the two would otherwise sit in
+  // one viewport naming one thing two ways.
+  const groups = sum.by_group.map((g) => ({ name: catName(g.category), value: Number(g.v) }));
   const total = sum.total_sgd;
   const top = groups[0];
   const lines = sum.by_subcategory.slice(0, 14);
