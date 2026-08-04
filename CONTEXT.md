@@ -82,6 +82,14 @@ The positive magnitude of a *counted* cash outflow. Transfers, card-bill payment
 are excluded from every spend metric though they remain inspectable.
 _Avoid_: expense, cash-out, outflow (an outflow may be an excluded transfer)
 
+**Unclassified spend**:
+Counted spend whose `category` is NULL — real money, no bucket yet. It is a category's worth of
+rows, not a data error, so every read shape carries it rather than filtering it out. The compute
+layer names it **Uncategorized** where the name has to be a key (`trends()`, whose group strings
+are the series keys the chart reads); `summary()` leaves the NULL as a value and the frontend
+names it at render. One word, two places, because only one of them can hold a null.
+_Avoid_: uncategorised (the app spells it with a z), missing, unknown
+
 ### Net worth
 
 **Net-worth snapshot**:

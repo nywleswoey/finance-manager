@@ -142,6 +142,15 @@
  *    (`minmax(min(420px, 100%), 1fr)`), and this file now holds nothing else. When it lands,
  *    every number here is zero and the file can be deleted for the `<= 0` gate it was always
  *    standing in for.
+ *
+ * NOT LOWERED, AND NOT RAISED, BY #35 — recorded because that ticket predicted otherwise.
+ * `/api/spending/trends` used to 500 and `Spending › Overview` rendered with no stacked chart
+ * at all, so the fix was expected to move that row, and to be the one legitimate reason to
+ * *raise* a number here. It moved nothing at any of the seven gated viewports. The chart is a
+ * full-width card holding a percentage-width `ResponsiveContainer` — it takes the pane's
+ * width rather than asking for one — and `Spending › Overview`'s residual was never the
+ * chart's: it is the same `.grid2` track floor the four other views carry, to the pixel.
+ * A view can gain a whole chart and overflow by exactly as much as before.
  */
 export const HSCROLL_BASELINE = {
   "small-phone": {

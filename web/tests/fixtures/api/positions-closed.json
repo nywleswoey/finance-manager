@@ -28,7 +28,7 @@
   "mv_sgd": 227735.2,
   "income_sgd": 40057.2,
   "pl_sgd": 194503.2,
-  "xirr": 0.1964,
+  "xirr": 0.1962,
   "simple_return": 2.6539,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -61,7 +61,7 @@
   "mv_sgd": 98083.49,
   "income_sgd": 0.0,
   "pl_sgd": 45126.83,
-  "xirr": 0.1753,
+  "xirr": 0.1748,
   "simple_return": 0.8521,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -94,7 +94,7 @@
   "mv_sgd": 89467.4,
   "income_sgd": 13957.9,
   "pl_sgd": 80274.3,
-  "xirr": 0.2893,
+  "xirr": 0.289,
   "simple_return": 3.4674,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -127,7 +127,7 @@
   "mv_sgd": 86947.76,
   "income_sgd": 1163.3,
   "pl_sgd": -33158.34,
-  "xirr": -0.2687,
+  "xirr": -0.2663,
   "simple_return": -0.252,
   "options_pl_sgd": 18999.56,
   "status": "open"
@@ -160,7 +160,7 @@
   "mv_sgd": 81683.97,
   "income_sgd": 0.0,
   "pl_sgd": -32489.88,
-  "xirr": -0.4968,
+  "xirr": -0.4903,
   "simple_return": -0.1901,
   "options_pl_sgd": 9327.15,
   "status": "open"
@@ -194,7 +194,7 @@
   "mv_sgd": 61992.0,
   "income_sgd": 27056.95,
   "pl_sgd": 39713.53,
-  "xirr": 0.0953,
+  "xirr": 0.0952,
   "simple_return": 0.805,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -227,7 +227,7 @@
   "mv_sgd": 49243.12,
   "income_sgd": 0.0,
   "pl_sgd": -1070.78,
-  "xirr": -0.1705,
+  "xirr": -0.1601,
   "simple_return": -0.0213,
   "options_pl_sgd": 320.46,
   "status": "open"
@@ -260,7 +260,7 @@
   "mv_sgd": 47640.81,
   "income_sgd": 661.82,
   "pl_sgd": -3688.4,
-  "xirr": -0.1252,
+  "xirr": -0.123,
   "simple_return": -0.0215,
   "options_pl_sgd": 17728.23,
   "status": "open"
@@ -293,7 +293,7 @@
   "mv_sgd": 41107.93,
   "income_sgd": 8616.98,
   "pl_sgd": -36781.15,
-  "xirr": -0.2364,
+  "xirr": -0.2355,
   "simple_return": -0.3901,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -326,7 +326,7 @@
   "mv_sgd": 38295.6,
   "income_sgd": 2174.11,
   "pl_sgd": 5893.43,
-  "xirr": 0.0519,
+  "xirr": 0.0518,
   "simple_return": 0.043,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -359,7 +359,7 @@
   "mv_sgd": 37111.2,
   "income_sgd": 1102.14,
   "pl_sgd": -5144.85,
-  "xirr": -0.183,
+  "xirr": -0.1809,
   "simple_return": -0.1187,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -392,7 +392,7 @@
   "mv_sgd": 30652.78,
   "income_sgd": 0.0,
   "pl_sgd": -1148.19,
-  "xirr": -0.0216,
+  "xirr": -0.0215,
   "simple_return": -0.0082,
   "options_pl_sgd": 44169.7,
   "status": "open"
@@ -427,7 +427,7 @@
   "mv_sgd": 28008.0,
   "income_sgd": 2590.0,
   "pl_sgd": 6556.15,
-  "xirr": 0.0885,
+  "xirr": 0.0883,
   "simple_return": 0.2727,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -460,7 +460,7 @@
   "mv_sgd": 26733.71,
   "income_sgd": 1761.04,
   "pl_sgd": 20671.63,
-  "xirr": 0.2596,
+  "xirr": 0.2592,
   "simple_return": 2.6424,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -493,7 +493,7 @@
   "mv_sgd": 25938.36,
   "income_sgd": 8404.39,
   "pl_sgd": 35155.16,
-  "xirr": 0.2651,
+  "xirr": 0.2648,
   "simple_return": 0.8882,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -527,7 +527,7 @@
   "mv_sgd": 22765.0,
   "income_sgd": 10653.4,
   "pl_sgd": 9112.57,
-  "xirr": 0.1022,
+  "xirr": 0.1021,
   "simple_return": 0.3749,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -561,7 +561,7 @@
   "mv_sgd": 21615.3,
   "income_sgd": 3079.44,
   "pl_sgd": 5531.86,
-  "xirr": 0.1401,
+  "xirr": 0.1396,
   "simple_return": 0.2887,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -594,7 +594,7 @@
   "mv_sgd": 19548.0,
   "income_sgd": 5550.66,
   "pl_sgd": 9020.66,
-  "xirr": 0.1104,
+  "xirr": 0.1102,
   "simple_return": 0.5611,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -728,7 +728,7 @@
   "mv_sgd": 15434.21,
   "income_sgd": 3595.15,
   "pl_sgd": 7300.33,
-  "xirr": 0.109,
+  "xirr": 0.1089,
   "simple_return": 0.6224,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -794,7 +794,7 @@
   "mv_sgd": 9504.0,
   "income_sgd": 2412.72,
   "pl_sgd": 1908.72,
-  "xirr": 0.0428,
+  "xirr": 0.0427,
   "simple_return": 0.1907,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -828,7 +828,7 @@
   "mv_sgd": 8220.0,
   "income_sgd": 2443.81,
   "pl_sgd": 2425.34,
-  "xirr": 0.0455,
+  "xirr": 0.0454,
   "simple_return": 0.2944,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -861,7 +861,7 @@
   "mv_sgd": 8200.0,
   "income_sgd": 2255.66,
   "pl_sgd": 4653.66,
-  "xirr": 0.1436,
+  "xirr": 0.1434,
   "simple_return": 0.8021,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -894,7 +894,7 @@
   "mv_sgd": 8121.5,
   "income_sgd": 4118.82,
   "pl_sgd": -8816.02,
-  "xirr": -0.1374,
+  "xirr": -0.1372,
   "simple_return": -0.4187,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -927,7 +927,7 @@
   "mv_sgd": 7920.0,
   "income_sgd": 2222.4,
   "pl_sgd": -70.7,
-  "xirr": -0.0014,
+  "xirr": -0.0013,
   "simple_return": -0.0069,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -993,7 +993,7 @@
   "mv_sgd": 6194.4,
   "income_sgd": 298.53,
   "pl_sgd": -3487.92,
-  "xirr": -0.1378,
+  "xirr": -0.1374,
   "simple_return": -0.3495,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -1026,7 +1026,7 @@
   "mv_sgd": 4849.46,
   "income_sgd": 1992.26,
   "pl_sgd": 2163.31,
-  "xirr": 0.0956,
+  "xirr": 0.0955,
   "simple_return": 0.4624,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -1059,7 +1059,7 @@
   "mv_sgd": 4256.0,
   "income_sgd": 1742.08,
   "pl_sgd": 929.22,
-  "xirr": 0.0319,
+  "xirr": 0.0318,
   "simple_return": 0.1833,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -1092,7 +1092,7 @@
   "mv_sgd": 1065.0,
   "income_sgd": 129.9,
   "pl_sgd": 412.9,
-  "xirr": 0.0575,
+  "xirr": 0.0574,
   "simple_return": 0.528,
   "options_pl_sgd": 0.0,
   "status": "open"
@@ -1323,7 +1323,7 @@
   "mv_sgd": 2.13,
   "income_sgd": 1.02,
   "pl_sgd": 1.61,
-  "xirr": 0.7845,
+  "xirr": 0.7809,
   "simple_return": 1.0455,
   "options_pl_sgd": 0.0,
   "status": "open"

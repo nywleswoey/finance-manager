@@ -3,8 +3,8 @@
 Stdlib unittest + in-memory SQLite (no pg), matching tests/test_networth.py. Of the six read
 shapes, four are portable and covered here: transactions(), categories(), years() and
 undated(). summary() and trends() bucket by month with Postgres `to_char`, so they aren't
-exercised here; the WHERE consolidation they share is covered via the portable shapes and
-_where directly.
+exercised here end-to-end; the WHERE consolidation they share is covered via the portable
+shapes and _where directly, and trends()' payload fold via `_trend_shape` directly.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending.py -q
 """
@@ -143,6 +143,62 @@ class TestReads(unittest.TestCase):
         year = spending.transactions(frm="2024-01-01", to="2024-12-31", s=self.s)
         self.assertEqual([float(r["amount_sgd"]) for r in year], [-10.0])
         self.assertEqual(spending.undated(s=self.s)["total_sgd"], 15.0)
+
+
+# ---------------- the stacked-series fold (pure) ----------------
+
+class TestTrendShape(unittest.TestCase):
+    """trends()' payload, exercised through `_trend_shape` rather than the endpoint.
+
+    The query around it is Postgres-only (`to_char`), but the fold is not, and the fold is
+    where the null category is decided — which is the whole of issue #35: `sorted()` over a
+    set holding both `str` and `None` raised `TypeError: '<' not supported between instances
+    of 'str' and 'NoneType'`, and the frontend swallowed the 500 into an empty series, so the
+    only symptom was a chart that silently was not there.
+    """
+
+    def rows(self, *triples):
+        return [{"ym": ym, "category": c, "v": v} for ym, c, v in triples]
+
+    def test_null_category_does_not_raise(self):
+        # The crash itself. Ordering a set of {str, None} is the TypeError.
+        got = spending._trend_shape(self.rows(
+            ("2024-01", "Food", 10), ("2024-01", None, 5)))
+        self.assertEqual(got["groups"], ["Food", spending.UNCLASSIFIED])
+
+    def test_null_category_is_named_and_sorts_last(self):
+        got = spending._trend_shape(self.rows(
+            ("2024-01", "Transport", 3), ("2024-01", None, 5), ("2024-01", "Food", 10)))
+        # Named, not null: these group strings are the *keys* of every series row, and JSON
+        # has no null key — an unnamed group would serialize to the string "null".
+        self.assertEqual(got["groups"], ["Food", "Transport", "Uncategorized"])
+        self.assertEqual(got["series"], [
+            {"ym": "2024-01", "Food": 10.0, "Transport": 3.0, "Uncategorized": 5.0}])
+
+    def test_every_group_is_a_key_on_every_month(self):
+        # A stacked chart reads one dataKey per group across the whole series, so a month
+        # that never saw a group still needs the key — zero, not missing.
+        got = spending._trend_shape(self.rows(
+            ("2024-01", "Food", 10), ("2024-02", None, 5)))
+        self.assertEqual(got["series"], [
+            {"ym": "2024-01", "Food": 10.0, "Uncategorized": 0},
+            {"ym": "2024-02", "Food": 0, "Uncategorized": 5.0}])
+
+    def test_months_come_out_in_order(self):
+        got = spending._trend_shape(self.rows(
+            ("2024-03", "Food", 3), ("2024-01", "Food", 1), ("2024-02", "Food", 2)))
+        self.assertEqual([m["ym"] for m in got["series"]], ["2024-01", "2024-02", "2024-03"])
+
+    def test_rows_folding_to_one_group_accumulate(self):
+        # NULL and "" are distinct GROUP BY keys in SQL and both mean unclassified, so the
+        # fold can be handed two rows for one month and one group. Summing keeps the stack
+        # reconcilable with summary(); assignment would have dropped one of them.
+        got = spending._trend_shape(self.rows(
+            ("2024-01", None, 5), ("2024-01", "", 2)))
+        self.assertEqual(got["series"], [{"ym": "2024-01", "Uncategorized": 7.0}])
+
+    def test_no_rows_is_an_empty_chart_not_an_error(self):
+        self.assertEqual(spending._trend_shape([]), {"groups": [], "series": []})
 
 
 if __name__ == "__main__":

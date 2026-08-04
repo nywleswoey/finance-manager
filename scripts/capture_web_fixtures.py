@@ -20,10 +20,23 @@ in from a targeted query against the same database — see `_ensure_long_merchan
 Re-run only when the fixtures genuinely need to move. Regenerating them casually
 re-tethers every measured assertion in the suite to whatever the database holds today.
 
-One fixture is not reproducible byte-for-byte: `return.json`, from `/api/return`, whose
-TWR is annualised over elapsed time, so two captures minutes apart differ in the fourth
-decimal. It changes no rendered width and no assertion — expect that churn in a recapture
-diff rather than going looking for a cause.
+Three fixtures are not reproducible byte-for-byte, because three endpoints compute against
+`dt.date.today()`: `return.json` and every `xirr` in `positions.json` /
+`positions-closed.json`. Two captures four days apart moved all four of `return.json`'s
+computed fields — `xirr_annualised`, `twr_annualised`, `twr_cumulative` and
+`value_plus_income_sgd` — and the `xirr` of most positions, while the database held no new
+price, FX rate, dividend or transaction between them. Same rows in, different numbers out:
+that is the clock, not the data.
+
+Do not tighten this into "only annualised rates move". That reading was written here once
+and is wrong — `value_plus_income_sgd` moved by 3,580 SGD and is not a rate, and the exact
+path by which `portfolio/twr.py` turns a later `today` into a lower terminal valuation on
+frozen data is not pinned down. What IS established is the direction to check in: a moved
+number in these three files is worth a `git log` on the database's newest row before it is
+worth reading as new data.
+
+None of it changes a rendered width — 19.64% and 19.62% are the same number of characters —
+so expect the churn in a recapture diff rather than going looking for a cause.
 
     PYTHONPATH=. .venv/bin/python -m uvicorn server.main:app --port 8123 &
     .venv/bin/python scripts/capture_web_fixtures.py --base http://localhost:8123
@@ -93,14 +106,14 @@ DYNAMIC_NOTE = "discovered at capture time from the data itself"
 # unlisted failure stops, because a fixture recording an accident would quietly turn a
 # broken endpoint into the baseline. A listed one is recorded with its real status, so
 # the suite measures the app as it actually behaves rather than as it should.
-EXPECTED_FAILURES = {
-    # portfolio/spending.py:83 sorts the category set, and the null-category row makes
-    # that `str < None`. The frontend swallows it (Overview.jsx:13 catches into an empty
-    # trend), so Spending Overview renders today with no trend chart. Pre-existing, and
-    # out of scope for the harness — but the fixture must reproduce it or the suite would
-    # be measuring a view the app never renders.
-    "/api/spending/trends": 500,
-}
+#
+# Empty, and worth keeping empty: the one entry it ever held was `/api/spending/trends`,
+# which sorted a category set containing the null-category row and raised `str < None`.
+# Overview.jsx caught that into an empty trend, so the only symptom was a chart that was
+# not there — the capture is what made it visible, and the capture is what will make the
+# next one visible. Fixed in `portfolio/spending.py` (issue #35); the fixture now holds a
+# real chart.
+EXPECTED_FAILURES: dict[str, int] = {}
 
 
 def fetch(base: str, path: str, *, allow_status: int | None = None):
@@ -123,9 +136,9 @@ def fetch(base: str, path: str, *, allow_status: int | None = None):
 
 def get(base: str, path: str) -> tuple[int, object]:
     """Fetch a path, returning (status, body). The status is what the server actually
-    returned, not what EXPECTED_FAILURES predicted — so the day `/api/spending/trends` is
-    fixed, the recapture records a 200 alongside the good body rather than serving a
-    working response under a 500 and making the fix look like a regression."""
+    returned, not what EXPECTED_FAILURES predicted — which is how `/api/spending/trends`
+    came back: the recapture after the fix recorded a 200 alongside the good body rather
+    than serving a working response under a 500 and making the fix look like a regression."""
     status, body = fetch(base, path, allow_status=EXPECTED_FAILURES.get(path))
     if status != 200:
         print(f"  (recording HTTP {status} for {path} — a known failure, see EXPECTED_FAILURES)")

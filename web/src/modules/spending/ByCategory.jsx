@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { get, sgd, fmt } from "../../api.js";
+import { get, sgd, fmt, catName } from "../../api.js";
 import { COLORS, Donut } from "../../charts.jsx";
 import { CardGroup, Cards, RowCard, usePhone } from "../../cards.jsx";
 
@@ -96,11 +96,12 @@ export default function SpendByCategory() {
   if (yearsErr) return <div className="loading">API not reachable.</div>;
   if (!years.length) return <div className="loading">No spending data yet.</div>;
 
-  // null category (unclassified spend) -> shown as "Uncategorized"; it isn't drillable because
-  // the transactions endpoint filters on an exact category string (no IS NULL match). Classify
-  // those rows in the Classify tab and they split into real, drillable categories.
+  // null category (unclassified spend) -> named by `catName`; it isn't drillable because the
+  // transactions endpoint filters on an exact category string (no IS NULL match), which is why
+  // `cat` keeps the raw null beside the name. Classify those rows in the Classify tab and they
+  // split into real, drillable categories.
   const groups = sum && !sum.error
-    ? sum.by_group.map((g) => ({ name: g.category || "Uncategorized", cat: g.category, value: Number(g.v), n: g.n }))
+    ? sum.by_group.map((g) => ({ name: catName(g.category), cat: g.category, value: Number(g.v), n: g.n }))
     : [];
   // subcategory rows keyed by their parent category, ready for the drill-in. A null
   // subcategory is spend classified into a category but no finer — shown as "—" and not
