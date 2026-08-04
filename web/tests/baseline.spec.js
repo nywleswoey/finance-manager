@@ -47,11 +47,13 @@
  * observations, and the open calls — and nothing else. The sweep reconciled it against
  * this suite, so a gate written there is one a person genuinely has to run.
  *
- * ONE GATE IS SCOPED, AND IT IS A RATCHET RATHER THAN A LINE. The horizontal-scroll gate
- * applies only below 1024px — `HSCROLL_GATE_APPLIES_BELOW` says why the wider two are
- * exempt. Below it the gate does not hold today either, because that is the defect the
- * whole effort exists to fix, so the overflow is measured and held against the recorded
- * numbers in `HSCROLL_BASELINE` — see that file for what those numbers are and are not.
+ * ONE GATE IS SCOPED, AND IT IS STILL A RATCHET RATHER THAN A LINE. The horizontal-scroll
+ * gate applies only below 1024px — `HSCROLL_GATE_APPLIES_BELOW` says why the wider two are
+ * exempt. Below it the gate now **does** hold: `HSCROLL_BASELINE` was a table of measured
+ * defects the ratchet lowered over eight slices, and since #44 every number in it is zero,
+ * so the lookup is `<= 0` written the long way. It stays a lookup for one more ticket —
+ * that file's header says what removing it costs and names this line as one of the edits.
+ * Until then, read it for what those numbers are and are not.
  *
  * NO SCREENSHOTS. Geometry and structure only, nowhere in this suite. `inventory.spec.js`
  * asserts that.

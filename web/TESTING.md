@@ -3,9 +3,10 @@
 **The definition of done for anything you change under `web/src` is [`../RESPONSIVE.md`](../RESPONSIVE.md).**
 It is the checklist — and since the sweep reconciled it against this suite, it holds **only what
 this suite cannot assert**: five gates that need a real iPhone and one observation that needs an
-iPad, the rest of the observations with their measured values, the open calls, and one rule that was
-decided and never built. Every gate that moved in here was deleted from there. Read it before
-changing layout, not after.
+iPad, the rest of the observations with their measured values, and the open calls. Its "Not built
+yet" section — rules decided and never built — is **empty** since #44, and an entry belongs there
+the moment that stops being true. Every gate that moved in here was deleted from there. Read it
+before changing layout, not after.
 
 **The command is `make test-web`** (from the repo root). It builds the frontend and runs the
 Playwright viewport suite against the production build through vite's preview server.

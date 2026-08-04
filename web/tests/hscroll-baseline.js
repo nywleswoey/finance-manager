@@ -8,11 +8,13 @@
  * THIS FILE WAS A LIST OF DEFECTS, NOT A SPECIFICATION, and its own instruction for this
  * moment is the one below: it is now a table of zeroes standing in for `<= 0`, and the gate
  * the spec actually describes is `expect(overflow).toBeLessThanOrEqual(0)` with no table at
- * all. **DELETING IT IS THE NEXT TICKET'S, AND IT IS THREE EDITS**: `baseline.spec.js`'s
- * lookup, `inventory.spec.js`'s key-parity test — which exists to catch a stale entry and
- * has nothing left to guard once the entries are gone — and this file. It was deliberately
- * not folded into #44, whose subject is a CSS track floor: a layout change and a harness
- * change land better apart, and a green ratchet is worth one ticket's wait.
+ * all. **DELETING IT IS THE NEXT TICKET'S, AND IT IS FOUR EDITS**: `baseline.spec.js`'s
+ * lookup, `baseline.spec.js`'s own header — which describes this gate and would otherwise
+ * go on describing a table that is gone — `inventory.spec.js`'s key-parity test, which
+ * exists to catch a stale entry and has nothing left to guard once the entries are, and
+ * this file. It was deliberately not folded into #44, whose subject is a CSS track floor:
+ * a layout change and a harness change land better apart, and a green ratchet is worth one
+ * ticket's wait.
  *
  * The suite gated against these numbers rather than against zero because this harness had
  * to run green against the code as it stood, before any layout change landed — a baseline
@@ -31,10 +33,14 @@
  * layout moved rather than that the measurement was noisy.
  *
  * Above 1024px there is no gate and therefore no entries here — `HSCROLL_GATE_APPLIES_BELOW`
- * in `viewports.js` says why those three viewports are exempt. **That exemption is the only
- * horizontal overflow the app still has anywhere**, and it is not this file's: the widest
- * position table measures 1272px against 1024px of content at 1280. Whoever takes the pin to
- * desktop widths owns it.
+ * in `viewports.js` says why those three viewports are exempt. **Everything the app still
+ * overflows by is up there**, and none of it is this file's. Two things, and they are not the
+ * same shape: the widest position table measures 1272px against 1024px of content at 1280,
+ * which is a *table* against a pane and belongs to whoever takes the pin to desktop widths;
+ * and `spending/Overview.jsx`'s top-line-items card needs 519px against the live DB's longest
+ * subcategory name, which is *content* spilling inside a track between 1024 and ~1256 and is
+ * not a pane problem at all. `RESPONSIVE.md`'s Traps holds both. Neither is reachable from
+ * here, because there is no gate above 1024.
  *
  * LOWERED EIGHT TIMES, AND THE EIGHTH WAS THE LAST.
  *

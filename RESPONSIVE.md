@@ -345,10 +345,14 @@ Things the build session must be told, not left to discover.
   pin actually tells you which row you are on.
 - **A nested `<table>` inherits its parent's width**, so it sets the parent's min-content. This is
   why the By Category drilldown leaves the table on phone rather than becoming cards in place.
-  **Leaving the table is not enough** — cards placed in the categories card were still 386px in a
+  **Leaving the table is not enough** — cards placed in the categories card were still ~386px in a
   362px pane when `.grid2`'s track floor was a hard 420px and reached them there. They leave the
-  whole grid. #44 has since collapsed that floor, so the *arithmetic* no longer forces it; the
-  decision stands anyway, because a drilldown that renders in place inside a category card is a
+  whole grid. **The tilde is deliberate and is its own small lesson**: this was written as 386 here
+  and 388 in `ByCategory.jsx`, and by the time anyone noticed, the layout the number described had
+  been rejected and could not be re-measured. A measurement of a *rejected* alternative is worth
+  keeping and is worth keeping in exactly one place; `ByCategory.jsx` now points here instead of
+  restating it. #44 has since collapsed that floor, so the arithmetic no longer forces the decision
+  either; it stands anyway, because a drilldown that renders in place inside a category card is a
   card inside a card inside a grid track, and the layout was rejected on that as well as on width.
 - **Rows that agree to the pixel are evidence of a shared cause and are not proof of a single one.**
   `Portfolio › Overview`, `Options`, `Net Worth` and both `Spending` views read 74 / 44 / 4 / 0 / 8 /
