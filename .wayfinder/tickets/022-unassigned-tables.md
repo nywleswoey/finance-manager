@@ -85,6 +85,10 @@ The mechanical reading was B (contract ledger → read one row at a time). It do
 - **Density.** A 9-field `.rowcard` built to 013's own prototype markup measures **121px** (+8 gap) →
   **4 rows** in the ~528px pane. Pattern A at 015's 44px pitch → **12 rows**. 013 rejected B for Holdings at
   **3** rows and accepted it for `spending/Transactions` at **9**. Four sits on the rejected side.
+  (**#50**: 44px is a floor, not a pitch. The only A row anyone has measured is Holdings' at
+  **60.5px**, where the pin wraps to two lines; this table's merged `Contract` cell is two lines by
+  construction, so A here is **probably nearer 8 than 12** — unmeasured, and flagged rather than
+  restated as fact. Four sits on the rejected side at either number, so the call is unchanged.)
 - **Ledger-sized and uncapped.** Real DB: PLTR **73** option trades, RIVN 64, BABA 53. Under B that is
   ~9,400px of scroll, ~18 screens.
 - **The test itself pointed to A all along.** What you do with one security's wheel log is scan P/L and

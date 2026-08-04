@@ -71,6 +71,13 @@ Measured at 390×844:
 | B — card per row | **3 rows** | 9 rows |
 | C — priority + expand | 9 rows | 11 rows |
 
+**Correction (#50): the 15 above is a historical prototype figure and stays one.** It was measured
+before [Touch targets & type scale](015-touch-targets-type-scale.md)'s tap floor existed; shipped,
+Holdings holds **10** rows at 390×844 (9 data + 1 group) and **4** at 844×390. The reason, and the
+decision to accept 10, live in 015's point 5 — this ticket's own numbers are all *comparisons*, and
+each survives: A-vs-B for positions was 15-vs-3 and is now 10-vs-3, so **no pattern assignment below
+changes**.
+
 **Verdict: not one pattern — two, chosen per table by one test.**
 
 > **Does this table exist so you can compare a number down the column, or so you can read one row

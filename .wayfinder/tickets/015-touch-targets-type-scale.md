@@ -71,7 +71,7 @@ phone. The 11px labels hold everywhere.
 | Selector | Rule | Effect |
 |---|---|---|
 | `input, select, textarea` | `font-size: 16px` | kills the iOS focus-zoom. Must be **explicit** — `font: inherit` (:48) will not pick up a body change. |
-| `th, td` | `padding: 11px 8px` | **44px row pitch** = 11 + 21 (14px×1.5) + 11 + 1px border. Horizontal 10→8 returns ~40px of scroll distance on a 10-column table. |
+| `th, td` | `padding: 11px 8px` | **44px row floor** = 11 + 21 (14px×1.5) + 11 + 1px border — **for a one-line cell**. Wrap the cell to two lines and the 11px is paid on both: Holdings' pinned `Security` makes it **60.5px** (#50, see point 5's correction). Horizontal 10→8 returns ~40px of scroll distance on a 10-column table. |
 | `.navitem`, `.logout-btn`, `.link-btn`, `.refresh-btn`, `select` | `min-height: var(--tap); min-width: var(--tap)` | square. |
 | `SecurityDetail.jsx:24` back link | `display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap)` | a bare `<a>` has no box to size. It is the only way home (013). |
 | `Transactions.jsx:35` "show excluded" `<label>` | `display: inline-flex; align-items: center; min-height: var(--tap)` | the **label** is the target; `<label>` is inline, so it needs the flex to materialise a box. |
@@ -98,7 +98,8 @@ phone. The 11px labels hold everywhere.
 3. **Body stays 14px.** Raising body to 16px would fix the input zoom for free via `font: inherit` — and
    silently invalidate every measurement in 013 and 014 (15 rows on screen, the pinned-column widths, the
    ⌀216px donut, S2's ~38px pitch), while widening the columns 013 already calls "already-overflowing" by
-   ~14%. The readability case for 16px is a *prose* case; this app renders ~90% right-aligned
+   ~14%. (The 15 is 10 as shipped — point 5's correction. The argument is untouched: it turns on those
+   numbers being *invalidated*, not on what they are.) The readability case for 16px is a *prose* case; this app renders ~90% right-aligned
    `tabular-nums` inside tables. Accepted consequence: on phone, form controls render visibly larger than
    the text around them — which is what iOS Safari users see across most of the web anyway.
 
@@ -115,6 +116,20 @@ phone. The 11px labels hold everywhere.
    judgement call. This ticket exists so downstream stops re-deciding. **Stated bill: 013's measured 15
    rows on screen becomes 12** — a ~20% density loss. Its argument was 15-vs-3 against cards, so every
    pattern assignment in 013 survives intact.
+
+   **Correction (#50): the bill came in at 10, not 12, and 10 was accepted.** **44px is the floor, not
+   the pitch, and this point conflated them** — `th, td { padding: 11px 8px }` gives a 44px row only for
+   a *one-line* cell, and Holdings' pinned `Security` cell is **two** lines, so the 11px is paid on both
+   and a data row lands at **60.5px**. Shipped: 10 rows at 390×844 (9 data + 1 group) against the 12
+   forecast here, and 4 at 844×390, which is what that viewport already held — this whole block is
+   `max-width`-scoped, so a rotated phone never got the floor and its row is still 52.5px. The
+   **~20% density loss** priced above is therefore **~33%**.
+
+   Accepted rather than tuned away, on this point's own argument: the density case was 15-vs-3 and is
+   still **10-vs-3**, so every pattern assignment in 013 survives at 10 too. The two rejected
+   alternatives — a one-line pin, and scoping the padding away from `.pinned` tables — are weighed in
+   [the map's line for this ticket](../map-mobile-responsive.md), which is where the decision is
+   recorded; measured in #49, values under Observations in [`RESPONSIVE.md`](../../RESPONSIVE.md).
 
 6. **Literal values, not a token layer.** A large share of what phone changes **cannot** be a token
    override at all — 012 flips `.app` to `flex-direction: column`, 014 deletes three donuts and drops
@@ -141,7 +156,10 @@ phone. The 11px labels hold everywhere.
    `matchMedia` hook, and JS cannot read a CSS custom property. A single source of truth is unreachable
    without a build step, and the map bars new dependencies — so: a cross-referencing comment on both sides.
 3. **Verify tables at 12 rows, not 15** — see point 5 above. Feed this to
-   [Verification checklist](019-verification-checklist.md).
+   [Verification checklist](019-verification-checklist.md). **Superseded (#50): verify at 10, not 12**
+   — and note that #34 read 12 and called the forecast met, but measured *before* the pitch rule
+   existed, where the two-line cell alone made a row 52.5px. The forecast was never actually tested
+   against the rule it was a forecast about.
 
 ### Inventory correction
 
