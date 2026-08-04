@@ -3,9 +3,10 @@
 **The definition of done for anything you change under `web/src` is [`../RESPONSIVE.md`](../RESPONSIVE.md).**
 It is the checklist — and since the sweep reconciled it against this suite, it holds **only what
 this suite cannot assert**: five gates that need a real iPhone and one observation that needs an
-iPad, the rest of the observations with their measured values, the open calls, and one rule that was
-decided and never built. Every gate that moved in here was deleted from there. Read it before
-changing layout, not after.
+iPad, the rest of the observations with their measured values, and the open calls. Its "Not built
+yet" section — rules decided and never built — is **empty** since #44, and an entry belongs there
+the moment that stops being true. Every gate that moved in here was deleted from there. Read it
+before changing layout, not after.
 
 **The command is `make test-web`** (from the repo root). It builds the frontend and runs the
 Playwright viewport suite against the production build through vite's preview server.
@@ -188,13 +189,15 @@ tickets. Three prototypes live in `web/prototypes/`.
 
 ## Two things to know before you touch the suite
 
-**`tests/hscroll-baseline.js` is a list of defects, not a specification.** The suite ratchets
-against the measured numbers so it can run green now and still catch a regression. Lower them as
-the work lands; never raise one to make a test pass. **It is nearly done**: seven lowerings in,
-two of the seven gated viewports are zero across all thirteen views and every number left is the
-same one cause — `.grid2`'s `minmax(420px, 1fr)` track floor against a narrower pane, which is
-#44's. Nothing table-shaped is left in it, and `tablet.spec.js` asserts that half separately,
-because the ratchet would go green on a build that swapped one table's overflow for another's.
+**`tests/hscroll-baseline.js` was a list of defects, not a specification.** The suite ratchets
+against the measured numbers so it could run green on day one and still catch a regression. Lower
+them as the work lands; never raise one to make a test pass. **It is done**: eight lowerings in,
+`.grid2`'s track floor became `minmax(min(420px, 100%), 1fr)` under #44 and **every number in the
+file is zero** — all thirteen views, all seven gated viewports. It is now a table of zeroes
+standing in for `<= 0`, and its own header says what deleting it costs and why that is its own
+ticket. Until then a raise is a plain regression, not a defect getting worse. `tablet.spec.js`
+still asserts the table-shaped half separately, because the ratchet would go green on a build that
+swapped one table's overflow for another's.
 
 **No screenshots, ever.** Geometry and structure only. Visual-regression diffing is out of
 scope by decision, and a test asserts that no `toHaveScreenshot` creeps in.

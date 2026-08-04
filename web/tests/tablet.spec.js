@@ -313,12 +313,14 @@ test("the pane's remaining overflow in the tier is not a table", async ({ page, 
   test.skip(vp.width >= HSCROLL_GATE_APPLIES_BELOW, "no pane gate above 1024");
   test.skip(vp.width < PHONE_TIER_BELOW, "the tier, not the phone — below 640 the ratchet owns this");
 
-  // The acceptance criterion in its strongest checkable form. `hscroll-baseline.js` is a
-  // ratchet on *how much* the pane overflows and is deliberately allowed to be non-zero while
-  // `.grid2`'s 420px track floor is still #44's; this asserts the part that is this ticket's,
-  // which is that none of what is left is a table. Both are needed: the ratchet would go
-  // green on a build that swapped a table's overflow for a wider one somewhere else, and this
-  // would go green on a build that let the residual grow.
+  // The acceptance criterion in its strongest checkable form, and it did NOT become redundant
+  // when #44 took `hscroll-baseline.js` to zero. The ratchet is a claim about *how much* the
+  // pane overflows; this is a claim about *what shape* the overflow is, and the two answer
+  // different questions. The ratchet would go green on a build that swapped a table's overflow
+  // for a wider one somewhere else, and it would keep the pane at zero while a table quietly
+  // handed its width to a wrapper that absorbed it — this reads the table against the pane
+  // directly. When the ratchet becomes a plain `<= 0`, this is what still says the zero was
+  // reached by containing tables rather than by hiding them.
   // ALL THIRTEEN VIEWS, the two editors included — which is what this adds over the sweep at
   // the top of the file. That one runs on the eleven fully-responsive views and asks whether
   // a table overflows *its own parent*; this asks the pane's question of every view in the

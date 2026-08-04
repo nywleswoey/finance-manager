@@ -24,10 +24,15 @@ import { CardGroup, Cards, RowCard, usePhone } from "../../cards.jsx";
 // its count and its aggregate.
 //
 // BELOW THE `.grid2` RATHER THAN INSIDE THE CARD, which is a second width problem and not the
-// same one. `.grid2`'s track floor is `minmax(420px, 1fr)` and does not fit the 362px pane —
-// the residual four views share and no ticket owns (`RESPONSIVE.md`'s Traps). Cards placed
-// inside that card would be 388px wide in a 362px pane and clipped again, by a cause this
-// view cannot reach. Outside the grid they take the pane's own width.
+// same one. When this was written `.grid2`'s track floor was a hard `minmax(420px, 1fr)` that
+// did not fit the 362px pane — the residual four views shared and no ticket owned — so cards
+// placed inside that card overflowed the pane and were clipped again, by a cause this view
+// could not reach. `RESPONSIVE.md`'s Traps owns that measurement; it is not restated here,
+// because two sites carrying it disagreed by 2px for three tickets and neither was checkable
+// once the layout it described had been rejected. #44 collapsed the floor to
+// `min(420px, 100%)`, so the clipping is gone; this stays outside the grid regardless,
+// because a drilldown nested a card deep inside a track is the layout that was rejected, not
+// merely the width it happened to have.
 export default function SpendByCategory() {
   const [years, setYears] = useState(null);   // null=loading, []=no data
   const [yearsErr, setYearsErr] = useState(false);
