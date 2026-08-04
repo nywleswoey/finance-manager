@@ -154,16 +154,18 @@ def test_twr_annualises_from_first_live_day():
 # database that had gained no price, FX rate, dividend or transaction. The tests below split
 # that observation in two, because the two halves have different causes.
 #
-#   Clock-dependent by construction: `xirr_annualised`, `twr_annualised`. Both divide a fixed
-#   total return by an elapsed-years denominator that grows every day. Holding the same value
-#   for longer IS a lower annualised return; there is nothing to fix.
+#   Clock-dependent by construction: `xirr_annualised`, `twr_annualised`. Same money held for
+#   longer IS a lower annualised return; there is nothing to fix.
 #
 #   Clock-INdependent, as long as no close lands between the two dates: `twr_cumulative`,
 #   `value_plus_income_sgd`, `invested_sgd`, `from`. So those two moving in the real capture
-#   was never the clock — it was the price series, which `compute_twr` fetches live from Yahoo
-#   rather than reading from the `price` table. "Unchanged database" does not freeze this
-#   endpoint's inputs. Confirmed on the real book: with the Yahoo series truncated so nothing
-#   lands in the window, four days apart moves only the two annualised rates.
+#   took a price series that moved — and `compute_twr` fetches that live from Yahoo rather
+#   than reading the `price` table, so "unchanged database" never froze this endpoint's
+#   inputs. Confirmed on the real book: with the Yahoo series truncated so nothing lands in
+#   the window, four days apart moves only the two annualised rates.
+#
+# The last test is the one that stops this being read as "only rates move" — advancing the
+# clock alone moves the levels too, whenever it reaches a close the series already held.
 
 HELD = [(1, "AAA", "SG", "equity", "SGD")]                 # SGD -> fx_on is 1.0 throughout
 TXNS = [{"security_id": 1, "trade_date": D(2024, 1, 1), "action": "buy",

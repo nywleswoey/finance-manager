@@ -9,10 +9,10 @@ The same unit-delta contribution series feeds the money-weighted XIRR, so a posi
 arrives without a txn price (transfer, snapshot-diff open, fund switch) still carries a cost
 basis instead of landing in the terminal value for free.
 
-The daily series comes from Yahoo on every call, NOT from the `price` table — so this module's
-output is not pinned by the database, and it can value the book differently from
-/api/positions, which reads the table. `_returns` takes both the clock and the fetch as
-arguments so the two can be told apart; see its docstring and issue #52.
+The daily series comes from Yahoo on every call, NOT from the `price` table (ADR 0001 keeps
+that split deliberate) — so an unchanged database does not pin this module's output, and it
+can value the book differently from /api/positions, which reads the table. `_returns` takes
+the clock and the fetch as arguments so the two can be told apart; see it and issue #52.
 Run: PYTHONPATH=. .venv/bin/python -m portfolio.twr
 """
 import bisect
@@ -204,17 +204,14 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
     `fetch` still and advancing `as_of` is the only moving input, which is the only way to
     say which output fields the clock actually owns. See tests/test_twr.py and issue #52.
 
-    What `as_of` legitimately moves: `xirr_annualised`, `twr_annualised`, `years` — each
-    divides a fixed total by an elapsed-time denominator that grows daily. What it must not
-    move, given no new close between the two dates: `twr_cumulative`,
-    `value_plus_income_sgd`, `invested_sgd`, `from`. Note "no new close" is the real
-    condition, not "same `fetch`" — `ffill` truncates the series at `as_of`, so a later date
-    picks up any close the series already held past the earlier one.
-
-    Note `fetch` is Yahoo, not the `price` table. This endpoint's daily series is pulled live,
-    so an unchanged database does NOT pin its output — that is what #52 was chasing. (The
-    `last_px` fallback below, and /api/positions, do read the table; the two valuations can
-    therefore disagree.)"""
+    What `as_of` legitimately moves: `years`; `twr_annualised`, which raises a fixed `factor`
+    to `1/years`; and `xirr_annualised`, which re-solves with the terminal inflow discounted
+    over a longer span. All three decay on a book standing still. What it must not move:
+    `twr_cumulative`, `value_plus_income_sgd`, `invested_sgd`, `from` — but only while no
+    close lands between the two dates. "No new close" is the real condition, not "same
+    `fetch`": `ffill` truncates the series at `as_of`, so a later date picks up any close the
+    series already held past the earlier one. Advancing the clock is therefore the trigger,
+    while Yahoo remains the source."""
     ids = sorted({h[0] for h in held})
     start = min((t["trade_date"] for t in txns), default=as_of)
     days = [start + dt.timedelta(d) for d in range((as_of - start).days + 1)]
