@@ -5,6 +5,7 @@ Run: PYTHONPATH=. .venv/bin/uvicorn server.main:app --reload --port 8000
 Locked behind Google OAuth: every /api/* route except the auth + health endpoints
 requires a valid session cookie (deny-by-default gate below). See server/auth.py.
 """
+import hmac
 import logging
 import os
 import sys
@@ -40,10 +41,14 @@ if settings.auth_bypass_active:
 
 # Endpoints reachable WITHOUT a session (login entry + liveness). Everything else
 # under /api/ is denied by default by the gate middleware (SECURITY-08).
-_PUBLIC_PATHS = {"/api/auth/google", "/api/auth/me", "/api/auth/logout", "/api/health"}
+# /api/cron/refresh-prices is "public" only in the sense that the cookie gate must not answer
+# it — a Vercel Cron request carries no session. It authenticates itself against CRON_SECRET
+# inside the handler and fails closed when that env var is unset.
+_PUBLIC_PATHS = {"/api/auth/google", "/api/auth/me", "/api/auth/logout", "/api/health",
+                 "/api/cron/refresh-prices"}
 
 # HTML security headers for both the API and the static SPA — this middleware is the only
-# place they are set (there is no vercel.json).
+# place they are set (vercel.json exists, but carries the cron schedule and nothing else).
 # script-src stays strict (no unsafe-inline) — the XSS-relevant directive. style-src
 # allows inline because React inline styles + the Google button need it (documented
 # exception, SECURITY-04). accounts.google.com is allowed for Google Identity Services
@@ -159,13 +164,41 @@ def refresh():
     return {"ok": True}
 
 
-@app.post("/api/refresh-prices")
-def refresh_prices():
+def _refresh_prices():
     """Fetch latest prices + FX for held tickers, then invalidate the cache."""
     from ingestion.prices import main as fetch_prices
     result = fetch_prices()   # blocking; upserts price/fx_rate for current_position
     _cache.clear()            # next overview/positions recompute with fresh prices
     return result             # {ok, fail, date, failed, fx_failed}
+
+
+@app.post("/api/refresh-prices")
+def refresh_prices():
+    """Manual refresh from the signed-in UI."""
+    return _refresh_prices()
+
+
+@app.get("/api/cron/refresh-prices")
+def cron_refresh_prices(request: Request):
+    """The same refresh, on a schedule (Vercel Cron — see DEPLOY.md §6).
+
+    GET, because Vercel invokes a cron path with GET and nothing else; this is the one route
+    where a mutating GET is not a choice. It bypasses the cookie gate (a cron request has no
+    session) and instead compares the `Authorization: Bearer <CRON_SECRET>` header Vercel
+    sends against the env var — constant-time, and denying when CRON_SECRET is unset, so a
+    project that never set it has a dead route rather than an open one (SECURITY-15).
+
+    A cloud run prices stocks + FX only: the Endowus NAV is scraped from a statement PDF in
+    data/, which is gitignored and therefore absent from the deployment. That one fund's NAV
+    moves only on the local scheduled run.
+    """
+    expected, got = settings.cron_secret, request.headers.get("authorization", "")
+    if not expected or not hmac.compare_digest(got, f"Bearer {expected}"):
+        log.warning("cron refresh-prices denied ua=%s", request.headers.get("user-agent", ""))
+        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+    result = _refresh_prices()
+    log.info("cron refresh-prices: %s", result)
+    return result
 
 
 @app.get("/api/overview")
