@@ -38,6 +38,11 @@ lands. Per-source commands below if you want to run just one pipeline.
 | — (market data) | `make prices` | refresh latest prices + FX (needs network) |
 | `data/dbs-consolidated-statements/dbs_YYYYMM.pdf` (+ latest `data/tiger-prime/`) | `make snapshot` → `make snapshot-commit` | preview, then write a net-worth snapshot per DBS month newer than the latest one (month-end dated) |
 
+Unattended, against the **deployed** database: `make schedule-install` loads two launchd
+agents — `make prices` daily 06:15 and `make ingest-all` Sunday 07:00 — plus a Vercel Cron
+that refreshes prices in the cloud on the days this machine is off. Dropping the statement in
+its folder is still yours to do; parsing it is not. See [DEPLOY.md §6](DEPLOY.md#6-keeping-the-deployed-data-fresh-schedules).
+
 One-off / backdated net-worth snapshot for a specific month:
 
 ```bash

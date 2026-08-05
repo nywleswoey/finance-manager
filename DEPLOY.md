@@ -34,6 +34,7 @@ Project → Settings → Environment Variables (Production + Preview):
 | `SPENDING_EMAILS` | `you@gmail.com` — subset of `ALLOWED_EMAILS` that may see Spending |
 | `ALLOWED_ORIGINS` | `https://<your-app>.vercel.app` |
 | `COOKIE_SECURE` | `true` |
+| `CRON_SECRET` | `python -c "import secrets;print(secrets.token_urlsafe(32))"` — Production only; Vercel sends it as the cron's `Authorization: Bearer …` (§6). Unset ⇒ the cron route denies every caller |
 | `DATABASE_URL` | the `sslmode=require` Postgres URL |
 | `VITE_PUBLIC_POSTHOG_KEY` | PostHog project API key (`phc_…`) |
 | `VITE_PUBLIC_POSTHOG_HOST` | PostHog host, e.g. `https://us.i.posthog.com` — used as `ui_host` (toolbar links) and to gate `posthog.init()`; events go through the same-origin `/ingest` proxy, not here |
@@ -51,8 +52,9 @@ Project → Settings → Environment Variables (Production + Preview):
 
 ## 4. Deploy (single FastAPI project)
 Vercel deploys the whole repo as **one FastAPI Vercel Function** that serves both the
-API and the built SPA (same origin → first-party session cookie). There is no
-`vercel.json`; the model relies on Vercel's framework detection:
+API and the built SPA (same origin → first-party session cookie). `vercel.json` carries the
+cron schedule (§6) and **nothing else** — build settings stay with Vercel's framework
+detection, and a key added here silently overrides the dashboard:
 
 - Vercel detects the entrypoint at `api/index.py` (re-exports `server.main:app`) and
   installs Python deps from `pyproject.toml`/`uv.lock`.
@@ -93,11 +95,134 @@ Remove the email from `ALLOWED_EMAILS` and redeploy (or update the env var). The
 re-checks the allowlist on **every** request, so access dies immediately — no waiting
 for the 7-day session cookie to expire.
 
-## 6. Price refresh on serverless (note)
-`POST /api/refresh-prices` does a blocking external fetch and can exceed the serverless
-function timeout. Options: trigger it via **Vercel Cron** off-peak, raise the function
-`maxDuration`, or run price ingestion from a scheduled job outside Vercel. Not part of the
-auth work — the endpoint is auth-protected either way.
+## 6. Keeping the deployed data fresh (schedules)
+
+Two schedules, because the sources split cleanly in two: **Yahoo is reachable from anywhere,
+everything else is a file on the laptop.** `data/` is gitignored, so no deployment has ever
+contained a broker statement — dividends, transactions, spending and net-worth snapshots can
+only be produced by the machine holding the PDFs. Prices are the one exception, and the only
+thing the cloud can refresh alone.
+
+| | What runs | When | Reaches |
+|---|---|---|---|
+| **launchd** (this Mac) | `make prices` | daily 06:15 SGT | Yahoo closes + FX **+ the Endowus NAV** |
+| **launchd** (this Mac) | `make ingest-all` | Sunday 07:00 SGT | statements → `txn`/`dividend`, spending, prices, snapshots |
+| **Vercel Cron** | `GET /api/cron/refresh-prices` | daily 23:15 UTC (≈07:15 SGT) | Yahoo closes + FX only |
+
+Both local jobs write to the **deployed** Neon database — that is the whole point, and the
+one thing to get wrong: `make ingest` with no `DATABASE_URL` writes to the local docker DB
+and reports success while the site goes stale. `scripts/scheduled_run.sh` resolves
+`DATABASE_URL_UNPOOLED` from `.env.local` and refuses to run against a localhost URL.
+
+```sh
+make schedule-install     # write + load both launchd agents (~/Library/LaunchAgents)
+make schedule-status      # loaded? last exit code? last three log lines?
+make schedule-test        # run the prices agent now (JOB=ingest-all for the other)
+make schedule-uninstall
+```
+
+Logs: `~/Library/Logs/portfolio/{prices,ingest-all}.log`. A missed calendar time (machine
+asleep) fires **once** on wake, not once per occurrence; powered off, at next login. Every
+target is idempotent, so a catch-up and a duplicate are equally harmless.
+
+### 6a. The Vercel Cron half — enabling it, step by step
+
+Only for the days the laptop is shut. Two things have to be true before a single invocation
+happens, and **neither is in the code you just merged**: the secret must exist as a
+Production env var, and a *new production deployment* must be built after `vercel.json`
+declared the cron. A cron belongs to the deployment that declared it — merging the file is
+not enough.
+
+**1 — Generate the secret.** Vercel's own recommendation is ≥16 characters of random.
+
+```sh
+python3 -c "import secrets;print(secrets.token_urlsafe(32))"
+```
+
+**2 — Store it as a Production env var.** The name must be exactly `CRON_SECRET`: Vercel
+sends *that* variable as the `Authorization` header, and nothing else is consulted.
+
+```sh
+vercel env add CRON_SECRET production      # paste the value from step 1 at the prompt
+```
+
+Dashboard equivalent: **Project → Settings → Environment Variables → Add**, name
+`CRON_SECRET`, Environment = **Production** only. Preview does not need it (crons only ever
+hit the production deployment), and leaving it off Preview keeps one fewer copy of a
+credential that can drive writes.
+
+**3 — Deploy from `main`.** Push the merge, or **Deployments → Redeploy** on the latest
+production build. The commit author's email must be authorised or the build never
+runs — see [§4](#commit-author-must-be-an-authorised-email). Watch for the build to finish;
+a `BLOCKED` deployment declares no cron.
+
+**4 — Confirm the cron was registered.** **Project → Settings → Cron Jobs** must list
+`/api/cron/refresh-prices` with schedule `15 23 * * *`. If the page is empty, the deployment
+that shipped `vercel.json` was not promoted to production — nothing else causes this.
+
+**5 — Prove the endpoint before waiting a day for it.** Two curls, both from your machine —
+the first is the one that matters, because a route this shape is only safe if the naked path
+is dead:
+
+```sh
+APP=https://<your-app>.vercel.app
+
+curl -si "$APP/api/cron/refresh-prices" | head -1
+# HTTP/2 401     <- required. Anything else: STOP, the route is open to the internet.
+
+curl -s -H "Authorization: Bearer $CRON_SECRET" "$APP/api/cron/refresh-prices"
+# {"ok":35,"fail":0,"date":"2026-08-06","failed":[],"fx_failed":[]}
+```
+
+**`ok` is 35, not 36, and that is correct here** — the Endowus fund is skipped in the cloud
+and counted in neither `ok` nor `fail`, so the response cannot tell you it happened (see the
+third bullet below). Locally the same call reports 36. A second call is safe either way: the
+write is a merge keyed on (security, date), so running it twice changes nothing.
+
+**6 — Check the first real run the next morning.** Settings → Cron Jobs → **View Logs**
+(filtered to `requestPath:/api/cron/refresh-prices`), or from the data side:
+
+```sh
+set -a; . ./.env.local; set +a
+psql "$DATABASE_URL_UNPOOLED" -c "select max(date) from price; select max(date) from fx_rate;"
+```
+
+#### Changing or turning it off
+- **Reschedule**: edit the `schedule` in `vercel.json`, commit, redeploy. Editing it anywhere
+  else does not survive the next deploy.
+- **Pause without a deploy**: Settings → Cron Jobs → **Disable Cron Jobs**.
+- **Remove**: delete the entry from `vercel.json` and redeploy.
+- **Rotate the secret**: `vercel env rm CRON_SECRET production` then add the new value, and
+  **redeploy** — a running deployment keeps the value it was built with.
+- **Revoke instantly**: remove `CRON_SECRET`. The route then denies every caller, including
+  Vercel's own (it fails closed by design), while the local launchd jobs carry on untouched.
+
+#### Four things to know about it
+- **Hobby plan**: at most one run per day, fired at any minute inside the stated hour
+  (23:00–23:59 UTC). A more frequent expression fails the deployment outright. Max 2 crons.
+- **23:15 UTC is deliberate** — after the US close, and already the next SGT day, so the row
+  it writes carries the same date the 06:15 SGT local run would use (`ingestion.prices.sg_today`,
+  not the function's UTC clock).
+- **It cannot price the Endowus fund**, and says nothing about it. That NAV is scraped from
+  the latest statement PDF in `data/`, absent from the deployment: `endowus_nav()` finds no
+  file, returns `None`, and the loop moves on without touching `ok` or `fail`. So a cloud run
+  reports `35 ok, 0 fail` and looks clean. Only the local daily/Sunday run moves that NAV.
+- **No retries, best-effort delivery.** A failed or missed run is not re-attempted; the next
+  one is 24h later. That is tolerable only because the job is idempotent and the local
+  06:15 run covers the same ground.
+
+#### If it does not fire
+| Symptom | Cause |
+|---|---|
+| Cron Jobs page empty | `vercel.json` never reached a **production** deployment |
+| Build fails on the cron | Schedule is more frequent than daily (Hobby limit) |
+| Logs show `401` | `CRON_SECRET` missing on Production, or set after the current deployment was built — redeploy |
+| Logs show `404` | Path typo; Vercel still invokes and still logs it |
+| Ran, but `price.date` did not move | Read the JSON in the log: all-`fail` means Yahoo refused the deployment's IP, not a scheduling problem |
+
+Duration is not a concern in practice: 36 held securities + 4 FX pairs run in ~19s against
+the 300s function ceiling. It stays sequential and unretried — a failed run is visible in
+**Project → Settings → Cron Jobs → View Logs**, and the next run is 24h later.
 
 ## Security ops
 - **Dependency scan (SECURITY-10)**: `uv pip install pip-audit && pip-audit -r requirements.txt`

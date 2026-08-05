@@ -1,5 +1,6 @@
 .PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net \
-        flat-cash load-cash spending snapshot snapshot-commit ingest-all test-web capture-web-fixtures
+        flat-cash load-cash spending snapshot snapshot-commit ingest-all test-web capture-web-fixtures \
+        schedule-install schedule-status schedule-uninstall schedule-test
 
 PY = PYTHONPATH=. .venv/bin/python
 AL = PYTHONPATH=. .venv/bin/alembic
@@ -52,6 +53,17 @@ ingest-all:   ## delta-ingest EVERY source: brokers + spending + prices + net-wo
 	$(MAKE) spending      # dbs-cc, trust-cc, dbs-consolidated -> spending ledger
 	-$(MAKE) prices       # endowus NAV + FX (needs network; non-fatal if offline)
 	$(MAKE) snapshot-commit   # new DBS months (+ tiger-prime) -> net-worth snapshots
+
+schedule-install:   ## install the launchd agents: prices daily 06:15, ingest-all Sunday 07:00
+	@# Both run against the DEPLOYED (Neon) database, not the local docker one — the point of
+	@# scheduling is that the site is fresh without you. See DEPLOY.md §6.
+	scripts/schedule.sh install
+schedule-status:    ## are the agents loaded, when did they last run, what did they say
+	@scripts/schedule.sh status
+schedule-uninstall: ## remove both agents
+	scripts/schedule.sh uninstall
+schedule-test:      ## run the prices agent right now (JOB=ingest-all for the other)
+	scripts/schedule.sh test $(or $(JOB),prices)
 
 api:          ## run the API (serves built web/ at /)
 	$(PY) -m uvicorn server.main:app --reload --port 8000

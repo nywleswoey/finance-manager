@@ -30,6 +30,10 @@ class Settings(BaseSettings):
     # Match the region of the frontend's VITE_PUBLIC_POSTHOG_HOST.
     posthog_host: str = "https://us.i.posthog.com"
     dev_auth_bypass: bool = False        # skip Google auth — LOCAL dev only (see auth_bypass_active)
+    # Shared secret Vercel Cron sends as `Authorization: Bearer <value>`. It is the ONLY
+    # credential the scheduled price refresh has (a cron request carries no session cookie),
+    # so an unset value denies the cron route outright rather than opening it (SECURITY-15).
+    cron_secret: str = ""
 
     # --- spend classification: NL->predicate compile (server-side, once per rule) ---
     anthropic_api_key: str = ""          # server-held; never reaches the browser

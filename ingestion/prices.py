@@ -23,6 +23,19 @@ from portfolio.models import FxRate, Price
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 UA = {"User-Agent": "Mozilla/5.0"}
+# The book's timezone. Singapore has had no DST since 1982, so a fixed offset is the whole
+# rule — no tzdata needed, which matters because this also runs on Vercel.
+SGT = dt.timezone(dt.timedelta(hours=8))
+
+
+def sg_today():
+    """Today in SGT — the date every price/FX row is stamped with.
+
+    On a local run this is just date.today(). It exists for the scheduled Vercel Cron run,
+    whose clock is UTC: it fires at 23:15 UTC, which is already the next SGT day, and
+    date.today() there would stamp the row a day behind the identical local 06:15 SGT run.
+    """
+    return dt.datetime.now(SGT).date()
 
 
 def yahoo_symbol(ticker, market):
@@ -57,9 +70,9 @@ def upsert_price(s, security_id, d, close, ccy):
     s.merge(Price(security_id=security_id, date=d, close=close, currency=ccy, source="yahoo"))
 
 
-def main():
+def main(today=None):
     s = SessionLocal()
-    today = dt.date.today()
+    today = today or sg_today()
     held = s.execute(text(
         "SELECT DISTINCT security_id, canonical_ticker, market, asset_type "
         "FROM current_position WHERE units > 0")).all()
