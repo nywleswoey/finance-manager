@@ -8,6 +8,11 @@ unadjusted. TWR strips out contribution timing -> comparable to an index.
 The same unit-delta contribution series feeds the money-weighted XIRR, so a position that
 arrives without a txn price (transfer, snapshot-diff open, fund switch) still carries a cost
 basis instead of landing in the terminal value for free.
+
+The daily series comes from Yahoo on every call, NOT from the `price` table (ADR 0001 keeps
+that split deliberate) — so an unchanged database does not pin this module's output, and it
+can value the book differently from /api/positions, which reads the table. `_returns` takes
+the clock and the fetch as arguments so the two can be told apart; see it and issue #52.
 Run: PYTHONPATH=. .venv/bin/python -m portfolio.twr
 """
 import bisect
@@ -192,29 +197,24 @@ def _twr(days, txns, prices, ccy_of, fx, contrib, div_by_day=None):
     return factor - 1, ann
 
 
-def compute_twr():
-    s = SessionLocal()
-    # one row per (account, security): the same counter can sit in FSM and CPF at once
-    held = s.execute(text(
-        "SELECT DISTINCT security_id, canonical_ticker, market, asset_type, currency "
-        "FROM current_position WHERE units > 0")).all()
-    ids = sorted({h[0] for h in held})
-    # txns for held securities (units over time + external cash flows)
-    txns = s.execute(text(
-        "SELECT security_id, trade_date, action, qty_signed, price, fees, currency FROM txn "
-        "WHERE trade_date IS NOT NULL AND security_id = ANY(:ids)"), {"ids": ids}).mappings().all()
-    # dividends scoped to held securities: a dividend whose purchase cost never entered `flows`
-    # (sold-out position) is a free inflow that inflates XIRR.
-    divs = s.execute(text(
-        "SELECT security_id, COALESCE(ex_date, pay_date) AS ex_date, pay_date, gross, currency "
-        "FROM dividend WHERE pay_date IS NOT NULL AND security_id = ANY(:ids)"),
-        {"ids": ids}).mappings().all()
-    # last known close per security — covers what Yahoo can't price (funds, delisted tickers)
-    last_px = latest_close(s)
-    s.close()
+def _returns(held, txns, divs, last_px, as_of, fetch=daily):
+    """The whole return calculation, once the database rows are in hand.
 
-    start = min((t["trade_date"] for t in txns), default=dt.date.today())
-    days = [start + dt.timedelta(d) for d in range((dt.date.today() - start).days + 1)]
+    Split out from `compute_twr` so the clock and the price source are both arguments: hold
+    `fetch` still and advancing `as_of` is the only moving input, which is the only way to
+    say which output fields the clock actually owns. See tests/test_twr.py and issue #52.
+
+    What `as_of` legitimately moves: `years`; `twr_annualised`, which raises a fixed `factor`
+    to `1/years`; and `xirr_annualised`, which re-solves with the terminal inflow discounted
+    over a longer span. All three decay on a book standing still. What it must not move:
+    `twr_cumulative`, `value_plus_income_sgd`, `invested_sgd`, `from` — but only while no
+    close lands between the two dates. "No new close" is the real condition, not "same
+    `fetch`": `ffill` truncates the series at `as_of`, so a later date picks up any close the
+    series already held past the earlier one. Advancing the clock is therefore the trigger,
+    while Yahoo remains the source."""
+    ids = sorted({h[0] for h in held})
+    start = min((t["trade_date"] for t in txns), default=as_of)
+    days = [start + dt.timedelta(d) for d in range((as_of - start).days + 1)]
 
     # daily prices (native) + fx
     prices, ccy_of = {}, {}
@@ -223,13 +223,13 @@ def compute_twr():
         if atype == "fund":
             continue  # fund: no daily series (Endowus monthly) -> skip from TWR
         try:
-            prices[sid] = ffill(daily(ysym(tk, market)), days)
+            prices[sid] = ffill(fetch(ysym(tk, market)), days)
         except Exception:
             prices[sid] = {}
     fx = {"SGD": {d: 1.0 for d in days}}
     for c in ("USD", "HKD", "EUR"):
         try:
-            fx[c] = ffill(daily(f"{c}SGD=X"), days)
+            fx[c] = ffill(fetch(f"{c}SGD=X"), days)
         except Exception:
             fx[c] = {}
     price_sids = [sid for sid, p in prices.items() if p]
@@ -292,22 +292,21 @@ def compute_twr():
                 flows.append((t["trade_date"], -abs(float(t["fees"])) * rate))
     flows.extend(div_flows)
 
-    today = dt.date.today()
     cum_all = running_units(txns, ids)
     mv = 0.0
     for sid in ids:
-        u = units_on(cum_all, sid, today)
+        u = units_on(cum_all, sid, as_of)
         px = prices[sid][max(prices[sid])] if prices.get(sid) else last_px.get(sid)
-        rate = fx_on(fx, ccy_of[sid], today)
+        rate = fx_on(fx, ccy_of[sid], as_of)
         if u > 1e-9 and px and rate is not None:
             mv += u * px * rate
     if mv > 0:
-        flows.append((today, mv))
+        flows.append((as_of, mv))
     xirr = _xirr(flows)
     twr_cum, twr_ann = _twr(days, txns, prices, ccy_of, fx, contrib_twr, div_by_day)
     invested = sum(-a for _, a in flows if a < 0)
     received = sum(a for _, a in flows if a > 0)
-    years = max((today - start).days / 365.0, 0.1)
+    years = max((as_of - start).days / 365.0, 0.1)
     return {"xirr_annualised": _r4(xirr),
             "twr_annualised": _r4(twr_ann),
             "twr_cumulative": _r4(twr_cum),
@@ -315,6 +314,30 @@ def compute_twr():
             "years": round(years, 1), "from": str(start),
             "note": "money-weighted (XIRR, pay-date dividends) + time-weighted (TWR, ex-date "
                     "dividends); fund excluded from the daily series but not from XIRR"}
+
+
+def compute_twr(as_of=None, fetch=daily):
+    """Read the held book out of the database and hand it to `_returns`."""
+    s = SessionLocal()
+    # one row per (account, security): the same counter can sit in FSM and CPF at once
+    held = s.execute(text(
+        "SELECT DISTINCT security_id, canonical_ticker, market, asset_type, currency "
+        "FROM current_position WHERE units > 0")).all()
+    ids = sorted({h[0] for h in held})
+    # txns for held securities (units over time + external cash flows)
+    txns = s.execute(text(
+        "SELECT security_id, trade_date, action, qty_signed, price, fees, currency FROM txn "
+        "WHERE trade_date IS NOT NULL AND security_id = ANY(:ids)"), {"ids": ids}).mappings().all()
+    # dividends scoped to held securities: a dividend whose purchase cost never entered `flows`
+    # (sold-out position) is a free inflow that inflates XIRR.
+    divs = s.execute(text(
+        "SELECT security_id, COALESCE(ex_date, pay_date) AS ex_date, pay_date, gross, currency "
+        "FROM dividend WHERE pay_date IS NOT NULL AND security_id = ANY(:ids)"),
+        {"ids": ids}).mappings().all()
+    # last known close per security — covers what Yahoo can't price (funds, delisted tickers)
+    last_px = latest_close(s)
+    s.close()
+    return _returns(held, txns, divs, last_px, as_of or dt.date.today(), fetch)
 
 
 if __name__ == "__main__":

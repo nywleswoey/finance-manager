@@ -20,20 +20,48 @@ in from a targeted query against the same database — see `_ensure_long_merchan
 Re-run only when the fixtures genuinely need to move. Regenerating them casually
 re-tethers every measured assertion in the suite to whatever the database holds today.
 
-Three fixtures are not reproducible byte-for-byte, because three endpoints compute against
-`dt.date.today()`: `return.json` and every `xirr` in `positions.json` /
-`positions-closed.json`. Two captures four days apart moved all four of `return.json`'s
-computed fields — `xirr_annualised`, `twr_annualised`, `twr_cumulative` and
-`value_plus_income_sgd` — and the `xirr` of most positions, while the database held no new
-price, FX rate, dividend or transaction between them. Same rows in, different numbers out:
-that is the clock, not the data.
+Three fixtures are not reproducible byte-for-byte: `return.json`, and every `xirr` in
+`positions.json` / `positions-closed.json`. They move for two different reasons, and a
+recapture diff is only readable if you keep them apart (issue #52, which is where the
+numbers below come from).
 
-Do not tighten this into "only annualised rates move". That reading was written here once
-and is wrong — `value_plus_income_sgd` moved by 3,580 SGD and is not a rate, and the exact
-path by which `portfolio/twr.py` turns a later `today` into a lower terminal valuation on
-frozen data is not pinned down. What IS established is the direction to check in: a moved
-number in these three files is worth a `git log` on the database's newest row before it is
-worth reading as new data.
+1. The clock alone. `twr_annualised` raises a fixed total return to `1/years`, and `xirr`
+   / `xirr_annualised` re-solve with the terminal inflow discounted over a longer span —
+   so both drift downward on a book that is standing still. Correct arithmetic, nothing to
+   investigate. This is the only reason `positions.json` moves: its `price`, `mv_native`
+   and `mv_sgd` come from the `price` table via `latest_close` and were byte-identical
+   across the four-day capture.
+
+2. The clock reaching a Yahoo close. `portfolio/twr.py` fetches `return.json`'s whole daily
+   price and FX series live from Yahoo on every call; it does not read the `price` table
+   (only its `last_px` fallback does, for funds and delisted tickers Yahoo cannot price).
+   So "the database gained no rows" does not pin `return.json` at all. Advancing `today` is
+   the trigger — `ffill` truncates the series at today, so a close Yahoo has already
+   printed is invisible until the date reaches it — but Yahoo, not the clock, is the source
+   of the new number. That is the likeliest account of the 3,580 SGD in
+   `value_plus_income_sgd`: inference from where the prices come from, not something
+   re-measured against the original captures, which are gone.
+
+Which gives the split to read a diff by. Run against the real book with the Yahoo series
+truncated so no close lands between the two dates, four days apart:
+
+    xirr_annualised     0.1339 -> 0.1336   moved
+    twr_annualised      0.0772 -> 0.0771   moved
+    twr_cumulative      0.991  -> 0.991
+    value_plus_income_sgd  2142504 -> 2142504
+    invested_sgd           1634953 -> 1634953
+
+So `twr_cumulative`, `value_plus_income_sgd`, `invested_sgd` and `from` do NOT move while no
+close lands. If they have moved, one did — check Yahoo, not the database, because the
+database is not where this endpoint gets its prices. Note this is NOT the old "only
+annualised rates move" reading the header used to carry and #52 warned off: that one was
+unconditional and false. This one is conditional on the price series, and the condition is
+the whole point. `tests/test_twr.py` holds both halves as regression tests.
+
+(The two valuation paths disagreeing is a real inconsistency — `/api/return` can report a
+market value `/api/positions` does not — but it is a live-correctness question, out of scope
+for the fixtures, and left open. ADR 0001 already records the split price source as
+deliberate, so this is a question about the two endpoints agreeing, not about the design.)
 
 None of it changes a rendered width — 19.64% and 19.62% are the same number of characters —
 so expect the churn in a recapture diff rather than going looking for a cause.
