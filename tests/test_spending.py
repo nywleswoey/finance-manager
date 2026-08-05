@@ -6,6 +6,10 @@ undated(). summary() and trends() bucket by month with Postgres `to_char`, so th
 exercised here end-to-end; the WHERE consolidation they share is covered via the portable
 shapes and _where directly, and trends()' payload fold via `_trend_shape` directly.
 
+Their SELECTs are covered in tests/test_spending_pg.py, which runs them on a real Postgres
+and skips without one (issue #53). Keep that split: what is portable belongs here, where it
+runs on every machine with no server up.
+
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending.py -q
 """
 import datetime as dt

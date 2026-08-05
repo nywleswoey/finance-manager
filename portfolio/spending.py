@@ -10,12 +10,13 @@ The six read shapes share a single WHERE builder (`_where`) rather than each re-
 the same is_spend / date / category filters.
 
 Note: summary() and trends() bucket by month with Postgres `to_char`, so their SQL is
-Postgres-only; transactions(), categories(), years() and undated() are portable (covered by
-tests/test_spending.py). trends() keeps its payload-shaping in `_trend_shape`, which is not
-Postgres-anything and is tested directly — that fold is where unclassified spend gets its
-name, and where it used to raise.
+Postgres-only; transactions(), categories(), years() and undated() are portable. That split
+is a testing split too — tests/test_spending.py runs the portable shapes on SQLite plus
+`_where` and `_trend_shape` (trends()' payload fold, where unclassified spend gets its name
+and where it used to raise) directly, and tests/test_spending_pg.py runs these two functions'
+actual SELECT against a real Postgres, skipping when there is none.
 
-Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending.py -q
+Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending.py tests/test_spending_pg.py -q
 """
 from sqlalchemy import text
 
@@ -49,8 +50,25 @@ def _rows(s, sql, p):
     return [dict(r) for r in s.execute(text(sql), p).mappings().all()]
 
 
+#: Every month-bucketed query carries this on top of `_where`. txn_date is nullable and
+#: `to_char(NULL,'YYYY-MM')` is NULL, so counted-but-dateless spend would arrive as a bucket
+#: whose `ym` is None: an unlabelled column on the chart, and — once a second month exists —
+#: a TypeError out of `_trend_shape`'s `sorted(..., key=ym)`, which is issue #35's crash one
+#: level up. Dropping the rows here is also the consistent answer: no date window matches
+#: them and years() cannot see them either, which is exactly what undated() is for. They stay
+#: in summary()'s total_sgd, because they are spend — see that function's note.
+DATED = "txn_date IS NOT NULL"
+
+
 def summary(frm=None, to=None, s=None):
-    """Totals + category / subcategory / month breakdowns for the spend window."""
+    """Totals + category / subcategory / month breakdowns for the spend window.
+
+    total_sgd is every counted line in the window; by_month covers only the dated ones (see
+    DATED). Unwindowed, the two therefore differ by exactly undated()'s magnitude — the gap
+    that endpoint exists to surface. months counts real months, so avg_month_sgd spreads any
+    dateless spend across the months that are known rather than over a bucket that is not a
+    month; with a frm/to window the question does not arise, since the window drops those
+    rows from the total too."""
     where, p = _where(frm=frm, to=to)
     with session_scope(s) as s:
         total = s.execute(
@@ -63,7 +81,7 @@ def summary(frm=None, to=None, s=None):
             f"WHERE {where} GROUP BY category, subcategory ORDER BY v DESC", p)
         by_month = _rows(s,
             f"SELECT to_char(txn_date,'YYYY-MM') ym, ROUND(SUM(-amount_sgd),2) v FROM cash_txn "
-            f"WHERE {where} GROUP BY ym ORDER BY ym", p)
+            f"WHERE {where} AND {DATED} GROUP BY ym ORDER BY ym", p)
     months = len(by_month) or 1
     return {
         "total_sgd": round(float(total), 2),
@@ -130,7 +148,8 @@ def trends(frm=None, to=None, s=None):
     with session_scope(s) as s:
         rows = s.execute(text(
             f"SELECT to_char(txn_date,'YYYY-MM') ym, category, ROUND(SUM(-amount_sgd),2) v "
-            f"FROM cash_txn WHERE {where} GROUP BY ym, category ORDER BY ym"), p).mappings().all()
+            f"FROM cash_txn WHERE {where} AND {DATED} "
+            f"GROUP BY ym, category ORDER BY ym"), p).mappings().all()
     return _trend_shape(rows)
 
 
