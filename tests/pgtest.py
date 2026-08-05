@@ -6,15 +6,13 @@ month with `to_char`, which SQLite has never had, so those two functions had no 
 their `SELECT` at all (issue #53). This module is what a `*_pg.py` test imports to get a real
 Postgres session, and what lets it skip cleanly on a machine that has none.
 
-    def setUpModule():
-        global ENGINE
-        ENGINE = pgtest.engine_or_skip()        # raises SkipTest when no pg is reachable
+    class TestFoo(pgtest.Case):
+        TABLES = ("cash_txn",)              # emptied before each test; skips when no pg
 
-NEVER the app database. The URL is `settings.database_url` with `_test` appended to the
-database name (`portfolio` -> `portfolio_test`), created on first use and owned entirely by
-the suite — `reset()` truncates in it. Override with TEST_DATABASE_URL, which is checked
-against the app database and refused if they are the same, because a suite that truncates is
-one misconfigured env var away from emptying the real ledger.
+NEVER the app database, and not by convention: the URL is `settings.database_url` with `_test`
+appended to the database name (`portfolio` -> `portfolio_test`), with no env var to point it
+anywhere else. `reset()` truncates, so the one thing worth making impossible is aiming that at
+the real ledger — a database this module derives and creates itself cannot be aimed.
 
 Schema comes from `Base.metadata`, not from alembic: the tests assert on query behaviour
 (`to_char` output, GROUP BY cardinality, numeric arithmetic), which the model definitions
@@ -40,20 +38,9 @@ _engine = None
 
 
 def throwaway_url():
-    """The throwaway database's URL: TEST_DATABASE_URL, else the app URL with `_test`.
-
-    Refuses a TEST_DATABASE_URL naming the app database on the app host — see the module
-    docstring: everything here truncates."""
-    override = os.getenv("TEST_DATABASE_URL")
+    """The app's URL with `_test` on the database name — see the module docstring."""
     app = make_url(settings.database_url)
-    if not override:
-        return app.set(database=(app.database or "portfolio") + "_test")
-    url = make_url(override)
-    if (url.database, url.host, url.port) == (app.database, app.host, app.port):
-        raise RuntimeError(
-            f"TEST_DATABASE_URL points at the application database ({app.database}); "
-            "the pg tests truncate their tables, so they refuse to run against it")
-    return url
+    return app.set(database=(app.database or "portfolio") + "_test")
 
 
 def _create_database(url):
@@ -80,6 +67,11 @@ def engine_or_skip():
     if _engine is not None:
         return _engine
     url = throwaway_url()
+    if not url.get_backend_name().startswith("postgresql"):
+        # DATABASE_URL points somewhere that has no `to_char` and no numeric — the very
+        # assumptions these tests exist to check. Skip rather than assert against a dialect
+        # that would answer differently.
+        raise unittest.SkipTest(f"not a Postgres DATABASE_URL: {url.get_backend_name()}")
     try:
         _create_database(url)
         eng = create_engine(url, future=True)
@@ -104,3 +96,21 @@ def reset(engine, *tables):
     names = ", ".join(tables)
     with engine.begin() as c:
         c.execute(text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))
+
+
+class Case(unittest.TestCase):
+    """Base for the `*_pg.py` cases: `self.s` on the throwaway database, `TABLES` empty.
+
+    The skip lives in setUp rather than a setUpModule so a module needs no engine global of
+    its own; engine_or_skip() memoizes, so it costs one dict lookup per test after the first.
+    Subclasses that override setUp/tearDown must call super()."""
+
+    TABLES: tuple[str, ...] = ()
+
+    def setUp(self):
+        self.engine = engine_or_skip()
+        reset(self.engine, *self.TABLES)
+        self.s = session(self.engine)
+
+    def tearDown(self):
+        self.s.close()

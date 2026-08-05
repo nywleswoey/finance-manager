@@ -30,7 +30,7 @@ package = false
 build = "npm --prefix web ci && npm --prefix web run build"
 
 [project.optional-dependencies]
-dev = ["ruff>=0.6"]
+dev = ["ruff>=0.6", "pytest>=8"]
 
 [tool.pytest.ini_options]
 # `pg` marks the tests that need a real Postgres (tests/*_pg.py, via tests/pgtest.py) because

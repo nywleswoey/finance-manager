@@ -1,16 +1,17 @@
 """portfolio.networth against a real Postgres — the half tests/test_networth.py cannot see.
 
-That module runs on in-memory SQLite and owns the metric math: the six figures, the housing /
-CPF exclusions, FX freezing. None of that needs a server, and it should stay there. What it
-cannot cover is the trade-off SQLite makes underneath it — the same trade-off issue #53 raised
-for spending, which is why this file exists beside tests/test_spending_pg.py and shares its
-harness. SQLite has no numeric type: `Numeric(20,4)` round-trips through a float, and a `Date`
-column is text, so two things go untested there —
+That module runs on in-memory SQLite and owns everything portable: the six metrics, the
+housing / CPF exclusions, FX freezing, and every guard that is Python (BR1's duplicate-date
+check, BR2's defaults, BR4's missing-rate raise). None of that needs a server and none of it
+is repeated here. What it cannot cover is the trade-off underneath it — the same trade-off
+issue #53 raised for spending, which is why this file exists beside tests/test_spending_pg.py
+and shares its harness. Unlike spending, networth has no Postgres-only SQL; it has
+Postgres-only *types*. SQLite has no numeric — `Numeric(20,4)` round-trips through a float —
+and its `Date` is text. So three things go untested there, and only three are here:
 
-  * money keeps four decimal places and comparisons are exact, not float-approximate;
-  * `rate_for`'s raw `date <= :d ORDER BY date DESC` compares dates as dates.
-
-Plus the one guard that is a schema constraint rather than Python: one snapshot per date.
+  * frozen money keeps four decimal places through the column, exactly;
+  * `rate_for`'s raw `date <= :d ORDER BY date DESC` compares dates as dates;
+  * one-snapshot-per-date is enforced by the schema, not only by create_snapshot's SELECT.
 
 Marked `pg` — skips when no server answers, `-m "not pg"` deselects.
 
@@ -34,19 +35,12 @@ from tests import pgtest
 
 pytestmark = pytest.mark.pg
 
-TABLES = ("nw_value", "nw_snapshot", "nw_item", "fx_rate")
-ENGINE = None
 
+class PgCase(pgtest.Case):
+    TABLES = ("nw_value", "nw_snapshot", "nw_item", "fx_rate")
 
-def setUpModule():
-    global ENGINE
-    ENGINE = pgtest.engine_or_skip()
-
-
-class PgCase(unittest.TestCase):
     def setUp(self):
-        pgtest.reset(ENGINE, *TABLES)
-        self.s = pgtest.session(ENGINE)
+        super().setUp()
         # compute() over the whole securities ledger is not what any of this is about, and the
         # catalogue below has no positions to price. Restored in tearDown — patching the module
         # global permanently would hand the stub to every later test in the same process.
@@ -59,7 +53,7 @@ class PgCase(unittest.TestCase):
 
     def tearDown(self):
         nw.live_portfolio_sgd = self._live
-        self.s.close()
+        super().tearDown()
 
     def seed_items(self):
         for i, (code, kind, ccy, liq, hou, cpf) in enumerate([
@@ -94,7 +88,9 @@ class TestFrozenMoney(PgCase):
         self.assertIsInstance(v, Decimal)          # numeric, not the float SQLite hands back
 
     def test_metrics_reconcile_after_a_round_trip(self):
-        # Read back in a session that never saw the write: every figure comes off the column.
+        # Read back in a session that never saw the write: every figure comes off the column,
+        # so this is the metric math over what Postgres actually stored, not over what Python
+        # happened to still be holding.
         nw.create_snapshot(dt.date(2026, 6, 1), [
             {"code": "posb", "native_value": "10000.25"},
             {"code": "tiger_usd", "native_value": "1000.5", "currency": "USD"},
@@ -102,7 +98,7 @@ class TestFrozenMoney(PgCase):
             {"code": "hdb", "native_value": "600000"},
             {"code": "home_loan", "native_value": "300000"},
         ], s=self.s)
-        fresh = pgtest.session(ENGINE)
+        fresh = pgtest.session(self.engine)
         try:
             got = nw.latest(s=fresh)
         finally:
@@ -113,69 +109,30 @@ class TestFrozenMoney(PgCase):
         self.assertEqual(got["total_liabilities"], 300000.0)
         self.assertEqual(got["liquid_assets"], round(10000.25 + usd_sgd, 2))
         self.assertEqual(got["net_worth"], round(assets - 300000, 2))
-        self.assertEqual(got["net_worth_excl_housing"], round(assets - 600000 - 300000 + 300000, 2))
-        self.assertEqual(got["net_worth_excl_housing_cpf"],
-                         round(assets - 600000 - 50000, 2))
-
-    def test_unsupplied_items_default_to_zero_rows(self):
-        # BR2: one row per catalogue item, so the breakdown lists everything the catalogue has.
-        d = nw.create_snapshot(dt.date(2026, 6, 1), [{"code": "posb", "native_value": 5000}],
-                               s=self.s)
-        self.assertEqual(len(d["values"]), 5)
-        self.assertEqual(sorted(v["value_sgd"] for v in d["values"]), [0.0, 0.0, 0.0, 0.0, 5000.0])
+        self.assertEqual(got["net_worth_excl_housing"], round(assets - 600000, 2))
+        self.assertEqual(got["net_worth_excl_housing_cpf"], round(assets - 600000 - 50000, 2))
 
 
 class TestFrozenFx(PgCase):
     def test_rate_is_the_latest_on_or_before_the_date(self):
-        # `date <= :d ORDER BY date DESC LIMIT 1` against a real date column, with a date bind.
+        # `date <= :d ORDER BY date DESC LIMIT 1` against a real date column with a date bind:
+        # dates compared as dates, and the RATE column's eight decimals kept.
         self.add_rate(dt.date(2026, 5, 1), "USD", Decimal("1.33"))
         self.add_rate(dt.date(2026, 6, 15), "USD", Decimal("1.36"))
         self.assertEqual(nw.rate_for(self.s, "USD", dt.date(2026, 6, 1)), Decimal("1.33000000"))
         self.assertEqual(nw.rate_for(self.s, "USD", dt.date(2026, 6, 20)), Decimal("1.36000000"))
 
-    def test_no_rate_on_or_before_raises(self):
-        # BR4 — no silent fallback to 1. The only EUR rate is *after* the snapshot's date, so
-        # this is the `date <= :d` bound doing the work, not an empty table.
-        self.add_rate(dt.date(2026, 6, 15), "EUR", Decimal("1.45"))
-        with self.assertRaises(ValueError):
-            nw.rate_for(self.s, "EUR", dt.date(2026, 6, 1))
-
-    def test_update_refreezes_at_the_snapshots_own_date(self):
-        # The point of update_snapshot: editing a manual field months later must not re-price
-        # history at today's rate. Two rates exist; the older one is the snapshot's.
-        self.add_rate(dt.date(2026, 5, 1), "USD", Decimal("1.33"))
-        self.add_rate(dt.date(2026, 12, 1), "USD", Decimal("1.50"))
-        snap = nw.create_snapshot(dt.date(2026, 6, 1), [], s=self.s)
-        d = nw.update_snapshot(snap["id"],
-                               [{"code": "tiger_usd", "native_value": 100, "currency": "USD"}],
-                               s=self.s)
-        usd = next(v for v in d["values"] if v["code"] == "tiger_usd")
-        self.assertEqual(usd["rate_to_sgd"], 1.33)
-        self.assertEqual(usd["value_sgd"], 133.0)
-
 
 class TestOneSnapshotPerDate(PgCase):
-    def test_duplicate_date_is_rejected(self):
-        nw.create_snapshot(dt.date(2026, 6, 1), [], s=self.s)
-        with self.assertRaises(ValueError):
-            nw.create_snapshot(dt.date(2026, 6, 1), [], s=self.s)
-
     def test_the_constraint_is_in_the_schema_not_only_the_guard(self):
-        # create_snapshot's BR1 check is a SELECT, which two concurrent writers can both pass.
-        # The unique index is what actually holds — assert it exists by violating it directly.
+        # create_snapshot's BR1 check is a SELECT, which two concurrent writers can both pass;
+        # tests/test_networth.py covers that guard. The unique index is what actually holds —
+        # assert it is really on the shipped table by violating it directly.
         nw.create_snapshot(dt.date(2026, 6, 1), [], s=self.s)
         self.s.add(NwSnapshot(date=dt.date(2026, 6, 1)))
         with self.assertRaises(IntegrityError):
             self.s.commit()
         self.s.rollback()
-
-    def test_empty_catalogue_is_refused(self):
-        # An unseeded catalogue yields a snapshot with no values: every metric zero, no error.
-        self.s.execute(text("DELETE FROM nw_item"))
-        self.s.commit()
-        with self.assertRaises(ValueError):
-            nw.create_snapshot(dt.date(2026, 6, 1), [{"code": "posb", "native_value": 1}],
-                               s=self.s)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,7 @@ import os
 import sys
 import unittest
 from decimal import Decimal
+from unittest import mock
 
 import pytest
 
@@ -35,25 +36,16 @@ from tests import pgtest
 pytestmark = pytest.mark.pg
 
 D = dt.date
-ENGINE = None
 
 
-def setUpModule():
-    """Skips the whole module when no Postgres answers (see pgtest.engine_or_skip)."""
-    global ENGINE
-    ENGINE = pgtest.engine_or_skip()
+class PgCase(pgtest.Case):
+    """One empty cash_txn per test, on the throwaway database (or a skip — see pgtest.Case)."""
 
-
-class PgCase(unittest.TestCase):
-    """One empty cash_txn per test, on the throwaway database."""
+    TABLES = ("cash_txn",)
 
     def setUp(self):
-        pgtest.reset(ENGINE, "cash_txn")
-        self.s = pgtest.session(ENGINE)
+        super().setUp()
         self._n = 0
-
-    def tearDown(self):
-        self.s.close()
 
     def add(self, day, amount, *, is_spend=True, category="Food", subcategory="Dining",
             source="dbs", exclude_reason=None):
@@ -152,9 +144,49 @@ class TestUndatedRows(PgCase):
 # ---------------- GROUP BY: one row per (month, category) ----------------
 
 class TestGroupByCardinality(PgCase):
+    def rows_the_query_returned(self):
+        """The `SELECT`'s own rows, caught at the seam it hands them over at.
+
+        The assertion has to be made here and not on trends()' output: `_trend_shape` sums,
+        so one row of 20 and two rows of 10 fold to the same series and the property is
+        invisible downstream. `_trend_shape` is the seam by design — the module splits it out
+        precisely because the query above it is Postgres-only — so wrapping it reads the real
+        query's real rows without a copy of the SQL to go stale."""
+        caught = []
+        fold = spending._trend_shape          # bound before the patch, or spy calls itself
+
+        def spy(rows):
+            caught.extend(dict(r) for r in rows)
+            return fold(rows)
+
+        with mock.patch.object(spending, "_trend_shape", spy):
+            spending.trends(s=self.s)
+        return caught
+
+    def test_the_query_returns_one_row_per_month_and_category(self):
+        # What `_trend_shape`'s fold was built on top of, and what made the old
+        # `m[category] = v` assignment survivable. Four lines, two months, two categories ->
+        # three (month, category) pairs, one row each. Not four rows, and not one per line.
+        for day, cat in [(D(2024, 1, 1), "Food"), (D(2024, 1, 2), "Food"),
+                         (D(2024, 1, 3), "Transport"), (D(2024, 2, 1), "Food")]:
+            self.add(day, -10, category=cat)
+        rows = self.rows_the_query_returned()
+        self.assertEqual([(r["ym"], r["category"], float(r["v"])) for r in rows],
+                         [("2024-01", "Food", 20.0), ("2024-01", "Transport", 10.0),
+                          ("2024-02", "Food", 10.0)])
+
+    def test_null_and_empty_category_are_two_rows_the_fold_joins(self):
+        # The one case where the query hands over two rows for what becomes one band: SQL
+        # groups NULL and '' separately, `_trend_shape` names both UNCLASSIFIED. The fold
+        # sums for exactly this, and only the query can show there is something to sum.
+        self.add(D(2024, 1, 1), -5, category=None, subcategory=None)
+        self.add(D(2024, 1, 2), -2, category="", subcategory=None)
+        rows = self.rows_the_query_returned()
+        self.assertCountEqual([r["category"] for r in rows], ["", None])
+        self.assertEqual(spending.trends(s=self.s)["series"],
+                         [{"ym": "2024-01", spending.UNCLASSIFIED: 7.0}])
+
     def test_one_row_per_month_and_category(self):
-        # What `_trend_shape`'s fold was built on top of. Four lines, two months, two
-        # categories -> four rows, not eight.
         for day, cat in [(D(2024, 1, 1), "Food"), (D(2024, 1, 2), "Food"),
                          (D(2024, 1, 3), "Transport"), (D(2024, 2, 1), "Food")]:
             self.add(day, -10, category=cat)
