@@ -211,21 +211,37 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
     close lands between the two dates. "No new close" is the real condition, not "same
     `fetch`": `ffill` truncates the series at `as_of`, so a later date picks up any close the
     series already held past the earlier one. Advancing the clock is therefore the trigger,
-    while Yahoo remains the source."""
+    while Yahoo remains the source.
+
+    `as_of` (the output field, #56) belongs to neither list: it is the newest close at or
+    before the clock, so advancing the clock moves it exactly when the clock reaches a close —
+    the same condition that moves the levels, which is the point of reporting it."""
     ids = sorted({h[0] for h in held})
     start = min((t["trade_date"] for t in txns), default=as_of)
     days = [start + dt.timedelta(d) for d in range((as_of - start).days + 1)]
 
-    # daily prices (native) + fx
-    prices, ccy_of = {}, {}
+    # daily prices (native) + fx. `newest_close` is the latest date any fetched series actually
+    # printed a close on or before `as_of` — read off the raw series, because `ffill` carries the
+    # last close forward to every day up to `as_of` and would answer "today" unconditionally.
+    #
+    # The newest across securities, which #56 asked for, and therefore an upper bound rather than
+    # a per-security fact: one SG name printing today reads as today while every US position is a
+    # day behind it. It also leaves the FX series out, unlike /api/positions, which folds in the
+    # `fx_rate` date — the two legs there are separate table writes that can and do land on
+    # different days, where these come back from one Yahoo fetch in one call.
+    prices, ccy_of, newest_close = {}, {}, None
     for sid, tk, market, atype, ccy in held:
         ccy_of[sid] = ccy or "SGD"
         if atype == "fund":
             continue  # fund: no daily series (Endowus monthly) -> skip from TWR
         try:
-            prices[sid] = ffill(fetch(ysym(tk, market)), days)
+            series = fetch(ysym(tk, market))
+            prices[sid] = ffill(series, days)
         except Exception:
-            prices[sid] = {}
+            series, prices[sid] = {}, {}
+        printed = [d for d in series if d <= as_of]
+        if printed:
+            newest_close = max(printed + ([newest_close] if newest_close else []))
     fx = {"SGD": {d: 1.0 for d in days}}
     for c in ("USD", "HKD", "EUR"):
         try:
@@ -312,6 +328,11 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
             "twr_cumulative": _r4(twr_cum),
             "invested_sgd": round(invested, 0), "value_plus_income_sgd": round(received, 0),
             "years": round(years, 1), "from": str(start),
+            # Yahoo's newest close, which is not /api/positions' date (the `price` table's) and
+            # is not meant to be — see the loop above for what this date does and does not
+            # cover. None when no security has a daily series at all, i.e. nothing came from
+            # Yahoo and the terminal value is the stored close instead.
+            "as_of": str(newest_close) if newest_close else None,
             "note": "money-weighted (XIRR, pay-date dividends) + time-weighted (TWR, ex-date "
                     "dividends); fund excluded from the daily series but not from XIRR"}
 

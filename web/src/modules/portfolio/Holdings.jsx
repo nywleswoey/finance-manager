@@ -102,7 +102,12 @@ export default function Holdings() {
 
   useEffect(() => {
     setRows(null);
-    get("/api/positions" + (showClosed ? "?closed=true" : "")).then(setRows).catch(() => setRows([]));
+    // {as_of, positions}: the endpoint carries the date its prices are as of (issue #56).
+    // Nothing renders it yet — flagging a stale book is a follow-up — but the rows now arrive
+    // inside an envelope, so unwrap before anything downstream sees them.
+    get("/api/positions" + (showClosed ? "?closed=true" : ""))
+      .then((d) => setRows(d.positions ?? []))
+      .catch(() => setRows([]));
   }, [showClosed]);
 
   const groups = useMemo(() => {

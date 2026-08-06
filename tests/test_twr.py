@@ -217,6 +217,42 @@ def test_a_close_inside_the_window_is_what_restates_the_levels():
     assert b["value_plus_income_sgd"] == 1150 and b["twr_cumulative"] == pytest.approx(0.15)
 
 
+# ------------------------------------------------------- _returns: the as-of date (#56)
+#
+# `/api/positions` values the same book off the `price` table and this endpoint off Yahoo, so
+# the two answer as of different moments — 29,451 SGD apart when #56 was written. The split is
+# deliberate (ADR 0001) and stays; what must not stay is that neither response said when. The
+# date this endpoint reports is the newest close it actually fetched, NOT `as_of`: the clock is
+# what truncates the series, but the close is what the money is worth.
+
+
+def test_as_of_is_the_newest_close_not_the_clock():
+    """FROZEN's last close is 2024-06-01 and the clock is 2026-01-01, so a number reported as
+    of today would be a claim the price series does not support."""
+    r = _returns(HELD, TXNS, [], {}, D(2026, 1, 1), fetch=FROZEN)
+    assert r["as_of"] == "2024-06-01"
+
+
+def test_as_of_moves_when_the_clock_reaches_a_close():
+    """Same fetch, two clocks — the pairing of
+    test_a_close_inside_the_window_is_what_restates_the_levels. The value moves because a close
+    came into view, and the as-of is what makes that legible instead of unexplained."""
+    yahoo = _fetch([(D(2024, 1, 1), 10.0), (D(2024, 6, 1), 12.0), (D(2026, 1, 5), 11.5)])
+
+    assert _returns(HELD, TXNS, [], {}, D(2026, 1, 1), fetch=yahoo)["as_of"] == "2024-06-01"
+    assert _returns(HELD, TXNS, [], {}, D(2026, 1, 8), fetch=yahoo)["as_of"] == "2026-01-05"
+
+
+def test_no_daily_series_at_all_reports_no_as_of():
+    """A fund-only book is valued from the stored close, not from Yahoo. There is no fetched
+    close to be as of, and inventing one (today, say) would misreport a DB-priced number."""
+    fund = [(2, "FUND", "SG", "fund", "SGD")]
+    txns = [{"security_id": 2, "trade_date": D(2024, 1, 1), "action": "buy",
+             "qty_signed": 50.0, "price": 8.0, "fees": None, "currency": "SGD"}]
+
+    assert _returns(fund, txns, [], {2: 9.0}, D(2026, 1, 1), fetch=_fetch([]))["as_of"] is None
+
+
 def test_a_security_yahoo_cannot_price_falls_back_to_the_stored_close():
     """Candidate 1 in #52 — a security ageing out of a rolling price window — does not happen:
     `daily` asks for a 10y range ending now, so nothing ages out. The `last_px` fallback fires
