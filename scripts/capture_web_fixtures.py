@@ -21,18 +21,25 @@ Re-run only when the fixtures genuinely need to move. Regenerating them casually
 re-tethers every measured assertion in the suite to whatever the database holds today.
 
 Three fixtures are not reproducible byte-for-byte: `return.json`, and every `xirr` in
-`positions.json` / `positions-closed.json`. They move for two different reasons, and a
-recapture diff is only readable if you keep them apart (issue #52, which is where the
-numbers below come from).
+`positions.json` / `positions-closed.json`. They move for three different reasons, and a
+recapture diff is only readable if you keep them apart (issues #52 and #56, which are where
+the numbers below come from).
 
 1. The clock alone. `twr_annualised` raises a fixed total return to `1/years`, and `xirr`
    / `xirr_annualised` re-solve with the terminal inflow discounted over a longer span —
    so both drift downward on a book that is standing still. Correct arithmetic, nothing to
-   investigate. This is the only reason `positions.json` moves: its `price`, `mv_native`
-   and `mv_sgd` come from the `price` table via `latest_close` and were byte-identical
-   across the four-day capture.
+   investigate. This was the only reason `positions.json` moved across the four-day capture
+   #52 measured: its `price`, `mv_native` and `mv_sgd` were byte-identical there.
 
-2. The clock reaching a Yahoo close. `portfolio/twr.py` fetches `return.json`'s whole daily
+2. The price ingest running. Those same `price` / `mv_native` / `mv_sgd` fields — and
+   `as_of` — come from the `price` and `fx_rate` tables via `latest_close` and `fx_map`, so
+   they move when, and only when, a row lands in either. `ingestion/prices.py` writes both
+   (`POST /api/refresh-prices`, the local scheduled run, the Vercel cron). They were frozen
+   across #52's capture because nothing had ingested in that window, which is a fact about
+   that window and not a property of the endpoint. Under a daily schedule, expect every
+   priced row to move on every recapture, and `as_of` to be roughly today.
+
+3. The clock reaching a Yahoo close. `portfolio/twr.py` fetches `return.json`'s whole daily
    price and FX series live from Yahoo on every call; it does not read the `price` table
    (only its `last_px` fallback does, for funds and delisted tickers Yahoo cannot price).
    So "the database gained no rows" does not pin `return.json` at all. Advancing `today` is
@@ -59,9 +66,13 @@ unconditional and false. This one is conditional on the price series, and the co
 the whole point. `tests/test_twr.py` holds both halves as regression tests.
 
 (The two valuation paths disagreeing is a real inconsistency — `/api/return` can report a
-market value `/api/positions` does not — but it is a live-correctness question, out of scope
-for the fixtures, and left open. ADR 0001 already records the split price source as
-deliberate, so this is a question about the two endpoints agreeing, not about the design.)
+market value `/api/positions` does not, and #56 measured 29,451 SGD of it — but it is a
+live-correctness question, out of scope for the fixtures. ADR 0001 already records the split
+price source as deliberate, so this is a question about the two endpoints agreeing, not about
+the design; #56 answers it by ingest plus an `as_of` on each side rather than by unifying
+them. Which is also why reasons 2 and 3 are separate above: each endpoint now states the
+moment it is speaking about, so a diff where the two `as_of` values move apart is the same
+divergence showing up in the fixtures.)
 
 None of it changes a rendered width — 19.64% and 19.62% are the same number of characters —
 so expect the churn in a recapture diff rather than going looking for a cause.

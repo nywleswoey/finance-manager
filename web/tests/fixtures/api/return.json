@@ -1,10 +1,11 @@
 {
- "xirr_annualised": 0.1344,
- "twr_annualised": 0.0775,
- "twr_cumulative": 0.9977,
+ "xirr_annualised": 0.1369,
+ "twr_annualised": 0.079,
+ "twr_cumulative": 1.0241,
  "invested_sgd": 1634953.0,
- "value_plus_income_sgd": 2146127.0,
+ "value_plus_income_sgd": 2160471.0,
  "years": 9.3,
  "from": "2017-04-28",
+ "as_of": "2026-08-06",
  "note": "money-weighted (XIRR, pay-date dividends) + time-weighted (TWR, ex-date dividends); fund excluded from the daily series but not from XIRR"
 }

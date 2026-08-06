@@ -23,7 +23,7 @@ from starlette.concurrency import run_in_threadpool
 from portfolio.config import settings
 
 from server import auth
-from portfolio.db import SessionLocal, fx_map
+from portfolio.db import SessionLocal, fx_map, session_scope, valuation_as_of
 from portfolio.money import to_sgd
 from portfolio.performance import alloc_by_account, compute, empty_group, rollup
 from portfolio import spending
@@ -150,6 +150,20 @@ def _f(x):
     return float(x) if x is not None else None
 
 
+def _as_of():
+    """ISO date the DB-priced views are as of, or None — see portfolio.db.valuation_as_of.
+
+    Cached like the fold it describes and cleared by the same /refresh-prices, but not a
+    transactional pair with it: the keys fill lazily and independently, and a write that
+    bypasses this process (the scheduled ingest, or the cron landing on another warm instance)
+    clears no cache here. So a date filled after such a write can sit above a fold filled
+    before it. Narrow, self-healing on the next /refresh, and strictly smaller than the
+    staleness the memo already carries."""
+    with session_scope() as s:
+        d = valuation_as_of(s)
+    return str(d) if d else None
+
+
 def perf_all():
     return _cached("all", compute)
 
@@ -223,8 +237,20 @@ def overview():
 
 @app.get("/api/positions")
 def positions(closed: bool = False):
-    """Open positions (units > 0). With closed=true, also include closed positions
-    (units ≈ 0 that had real activity); each row tagged status=open|closed."""
+    """`{as_of, positions}`. Open positions (units > 0); with closed=true, also closed ones
+    (units ≈ 0 that had real activity), each row tagged status=open|closed.
+
+    `as_of` is when the prices below were last refreshed: the older of the newest `price` and
+    `fx_rate` row, so an upper bound on the freshness of any one row rather than that row's own
+    date (`latest_close` prices each security off its own newest close — a delisted ticker
+    stopped years ago and still appears under a same-day `as_of`; portfolio.db has the detail).
+    It is NOT /api/return's date, which is Yahoo's newest close — the two
+    endpoints read different price sources on purpose (ADR 0001) and so answer as of different
+    moments. Issue #56 measured them 29,451 SGD apart; the gap closes by running the price
+    ingest, but only the two dates let a reader see the numbers are not comparable.
+
+    An envelope rather than the bare list this used to return, because the date belongs to the
+    valuation as a whole, not to any row — closed positions carry no market value at all."""
     out = []
     for r in perf_all():
         is_open = r["units"] > 1e-6
@@ -237,7 +263,7 @@ def positions(closed: bool = False):
     # open first (by market value desc), then closed (by realised P/L desc)
     out.sort(key=lambda r: (r["status"] != "open", -(r["mv_sgd"] if r["status"] == "open"
                                                       else (r["pl_sgd"] or 0))))
-    return out
+    return {"as_of": _cached("as_of", _as_of), "positions": out}
 
 
 @app.get("/api/performance")
