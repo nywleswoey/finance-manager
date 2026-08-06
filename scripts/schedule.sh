@@ -1,14 +1,20 @@
 #!/bin/bash
-# Install / remove / inspect the launchd agents that keep the deployed database fresh.
+# Install / remove / inspect the launchd agent that keeps the deployed database fresh.
 #
-#   com.portfolio.prices      daily 06:15 SGT   make prices      (Yahoo closes + FX + Endowus NAV)
-#   com.portfolio.ingest-all  Sunday 07:00 SGT  make ingest-all  (statements -> txn/dividend,
-#                                                                 spending, prices, snapshots)
+#   com.portfolio.ingest-all  daily 06:15 SGT  make ingest-all  (statements -> txn/dividend,
+#                                                                spending, prices, snapshots)
+#
+# One agent, not two: ingest-all already ends in `make prices`, so a separate prices job would
+# only refresh what this one refreshes anyway. It was weekly at first, which meant a statement
+# dropped on Monday sat unloaded until Sunday — for four minutes of overnight work, that wait
+# bought nothing.
 #
 # Why local and not only in the cloud: every source but Yahoo is a PDF/CSV under data/, which
 # is gitignored and so exists on this machine alone. Dividends in particular are parsed out of
 # broker statements — nothing off this laptop can produce them. The Vercel Cron in vercel.json
-# is the backstop for prices only, for the days the laptop is shut.
+# is the backstop for prices only, for the days the laptop is shut. It also covers the one way
+# this agent can leave prices stale: `make ingest` failing aborts the chain before the price
+# step, and the cloud run an hour later refreshes them regardless.
 #
 # Missed runs: StartCalendarInterval fires on wake if the machine was asleep at the time (once,
 # coalesced — not once per missed occurrence). If it was powered off, at next login. Every
@@ -19,7 +25,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 AGENTS="$HOME/Library/LaunchAgents"
 LOGS="$HOME/Library/Logs/portfolio"
 DOMAIN="gui/$(id -u)"
-JOBS=("prices" "ingest-all")
+JOBS=("ingest-all")
+# Agents this script used to install and no longer does. install/uninstall unload them, so an
+# upgrade doesn't leave a second, differently-scheduled job running behind your back.
+RETIRED=("prices")
 
 plist_path() { echo "$AGENTS/com.portfolio.$1.plist"; }
 
@@ -60,9 +69,9 @@ install() {
   [ -f "$ROOT/.env.local" ] || { echo "no .env.local — run: vercel env pull .env.local"; exit 1; }
   chmod +x "$ROOT/scripts/scheduled_run.sh"
 
-  write_plist prices     "$(cal Hour 6; cal Minute 15)"
-  write_plist ingest-all "$(cal Weekday 0; cal Hour 7; cal Minute 0)"
+  write_plist ingest-all "$(cal Hour 6; cal Minute 15)"
 
+  retire
   for job in "${JOBS[@]}"; do
     launchctl bootout "$DOMAIN/com.portfolio.$job" 2>/dev/null || true
     launchctl bootstrap "$DOMAIN" "$(plist_path "$job")"
@@ -70,11 +79,21 @@ install() {
     echo "installed com.portfolio.$job -> $(plist_path "$job")"
   done
   echo
-  echo "logs:      $LOGS/{prices,ingest-all}.log"
-  echo "run now:   make schedule-test        # runs the prices job immediately"
+  echo "log:       $LOGS/ingest-all.log"
+  echo "run now:   make schedule-test        # runs it immediately"
+}
+
+retire() {
+  for job in "${RETIRED[@]}"; do
+    [ -f "$(plist_path "$job")" ] || continue
+    launchctl bootout "$DOMAIN/com.portfolio.$job" 2>/dev/null || true
+    rm -f "$(plist_path "$job")"
+    echo "retired com.portfolio.$job (ingest-all now covers it)"
+  done
 }
 
 uninstall() {
+  retire
   for job in "${JOBS[@]}"; do
     launchctl bootout "$DOMAIN/com.portfolio.$job" 2>/dev/null || true
     rm -f "$(plist_path "$job")"
@@ -96,7 +115,7 @@ case "${1:-}" in
   uninstall) uninstall ;;
   status)    status ;;
   # kickstart -k restarts the job now; the calendar schedule is unaffected.
-  test)      launchctl kickstart -k "$DOMAIN/com.portfolio.${2:-prices}" &&
-             echo "kicked com.portfolio.${2:-prices} — tail $LOGS/${2:-prices}.log" ;;
-  *) echo "usage: $0 {install|uninstall|status|test [prices|ingest-all]}"; exit 2 ;;
+  test)      launchctl kickstart -k "$DOMAIN/com.portfolio.${2:-ingest-all}" &&
+             echo "kicked com.portfolio.${2:-ingest-all} — tail $LOGS/${2:-ingest-all}.log" ;;
+  *) echo "usage: $0 {install|uninstall|status|test}"; exit 2 ;;
 esac

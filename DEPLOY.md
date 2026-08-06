@@ -105,25 +105,37 @@ thing the cloud can refresh alone.
 
 | | What runs | When | Reaches |
 |---|---|---|---|
-| **launchd** (this Mac) | `make prices` | daily 06:15 SGT | Yahoo closes + FX **+ the Endowus NAV** |
-| **launchd** (this Mac) | `make ingest-all` | Sunday 07:00 SGT | statements → `txn`/`dividend`, spending, prices, snapshots |
+| **launchd** (this Mac) | `make ingest-all` | daily 06:15 SGT | statements → `txn`/`dividend`, spending, prices + FX, the Endowus NAV, snapshots |
 | **Vercel Cron** | `GET /api/cron/refresh-prices` | daily 23:15 UTC (≈07:15 SGT) | Yahoo closes + FX only |
 
-Both local jobs write to the **deployed** Neon database — that is the whole point, and the
-one thing to get wrong: `make ingest` with no `DATABASE_URL` writes to the local docker DB
-and reports success while the site goes stale. `scripts/scheduled_run.sh` resolves
+One local agent, not two: `ingest-all` ends in `make prices`, so a separate price job would
+refresh what this one already refreshes. It ran weekly at first, which left a statement
+dropped on Monday unloaded until Sunday — for ~4 minutes of overnight work, that wait bought
+nothing.
+
+**What is still manual**: putting the statement in `data/`. Nothing downloads from Tiger,
+Moomoo, FSM, CDP or Endowus — the schedule loads whatever is sitting there, the morning after
+you drop it.
+
+The local job writes to the **deployed** Neon database — that is the whole point, and the one
+thing to get wrong: `make ingest` with no `DATABASE_URL` writes to the local docker DB and
+reports success while the site goes stale. `scripts/scheduled_run.sh` resolves
 `DATABASE_URL_UNPOOLED` from `.env.local` and refuses to run against a localhost URL.
 
 ```sh
-make schedule-install     # write + load both launchd agents (~/Library/LaunchAgents)
+make schedule-install     # write + load the launchd agent (~/Library/LaunchAgents)
 make schedule-status      # loaded? last exit code? last three log lines?
-make schedule-test        # run the prices agent now (JOB=ingest-all for the other)
+make schedule-test        # run it now
 make schedule-uninstall
 ```
 
-Logs: `~/Library/Logs/portfolio/{prices,ingest-all}.log`. A missed calendar time (machine
-asleep) fires **once** on wake, not once per occurrence; powered off, at next login. Every
-target is idempotent, so a catch-up and a duplicate are equally harmless.
+Log: `~/Library/Logs/portfolio/ingest-all.log`. A missed calendar time (machine asleep) fires
+**once** on wake, not once per occurrence; powered off, at next login. Every target is
+idempotent, so a catch-up and a duplicate are equally harmless.
+
+The one way this leaves prices stale: `make ingest` failing aborts the chain before the price
+step (`ingest-all` runs ingest → spending → prices → snapshots). The Vercel Cron an hour later
+refreshes them anyway, which is the second reason it exists.
 
 ### 6a. The Vercel Cron half — enabling it, step by step
 

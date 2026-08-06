@@ -54,16 +54,16 @@ ingest-all:   ## delta-ingest EVERY source: brokers + spending + prices + net-wo
 	-$(MAKE) prices       # endowus NAV + FX (needs network; non-fatal if offline)
 	$(MAKE) snapshot-commit   # new DBS months (+ tiger-prime) -> net-worth snapshots
 
-schedule-install:   ## install the launchd agents: prices daily 06:15, ingest-all Sunday 07:00
-	@# Both run against the DEPLOYED (Neon) database, not the local docker one — the point of
+schedule-install:   ## install the launchd agent: ingest-all daily 06:15
+	@# Runs against the DEPLOYED (Neon) database, not the local docker one — the point of
 	@# scheduling is that the site is fresh without you. See DEPLOY.md §6.
 	scripts/schedule.sh install
-schedule-status:    ## are the agents loaded, when did they last run, what did they say
+schedule-status:    ## is the agent loaded, when did it last run, what did it say
 	@scripts/schedule.sh status
-schedule-uninstall: ## remove both agents
+schedule-uninstall: ## remove the agent
 	scripts/schedule.sh uninstall
-schedule-test:      ## run the prices agent right now (JOB=ingest-all for the other)
-	scripts/schedule.sh test $(or $(JOB),prices)
+schedule-test:      ## run the agent right now
+	scripts/schedule.sh test
 
 api:          ## run the API (serves built web/ at /)
 	$(PY) -m uvicorn server.main:app --reload --port 8000
