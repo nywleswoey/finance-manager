@@ -68,9 +68,16 @@ function DataRow({ r, onClick, max }) {
   const { net, partial } = netOf(r);
   return (
     <tr className="rowlink" style={{ cursor: "pointer", opacity: closed ? 0.7 : 1 }} onClick={onClick}>
-      <td className="l">{r.name} <span className="pill">{r.ticker}</span>
+      {/* The ticker sits on the sub-line rather than beside the name, and this cell is the
+          pinned one — so its width is the width of everything the numbers have to scroll
+          under. Measured at 390×844: name+pill inline made it 281px of a 328px window, 86%,
+          leaving 47px for the thirteen numbers the pin exists to let you reach; at 360 it was
+          94% and 17px, narrower than a single figure. Moving the pill down costs no row
+          height, because the accounts line was already there. */}
+      <td className="l">{r.name}
         {closed && <span className="pill" style={{ marginLeft: 4, color: "var(--mut)" }}>closed</span>}
-        <div className="mut" style={{ fontSize: 11 }}>{(r.accounts || []).join(", ")}</div></td>
+        <div className="mut" style={{ fontSize: 11 }}>
+          <span className="pill">{r.ticker}</span>{(r.accounts || []).length ? " " + (r.accounts || []).join(", ") : ""}</div></td>
       <td className="l"><span className="pill">{r.bucket}</span></td>
       <td className="l"><span className="pill">{r.market}</span></td>
       <td>{closed ? <span className="mut">—</span> : fmt(r.units, r.units < 10 ? 2 : 0)}</td>
