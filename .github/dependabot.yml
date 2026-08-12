@@ -10,13 +10,20 @@ version: 2
 
 updates:
   # ---------------------------------------------------------------------------
-  # Python — pyproject.toml + uv.lock
+  # Python — pyproject.toml + uv.lock + requirements.txt, all three in one PR
   #
-  # This ecosystem edits uv.lock ONLY. requirements.txt (the runtime subset Vercel installs
-  # into the function) is not a manifest dependabot knows about here, so a bump landing in
-  # the lockfile leaves the deployed pins behind. CI's `sync_requirements --check` is what
-  # catches that: a production bump fails until `make sync-requirements` is committed onto
-  # the PR. Deliberate — the versions that reach production get a human.
+  # `uv` names the RESOLVER, not the file set: dependabot's python updater rewrites every
+  # manifest in the directory it can, requirements.txt included. Measured, not assumed —
+  # PR #70 carried fastapi 0.138.0 -> 0.141.1 into the lockfile and the runtime pins
+  # together, and CI's drift check passed on it.
+  #
+  # (This comment used to claim the opposite, that the lockfile moved alone and every
+  # production bump needed `make sync-requirements` committed onto the PR by hand. It was
+  # written before any dependabot PR existed to check it against. It was wrong.)
+  #
+  # So `sync_requirements --check` in CI is an invariant, not a chore anyone performs. What
+  # it actually guards is a hand-run `uv lock` — which is how the lockfile came to have no
+  # entry for anthropic at all while requirements.txt pinned it.
   # ---------------------------------------------------------------------------
   - package-ecosystem: "uv"
     directory: "/"

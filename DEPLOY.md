@@ -243,9 +243,9 @@ the 300s function ceiling. It stays sequential and unretried — a failed run is
   **Actions** tab, or locally with `uvx pip-audit -r requirements.txt`. Lock files (`uv.lock`,
   pinned `requirements.txt`) are committed.
 - **Dependency updates**: Dependabot (`.github/dependabot.yml`) opens grouped PRs weekly for
-  `uv.lock`, `web/package-lock.json`, and monthly for the workflow actions. Minor/patch
-  **development** bumps auto-merge once CI passes; anything that reaches production waits for
-  you. See [§Dependency updates](#dependency-updates) below.
+  the Python manifests and `web/package-lock.json`, monthly for the workflow actions.
+  Minor/patch **development** bumps auto-merge once CI passes; anything that reaches
+  production waits for you. See [§Dependency updates](#dependency-updates) below.
 - **Local dev**: copy `.env.example` → `.env` (`COOKIE_SECURE=false` for http), and
   `web/.env.example` → `web/.env.local`. Run API (`make api`, i.e. `uvicorn server.main:app
   --port 8000`) + `npm run dev` (Vite proxies `/api` **and** `/ingest` → 8000, so the
@@ -278,13 +278,27 @@ real `[project].dependencies`), so the package *list* in `requirements.txt` is a
 choice. The *versions* are not: `scripts/sync_requirements.py` re-pins them from `uv.lock`,
 and CI fails on drift.
 
-That check is what makes Dependabot's `uv` ecosystem safe. It edits `uv.lock` only, so a
-production bump landing alone would ship a version nobody reviewed to the deployed function.
-Instead:
+**Dependabot updates all three files itself.** `uv` names the resolver, not the file set —
+its Python updater rewrites every manifest in the directory it can, `requirements.txt`
+included. PR #70 carried `fastapi` 0.138.0 → 0.141.1 into `pyproject.toml`, `uv.lock` *and*
+the runtime pins in one PR, and the drift check passed on it. So there is no routine step
+here: you do not run `make sync-requirements` on a Dependabot PR.
+
+What the check actually guards is a **hand-run `uv lock`** — which is exactly how this repo
+ended up with a lockfile that had no entry for `anthropic` at all while `requirements.txt`
+pinned it. If CI ever fails on drift:
 
 ```
-make sync-requirements     # re-pin requirements.txt from uv.lock, then commit onto the PR
+make sync-requirements     # re-pin requirements.txt from uv.lock, then commit
 ```
+
+**Grouping, and the trap in it.** Most groups are scoped `update-types: [minor, patch]`,
+which **silently excludes majors** — a major falls out of its group and gets its own PR.
+Harmless for an independent package; a deadlock for a coupled pair, which is what happened
+on the first run: react 18→19 and react-dom 18→19 arrived as two PRs (#67, #69), and neither
+could be merged alone. The pairs that must travel together are therefore grouped by *name*,
+which covers every update type: `react`+`react-dom`, `vite`+`@vitejs/plugin-react`,
+`sqlalchemy`+`alembic`. Add to those patterns before adding a coupled dependency, not after.
 
 **What auto-merges**: minor and patch **development** dependencies (ruff, pytest, vite,
 `@playwright/test`, `@vitejs/plugin-react`), and only once both CI jobs pass. Nothing that
