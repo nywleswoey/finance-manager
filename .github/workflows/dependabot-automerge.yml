@@ -33,7 +33,7 @@ jobs:
       # change among them, so one major in the group disqualifies the whole PR.
       - name: fetch dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v2
+        uses: dependabot/fetch-metadata@v3
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
