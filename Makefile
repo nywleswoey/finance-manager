@@ -83,10 +83,11 @@ capture-web-fixtures:   ## re-derive the suite's fixtures from the live DB (need
 	@# today — read the docstring in the script before running it.
 	$(PY) scripts/capture_web_fixtures.py --base http://localhost:8000
 
-sync-requirements:   ## re-pin requirements.txt from uv.lock (run this on a dependabot uv.lock PR)
+sync-requirements:   ## re-pin requirements.txt from uv.lock (only when CI reports drift)
 	@# Two manifests, one resolver: uv.lock resolves everything, requirements.txt is the
-	@# runtime subset Vercel installs. A lockfile bump that lands alone ships an unreviewed
-	@# version to the function, so CI fails on drift — this is the fix it asks for.
+	@# runtime subset Vercel installs. NOT a step for dependabot PRs — it updates both files
+	@# itself. This is for a hand-run `uv lock`, which is how the lockfile once ended up with
+	@# no entry for anthropic while requirements.txt pinned it.
 	$(PY) scripts/sync_requirements.py
 
 net:          ## per-ticker net verdict (+/-) incl dividends + option premiums
