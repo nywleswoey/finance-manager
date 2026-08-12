@@ -1,6 +1,6 @@
 .PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net \
         flat-cash load-cash spending snapshot snapshot-commit ingest-all test-web capture-web-fixtures \
-        schedule-install schedule-status schedule-uninstall schedule-test
+        schedule-install schedule-status schedule-uninstall schedule-test sync-requirements
 
 PY = PYTHONPATH=. .venv/bin/python
 AL = PYTHONPATH=. .venv/bin/alembic
@@ -82,6 +82,12 @@ capture-web-fixtures:   ## re-derive the suite's fixtures from the live DB (need
 	@# Rarely. Regenerating re-tethers every measured assertion to whatever the DB holds
 	@# today — read the docstring in the script before running it.
 	$(PY) scripts/capture_web_fixtures.py --base http://localhost:8000
+
+sync-requirements:   ## re-pin requirements.txt from uv.lock (run this on a dependabot uv.lock PR)
+	@# Two manifests, one resolver: uv.lock resolves everything, requirements.txt is the
+	@# runtime subset Vercel installs. A lockfile bump that lands alone ships an unreviewed
+	@# version to the function, so CI fails on drift — this is the fix it asks for.
+	$(PY) scripts/sync_requirements.py
 
 net:          ## per-ticker net verdict (+/-) incl dividends + option premiums
 	$(PY) scripts/net.py $(filter-out $@,$(MAKECMDGOALS))

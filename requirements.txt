@@ -9,4 +9,4 @@ python-dotenv==1.2.2
 google-auth==2.55.0
 requests==2.34.2
 PyJWT==2.13.0
-anthropic==0.120.0
+anthropic==0.121.0

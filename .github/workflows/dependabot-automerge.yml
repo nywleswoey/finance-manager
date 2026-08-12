@@ -1,0 +1,65 @@
+# Merge the dependabot PRs that nobody would learn anything from reviewing.
+#
+# The line drawn here is dev-vs-production, not "is it small". A ruff or pytest or vite or
+# @playwright/test bump cannot reach a user: if it breaks, it breaks CI, in this repo, before
+# the merge. A fastapi or react or psycopg bump can reach a user, so it waits for you — and
+# for the Python side it must, because CI's requirements.txt/uv.lock drift check fails a
+# production bump until `make sync-requirements` is committed onto the PR.
+#
+# Majors are excluded on both sides. A major is a changelog to read.
+#
+# REQUIRES TWO REPO SETTINGS, or this is a no-op that quietly does nothing:
+#   1. Settings -> General -> "Allow auto-merge" ticked. `gh pr merge --auto` errors without it.
+#   2. A branch protection / ruleset on `main` requiring the `python` and `web` checks. Without
+#      it, auto-merge has no checks to wait for and merges immediately — which is the one
+#      failure mode of this file worth being afraid of.
+name: Dependabot auto-merge
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    # github.actor, not the PR title: the title is attacker-controllable, the actor is not.
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      # Parses the structured metadata dependabot puts in the PR body. On a grouped PR the
+      # outputs cover every dependency in the group — update-type is the largest semver
+      # change among them, so one major in the group disqualifies the whole PR.
+      - name: fetch dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: enable auto-merge
+        if: |
+          steps.meta.outputs.dependency-type == 'direct:development' &&
+          contains(fromJSON('["version-update:semver-minor", "version-update:semver-patch"]'), steps.meta.outputs.update-type)
+        # --auto queues it: the merge happens if and when every required check passes, and
+        # never if one fails. --squash to keep the one-commit-per-change history this repo has.
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # A production bump is left open on purpose; say so in the PR rather than leaving it
+      # looking like the automation failed. Only on `opened` — dependabot rebases its
+      # branches, and a comment per rebase would bury the diff it is explaining.
+      - name: explain why this one waits
+        if: |
+          github.event.action == 'opened' &&
+          (steps.meta.outputs.dependency-type != 'direct:development' ||
+           !contains(fromJSON('["version-update:semver-minor", "version-update:semver-patch"]'), steps.meta.outputs.update-type))
+        run: |
+          gh pr comment "$PR_URL" --body "Not auto-merged: \`$DEP_TYPE\` / \`$UPDATE_TYPE\`. Auto-merge covers **minor and patch development** dependencies only — this one reaches production or is a major, so it wants a human. If it touches \`uv.lock\`, CI fails until \`make sync-requirements\` is run and committed onto this branch."
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          DEP_TYPE: ${{ steps.meta.outputs.dependency-type }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
