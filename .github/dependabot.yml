@@ -30,6 +30,12 @@ updates:
       prefix: "chore(deps)"
       prefix-development: "chore(deps-dev)"
     groups:
+      # First, for the same reason as the react group below: `update-types` groups drop
+      # majors, and alembic reads enough SQLAlchemy internals that a SQLAlchemy major
+      # arriving without the alembic that supports it breaks `make migrate` — with the two
+      # in separate PRs, neither is mergeable and CI cannot tell you why.
+      sqlalchemy:
+        patterns: ["sqlalchemy", "alembic"]
       # ruff + pytest: never shipped, and a bump that breaks them breaks CI loudly and
       # locally-fixably. These are the ones automerge is allowed to take.
       python-dev:
@@ -57,14 +63,33 @@ updates:
       prefix: "chore(deps)"
       prefix-development: "chore(deps-dev)"
     groups:
-      # vite + @vitejs/plugin-react + @playwright/test. The build toolchain, which the
-      # viewport suite tests directly: it runs against the production build through vite's
-      # preview server, so a vite bump that changes CSS ordering fails here, not in prod.
+      # ORDER MATTERS: a dependency joins the FIRST group it matches, so the two pattern
+      # groups below must precede the update-type ones.
+      #
+      # These two exist because `update-types` groups silently exclude majors — anything not
+      # minor/patch falls out and gets its own PR. For a coupled pair that is not noise, it
+      # is a deadlock: dependabot's first run opened react 18->19 (#67) and react-dom 18->19
+      # (#69) as SEPARATE PRs, and neither can be merged alone, so both are stuck forever.
+      # Matching on name instead of update-type is what keeps a major together.
+      #
+      # Patterns are exact unless they contain a wildcard, so "react" does not match
+      # "react-dom" — both are listed. @types/react* is here for the day this repo grows
+      # TypeScript; it matches nothing today and costs nothing.
+      react:
+        patterns: ["react", "react-dom", "@types/react*"]
+      # Same failure mode, same fix: @vitejs/plugin-react declares a peer range on vite, so
+      # a vite major essentially always needs the plugin major with it.
+      vite:
+        patterns: ["vite", "@vitejs/plugin-react"]
+      # What is left of the dev set — @playwright/test, which pairs with nothing. The
+      # viewport suite tests the toolchain directly: it runs against the production build
+      # through vite's preview server, so a bump that changes CSS ordering fails here.
       web-dev:
         dependency-type: "development"
         update-types: ["minor", "patch"]
-      # react + react-dom must move as a pair; recharts and posthog-js ride along because
-      # they are the only other runtime deps and a weekly PR each is noise.
+      # recharts and posthog-js: the only runtime deps left once react is grouped above, and
+      # a weekly PR each is noise. Majors still arrive alone, which is correct — neither is
+      # coupled to anything, and recharts 2->3 is a changelog to read.
       web-runtime:
         dependency-type: "production"
         update-types: ["minor", "patch"]
