@@ -1,0 +1,85 @@
+# Automated dependency updates. Three surfaces, three schedules — see .github/workflows/ci.yml
+# for what runs on the PRs this opens, and dependabot-automerge.yml for which of them merge
+# without a human.
+#
+# Grouping is the whole point of the config below. Ungrouped, this repo opens ~10 PRs a week
+# (react + react-dom, sqlalchemy + psycopg, every @playwright/* in lockstep) and each one runs
+# the full 1345-assertion viewport suite. Grouped, related bumps arrive as one PR that either
+# passes together or fails together, which is also how they would be deployed.
+version: 2
+
+updates:
+  # ---------------------------------------------------------------------------
+  # Python — pyproject.toml + uv.lock
+  #
+  # This ecosystem edits uv.lock ONLY. requirements.txt (the runtime subset Vercel installs
+  # into the function) is not a manifest dependabot knows about here, so a bump landing in
+  # the lockfile leaves the deployed pins behind. CI's `sync_requirements --check` is what
+  # catches that: a production bump fails until `make sync-requirements` is committed onto
+  # the PR. Deliberate — the versions that reach production get a human.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Asia/Singapore"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      # ruff + pytest: never shipped, and a bump that breaks them breaks CI loudly and
+      # locally-fixably. These are the ones automerge is allowed to take.
+      python-dev:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+      # The runtime stack moves together or not at all — sqlalchemy and psycopg are one
+      # decision, fastapi and pydantic are another, and reviewing them apart invites the
+      # combination nobody tested.
+      python-runtime:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+
+  # ---------------------------------------------------------------------------
+  # Frontend — web/package.json + web/package-lock.json
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "07:00"
+      timezone: "Asia/Singapore"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
+    groups:
+      # vite + @vitejs/plugin-react + @playwright/test. The build toolchain, which the
+      # viewport suite tests directly: it runs against the production build through vite's
+      # preview server, so a vite bump that changes CSS ordering fails here, not in prod.
+      web-dev:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+      # react + react-dom must move as a pair; recharts and posthog-js ride along because
+      # they are the only other runtime deps and a weekly PR each is noise.
+      web-runtime:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+
+  # ---------------------------------------------------------------------------
+  # The workflows themselves. Actions are pinned to major tags (@v5), so this mostly catches
+  # the major bumps that tag-pinning cannot follow — rare, and always worth reading.
+  # ---------------------------------------------------------------------------
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]

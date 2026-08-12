@@ -237,8 +237,15 @@ the 300s function ceiling. It stays sequential and unretried — a failed run is
 **Project → Settings → Cron Jobs → View Logs**, and the next run is 24h later.
 
 ## Security ops
-- **Dependency scan (SECURITY-10)**: `uv pip install pip-audit && pip-audit -r requirements.txt`
-  before each deploy. Lock files (`uv.lock`, pinned `requirements.txt`) are committed.
+- **Dependency scan (SECURITY-10)**: `.github/workflows/audit.yml` runs
+  `pip-audit -r requirements.txt` and `npm audit --audit-level=high` every Monday 07:00 SGT,
+  so the scan no longer depends on remembering it before a deploy. Run it on demand from the
+  **Actions** tab, or locally with `uvx pip-audit -r requirements.txt`. Lock files (`uv.lock`,
+  pinned `requirements.txt`) are committed.
+- **Dependency updates**: Dependabot (`.github/dependabot.yml`) opens grouped PRs weekly for
+  `uv.lock`, `web/package-lock.json`, and monthly for the workflow actions. Minor/patch
+  **development** bumps auto-merge once CI passes; anything that reaches production waits for
+  you. See [§Dependency updates](#dependency-updates) below.
 - **Local dev**: copy `.env.example` → `.env` (`COOKIE_SECURE=false` for http), and
   `web/.env.example` → `web/.env.local`. Run API (`make api`, i.e. `uvicorn server.main:app
   --port 8000`) + `npm run dev` (Vite proxies `/api` **and** `/ingest` → 8000, so the
@@ -258,3 +265,41 @@ the 300s function ceiling. It stays sequential and unretried — a failed run is
   deny-by-default gate lets it through; analytics and error events fire before sign-in. It
   forwards only to `POSTHOG_HOST`, never follows upstream redirects, and re-emits no
   `Set-Cookie`/`Access-Control-*`/`Location` headers.
+
+## Dependency updates
+Dependabot opens the PRs, `.github/workflows/ci.yml` decides whether they are safe, and
+`.github/workflows/dependabot-automerge.yml` merges the boring ones.
+
+**Two Python manifests, one resolver.** `uv.lock` is the resolved truth for everything;
+`requirements.txt` is the runtime subset the Vercel Python builder installs into the function
+— deliberately without alembic/uvicorn/ruff/pytest, which never run inside a request. Nothing
+derives one from the other (`uv export` would drag alembic and uvicorn in, because they are
+real `[project].dependencies`), so the package *list* in `requirements.txt` is a human's
+choice. The *versions* are not: `scripts/sync_requirements.py` re-pins them from `uv.lock`,
+and CI fails on drift.
+
+That check is what makes Dependabot's `uv` ecosystem safe. It edits `uv.lock` only, so a
+production bump landing alone would ship a version nobody reviewed to the deployed function.
+Instead:
+
+```
+make sync-requirements     # re-pin requirements.txt from uv.lock, then commit onto the PR
+```
+
+**What auto-merges**: minor and patch **development** dependencies (ruff, pytest, vite,
+`@playwright/test`, `@vitejs/plugin-react`), and only once both CI jobs pass. Nothing that
+reaches a user, and no majors. A production or major PR gets a comment saying why it is
+waiting, and stays open.
+
+**Two repo settings this depends on** — without them the automerge workflow is either a
+no-op or, worse, merges without waiting:
+1. **Settings → General → Allow auto-merge** — ticked. `gh pr merge --auto` errors without it.
+2. **Settings → Rules/Branches** — a ruleset on `main` requiring the `python` and `web`
+   status checks. Auto-merge waits for *required* checks; with none required it merges
+   immediately.
+
+**CI runs more than the local default.** `make test-web` and `pytest -m "not pg"` are the
+fast local loop; CI runs the whole thing — the 33 `pg`-marked tests against a real Postgres
+service container (same image, credentials and port 5544 as `docker-compose.yml`, so no env
+var is needed), plus all 1345 viewport assertions. The Postgres-only SQL and the production
+vite build are exactly what a psycopg or vite bump breaks.

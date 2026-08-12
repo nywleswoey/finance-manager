@@ -1,0 +1,120 @@
+# What has to be true before a change merges. Written for dependabot's PRs first — they are
+# the only ones that arrive with nobody having run anything locally — but it gates every PR.
+#
+# Two jobs, split by what they can tell you and how fast: `python` answers in ~2 minutes,
+# `web` runs the 1345-assertion viewport suite and takes ~10. Neither needs a secret; the
+# suite serves every API call from web/tests/fixtures and the Python tests build their own
+# throwaway database.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A force-push supersedes the run it interrupted. Cancelling the old one is not just thrift:
+# on main it keeps the branch's status from being decided by a stale commit.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    services:
+      # tests/pgtest.py derives its URL from portfolio.config's default
+      # (postgresql+psycopg://portfolio:portfolio@localhost:5544/portfolio), appends `_test`
+      # to the database name and CREATEs it itself. Matching docker-compose.yml here — same
+      # image, same credentials, same host port 5544 — is what makes the 33 `pg`-marked
+      # tests run in CI instead of skipping, so no env var is needed or wanted.
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: portfolio
+          POSTGRES_PASSWORD: portfolio
+          POSTGRES_DB: portfolio
+        ports: ["5544:5432"]
+        options: >-
+          --health-cmd "pg_isready -U portfolio"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      # 3.12 to match the Vercel Python runtime, not just `requires-python >= 3.11`: the
+      # point of running tests here is to run them on the interpreter production uses.
+      - run: uv sync --extra dev --python 3.12
+
+      - name: ruff
+        run: uv run ruff check .
+
+      # The check that makes the `uv` half of dependabot safe. uv.lock is the resolved truth;
+      # requirements.txt is the subset Vercel installs. A lockfile-only bump means the
+      # function ships a version nobody reviewed, so drift is a failure, not a warning.
+      - name: requirements.txt pins match uv.lock
+        run: uv run python scripts/sync_requirements.py --check
+
+      # The full suite, `pg` marks included — the Postgres-only SQL (to_char month bucketing
+      # in spending.summary/trends) is precisely what a sqlalchemy or psycopg bump can break,
+      # and it is invisible to the SQLite default run.
+      - name: pytest
+        run: uv run pytest -q
+        env:
+          PYTHONPATH: .
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .tool-versions
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # Not a separate check from the suite — it IS the suite's input. playwright.config.js
+      # serves the production build through vite preview, so this build failing and the
+      # suite failing are the same signal arriving earlier.
+      - run: npm run build
+
+      # Chromium is ~130MB and unchanged between runs unless @playwright/test moves, which
+      # is exactly what the lockfile hash keys on.
+      - name: cache playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+
+      - run: npx playwright install --with-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+      - run: npx playwright install-deps chromium
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+
+      # CI=1 is already read by playwright.config.js: it forbids `.only`, drops the HTML
+      # reporter for `list`, and stops the preview server being reused.
+      - name: playwright
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v5
+        if: failure()
+        with:
+          name: playwright-report
+          path: web/playwright-report/
+          retention-days: 7

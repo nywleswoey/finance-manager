@@ -1,0 +1,53 @@
+# The other half of "keep dependencies current": dependabot tells you when a NEWER version
+# exists, this tells you when the version you are on is KNOWN-VULNERABLE. They are not the
+# same question, and only the second one has a deadline.
+#
+# DEPLOY.md §SECURITY-10 asks for `pip-audit -r requirements.txt` before each deploy. This
+# runs it on a schedule instead, because "before each deploy" is a step that gets skipped and
+# a Monday morning email is not.
+#
+# Deliberately NOT part of CI: a CVE disclosed against a transitive dependency would turn
+# every unrelated PR red overnight, and blocking the automerge of a ruff bump on an advisory
+# about psycopg helps nobody.
+name: Security audit
+
+on:
+  schedule:
+    - cron: "0 23 * * 0"   # Mondays 07:00 Asia/Singapore
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
+
+      # requirements.txt, not uv.lock: this is the set that actually gets installed into the
+      # Vercel function. CI's drift check is what keeps the two saying the same thing.
+      #
+      # No --no-deps: requirements.txt pins the DIRECT runtime deps only, and the advisories
+      # that matter most land on transitive ones (starlette under fastapi, urllib3 under
+      # requests). Letting pip-audit resolve the tree is the point.
+      - name: pip-audit
+        run: uvx pip-audit -r requirements.txt
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .tool-versions
+
+      # `high` and above only. The npm advisory database at `low` is mostly transitive
+      # build-tool noise that no amount of updating clears, and an audit that is always red
+      # is an audit nobody reads.
+      - name: npm audit
+        run: npm audit --audit-level=high
