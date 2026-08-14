@@ -5,7 +5,41 @@ from sqlalchemy.orm import sessionmaker
 
 from .config import settings
 
-engine = create_engine(settings.database_url, future=True)
+# How long a statement may sit on a socket nothing is listening to. The scheduled ingest runs
+# from a laptop that sleeps mid-run, so its connection to Neon dies routinely; with no timeout
+# and no keepalive, psycopg blocked until macOS's own TCP retransmit gave up. Four consecutive
+# nightly runs failed that way, and the wall-clocks say it plainly — 721s, 3693s, 21225s and
+# 50452s for work that takes a couple of minutes awake. Almost none of that is work; it is a
+# dead socket. Neon closing an idle compute produces the same hang from the other direction.
+# Keepalives make the OS notice within ~a minute, and the ceiling turns "hangs until morning"
+# into an error the caller can retry.
+#
+# connect_timeout is the loose one on purpose. It only bounds *establishing* a connection, and
+# Neon suspends an idle compute — a cold start measured 5.3s here, so a tight value would fail
+# runs for being early rather than for being hung. The keepalives are what answer the actual
+# bug, which was a socket dying mid-statement.
+PG_CONNECT_ARGS = {
+    "connect_timeout": 30,
+    "keepalives": 1,
+    "keepalives_idle": 30,
+    "keepalives_interval": 10,
+    "keepalives_count": 3,
+}
+
+
+def connect_args(url: str) -> dict:
+    """libpq connection options, for a Postgres URL only. The other engines in this repo are
+    the in-memory SQLite ones the tests build, and sqlite3 raises on kwargs it doesn't know —
+    so the driver, not the caller, decides whether these apply."""
+    return dict(PG_CONNECT_ARGS) if url.startswith("postgresql") else {}
+
+
+# pool_pre_ping because a pooled connection outlives the network under it: after a sleep or a
+# Neon autosuspend the pool still holds a socket that is already gone, and the next checkout
+# hands it out. pre_ping spends one round-trip to find out, and reconnects instead of failing.
+# pool_recycle retires connections before Neon's own idle cutoff can.
+engine = create_engine(settings.database_url, future=True, pool_pre_ping=True, pool_recycle=300,
+                       connect_args=connect_args(settings.database_url))
 SessionLocal = sessionmaker(bind=engine, autoflush=False, future=True)
 
 
