@@ -49,12 +49,37 @@ case "$DATABASE_URL" in
   *localhost*|*127.0.0.1*) say "FATAL: DATABASE_URL is the local docker DB — refusing"; exit 1 ;;
 esac
 
+# Stay awake for the whole run. launchd wakes the Mac to *start* a StartCalendarInterval job
+# and then lets it go straight back to sleep — on 2026-08-14 this script logged its first line
+# at 06:18:47 and the power log recorded "Sleep Service Back to Sleep" at 06:18:48, two seconds
+# in. What follows is a stutter of 45-second DarkWakes, and the connection to Neon does not
+# survive it. `-i` holds off idle sleep and is the one that matters here, because the machine
+# runs this on battery; `-s` covers the AC case. Each flag is ignored where it doesn't apply.
+#
+# The ceiling is for the run that hangs anyway. A dead socket once kept one going for 50452s —
+# long enough to still be holding the log when the next night's run arrived. Better a failure
+# at 30 minutes, which launchd will simply try again tomorrow.
+MAX_SECS="${INGEST_MAX_SECS:-1800}"
+runner=(caffeinate -is make "$JOB")
+# coreutils' timeout is not in a stock macOS; skip the ceiling rather than fail to run at all.
+if command -v timeout >/dev/null 2>&1; then
+  runner=(timeout -k 30 "$MAX_SECS" "${runner[@]}")
+else
+  say "note: no timeout(1) on PATH — running without the ${MAX_SECS}s ceiling"
+fi
+
 say "=== $JOB -> $(printf '%s' "$DATABASE_URL" | sed -E 's#.*@([^/?]+).*#\1#')"
 start=$(date +%s)
-if make "$JOB"; then
+if "${runner[@]}"; then
   say "=== $JOB ok in $(( $(date +%s) - start ))s"
 else
   code=$?
-  say "=== $JOB FAILED (exit $code) in $(( $(date +%s) - start ))s"
+  # 124 is timeout(1)'s own signal that it killed the job, and it is the interesting one:
+  # it means the run hung rather than errored, which is a different thing to go looking at.
+  if [ "$code" -eq 124 ]; then
+    say "=== $JOB TIMED OUT after ${MAX_SECS}s (killed)"
+  else
+    say "=== $JOB FAILED (exit $code) in $(( $(date +%s) - start ))s"
+  fi
   exit "$code"
 fi
