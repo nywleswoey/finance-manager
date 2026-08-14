@@ -13,7 +13,8 @@ import csv, glob, os, re
 from collections import defaultdict
 from _csvout import write_csv
 from _dates import try_date
-from _ledgercommon import canon, is_transfer_in, is_transfer_out, norm_ticker, num
+from _ledgercommon import (canon, fsm_amount_is_into_product, fsm_cash_flow, is_transfer_in,
+                           is_transfer_out, norm_ticker, num, trade_cash_flow)
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -125,7 +126,7 @@ def load_tiger():
                         add(date=parse_date(tt), account=racct, market=mkt,
                             ticker=canon(norm_ticker(sym, mkt)), asset_type=atype_l,
                             action=("buy" if qty > 0 else "sell"), qty_signed=qty,
-                            price=row[9], amount=num(row[10]), fees=fee,
+                            price=row[9], amount=trade_cash_flow(num(row[10]), qty), fees=fee,
                             currency=row[-1], source=rel, raw=sym)
                 elif sec == "Transfer" and len(row) > 14 and row[3] == "DATA" and row[4] == "Stock":
                     # gifted / transferred-in shares (e.g. BABA, AMZN gifts)
@@ -185,10 +186,19 @@ def load_fsm():
             if code == "S51" and pn.startswith("Seatrium"):
                 sign = -1
         qsig = (sign * abs(qty)) if (sign and is_stock and qty) else 0
+        # Custody transfers and cash dividends move no money through the position: iFast
+        # books both as "into the product", but the figure is a valuation / a receipt, not
+        # the cost of a trade. Left positive, matching the transfer_out legs in the simple
+        # CSVs, which record the same custody move at the same market value.
+        if is_stock and t in ("Transfer In", "Transfer Out", "Stock Dividend"):
+            amt = abs(num(r.get("Product Amount")))
+        else:
+            amt = fsm_cash_flow(num(r.get("Product Amount")),
+                                fsm_amount_is_into_product(r), is_cash_leg=not is_stock)
         add(date=parse_date(r.get("Transaction Date")), account=fsm_acct, market=mkt,
             ticker=code, asset_type=("stock" if is_stock else "cash"),
             action=action, qty_signed=qsig,
-            price=r.get("Transaction Price", ""), amount=num(r.get("Product Amount")),
+            price=r.get("Transaction Price", ""), amount=amt,
             fees=num(r.get("Total Fee")),
             currency=(r.get("Product Currency") or "").strip(),
             source="fsm/ifast_historical.csv", raw=pn)
@@ -198,10 +208,19 @@ def load_moomoo():
     p = os.path.join(os.path.dirname(__file__), "moomoo_events.csv")
     if not os.path.exists(p): return
     for r in csv.DictReader(open(p)):
+        qty = float(r["qty_signed"])
+        # the snapshot-diff records a magnitude; only the traded legs are a cash flow
+        # (a custody move carries a valuation, so it keeps its positive mark).
+        amt = num(r["amount"]) if r.get("amount") else ""
+        act = r["action"]
+        # "transfer" catches this file's slash-spellings ("open/transfer_in",
+        # "sell/transfer") that is_transfer_in/out were never written for.
+        if amt != "" and "transfer" not in act:
+            amt = trade_cash_flow(amt, qty)
         add(date=r["date"], account="Moomoo", market=r["market"],
             ticker=canon(norm_ticker(r["ticker"], r["market"])),
-            asset_type="stock", action=r["action"], qty_signed=float(r["qty_signed"]),
-            price=r.get("price", ""), amount=num(r.get("amount")) if r.get("amount") else "",
+            asset_type="stock", action=act, qty_signed=qty,
+            price=r.get("price", ""), amount=amt,
             source=r["source"], raw=r["raw"])
 
 # ---------- CDP (from parse_cdp.py snapshot-diff — authoritative custody) ----------
@@ -221,9 +240,17 @@ def load_endowus():
     if not os.path.exists(p): return
     for r in csv.DictReader(open(p)):
         acct = ENDOWUS_BUCKET.get(r["src"], "CPF")
+        qty = float(r["qty_signed"])
+        act = r["action"]
+        # the snapshot-diff records a magnitude. Endowus takes its advisory fee in units,
+        # so a fee row looks like a small sale — but it is a cost, not proceeds, and stays
+        # negative whichever way the units moved.
+        amt = num(r["amount"]) if r.get("amount") else ""
+        if amt != "":
+            amt = -abs(amt) if act == "fee" else trade_cash_flow(amt, qty)
         add(date=r["date"], account=acct, market="SG", ticker="0P0001OOJG",
-            asset_type="fund", action=r["action"], qty_signed=float(r["qty_signed"]),
-            price=r.get("price", ""), amount=r.get("amount", ""),
+            asset_type="fund", action=act, qty_signed=qty,
+            price=r.get("price", ""), amount=amt,
             currency="SGD", source="endowus (pdf)", raw=r["fund"])
 
 # ---------- synthesize missing transfer-in legs ----------
