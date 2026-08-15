@@ -25,6 +25,12 @@ starts 2026-06-27). Without it the no-carry-back check cannot reproduce in the t
 arrive un-editable. Only the rows the promoted snapshots actually read are copied, and an
 existing target row is never overwritten.
 
+**The write is guarded.** The pre-existing series is fingerprinted — ids included — before the
+write and re-read after the flush; any drift rolls the whole promotion back rather than
+committing it and reporting the damage afterwards. "No existing snapshot is modified, renumbered
+or deleted" is the one criterion `frozen_money_diff` structurally cannot cover, since that only
+compares dates *both* stores hold and the target's own snapshots are in neither intersection.
+
 Two integrity checks gate every promotion, the two the map ran on the June pair (#86):
   - **no BR2 omission** — every active catalogue item has a value row on the snapshot. A missing
     item is silently defaulted to 0 by `create_snapshot`, which is not a smaller net worth but a
@@ -39,15 +45,22 @@ Usage (SOURCE is read-only; TARGET is the store being written):
   ... --verify                          # both checks over the target's whole series, plus a
                                         # readback of every shared snapshot against the source
 
+`--expect-count` / `--expect-span` assert the shape of the series rather than only its soundness.
+They take no defaults on purpose: the count and span belong to the ticket, not the tool. For #93,
+
+  ... --verify --expect-count 5 --expect-span 2026-06-21..2026-08-05
+
 Both URLs default to `$PROMOTE_SOURCE_URL` / `$PROMOTE_TARGET_URL`. `--verify` is the re-runnable
-form of the acceptance criteria: the checks answer "is each snapshot sound", the readback answers
-"did the frozen money and the frozen portfolio value survive the copy unchanged" — a claim only a
-comparison against the store it came from can make, and one that should not rest on a diff taken
-by hand before the write.
+form of the acceptance criteria: the integrity checks answer "is each snapshot sound", the series
+check answers "is this the series that was asked for", and the readback answers "did the frozen
+money and the frozen portfolio value survive the copy unchanged" — a claim only a comparison
+against the store it came from can make, and one that should not rest on a diff taken by hand
+before the write.
 """
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import os
 import sys
 
@@ -71,18 +84,28 @@ def _items(s: Session) -> dict[str, NwItem]:
     return {i.code: i for i in s.scalars(select(NwItem)).all()}
 
 
+def _only_in(a: dict, b: dict) -> list:
+    """Keys `a` holds and `b` does not, sorted."""
+    return sorted(a.keys() - b.keys())
+
+
+def _field_diffs(a: dict, b: dict, fields: tuple) -> list[tuple]:
+    """(key, field, source_value, target_value) for every field that differs on a key both dicts
+    hold. The comparison shape the catalogue check and both halves of the readback share — three
+    different sentences to report, but one definition of what "differs" means."""
+    return [(k, f, getattr(a[k], f), getattr(b[k], f))
+            for k in sorted(a.keys() & b.keys()) for f in fields
+            if getattr(a[k], f) != getattr(b[k], f)]
+
+
 def catalogue_diff(src: Session, tgt: Session) -> list[str]:
     """Every way the two catalogues disagree, as human-readable lines. Empty means the snapshots
     band identically in both stores and merge without reconciliation."""
     a, b = _items(src), _items(tgt)
-    out = [f"{c}: in source, not in target" for c in sorted(a.keys() - b.keys())]
-    out += [f"{c}: in target, not in source" for c in sorted(b.keys() - a.keys())]
-    for code in sorted(a.keys() & b.keys()):
-        for f in ITEM_FIELDS:
-            x, y = getattr(a[code], f), getattr(b[code], f)
-            if x != y:
-                out.append(f"{code}: {f} source={x!r} target={y!r}")
-    return out
+    return ([f"{c}: in source, not in target" for c in _only_in(a, b)]
+            + [f"{c}: in target, not in source" for c in _only_in(b, a)]
+            + [f"{c}: {f} source={x!r} target={y!r}"
+               for c, f, x, y in _field_diffs(a, b, ITEM_FIELDS)])
 
 
 def missing_item_values(s: Session, snap: NwSnapshot) -> list[str]:
@@ -155,9 +178,37 @@ def plan(src: Session, tgt: Session) -> list[dict]:
     return rows
 
 
-def apply(tgt: Session, rows: list[dict]) -> None:
+def series_fingerprint(s: Session) -> dict:
+    """Every snapshot in a store reduced to a comparable tuple, keyed by date: its id, the frozen
+    snapshot fields, and every value row. The `id` is in there deliberately — "renumbered" is one
+    of the three things the promotion promises not to do, and it is the one a field-by-field money
+    comparison would miss entirely."""
+    return {sn.date: (sn.id, sn.note, sn.portfolio_value_sgd, sn.created_at,
+                      tuple(sorted((v.item.code, v.native_value, v.currency, v.rate_to_sgd,
+                                    v.value_sgd) for v in sn.values)))
+            for sn in s.scalars(select(NwSnapshot))}
+
+
+def fingerprint_drift(before: dict, after: dict) -> list[str]:
+    """AC4 — no existing snapshot modified, renumbered or deleted. Dates present in `before` that
+    changed or vanished. Dates only in `after` are the promotion doing its job, never drift.
+
+    This is the criterion `frozen_money_diff` structurally cannot cover: that one compares dates
+    *both* stores hold, so the target's own pre-existing snapshots — the very rows AC4 is about —
+    sit in no comparison at all."""
+    return ([f"{d}: snapshot no longer in the target" for d in _only_in(before, after)]
+            + [f"{d}: existing snapshot changed\n      was {before[d]!r}\n      now {after[d]!r}"
+               for d in sorted(before.keys() & after.keys()) if before[d] != after[d]])
+
+
+def write_snapshots(tgt: Session, rows: list[dict]) -> None:
     """Write the planned snapshots. Insert-only: no existing snapshot, value, catalogue item or
-    fx_rate row is touched, and the target's own id sequence assigns the new ids."""
+    fx_rate row is touched, and the target's own id sequence assigns the new ids.
+
+    "Insert-only" is enforced, not just intended: the pre-existing series is fingerprinted before
+    the write and re-read after the flush, and any drift rolls the whole thing back rather than
+    committing damage and reporting it afterwards. AC4 fails closed."""
+    before = series_fingerprint(tgt)
     items = _items(tgt)
     for r in rows:
         for f in r["fx"]:
@@ -179,6 +230,12 @@ def apply(tgt: Session, rows: list[dict]) -> None:
             tgt.add(NwValue(snapshot_id=snap.id, item_id=items[v["code"]].id,
                             native_value=v["native_value"], currency=v["currency"],
                             rate_to_sgd=v["rate_to_sgd"], value_sgd=v["value_sgd"]))
+    tgt.flush()
+    drift = fingerprint_drift(before, series_fingerprint(tgt))
+    if drift:
+        tgt.rollback()
+        raise RuntimeError("the write disturbed an existing snapshot; rolled back:\n  "
+                           + "\n  ".join(drift))
     tgt.commit()
 
 
@@ -193,6 +250,26 @@ def verify(s: Session) -> list[str]:
     for snap in s.scalars(select(NwSnapshot).order_by(NwSnapshot.date)):
         problems += missing_item_values(s, snap) + fx_carry_backs(s, snap)
     return problems
+
+
+def series_expectation(s: Session, count: int | None = None,
+                       span: tuple | None = None) -> list[str]:
+    """AC1 — the shape of the series the promotion was for: how many snapshots, spanning which
+    dates. Both optional, because the count and span belong to the *ticket*, not to the tool —
+    baking #93's five points and 2026-06-21..2026-08-05 in as defaults would make a general
+    promotion script quietly wrong for the next one. Passing neither checks nothing.
+
+    Worth asserting at all because `plan` promotes whatever dates the target happens to lack: a
+    source missing a snapshot, or a target that already held a stray one, both merge cleanly and
+    leave a series that is sound but not the one that was asked for."""
+    dates = sorted(d for (d,) in s.execute(select(NwSnapshot.date)))
+    out = []
+    if count is not None and len(dates) != count:
+        out.append(f"expected {count} snapshot(s), found {len(dates)}")
+    if span is not None and dates and (dates[0], dates[-1]) != tuple(span):
+        out.append(f"expected the series to span {span[0]}..{span[1]}, "
+                   f"found {dates[0]}..{dates[-1]}")
+    return out
 
 
 # What must survive the copy untouched, per row. `native_value` and `currency` are here as much
@@ -213,23 +290,17 @@ def frozen_money_diff(src: Session, tgt: Session) -> list[str]:
     whether a snapshot is internally sound; this asks whether the copy was faithful, which only
     a comparison against the store it came from can answer. Re-runnable, so the claim does not
     rest on a diff someone took by hand before the write."""
-    out = []
     a = {sn.date: sn for sn in src.scalars(select(NwSnapshot))}
     b = {sn.date: sn for sn in tgt.scalars(select(NwSnapshot))}
+    out = [f"{d}: {f} source={x!r} target={y!r}"
+           for d, f, x, y in _field_diffs(a, b, SNAPSHOT_FIELDS)]
     for date in sorted(a.keys() & b.keys()):
-        for f in SNAPSHOT_FIELDS:
-            x, y = getattr(a[date], f), getattr(b[date], f)
-            if x != y:
-                out.append(f"{date}: {f} source={x!r} target={y!r}")
         va = {v.item.code: v for v in a[date].values}
         vb = {v.item.code: v for v in b[date].values}
-        out += [f"{date}: {c} valued in source, not in target" for c in sorted(va.keys() - vb.keys())]
-        out += [f"{date}: {c} valued in target, not in source" for c in sorted(vb.keys() - va.keys())]
-        for code in sorted(va.keys() & vb.keys()):
-            for f in VALUE_FIELDS:
-                x, y = getattr(va[code], f), getattr(vb[code], f)
-                if x != y:
-                    out.append(f"{date}: {code}.{f} source={x!r} target={y!r}")
+        out += [f"{date}: {c} valued in source, not in target" for c in _only_in(va, vb)]
+        out += [f"{date}: {c} valued in target, not in source" for c in _only_in(vb, va)]
+        out += [f"{date}: {c}.{f} source={x!r} target={y!r}"
+                for c, f, x, y in _field_diffs(va, vb, VALUE_FIELDS)]
     return out
 
 
@@ -260,9 +331,29 @@ def _print_problems(label: str, clean: str, problems: list[str]) -> int:
 
 INTEGRITY_CLEAN = "CLEAN — no BR2 omission, no FX carry-back"
 READBACK_CLEAN = "CLEAN — frozen money and frozen portfolio value identical to the source"
+SERIES_CLEAN = "CLEAN — the series is the count and span that were asked for"
 
 
-def main(argv) -> int:
+def _readback(source_url: str, tgt: Session) -> int:
+    """Read every shared snapshot back against the store it came from. Opens its own session so
+    the caller never has to hold one open across the write."""
+    src = _session(source_url)
+    try:
+        return _print_problems("readback vs source", READBACK_CLEAN, frozen_money_diff(src, tgt))
+    finally:
+        src.close()
+
+
+def _span(text: str) -> tuple:
+    """`--expect-span FIRST..LAST`, as two dates."""
+    try:
+        first, last = text.split("..")
+        return dt.date.fromisoformat(first), dt.date.fromisoformat(last)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"expected FIRST..LAST as ISO dates, got {text!r}")
+
+
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--source", default=os.environ.get("PROMOTE_SOURCE_URL"),
                     help="store to read snapshots from (never written)")
@@ -272,22 +363,25 @@ def main(argv) -> int:
     ap.add_argument("--verify", action="store_true",
                     help="run both integrity checks over the target's whole series and stop; "
                          "with --source, also read every shared snapshot back against it")
+    ap.add_argument("--expect-count", type=int, metavar="N",
+                    help="assert the target holds exactly N snapshots (AC1)")
+    ap.add_argument("--expect-span", type=_span, metavar="FIRST..LAST",
+                    help="assert the target's series runs from FIRST to LAST (AC1)")
     args = ap.parse_args(argv)
     if not args.target:
         ap.error("--target (or PROMOTE_TARGET_URL) is required")
+    expected = (args.expect_count, args.expect_span)
 
     tgt = _session(args.target)
     try:
         if args.verify:
             _report(tgt, f"target {_host(args.target)}")
             rc = _print_problems("integrity", INTEGRITY_CLEAN, verify(tgt))
+            if any(e is not None for e in expected):
+                rc |= _print_problems("series", SERIES_CLEAN,
+                                      series_expectation(tgt, *expected))
             if args.source:
-                src = _session(args.source)
-                try:
-                    rc |= _print_problems("readback vs source", READBACK_CLEAN,
-                                          frozen_money_diff(src, tgt))
-                finally:
-                    src.close()
+                rc |= _readback(args.source, tgt)
             return rc
 
         if not args.source:
@@ -322,16 +416,14 @@ def main(argv) -> int:
             print("\nDRY-RUN. Re-run with --commit to write.")
             return 0
 
-        apply(tgt, rows)
-        print(f"\nCOMMITTED {len(rows)} snapshot(s).\n")
+        write_snapshots(tgt, rows)
+        print(f"\nCOMMITTED {len(rows)} snapshot(s). "
+              "No pre-existing snapshot changed — the write is guarded and rolls back if one does.\n")
         _report(tgt, f"target {_host(args.target)}")
         rc = _print_problems("integrity over the merged series", INTEGRITY_CLEAN, verify(tgt))
-        src = _session(args.source)
-        try:
-            rc |= _print_problems("readback vs source", READBACK_CLEAN,
-                                  frozen_money_diff(src, tgt))
-        finally:
-            src.close()
+        if any(e is not None for e in expected):
+            rc |= _print_problems("series", SERIES_CLEAN, series_expectation(tgt, *expected))
+        rc |= _readback(args.source, tgt)
         return rc
     finally:
         tgt.close()

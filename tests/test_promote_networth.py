@@ -37,10 +37,10 @@ def make_session():
     return sessionmaker(bind=eng, future=True)()
 
 
-def seed_items(s, catalogue=CATALOGUE, id_offset=0):
+def seed_items(s, id_offset=0):
     """Seed the catalogue. `id_offset` forces the two stores onto different id sequences, which
     is what makes a by-id copy visibly wrong."""
-    for i, (code, kind, ccy, liq, hou, cpf) in enumerate(catalogue):
+    for i, (code, kind, ccy, liq, hou, cpf) in enumerate(CATALOGUE):
         s.add(NwItem(id=id_offset + i + 1, code=code, label=code.upper(), kind=kind,
                      currency_default=ccy, is_liquid=liq, is_housing=hou, is_cpf=cpf,
                      sort_order=i, active=True))
@@ -197,7 +197,7 @@ class PlanTest(Stores):
 class ApplyTest(Stores):
     def apply(self):
         rows = promote.plan(self.src, self.tgt)
-        promote.apply(self.tgt, rows)
+        promote.write_snapshots(self.tgt, rows)
         return rows
 
     def promoted(self, date):
@@ -278,7 +278,7 @@ class ApplyTest(Stores):
     def test_re_running_promotes_nothing(self):
         self.apply()
         self.assertEqual(promote.plan(self.src, self.tgt), [])
-        promote.apply(self.tgt, promote.plan(self.src, self.tgt))
+        promote.write_snapshots(self.tgt, promote.plan(self.src, self.tgt))
         self.assertEqual(len(self.target_dates()), 3)
 
     def test_both_checks_are_clean_across_the_merged_series(self):
@@ -294,7 +294,7 @@ class ReadbackTest(Stores):
     before the write."""
 
     def test_a_faithful_promotion_reads_back_clean(self):
-        promote.apply(self.tgt, promote.plan(self.src, self.tgt))
+        promote.write_snapshots(self.tgt, promote.plan(self.src, self.tgt))
         self.assertEqual(promote.frozen_money_diff(self.src, self.tgt), [])
 
     def test_it_ignores_dates_only_one_store_holds(self):
@@ -306,14 +306,14 @@ class ReadbackTest(Stores):
         rows = promote.plan(self.src, self.tgt)
         usd = [v for v in rows[0]["values"] if v["code"] == "tiger_usd"][0]
         usd["value_sgd"] = usd["native_value"] * usd["rate_to_sgd"]   # what a recompute produces
-        promote.apply(self.tgt, rows)
+        promote.write_snapshots(self.tgt, rows)
         self.assertTrue(any("tiger_usd.value_sgd" in d
                             for d in promote.frozen_money_diff(self.src, self.tgt)))
 
     def test_a_restamped_portfolio_value_is_caught(self):
         rows = promote.plan(self.src, self.tgt)
         rows[0]["portfolio_value_sgd"] = Decimal("1137390.0400")      # today's live value
-        promote.apply(self.tgt, rows)
+        promote.write_snapshots(self.tgt, rows)
         self.assertTrue(any("portfolio_value_sgd" in d
                             for d in promote.frozen_money_diff(self.src, self.tgt)))
 
@@ -323,12 +323,12 @@ class ReadbackTest(Stores):
         time would read back clean and the docstring's "verbatim" would be untested."""
         rows = promote.plan(self.src, self.tgt)
         rows[0]["created_at"] = dt.datetime(2026, 8, 15, 9, 0, tzinfo=dt.timezone.utc)
-        promote.apply(self.tgt, rows)
+        promote.write_snapshots(self.tgt, rows)
         self.assertTrue(any("created_at" in d
                             for d in promote.frozen_money_diff(self.src, self.tgt)))
 
     def test_a_faithfully_carried_created_at_reads_back_clean(self):
-        promote.apply(self.tgt, promote.plan(self.src, self.tgt))
+        promote.write_snapshots(self.tgt, promote.plan(self.src, self.tgt))
         self.assertEqual(promote.frozen_money_diff(self.src, self.tgt), [])
         promoted = self.tgt.scalar(select(NwSnapshot).where(NwSnapshot.date == dt.date(2026, 6, 21)))
         source = self.src.scalar(select(NwSnapshot).where(NwSnapshot.date == dt.date(2026, 6, 21)))
@@ -337,8 +337,89 @@ class ReadbackTest(Stores):
     def test_a_dropped_value_row_is_caught(self):
         rows = promote.plan(self.src, self.tgt)
         rows[0]["values"] = [v for v in rows[0]["values"] if v["code"] != "cpf_oa"]
-        promote.apply(self.tgt, rows)
+        promote.write_snapshots(self.tgt, rows)
         self.assertTrue(any("cpf_oa" in d for d in promote.frozen_money_diff(self.src, self.tgt)))
+
+
+class SeriesExpectationTest(Stores):
+    """AC1 — "the deployed store returns 5 snapshots spanning 2026-06-21 -> 2026-08-05". The
+    count and the span are the claim; `plan` promotes whatever dates the target lacks and would
+    happily leave a four-point series, so something has to assert the shape that was asked for."""
+
+    def test_a_matching_series_is_clean(self):
+        promote.write_snapshots(self.tgt, promote.plan(self.src, self.tgt))
+        self.assertEqual(promote.series_expectation(
+            self.tgt, count=3, span=(dt.date(2026, 6, 21), dt.date(2026, 7, 10))), [])
+
+    def test_a_short_count_is_flagged(self):
+        self.assertTrue(any("3" in p for p in promote.series_expectation(self.tgt, count=3)))
+
+    def test_a_wrong_span_is_flagged(self):
+        promote.write_snapshots(self.tgt, promote.plan(self.src, self.tgt))
+        problems = promote.series_expectation(
+            self.tgt, span=(dt.date(2026, 6, 1), dt.date(2026, 7, 10)))
+        self.assertTrue(any("2026-06-01" in p for p in problems))
+
+    def test_no_expectation_asked_for_is_no_check(self):
+        self.assertEqual(promote.series_expectation(self.tgt), [])
+
+
+class ExistingSnapshotsUntouchedTest(Stores):
+    """AC4 — "no existing snapshot is modified, renumbered or deleted". `frozen_money_diff` only
+    compares dates *both* stores hold, so the target's own pre-existing snapshots sit in no
+    comparison at all. This is the guard that covers them, at the moment they could be hurt."""
+
+    def test_fingerprint_drift_is_empty_for_an_untouched_store(self):
+        before = promote.series_fingerprint(self.tgt)
+        promote.write_snapshots(self.tgt, promote.plan(self.src, self.tgt))
+        self.assertEqual(promote.fingerprint_drift(before, promote.series_fingerprint(self.tgt)), [])
+
+    def test_a_renumbered_snapshot_is_drift(self):
+        before = promote.series_fingerprint(self.tgt)
+        d = dt.date(2026, 7, 10)
+        after = {**before, d: (99,) + before[d][1:]}           # same rows, new id
+        self.assertTrue(any("2026-07-10" in p for p in promote.fingerprint_drift(before, after)))
+
+    def test_a_deleted_snapshot_is_drift(self):
+        before = promote.series_fingerprint(self.tgt)
+        self.assertTrue(any("2026-07-10" in p for p in promote.fingerprint_drift(before, {})))
+
+    def test_a_new_snapshot_is_not_drift(self):
+        """Promotion adds dates; that is the point. Only the pre-existing ones are the claim."""
+        before = promote.series_fingerprint(self.tgt)
+        promote.write_snapshots(self.tgt, promote.plan(self.src, self.tgt))
+        after = promote.series_fingerprint(self.tgt)
+        self.assertEqual(promote.fingerprint_drift(before, after), [])
+        self.assertEqual(len(after), 3)
+
+    def test_the_write_rolls_back_rather_than_commit_drift(self):
+        """The guard has to fail closed: a write that disturbed an existing snapshot must leave
+        the store as it was, not commit the damage and report it afterwards.
+
+        Doctoring the "before" reading is how the drift is staged — it makes the untouched
+        2026-07-10 row *look* changed to the post-write comparison, which drives the same branch
+        a real modification would without this test needing a hook in the production path."""
+        rows = promote.plan(self.src, self.tgt)
+        real, d, seen = promote.series_fingerprint, dt.date(2026, 7, 10), []
+
+        def doctored_before(s):
+            fp = real(s)
+            seen.append(1)
+            if len(seen) == 1:
+                fp[d] = fp[d][:1] + ("a note it never had",) + fp[d][2:]
+            return fp
+
+        promote.series_fingerprint = doctored_before
+        try:
+            with self.assertRaises(RuntimeError) as cm:
+                promote.write_snapshots(self.tgt, rows)
+        finally:
+            promote.series_fingerprint = real
+        self.assertIn("2026-07-10", str(cm.exception))
+        self.assertEqual(self.target_dates(), [d])          # the two June rows never landed
+        self.assertEqual(
+            self.tgt.scalar(select(NwSnapshot).where(NwSnapshot.date == d)).portfolio_value_sgd,
+            Decimal("1117741.9400"))
 
 
 class InactiveItemTest(Stores):
