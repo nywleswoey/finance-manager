@@ -396,7 +396,8 @@ class TestWindowShape(unittest.TestCase):
         self.assertEqual(spending._window_shape([], []), {
             "start": None, "end": None, "gaps": [], "sources": [],
             "excluded": {"before": {"months": 0, "n": 0, "total_sgd": 0.0},
-                         "after": {"months": 0, "n": 0, "total_sgd": 0.0}}})
+                         "after": {"months": 0, "n": 0, "total_sgd": 0.0},
+                         "gaps": {"months": 0, "n": 0, "total_sgd": 0.0}}})
 
     def test_a_ledger_with_no_drawable_month_reports_no_window(self):
         # One source, one month, and that month is the partial one. There is nothing to draw,
@@ -404,8 +405,9 @@ class TestWindowShape(unittest.TestCase):
         coverage = self.cover(("dbs", "2024-01-02", "2024-01-30", 50.0))
         got = spending._window_shape(coverage, self.seen(("2024-01", "dbs", 3, 50.0)))
         self.assertEqual((got["start"], got["end"], got["gaps"]), (None, None, []))
-        self.assertEqual(got["excluded"]["before"], {"months": 1, "n": 3, "total_sgd": 50.0})
-        self.assertEqual(got["excluded"]["after"], {"months": 0, "n": 0, "total_sgd": 0.0})
+        self.assertEqual(got["excluded"], {"before": {"months": 1, "n": 3, "total_sgd": 50.0},
+                                           "after": {"months": 0, "n": 0, "total_sgd": 0.0},
+                                           "gaps": {"months": 0, "n": 0, "total_sgd": 0.0}})
 
     def test_an_all_undated_source_is_flagged_rather_than_missing(self):
         # MIN/MAX over rows that all carry a NULL date is NULL, and its dated sum is zero. It
@@ -440,17 +442,51 @@ class TestWindowShape(unittest.TestCase):
         self.assertEqual((got["start"], got["end"]), ("2024-03", "2024-05"))
 
         dated_total = sum(x["total_sgd"] for x in got["sources"])
-        before, after = got["excluded"]["before"], got["excluded"]["after"]
+        ex = got["excluded"]
         self.assertEqual(dated_total, 900.0)
         # Jan (dbs only) + Feb (both) = 100 + 160; June = 160.
-        self.assertEqual(before, {"months": 2, "n": 26, "total_sgd": 260.0})
-        self.assertEqual(after, {"months": 1, "n": 16, "total_sgd": 160.0})
-        inside = round(dated_total - before["total_sgd"] - after["total_sgd"], 2)
-        self.assertEqual(inside, 480.0)                       # 3 drawn months x 160
-        # And the undated 100 is nowhere in any of it — not in the dated total, not in
-        # either bucket, and so not silently absorbed into "outside the window".
-        self.assertEqual(before["total_sgd"] + after["total_sgd"] + inside, dated_total)
+        self.assertEqual(ex["before"], {"months": 2, "n": 26, "total_sgd": 260.0})
+        self.assertEqual(ex["after"], {"months": 1, "n": 16, "total_sgd": 160.0})
+        self.assertEqual(ex["gaps"], {"months": 0, "n": 0, "total_sgd": 0.0})
+        off_chart = sum(b["total_sgd"] for b in ex.values())
+        drawn = round(dated_total - off_chart, 2)
+        self.assertEqual(drawn, 480.0)                        # 3 drawn months x 160
+        # And the undated 100 is nowhere in any of it — not in the dated total, not in any
+        # bucket, and so not silently absorbed into "outside the window".
+        self.assertEqual(off_chart + drawn, dated_total)
 
+    def test_gap_months_are_their_own_bucket_not_silently_drawn(self):
+        """The subtraction a caller has to make, and what a two-way split does to it.
+
+        April is a gap — inside the window, drawn by nothing. It is in neither `before` nor
+        `after`, so `dated_total - before - after` reports it as money the chart shows, and
+        the disclosure prose understates the off-chart total by exactly one month. The third
+        bucket is what makes the sum close.
+        """
+        # dbs 100/month across Jan-Jul = 700; cc 50/month across the same span minus April
+        # = 300. Coverage and presence agree, so the subtraction below is checkable by hand.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-07-28", 700.0),
+                              ("cc", "2024-01-06", "2024-07-20", 300.0))
+        presence = self.seen(*self.months("dbs", "2024-01", "2024-07", 100.0, n=4),
+                             *[r for r in self.months("cc", "2024-01", "2024-07", 50.0, n=2)
+                               if r[0] != "2024-04"])
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual((got["start"], got["end"], got["gaps"]),
+                         ("2024-02", "2024-06", ["2024-04"]))
+        # April: dbs alone, 4 lines, $100 — inside the window and on no chart.
+        self.assertEqual(got["excluded"]["gaps"], {"months": 1, "n": 4, "total_sgd": 100.0})
+
+        dated_total = sum(x["total_sgd"] for x in got["sources"])
+        ex = got["excluded"]
+        self.assertEqual(dated_total, 1000.0)
+        naive = round(dated_total - ex["before"]["total_sgd"] - ex["after"]["total_sgd"], 2)
+        drawn = round(naive - ex["gaps"]["total_sgd"], 2)
+        self.assertEqual(naive - drawn, 100.0)   # the month a two-way split would have lost
+        self.assertEqual(drawn, 600.0)           # Feb, Mar, May, Jun at 150 each
+        self.assertEqual(sum(b["total_sgd"] for b in ex.values()) + drawn, dated_total)
+
+
+# ---------------- month arithmetic (pure) ----------------
 
 class TestMonthArithmetic(unittest.TestCase):
     """`_next_month` / `_month_range`, which every boundary in the rule above is built from.

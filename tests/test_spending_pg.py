@@ -12,7 +12,7 @@ that left uncovered, and every item is a class below:
     old `m[category] = v` assignment relied on without saying so — TestGroupByCardinality;
   * `ROUND(SUM(-amount_sgd),2)` really arrives as something `float()` accepts — TestNumerics;
   * `_where` really composes into valid Postgres, rather than into the string
-    TestWhere asserts on — TestWindow.
+    TestWhere asserts on — TestDateWindow.
 
 `tests/pgtest.py` owns the connection: a throwaway `portfolio_test` database, never the app's,
 and a skip when no server is up. Marked `pg` — `-m "not pg"` deselects the file.
@@ -253,7 +253,11 @@ class TestNumerics(PgCase):
 
 # ---------------- _where composing into valid Postgres ----------------
 
-class TestWindow(PgCase):
+class TestDateWindow(PgCase):
+    """The `frm`/`to` date window — the filter a caller chooses, NOT window()'s spend-trend
+    window, which is a rule the data decides and lives in TestPresenceQuery below. One word,
+    two things; CONTEXT.md's Spending glossary pins both."""
+
     def test_date_window_filters_both_functions(self):
         self.add(D(2023, 12, 31), -10)
         self.add(D(2024, 1, 15), -20)
@@ -392,7 +396,8 @@ class TestPresenceQuery(PgCase):
                          [("dbs", True), ("cc", True), ("hsbc", False)])
         self.assertEqual(got["excluded"],
                          {"before": {"months": 2, "n": 3, "total_sgd": 600.0},
-                          "after": {"months": 1, "n": 2, "total_sgd": 350.0}})
+                          "after": {"months": 1, "n": 2, "total_sgd": 350.0},
+                          "gaps": {"months": 0, "n": 0, "total_sgd": 0.0}})
 
 
 if __name__ == "__main__":

@@ -90,6 +90,28 @@ are the series keys the chart reads); `summary()` leaves the NULL as a value and
 names it at render. One word, two places, because only one of them can hold a null.
 _Avoid_: uncategorised (the app spells it with a z), missing, unknown
 
+**Date window**:
+The `frm`/`to` range a caller passes to `summary()`, `trends()` or `transactions()` — a filter
+the reader chooses, and the only thing "window" meant before the spend-trend window existed.
+_Avoid_: window, unqualified (see below — the two are not interchangeable)
+
+**Spend-trend window**:
+The months the spend-trend chart may draw, derived by `window()` from source coverage rather
+than chosen: `[start, last drawable month]`, where **start** is the first month beginning after
+the latest first-transaction among *material* sources and a month is **drawable** when it is at
+or after start, is not the month holding `MAX(txn_date)`, and every material source reported in
+it. Non-drawable months inside it are **gaps**. It is a rule, not a control — the grounds are
+data defects, so there is deliberately no UI to widen it.
+_Avoid_: window, unqualified; date range; the chart window
+
+**Material source**:
+A statement source whose dated counted spend is at least 1% of all dated counted spend. Decides
+which sources a month must have heard from before it is drawable. **First-appearance only** —
+a source that stops reporting never shortens the window, because the rule exists to exclude
+months a source had not started yet, not months it had finished. Immaterial sources are carried
+in the payload and flagged, never filtered out.
+_Avoid_: primary source, main account, significant source
+
 ### Net worth
 
 **Net-worth snapshot**:

@@ -517,9 +517,6 @@ def spending_trends(frm: str | None = Query(None, alias="from"),
 
 @app.get("/api/spending/window")
 def spending_window():
-    """Which months the spend-trend chart may draw, and the coverage its footnote is derived
-    from. Deliberately its own path rather than a parameter on /api/spending/trends: that
-    payload stays byte-identical, and a fixture key that carried a date would go stale."""
     return spending.window()
 
 

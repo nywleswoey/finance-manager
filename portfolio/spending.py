@@ -69,7 +69,7 @@ DATED = "txn_date IS NOT NULL"
 
 
 def summary(frm=None, to=None, s=None):
-    """Totals + category / subcategory / month breakdowns for the spend window.
+    """Totals + category / subcategory / month breakdowns for the `frm`/`to` date window.
 
     total_sgd is every counted line in the window; by_month covers only the dated ones (see
     DATED). Unwindowed, the two therefore differ by exactly undated()'s magnitude — the gap
@@ -215,11 +215,16 @@ def categories(s=None):
             f"FROM cash_txn WHERE {where} GROUP BY category, subcategory ORDER BY category, v DESC", p)
 
 
-# ---------------- the spend window ----------------
+# ---------------- the spend-trend window ----------------
 # Which months the spend-trend chart may draw, and everything its disclosure prose is
 # derived from. The chart itself slices the array trends() already returns; this shape only
 # says where to cut it, so trends() is untouched and one payload feeds two charts that
 # cannot disagree about a shared month.
+#
+# "Spend-trend window" in full, every time, because "window" alone is already spoken for in
+# this module: summary() and transactions() take a `frm`/`to` *date window*, which is a
+# filter the caller chooses. This one is a rule the data decides, and the two are not
+# interchangeable — see CONTEXT.md's Spending glossary, which pins both.
 
 #: A source is *material* when its lifetime counted spend is at least this share of all
 #: counted spend. Not a knife-edge on the live ledger: the gap between the last material
@@ -235,10 +240,14 @@ def _iso(d):
 
 
 def _month(d):
+    """The `YYYY-MM` bucket a date falls in — the same key `to_char(txn_date,'YYYY-MM')`
+    produces, taken by slice so the two cannot drift."""
     return None if d is None else _iso(d)[:7]
 
 
 def _next_month(ym):
+    """The month after `ym`, rolling the year. December is the whole of the arithmetic:
+    `12 // 12` carries the 1 into the year and `12 % 12 + 1` wraps the month back to 01."""
     y, m = int(ym[:4]), int(ym[5:7])
     return f"{y + m // 12:04d}-{m % 12 + 1:02d}"
 
@@ -259,7 +268,9 @@ def _bucket(months, keys):
     how much money."""
     return {"months": len(keys),
             "n": sum(months[k]["n"] for k in keys),
-            "total_sgd": round(sum(months[k]["v"] for k in keys), 2)}
+            # float() before round(), or an empty bucket serializes as `0` where every other
+            # bucket says `0.0` — the same money field with two JSON types across one payload.
+            "total_sgd": round(float(sum(months[k]["v"] for k in keys)), 2)}
 
 
 def _window_shape(coverage, presence):
@@ -305,6 +316,26 @@ def _window_shape(coverage, presence):
     undated rows (see DATED) — subtracting it naively would absorb undated spend into the
     outside-the-window figure, and undated spend is undated()'s to report, not this one's.
 
+    IT SPLITS THREE WAYS, NOT TWO. The spec names `before` and `after`; a gap month is a
+    third kind of off-chart money, and the two-way split has no room for it. That matters
+    because the only subtraction available to a caller is
+    `dated_total - before - after`, which counts every gap month's spend as *drawn* — so a
+    payload carrying `gaps` but not their money makes the disclosure prose wrong on the day
+    the list first fires, and this endpoint exists precisely so that prose is derived rather
+    than typed. Empty today, for the same reason `gaps` is. What the chart does with a
+    non-empty `gaps` is still out of scope; having the number is not the same as drawing it.
+
+    So: drawn = dated_total - before - after - gaps, and off-chart = before + after + gaps.
+
+    A SECOND DEVIATION, deliberate: the gate's denominator is the *dated* counted total, not
+    "all counted spend". The two differ only by undated rows, and undated rows cannot make a
+    source present in any month — so a source material on undated money alone would be
+    required in every month and no month would ever be drawable, which empties the chart
+    permanently rather than protecting it. The share on the wire is the same dated figure the
+    gate compared, so a reader can check the verdict against the number beside it. Both halves
+    are moot on today's ledger (undated is n=0/$0) and neither would stay moot silently:
+    undated() reports the count this rule is blind to.
+
     With no material source, or no drawable month, there is no window: `start` and `end` are
     both null and every dated month falls in `before`, because with no window there is no
     tail for `after` to mean.
@@ -335,7 +366,8 @@ def _window_shape(coverage, presence):
     material = {x["source"] for x in sources if x["material"]}
     empty = {"start": None, "end": None, "gaps": [], "sources": sources,
              "excluded": {"before": _bucket(months, sorted(months)),
-                          "after": _bucket(months, [])}}
+                          "after": _bucket(months, []),
+                          "gaps": _bucket(months, [])}}
     if not material:
         return empty
 
@@ -349,13 +381,15 @@ def _window_shape(coverage, presence):
         return empty
 
     end = max(drawable)
+    gaps = [m for m in _month_range(start, end) if m not in drawable]
     return {
         "start": start,
         "end": end,
-        "gaps": [m for m in _month_range(start, end) if m not in drawable],
+        "gaps": gaps,
         "sources": sources,
         "excluded": {"before": _bucket(months, [m for m in months if m < start]),
-                     "after": _bucket(months, [m for m in months if m > end])},
+                     "after": _bucket(months, [m for m in months if m > end]),
+                     "gaps": _bucket(months, [m for m in gaps if m in months])},
     }
 
 

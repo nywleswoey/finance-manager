@@ -11,6 +11,7 @@ web/dist/
 
 # playwright run artifacts (the suite itself and its fixtures ARE tracked)
 web/test-results/
+test-results/
 web/playwright-report/
 web/blob-report/
 

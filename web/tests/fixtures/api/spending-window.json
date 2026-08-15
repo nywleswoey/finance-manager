@@ -46,6 +46,11 @@
    "months": 1,
    "n": 30,
    "total_sgd": 599.58
+  },
+  "gaps": {
+   "months": 0,
+   "n": 0,
+   "total_sgd": 0.0
   }
  }
 }
