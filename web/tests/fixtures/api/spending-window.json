@@ -1,0 +1,56 @@
+{
+ "start": "2025-09",
+ "end": "2026-06",
+ "gaps": [],
+ "sources": [
+  {
+   "source": "dbs",
+   "first_txn": "2025-01-02",
+   "last_txn": "2026-06-30",
+   "total_sgd": 109412.05,
+   "share": 0.783,
+   "material": true
+  },
+  {
+   "source": "dbs-cc",
+   "first_txn": "2025-08-21",
+   "last_txn": "2026-07-23",
+   "total_sgd": 20600.97,
+   "share": 0.1474,
+   "material": true
+  },
+  {
+   "source": "trust",
+   "first_txn": "2025-08-14",
+   "last_txn": "2026-07-14",
+   "total_sgd": 9223.21,
+   "share": 0.066,
+   "material": true
+  },
+  {
+   "source": "hsbc",
+   "first_txn": "2025-08-22",
+   "last_txn": "2025-11-24",
+   "total_sgd": 496.41,
+   "share": 0.0036,
+   "material": false
+  }
+ ],
+ "excluded": {
+  "before": {
+   "months": 8,
+   "n": 285,
+   "total_sgd": 42718.85
+  },
+  "after": {
+   "months": 1,
+   "n": 30,
+   "total_sgd": 599.58
+  },
+  "gaps": {
+   "months": 0,
+   "n": 0,
+   "total_sgd": 0.0
+  }
+ }
+}

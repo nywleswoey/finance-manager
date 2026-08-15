@@ -124,6 +124,10 @@ ENDPOINTS: list[tuple[str, str]] = [
     # --- spending ---
     ("spending-summary", "/api/spending/summary"),
     ("spending-trends", "/api/spending/trends"),
+    # The spend-trend chart's window rule. Its own path rather than a parameter on
+    # `/api/spending/trends` partly for this table: the route key would carry a date, and a
+    # dated key goes stale the moment the ledger gains a month.
+    ("spending-window", "/api/spending/window"),
     ("spending-years", "/api/spending/years"),
     ("spending-undated", "/api/spending/undated"),
     ("spending-categories", "/api/spending/categories"),

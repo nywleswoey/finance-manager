@@ -6,7 +6,7 @@ every spend metric but remain inspectable via transactions(include_excluded=True
 
 Every public function accepts an optional Session (`s`) and routes through
 db.session_scope, so it composes inside a larger unit of work or opens its own connection.
-The six read shapes share a single WHERE builder (`_where`) rather than each re-deriving
+The seven read shapes share a single WHERE builder (`_where`) rather than each re-deriving
 the same is_spend / date / category filters.
 
 Note: summary() and trends() bucket by month with Postgres `to_char`, so their SQL is
@@ -15,6 +15,14 @@ is a testing split too — tests/test_spending.py runs the portable shapes on SQ
 `_where` and `_trend_shape` (trends()' payload fold, where unclassified spend gets its name
 and where it used to raise) directly, and tests/test_spending_pg.py runs these two functions'
 actual SELECT against a real Postgres, skipping when there is none.
+
+window() straddles that split rather than sitting on one side of it, which is why it is two
+queries and a fold instead of one query: its per-source coverage query (MIN/MAX/SUM) is
+portable, its per-source-per-month presence query buckets with `to_char` and is Postgres-only,
+and the window rule itself is `_window_shape`, a pure function over those two result sets.
+So the rule — every clause of it — is tested on any machine with no database at all, and
+only the month bucketing needs a server: tests/test_spending.py::TestWindowShape holds the
+rule, tests/test_spending_pg.py::TestPresenceQuery holds the bucketing.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending.py tests/test_spending_pg.py -q
 """
@@ -61,7 +69,7 @@ DATED = "txn_date IS NOT NULL"
 
 
 def summary(frm=None, to=None, s=None):
-    """Totals + category / subcategory / month breakdowns for the spend window.
+    """Totals + category / subcategory / month breakdowns for the `frm`/`to` date window.
 
     total_sgd is every counted line in the window; by_month covers only the dated ones (see
     DATED). Unwindowed, the two therefore differ by exactly undated()'s magnitude — the gap
@@ -205,3 +213,208 @@ def categories(s=None):
         return _rows(s,
             f"SELECT category, subcategory, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n "
             f"FROM cash_txn WHERE {where} GROUP BY category, subcategory ORDER BY category, v DESC", p)
+
+
+# ---------------- the spend-trend window ----------------
+# Which months the spend-trend chart may draw, and everything its disclosure prose is
+# derived from. The chart itself slices the array trends() already returns; this shape only
+# says where to cut it, so trends() is untouched and one payload feeds two charts that
+# cannot disagree about a shared month.
+#
+# "Spend-trend window" in full, every time, because "window" alone is already spoken for in
+# this module: summary() and transactions() take a `frm`/`to` *date window*, which is a
+# filter the caller chooses. This one is a rule the data decides, and the two are not
+# interchangeable — see CONTEXT.md's Spending glossary, which pins both.
+
+#: A source is *material* when its lifetime *dated* counted spend is at least this share of
+#: all dated counted spend (see `_window_shape` for why the denominator excludes undated
+#: rows). Not a knife-edge on the live ledger: the gap between the last material source and
+#: the first immaterial one is 18x (6.60% vs 0.36%).
+MATERIAL_SHARE = 0.01
+
+
+def _iso(d):
+    """A date column as the `YYYY-MM-DD` string that goes on the wire. Postgres hands back
+    `datetime.date`, SQLite hands back a string already, and an all-undated source hands
+    back None from MIN/MAX — all three have to survive the same call."""
+    return d if d is None or isinstance(d, str) else d.isoformat()
+
+
+def _month(d):
+    """The `YYYY-MM` bucket a date falls in — the same key `to_char(txn_date,'YYYY-MM')`
+    produces, taken by slice so the two cannot drift."""
+    return None if d is None else _iso(d)[:7]
+
+
+def _next_month(ym):
+    """The month after `ym`, rolling the year. December is the whole of the arithmetic:
+    `12 // 12` carries the 1 into the year and `12 % 12 + 1` wraps the month back to 01."""
+    y, m = int(ym[:4]), int(ym[5:7])
+    return f"{y + m // 12:04d}-{m % 12 + 1:02d}"
+
+
+def _month_range(start, end):
+    """Every calendar month in `[start, end]`, including the ones no row landed in — which
+    is the point: a month with no transactions at all is a gap, and it cannot be found by
+    walking rows that do not exist."""
+    out, m = [], start
+    while m <= end:
+        out.append(m)
+        m = _next_month(m)
+    return out
+
+
+def _bucket(months, keys):
+    """Fold a set of month keys into one `excluded` bucket: how many months, how many lines,
+    how much money."""
+    return {"months": len(keys),
+            "n": sum(months[k]["n"] for k in keys),
+            # float() before round(), or an empty bucket serializes as `0` where every other
+            # bucket says `0.0` — the same money field with two JSON types across one payload.
+            "total_sgd": round(float(sum(months[k]["v"] for k in keys)), 2)}
+
+
+def _window_shape(coverage, presence):
+    """The window rule, as a pure function over the two result sets `window()` runs.
+
+    Split out for the same reason `_trend_shape` is: one of the two queries is Postgres-only
+    (`to_char`) and this is not, so the rule is testable with no database at all — see
+    tests/test_spending.py::TestWindowShape, which is where every clause below is pinned.
+
+    `coverage` is one row per source: `first_txn`, `last_txn`, `total_sgd` (the *dated* sum).
+    `presence` is one row per (month, source): `ym`, `source`, `n`, `v`. The rule:
+
+      * **Material source** — lifetime counted spend >= MATERIAL_SHARE of all counted spend.
+      * **Start** — the first calendar month beginning *after* the latest first-transaction
+        among material sources. Unconditionally the next month: a source whose first line is
+        the 1st still only gets counted from the month after, because materiality here is
+        about when a source *appeared*, not how much of that month it saw.
+      * **Drawable** — a month at or after `start`, that is not the month containing
+        MAX(txn_date), and in which *every* material source has at least one counted line.
+      * **Window** — `[start, last drawable month]`.
+
+    Materiality is FIRST-APPEARANCE ONLY, never ongoing presence. The two are different
+    rules and only the first one is right: a discontinued small source would otherwise
+    truncate the window at the month it stopped reporting, and the window exists to exclude
+    months a source had not started yet, not months it had finished.
+
+    IMMATERIAL SOURCES ARE FLAGGED, NOT FILTERED. A source silently absent from a payload is
+    how the fourth source stayed invisible in the first place, so `sources` carries every
+    one of them with its share and its verdict, and the prose derives "two of three sources"
+    from the flags rather than having it typed (typed, it is wrong at three of four).
+
+    `gaps` is every non-drawable month *inside* the window, which is a hair wider than the
+    spec's "strictly inside": `end` is drawable by construction, but `start` need not be —
+    every material source has a first line before `start` begins, and none of that promises
+    each one also has a line *in* `start`. Reading "strictly" literally would leave an
+    undrawable start month inside the window and unlisted anywhere, which is the silent hole
+    this whole endpoint exists to close. The closed interval agrees with the spec everywhere
+    the spec's assumption holds.
+
+    `excluded` is SPLIT, NOT TOTALLED, and computed from the *dated* total. Split because
+    98.6% of the off-chart money on the live ledger is the leading months and one figure
+    would misread it as a rounding tail. Dated because summary()'s total_sgd includes
+    undated rows (see DATED) — subtracting it naively would absorb undated spend into the
+    outside-the-window figure, and undated spend is undated()'s to report, not this one's.
+
+    IT SPLITS THREE WAYS, NOT TWO. The spec names `before` and `after`; a gap month is a
+    third kind of off-chart money, and the two-way split has no room for it. That matters
+    because the only subtraction available to a caller is
+    `dated_total - before - after`, which counts every gap month's spend as *drawn* — so a
+    payload carrying `gaps` but not their money makes the disclosure prose wrong on the day
+    the list first fires, and this endpoint exists precisely so that prose is derived rather
+    than typed. Empty today, for the same reason `gaps` is. What the chart does with a
+    non-empty `gaps` is still out of scope; having the number is not the same as drawing it.
+
+    So: drawn = dated_total - before - after - gaps, and off-chart = before + after + gaps.
+
+    A SECOND DEVIATION, deliberate: the gate's denominator is the *dated* counted total, not
+    "all counted spend". The two differ only by undated rows, and undated rows cannot make a
+    source present in any month — so a source material on undated money alone would be
+    required in every month and no month would ever be drawable, which empties the chart
+    permanently rather than protecting it. The share on the wire is the same dated figure the
+    gate compared, so a reader can check the verdict against the number beside it. Both halves
+    are moot on today's ledger (undated is n=0/$0) and neither would stay moot silently:
+    undated() reports the count this rule is blind to.
+
+    With no material source, or no drawable month, there is no window: `start` and `end` are
+    both null and every dated month falls in `before`, because with no window there is no
+    tail for `after` to mean.
+    """
+    dated_total = sum(float(c["total_sgd"] or 0) for c in coverage)
+    sources = []
+    for c in sorted(coverage, key=lambda c: -float(c["total_sgd"] or 0)):
+        total, first = float(c["total_sgd"] or 0), _iso(c["first_txn"])
+        share = total / dated_total if dated_total else 0.0
+        sources.append({
+            "source": c["source"],
+            "first_txn": first,
+            "last_txn": _iso(c["last_txn"]),
+            "total_sgd": round(total, 2),
+            # Rounded for the wire, compared raw: a 0.996% share rounds to 0.0100 and would
+            # otherwise be admitted by the very digits that are there to display it.
+            "share": round(share, 4),
+            "material": first is not None and share >= MATERIAL_SHARE,
+        })
+
+    months: dict[str, dict] = {}
+    for r in presence:
+        m = months.setdefault(r["ym"], {"n": 0, "v": 0.0, "sources": set()})
+        m["n"] += int(r["n"])
+        m["v"] += float(r["v"])
+        m["sources"].add(r["source"])
+
+    material = {x["source"] for x in sources if x["material"]}
+    empty = {"start": None, "end": None, "gaps": [], "sources": sources,
+             "excluded": {"before": _bucket(months, sorted(months)),
+                          "after": _bucket(months, []),
+                          "gaps": _bucket(months, [])}}
+    if not material:
+        return empty
+
+    start = _next_month(max(_month(x["first_txn"]) for x in sources if x["material"]))
+    # MAX(txn_date) over *every* counted line, immaterial sources included: the partial month
+    # is the month the ledger currently ends in, whoever reported into it.
+    latest = max(_month(c["last_txn"]) for c in coverage if c["last_txn"] is not None)
+    drawable = {m for m, d in months.items()
+                if m >= start and m != latest and material <= d["sources"]}
+    if not drawable:
+        return empty
+
+    end = max(drawable)
+    gaps = [m for m in _month_range(start, end) if m not in drawable]
+    return {
+        "start": start,
+        "end": end,
+        "gaps": gaps,
+        "sources": sources,
+        "excluded": {"before": _bucket(months, [m for m in months if m < start]),
+                     "after": _bucket(months, [m for m in months if m > end]),
+                     "gaps": _bucket(months, [m for m in gaps if m in months])},
+    }
+
+
+def window(s=None):
+    """Which months the spend-trend chart may draw, plus the material-source coverage its
+    disclosure prose is derived from. See `_window_shape` for the rule.
+
+    Two result sets, because they split on portability: the coverage query is per-source
+    MIN/MAX/SUM and runs anywhere; the presence query buckets by month with `to_char` and is
+    Postgres-only. Both are one pass over cash_txn, so the endpoint costs two queries whatever
+    the ledger holds.
+
+    The coverage sum is over dated rows only (`CASE WHEN txn_date IS NOT NULL` rather than a
+    `FILTER` clause, which SQLite only learned in 3.30) while the GROUP BY is over all of
+    them — so an all-undated source still appears in `sources`, with no coverage and no
+    share, instead of vanishing from the payload."""
+    where, p = _where()
+    with session_scope(s) as s:
+        coverage = _rows(s,
+            f"SELECT source, MIN(txn_date) first_txn, MAX(txn_date) last_txn, "
+            f"COALESCE(SUM(CASE WHEN {DATED} THEN -amount_sgd ELSE 0 END),0) total_sgd "
+            f"FROM cash_txn WHERE {where} GROUP BY source", p)
+        presence = _rows(s,
+            f"SELECT to_char(txn_date,'YYYY-MM') ym, source, COUNT(*) n, "
+            f"ROUND(SUM(-amount_sgd),2) v FROM cash_txn "
+            f"WHERE {where} AND {DATED} GROUP BY ym, source ORDER BY ym, source", p)
+    return _window_shape(coverage, presence)

@@ -515,6 +515,11 @@ def spending_trends(frm: str | None = Query(None, alias="from"),
     return spending.trends(frm, to)
 
 
+@app.get("/api/spending/window")
+def spending_window():
+    return spending.window()
+
+
 @app.get("/api/spending/transactions")
 def spending_transactions(frm: str | None = Query(None, alias="from"),
                           to: str | None = Query(None, alias="to"),
