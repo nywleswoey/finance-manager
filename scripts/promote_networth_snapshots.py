@@ -58,6 +58,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from portfolio.db import connect_args
 from portfolio.models import FxRate, NwItem, NwSnapshot, NwValue
+from portfolio.networth import fx_row_for
 
 # The catalogue fields promotion depends on. `label` is included because the composition chart
 # reads it; `id` is deliberately excluded — the stores keep separate sequences, which is the
@@ -100,12 +101,6 @@ def missing_item_values(s: Session, snap: NwSnapshot) -> list[str]:
             for c in sorted(c for c in _items(s) if c not in valued)]
 
 
-def _dated_fx(s: Session, ccy: str, on_date) -> FxRate | None:
-    """The fx_rate row `networth.rate_for` would freeze from — newest on or before `on_date`."""
-    return s.execute(select(FxRate).where(FxRate.currency == ccy, FxRate.date <= on_date)
-                     .order_by(FxRate.date.desc()).limit(1)).scalar_one_or_none()
-
-
 def _currencies(snap: NwSnapshot) -> list[str]:
     """The non-SGD currencies this snapshot values. SGD is 1:1 by policy and never looked up."""
     return sorted({v.currency for v in snap.values if v.currency != "SGD"})
@@ -116,7 +111,7 @@ def fx_carry_backs(s: Session, snap: NwSnapshot) -> list[str]:
     snapshot date. `ensure_fx` resolves that case by back-stamping the nearest *later* rate,
     which values a June snapshot at a later month's FX."""
     return [f"{snap.date}: no fx_rate for {c} on or before {snap.date}"
-            for c in _currencies(snap) if _dated_fx(s, c, snap.date) is None]
+            for c in _currencies(snap) if fx_row_for(s, c, snap.date) is None]
 
 
 def _fx_rows(s: Session, snap: NwSnapshot) -> list[dict]:
@@ -124,7 +119,7 @@ def _fx_rows(s: Session, snap: NwSnapshot) -> list[dict]:
     the target. Carries the row as dated in the source, not the frozen rate off the value: the
     two can differ where a day's rate was refreshed after the snapshot froze it, and it is the
     row — the evidence that no carry-back was needed — that the target lacks."""
-    rows = [_dated_fx(s, ccy, snap.date) for ccy in _currencies(snap)]
+    rows = [fx_row_for(s, ccy, snap.date) for ccy in _currencies(snap)]
     return [{"date": r.date, "currency": r.currency, "rate_to_sgd": r.rate_to_sgd} for r in rows]
 
 
@@ -173,9 +168,10 @@ def apply(tgt: Session, rows: list[dict]) -> None:
         snap = NwSnapshot(date=r["date"], note=r["note"],
                           portfolio_value_sgd=r["portfolio_value_sgd"])
         if r.get("created_at") is not None:
-            # When it was captured, not when it was copied. Guarded because the column carries
-            # only a server_default and is nullable: assigning a source NULL straight through
-            # would suppress that default and leave the target row with no creation time at all.
+            # When it was captured, not when it was copied. Guarded rather than assigned blind:
+            # the column is NOT NULL with only a server_default, so passing a source NULL
+            # straight through would suppress that default and fail the insert instead of
+            # falling back to it.
             snap.created_at = r["created_at"]
         tgt.add(snap)
         tgt.flush()
@@ -202,7 +198,10 @@ def verify(s: Session) -> list[str]:
 # What must survive the copy untouched, per row. `native_value` and `currency` are here as much
 # as the money is: a rate that round-trips against a rewritten native is still a rewritten value.
 VALUE_FIELDS = ("native_value", "currency", "rate_to_sgd", "value_sgd")
-SNAPSHOT_FIELDS = ("note", "portfolio_value_sgd")
+# `created_at` is here because `apply` carries it deliberately — when the snapshot was captured,
+# not when it was copied. Left out, a snapshot that arrived stamped with the copy time would read
+# back clean and the promotion's "verbatim" claim would go unchecked.
+SNAPSHOT_FIELDS = ("note", "portfolio_value_sgd", "created_at")
 
 
 def frozen_money_diff(src: Session, tgt: Session) -> list[str]:

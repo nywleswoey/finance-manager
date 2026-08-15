@@ -317,6 +317,23 @@ class ReadbackTest(Stores):
         self.assertTrue(any("portfolio_value_sgd" in d
                             for d in promote.frozen_money_diff(self.src, self.tgt)))
 
+    def test_a_restamped_created_at_is_caught(self):
+        """`created_at` is carried verbatim — when it was captured, not when it was copied — so
+        the readback has to compare it. Left out, a snapshot that arrived stamped with the copy
+        time would read back clean and the docstring's "verbatim" would be untested."""
+        rows = promote.plan(self.src, self.tgt)
+        rows[0]["created_at"] = dt.datetime(2026, 8, 15, 9, 0, tzinfo=dt.timezone.utc)
+        promote.apply(self.tgt, rows)
+        self.assertTrue(any("created_at" in d
+                            for d in promote.frozen_money_diff(self.src, self.tgt)))
+
+    def test_a_faithfully_carried_created_at_reads_back_clean(self):
+        promote.apply(self.tgt, promote.plan(self.src, self.tgt))
+        self.assertEqual(promote.frozen_money_diff(self.src, self.tgt), [])
+        promoted = self.tgt.scalar(select(NwSnapshot).where(NwSnapshot.date == dt.date(2026, 6, 21)))
+        source = self.src.scalar(select(NwSnapshot).where(NwSnapshot.date == dt.date(2026, 6, 21)))
+        self.assertEqual(promoted.created_at, source.created_at)
+
     def test_a_dropped_value_row_is_caught(self):
         rows = promote.plan(self.src, self.tgt)
         rows[0]["values"] = [v for v in rows[0]["values"] if v["code"] != "cpf_oa"]
