@@ -205,5 +205,272 @@ class TestTrendShape(unittest.TestCase):
         self.assertEqual(spending._trend_shape([]), {"groups": [], "series": []})
 
 
+# ---------------- the window rule (pure) ----------------
+
+class TestWindowShape(unittest.TestCase):
+    """The spend-trend window, exercised through `_window_shape` rather than the endpoint.
+
+    The rule is the whole of this endpoint — the two queries around it are a MIN/MAX/SUM and
+    a GROUP BY, and neither decides anything. So the rule is a pure function over their two
+    result sets and every clause of it is pinned here, with no database: the 1% gate, where
+    the start lands, what does and does not move the end, and what falls in `gaps` rather
+    than truncating the history around it.
+
+    The one thing this file cannot claim is that the presence query buckets months the way
+    summary() and trends() do, because `to_char` is Postgres-only —
+    tests/test_spending_pg.py::TestPresenceQuery is that assertion.
+    """
+
+    def cover(self, *rows):
+        """coverage rows: (source, first_txn, last_txn, total_sgd)."""
+        return [{"source": s, "first_txn": f, "last_txn": l, "total_sgd": v}
+                for s, f, l, v in rows]
+
+    def seen(self, *rows):
+        """presence rows: (ym, source, n, v)."""
+        return [{"ym": ym, "source": s, "n": n, "v": v} for ym, s, n, v in rows]
+
+    def months(self, source, first, last, per_month, n=1):
+        """Every month in [first, last] for one source, `per_month` dollars each — the
+        shorthand most cases below want, since what they vary is which months exist."""
+        return [(m, source, n, per_month)
+                for m in spending._month_range(first[:7], last[:7])]
+
+    def by(self, got, source):
+        return next(x for x in got["sources"] if x["source"] == source)
+
+    # --- the 1% gate ---
+
+    def test_the_gate_rejects_a_source_under_one_percent(self):
+        # 99.5 / 100.0 and 0.5 / 100.0. The small source appears in `sources` — flagged, not
+        # filtered — and its months are not required for a month to be drawable, so the
+        # window is not shortened to the two months it happens to have reported in.
+        coverage = self.cover(("dbs", "2024-01-05", "2024-04-20", 99.5),
+                              ("tiny", "2024-01-06", "2024-02-20", 0.5))
+        presence = self.seen(*self.months("dbs", "2024-01", "2024-04", 24.875),
+                             ("2024-01", "tiny", 1, 0.25), ("2024-02", "tiny", 1, 0.25))
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual(self.by(got, "tiny")["material"], False)
+        self.assertEqual(self.by(got, "tiny")["share"], 0.005)
+        self.assertEqual((got["start"], got["end"]), ("2024-02", "2024-03"))
+
+    def test_the_gate_admits_a_source_at_exactly_one_percent(self):
+        # 1.00 / 100.00 is admitted: the rule is ">= 1%", and a source that sits exactly on
+        # the line is a source that exists.
+        coverage = self.cover(("dbs", "2024-01-05", "2024-04-20", 99.0),
+                              ("small", "2024-02-06", "2024-04-20", 1.0))
+        got = spending._window_shape(coverage, self.seen(("2024-01", "dbs", 1, 99.0)))
+        self.assertEqual(self.by(got, "small")["material"], True)
+        self.assertEqual(self.by(got, "small")["share"], 0.01)
+
+    def test_the_gate_compares_the_raw_share_not_the_displayed_one(self):
+        # 0.996% displays as 0.0100 because `share` is rounded for the wire. Comparing the
+        # rounded number would let the digits that exist to *show* the verdict decide it.
+        coverage = self.cover(("dbs", "2024-01-05", "2024-04-20", 99.004),
+                              ("tiny", "2024-02-06", "2024-04-20", 0.996))
+        got = spending._window_shape(coverage, self.seen(("2024-01", "dbs", 1, 99.004)))
+        self.assertEqual(self.by(got, "tiny")["share"], 0.01)
+        self.assertEqual(self.by(got, "tiny")["material"], False)
+
+    # --- where the start lands ---
+
+    def test_a_source_starting_mid_month_pushes_the_start_to_the_next_month(self):
+        # The whole reason the start is the month *after*: February is a partial month for
+        # `cc`, and drawing it would show a category rising out of nothing when it was
+        # simply not being captured for the first three weeks.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-05-30", 900.0),
+                              ("cc", "2024-02-21", "2024-05-30", 100.0))
+        presence = self.seen(*self.months("dbs", "2024-01", "2024-05", 180.0),
+                             *self.months("cc", "2024-02", "2024-05", 25.0))
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual((got["start"], got["end"]), ("2024-03", "2024-04"))
+
+    def test_a_source_starting_on_the_first_still_pushes_the_start(self):
+        # No day-of-month special case. The month a source first appears in is never drawn,
+        # even when it appeared on day one — the rule is about appearance, not coverage, and
+        # a special case would be a second rule to keep true.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-05-30", 900.0),
+                              ("cc", "2024-02-01", "2024-05-30", 100.0))
+        presence = self.seen(*self.months("dbs", "2024-01", "2024-05", 180.0),
+                             *self.months("cc", "2024-02", "2024-05", 25.0))
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual(got["start"], "2024-03")
+
+    def test_the_latest_first_appearance_wins_not_the_first(self):
+        coverage = self.cover(("dbs", "2024-01-02", "2024-06-30", 800.0),
+                              ("cc", "2024-02-11", "2024-06-30", 100.0),
+                              ("trust", "2024-04-09", "2024-06-30", 100.0))
+        presence = self.seen(*self.months("dbs", "2024-01", "2024-06", 133.0),
+                             *self.months("cc", "2024-02", "2024-06", 20.0),
+                             *self.months("trust", "2024-04", "2024-06", 33.0))
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual((got["start"], got["end"]), ("2024-05", "2024-05"))
+
+    # --- what moves the end, and what must not ---
+
+    def test_the_partial_month_is_always_dropped(self):
+        # The month containing MAX(txn_date) is never drawable, however complete it looks:
+        # it is the month the ledger currently ends in, so the newest point would be a
+        # fabricated collapse — and it is the reading entry point.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-04-14", 400.0))
+        got = spending._window_shape(
+            coverage, self.seen(*self.months("dbs", "2024-01", "2024-04", 100.0)))
+        self.assertEqual((got["start"], got["end"]), ("2024-02", "2024-03"))
+
+    def test_a_discontinued_immaterial_source_does_not_move_the_end(self):
+        # Materiality is first-appearance only, never ongoing presence. A 0.4% source that
+        # stopped reporting in February must not truncate four months of history: the window
+        # exists to exclude months a source had not started yet, not months it had finished.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-06-28", 996.0),
+                              ("gone", "2024-01-06", "2024-02-20", 4.0))
+        presence = self.seen(*self.months("dbs", "2024-01", "2024-06", 166.0),
+                             ("2024-01", "gone", 1, 2.0), ("2024-02", "gone", 1, 2.0))
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual((got["start"], got["end"]), ("2024-02", "2024-05"))
+        self.assertEqual(got["gaps"], [])
+
+    def test_a_material_source_absent_from_the_tail_does_move_the_end(self):
+        # The complement, and the one the chart is protected by: `cc` is 25% of spend and
+        # stopped reporting after March, so April and May are ingestion gaps rather than
+        # months where spending fell. They are dropped, and their money lands in `after`.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-06-28", 750.0),
+                              ("cc", "2024-01-06", "2024-03-20", 250.0))
+        presence = self.seen(*self.months("dbs", "2024-01", "2024-06", 125.0),
+                             *self.months("cc", "2024-01", "2024-03", 83.33))
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual((got["start"], got["end"]), ("2024-02", "2024-03"))
+        self.assertEqual(got["excluded"]["after"]["months"], 3)   # April, May, June
+
+    # --- gaps ---
+
+    def test_an_interior_absence_lands_in_gaps_rather_than_truncating(self):
+        # April has no `cc` line at all. The alternative — ending the window at March — would
+        # throw away May and June because one month in the middle was short, so the history
+        # is kept and the hole is *named*.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-07-28", 700.0),
+                              ("cc", "2024-01-06", "2024-07-20", 300.0))
+        presence = self.seen(*self.months("dbs", "2024-01", "2024-07", 100.0),
+                             *[r for r in self.months("cc", "2024-01", "2024-07", 42.85)
+                               if r[0] != "2024-04"])
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual((got["start"], got["end"], got["gaps"]),
+                         ("2024-02", "2024-06", ["2024-04"]))
+
+    def test_a_month_with_no_rows_at_all_is_a_gap(self):
+        # Nothing reported in April, from anyone. It cannot be found by walking presence rows
+        # — there are none — so the gap list is built by walking the calendar instead.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-06-28", 600.0))
+        presence = self.seen(*[r for r in self.months("dbs", "2024-01", "2024-06", 100.0)
+                               if r[0] != "2024-04"])
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual((got["start"], got["end"], got["gaps"]),
+                         ("2024-02", "2024-05", ["2024-04"]))
+
+    def test_an_undrawable_start_month_is_listed_rather_than_left_silent(self):
+        # `start` is derived from first-appearance, which promises every material source has
+        # a line *before* the month begins — not one *inside* it. So the window's own first
+        # month can be undrawable, and the spec's "strictly inside" would leave it inside the
+        # window and named nowhere. It is a gap.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-06-28", 800.0),
+                              ("cc", "2024-01-06", "2024-06-20", 200.0))
+        presence = self.seen(*self.months("dbs", "2024-01", "2024-06", 133.0),
+                             *[r for r in self.months("cc", "2024-01", "2024-06", 40.0)
+                               if r[0] != "2024-02"])
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual((got["start"], got["end"], got["gaps"]),
+                         ("2024-02", "2024-05", ["2024-02"]))
+
+    # --- the degenerate ledgers ---
+
+    def test_a_single_source_windows_on_its_own_coverage(self):
+        coverage = self.cover(("dbs", "2024-01-02", "2024-05-30", 500.0))
+        got = spending._window_shape(
+            coverage, self.seen(*self.months("dbs", "2024-01", "2024-05", 100.0)))
+        self.assertEqual((got["start"], got["end"], got["gaps"]),
+                         ("2024-02", "2024-04", []))
+        self.assertEqual(self.by(got, "dbs"), {
+            "source": "dbs", "first_txn": "2024-01-02", "last_txn": "2024-05-30",
+            "total_sgd": 500.0, "share": 1.0, "material": True})
+
+    def test_an_empty_ledger_is_a_null_window_not_an_error(self):
+        self.assertEqual(spending._window_shape([], []), {
+            "start": None, "end": None, "gaps": [], "sources": [],
+            "excluded": {"before": {"months": 0, "n": 0, "total_sgd": 0.0},
+                         "after": {"months": 0, "n": 0, "total_sgd": 0.0}}})
+
+    def test_a_ledger_with_no_drawable_month_reports_no_window(self):
+        # One source, one month, and that month is the partial one. There is nothing to draw,
+        # and with no window there is no tail — all of it is `before`.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-01-30", 50.0))
+        got = spending._window_shape(coverage, self.seen(("2024-01", "dbs", 3, 50.0)))
+        self.assertEqual((got["start"], got["end"], got["gaps"]), (None, None, []))
+        self.assertEqual(got["excluded"]["before"], {"months": 1, "n": 3, "total_sgd": 50.0})
+        self.assertEqual(got["excluded"]["after"], {"months": 0, "n": 0, "total_sgd": 0.0})
+
+    def test_an_all_undated_source_is_flagged_rather_than_missing(self):
+        # MIN/MAX over rows that all carry a NULL date is NULL, and its dated sum is zero. It
+        # is still a source, so it is still in the payload — with no coverage, no share, and
+        # no vote on any month. A payload that dropped it is the exact failure this list of
+        # flags exists to prevent.
+        coverage = self.cover(("dbs", "2024-01-02", "2024-04-30", 400.0),
+                              ("orphan", None, None, 0.0))
+        got = spending._window_shape(
+            coverage, self.seen(*self.months("dbs", "2024-01", "2024-04", 100.0)))
+        self.assertEqual(self.by(got, "orphan"),
+                         {"source": "orphan", "first_txn": None, "last_txn": None,
+                          "total_sgd": 0.0, "share": 0.0, "material": False})
+        self.assertEqual((got["start"], got["end"]), ("2024-02", "2024-03"))
+
+    # --- the footnote arithmetic ---
+
+    def test_outside_the_window_is_computed_from_the_dated_total(self):
+        """The disclosure's "$X sits outside the window", and the trap in computing it.
+
+        summary()'s total_sgd includes undated rows (see DATED) — it is 1,000 here while the
+        dated ledger is 900 — so `total - inside` would report 400 outside when 300 is
+        outside and 100 carries no date at all. undated() reports that 100 separately and
+        always has; this shape's job is to make the other subtraction come out right, which
+        it does by summing the *dated* coverage rather than being handed a total.
+        """
+        coverage = self.cover(("dbs", "2024-01-02", "2024-06-28", 600.0),
+                              ("cc", "2024-02-11", "2024-06-20", 300.0))
+        presence = self.seen(*self.months("dbs", "2024-01", "2024-06", 100.0, n=10),
+                             *self.months("cc", "2024-02", "2024-06", 60.0, n=6))
+        got = spending._window_shape(coverage, presence)
+        self.assertEqual((got["start"], got["end"]), ("2024-03", "2024-05"))
+
+        dated_total = sum(x["total_sgd"] for x in got["sources"])
+        before, after = got["excluded"]["before"], got["excluded"]["after"]
+        self.assertEqual(dated_total, 900.0)
+        # Jan (dbs only) + Feb (both) = 100 + 160; June = 160.
+        self.assertEqual(before, {"months": 2, "n": 26, "total_sgd": 260.0})
+        self.assertEqual(after, {"months": 1, "n": 16, "total_sgd": 160.0})
+        inside = round(dated_total - before["total_sgd"] - after["total_sgd"], 2)
+        self.assertEqual(inside, 480.0)                       # 3 drawn months x 160
+        # And the undated 100 is nowhere in any of it — not in the dated total, not in
+        # either bucket, and so not silently absorbed into "outside the window".
+        self.assertEqual(before["total_sgd"] + after["total_sgd"] + inside, dated_total)
+
+
+class TestMonthArithmetic(unittest.TestCase):
+    """`_next_month` / `_month_range`, which every boundary in the rule above is built from.
+
+    Worth their own class because both roll the year, and both are string arithmetic on
+    `YYYY-MM` rather than date arithmetic — the format is what `to_char` produces and what
+    `<Bar dataKey>` consumes, so it never becomes a date on the way through."""
+
+    def test_next_month_rolls_the_year(self):
+        self.assertEqual(spending._next_month("2024-12"), "2025-01")
+        self.assertEqual(spending._next_month("2024-01"), "2024-02")
+        self.assertEqual(spending._next_month("2024-09"), "2024-10")   # zero-padded
+
+    def test_month_range_is_inclusive_and_crosses_a_year(self):
+        self.assertEqual(spending._month_range("2024-11", "2025-02"),
+                         ["2024-11", "2024-12", "2025-01", "2025-02"])
+
+    def test_a_single_month_range_is_that_month(self):
+        self.assertEqual(spending._month_range("2024-03", "2024-03"), ["2024-03"])
+
+
 if __name__ == "__main__":
     unittest.main()

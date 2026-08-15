@@ -79,6 +79,10 @@
   "file": "spending-trends.json",
   "status": 200
  },
+ "/api/spending/window": {
+  "file": "spending-window.json",
+  "status": 200
+ },
  "/api/spending/years": {
   "file": "spending-years.json",
   "status": 200

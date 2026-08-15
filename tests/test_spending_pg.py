@@ -283,5 +283,117 @@ class TestWindow(PgCase):
         self.assertEqual(spending.trends(s=self.s)["series"], [{"ym": "2024-01", "Food": 10.0}])
 
 
+# ---------------- window(): the one query the rule cannot be tested without ----------------
+
+class TestPresenceQuery(PgCase):
+    """`window()`'s per-source-per-month presence query, against a real Postgres.
+
+    The window *rule* is `_window_shape`, a pure function, and every clause of it is pinned
+    in tests/test_spending.py with no database. What cannot be pinned there is the one thing
+    this query is made of: `to_char(txn_date,'YYYY-MM')`, which SQLite does not have. So the
+    claim here is narrow and specific — the presence query buckets months **the same way**
+    summary() and trends() do.
+
+    It has to be the same bucketing or the endpoint is worse than useless: the chart takes
+    the months from `window()` and the money from `trends()`, so a month that the two
+    queries disagree about is a slice taken at the wrong index — silently, because both
+    payloads are individually well-formed. The three queries share `_where` and `DATED` but
+    not their GROUP BY, and that is exactly the seam a shared helper does not cover.
+    """
+
+    def presence_rows(self):
+        """The presence query's own rows, caught at the seam it hands them over at — the
+        same spy shape TestGroupByCardinality uses, and for the same reason: `_window_shape`
+        folds months into verdicts, so the rows themselves are invisible downstream."""
+        caught = []
+        rule = spending._window_shape
+
+        def spy(coverage, presence):
+            caught.extend(dict(r) for r in presence)
+            return rule(coverage, presence)
+
+        with mock.patch.object(spending, "_window_shape", spy):
+            spending.window(s=self.s)
+        return caught
+
+    def test_presence_months_are_the_months_summary_and_trends_bucket(self):
+        # Two sources, overlapping but not identical months, and a month-boundary pair
+        # (Jan 31 / Feb 1) so an off-by-one bucketing would show up as a shifted month
+        # rather than a missing one.
+        self.add(D(2024, 1, 31), -10, source="dbs")
+        self.add(D(2024, 2, 1), -20, source="dbs")
+        self.add(D(2024, 2, 15), -5, source="cc")
+        self.add(D(2024, 3, 4), -30, source="dbs")
+        rows = self.presence_rows()
+        summary_months = [r["ym"] for r in spending.summary(s=self.s)["by_month"]]
+        trend_months = [m["ym"] for m in spending.trends(s=self.s)["series"]]
+        self.assertEqual(sorted({r["ym"] for r in rows}), summary_months)
+        self.assertEqual(summary_months, trend_months)
+        self.assertEqual(summary_months, ["2024-01", "2024-02", "2024-03"])
+
+    def test_presence_money_per_month_equals_summarys(self):
+        # Same rows, split by source instead of by category, so the per-month sums must
+        # reconcile line for line. They are what `excluded` is totalled from, and `excluded`
+        # is what the disclosure prose subtracts from the dated total.
+        self.add(D(2024, 1, 31), -10, source="dbs")
+        self.add(D(2024, 2, 1), -20, source="dbs")
+        self.add(D(2024, 2, 15), -5, source="cc")
+        per_month: dict[str, float] = {}
+        for r in self.presence_rows():
+            per_month[r["ym"]] = per_month.get(r["ym"], 0) + float(r["v"])
+        self.assertEqual(per_month, {"2024-01": 10.0, "2024-02": 25.0})
+        self.assertEqual({r["ym"]: float(r["v"]) for r in spending.summary(s=self.s)["by_month"]},
+                         per_month)
+
+    def test_presence_is_one_row_per_month_and_source(self):
+        # The property `_window_shape`'s `sources.add` and `n +=` are written against: two
+        # lines from one source in one month arrive as one row, not two.
+        self.add(D(2024, 1, 5), -10, source="dbs")
+        self.add(D(2024, 1, 6), -10, source="dbs")
+        self.add(D(2024, 1, 7), -5, source="cc")
+        rows = self.presence_rows()
+        self.assertEqual([(r["ym"], r["source"], int(r["n"]), float(r["v"])) for r in rows],
+                         [("2024-01", "cc", 1, 5.0), ("2024-01", "dbs", 2, 20.0)])
+
+    def test_undated_spend_is_in_no_month_and_in_no_coverage_sum(self):
+        # The footnote arithmetic, at the SQL end of it. `to_char(NULL,'YYYY-MM')` is NULL,
+        # so an undated row must be dropped by the presence query the way it is everywhere
+        # else — and dropped from the coverage sum too, or the dated total the disclosure
+        # subtracts from would carry money that belongs to no month.
+        self.add(D(2024, 1, 5), -10, source="dbs")
+        self.add(None, -15, source="dbs")
+        self.assertEqual([r["ym"] for r in self.presence_rows()], ["2024-01"])
+        got = spending.window(s=self.s)
+        self.assertEqual([s["total_sgd"] for s in got["sources"]], [10.0])
+        self.assertEqual(spending.summary(s=self.s)["total_sgd"], 25.0)   # includes the 15
+        self.assertEqual(spending.undated(s=self.s), {"n": 1, "total_sgd": 15.0})
+
+    def test_excluded_rows_are_out_of_the_window_too(self):
+        # `_where`'s is_spend default, composing into this query like every other one: a
+        # card-bill payment must not make a month look covered, or an ingestion gap would be
+        # papered over by the transfer that repaid it.
+        self.add(D(2024, 1, 5), -10, source="dbs")
+        self.add(D(2024, 2, 5), -999, source="cc", is_spend=False, exclude_reason="cc_payment")
+        self.assertEqual([(r["ym"], r["source"]) for r in self.presence_rows()],
+                         [("2024-01", "dbs")])
+
+    def test_window_end_to_end_on_a_real_ledger(self):
+        # The two queries and the rule joined up, once: dbs from January, cc appearing on
+        # Feb 11, and March as the partial month. Start is the month after cc appeared, the
+        # partial month is dropped, and the immaterial nothing-source is flagged not filtered.
+        for day in (D(2024, 1, 4), D(2024, 2, 4), D(2024, 3, 4), D(2024, 4, 4)):
+            self.add(day, -250, source="dbs")
+        for day in (D(2024, 2, 11), D(2024, 3, 11), D(2024, 4, 11)):
+            self.add(day, -100, source="cc")
+        self.add(D(2024, 3, 12), -1, source="hsbc")
+        got = spending.window(s=self.s)
+        self.assertEqual((got["start"], got["end"], got["gaps"]), ("2024-03", "2024-03", []))
+        self.assertEqual([(s["source"], s["material"]) for s in got["sources"]],
+                         [("dbs", True), ("cc", True), ("hsbc", False)])
+        self.assertEqual(got["excluded"],
+                         {"before": {"months": 2, "n": 3, "total_sgd": 600.0},
+                          "after": {"months": 1, "n": 2, "total_sgd": 350.0}})
+
+
 if __name__ == "__main__":
     unittest.main()
