@@ -226,9 +226,10 @@ def categories(s=None):
 # filter the caller chooses. This one is a rule the data decides, and the two are not
 # interchangeable — see CONTEXT.md's Spending glossary, which pins both.
 
-#: A source is *material* when its lifetime counted spend is at least this share of all
-#: counted spend. Not a knife-edge on the live ledger: the gap between the last material
-#: source and the first immaterial one is 18x (6.60% vs 0.36%).
+#: A source is *material* when its lifetime *dated* counted spend is at least this share of
+#: all dated counted spend (see `_window_shape` for why the denominator excludes undated
+#: rows). Not a knife-edge on the live ledger: the gap between the last material source and
+#: the first immaterial one is 18x (6.60% vs 0.36%).
 MATERIAL_SHARE = 0.01
 
 
