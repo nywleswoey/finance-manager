@@ -223,8 +223,8 @@ class TestWindowShape(unittest.TestCase):
 
     def cover(self, *rows):
         """coverage rows: (source, first_txn, last_txn, total_sgd)."""
-        return [{"source": s, "first_txn": f, "last_txn": l, "total_sgd": v}
-                for s, f, l, v in rows]
+        return [{"source": src, "first_txn": first, "last_txn": last, "total_sgd": v}
+                for src, first, last, v in rows]
 
     def seen(self, *rows):
         """presence rows: (ym, source, n, v)."""
