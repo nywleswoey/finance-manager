@@ -106,6 +106,21 @@ class FxAndCreateTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             nw.rate_for(self.s, "EUR", dt.date(2026, 6, 1))
 
+    def test_fx_row_for_returns_the_row_rate_for_reads(self):
+        """`rate_for` answers "what rate", `fx_row_for` answers "from which row" — one freeze
+        rule, two callers. Promotion needs the row (to carry it to a store that lacks it);
+        `rate_for` needs only the number."""
+        row = nw.fx_row_for(self.s, "USD", dt.date(2026, 6, 20))
+        self.assertEqual(row.date, dt.date(2026, 6, 15))
+        self.assertEqual(Decimal(str(row.rate_to_sgd)),
+                         nw.rate_for(self.s, "USD", dt.date(2026, 6, 20)))
+
+    def test_fx_row_for_returns_none_rather_than_raising(self):
+        """The difference that stops promotion reusing `rate_for` directly: an integrity check
+        needs to *report* a missing rate across every currency, not abort on the first one."""
+        self.assertIsNone(nw.fx_row_for(self.s, "EUR", dt.date(2026, 6, 1)))
+        self.assertIsNone(nw.fx_row_for(self.s, "USD", dt.date(2026, 4, 1)))
+
     def test_create_freezes_and_defaults_missing_to_zero(self):
         d = nw.create_snapshot(dt.date(2026, 6, 20),
                                [{"code": "posb", "native_value": 5000, "currency": "SGD"},

@@ -15,11 +15,11 @@ from __future__ import annotations
 import datetime as dt
 from decimal import Decimal
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .db import session_scope
-from .models import NwItem, NwSnapshot, NwValue
+from .models import FxRate, NwItem, NwSnapshot, NwValue
 
 # Catalogue codes auto-pulled from broker/bank statements (see scripts/snapshot_from_statements.py).
 # Everything else is manual: entered in-app or carried forward. Single source of truth so the UI
@@ -36,17 +36,27 @@ def live_portfolio_sgd(s: Session) -> Decimal:
     return Decimal(str(round(total, 4)))
 
 
+def fx_row_for(s: Session, ccy: str, on_date: dt.date) -> FxRate | None:
+    """The fx_rate row a freeze at `on_date` reads from — newest with date <= on_date, or None.
+
+    The freeze rule itself, held once. `rate_for` wraps it for the "what rate" question and
+    raises on None (BR4); scripts/promote_networth_snapshots.py needs the *row* — to carry it
+    into a store that has no rate that early — and needs to report a miss across every currency
+    rather than abort on the first, so it takes the None. Two callers, one definition of which
+    row wins; a second copy would be free to drift from this one."""
+    return s.execute(select(FxRate).where(FxRate.currency == ccy, FxRate.date <= on_date)
+                     .order_by(FxRate.date.desc()).limit(1)).scalar_one_or_none()
+
+
 def rate_for(s: Session, ccy: str, on_date: dt.date) -> Decimal:
     """Frozen FX: 1 for SGD; else latest fx_rate.rate_to_sgd with date <= on_date.
     Raises ValueError when no rate exists (BR4 — no silent fallback)."""
     if ccy == "SGD":
         return Decimal(1)
-    r = s.execute(text(
-        "SELECT rate_to_sgd FROM fx_rate WHERE currency = :c AND date <= :d "
-        "ORDER BY date DESC LIMIT 1"), {"c": ccy, "d": on_date}).scalar()
-    if r is None:
+    row = fx_row_for(s, ccy, on_date)
+    if row is None:
         raise ValueError(f"no FX rate for {ccy} on or before {on_date}")
-    return Decimal(str(r))
+    return Decimal(str(row.rate_to_sgd))
 
 
 def _active_items(s: Session) -> tuple[dict, dict]:
