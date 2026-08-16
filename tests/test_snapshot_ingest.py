@@ -86,7 +86,9 @@ class PlanReachesTheColumnTest(unittest.TestCase):
         self.s.execute(text("INSERT INTO fx_rate(date, currency, rate_to_sgd) VALUES "
                             "('2026-06-01','USD',1.30)"))
         self.s.commit()
+        original_live_portfolio_by_bucket = nw.live_portfolio_by_bucket
         nw.live_portfolio_by_bucket = lambda s: {b: Decimal("0") for b in nw.FUNDING_BUCKETS}
+        self.addCleanup(setattr, nw, 'live_portfolio_by_bucket', original_live_portfolio_by_bucket)
 
     def tearDown(self):
         self.s.close()

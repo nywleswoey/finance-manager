@@ -104,7 +104,9 @@ class FxAndCreateTest(unittest.TestCase):
         self.s.execute(text("INSERT INTO fx_rate(date, currency, rate_to_sgd) VALUES "
                             "('2026-05-01','USD',1.33),('2026-06-15','USD',1.36)"))
         self.s.commit()
+        original_live_portfolio_by_bucket = nw.live_portfolio_by_bucket
         nw.live_portfolio_by_bucket = _no_portfolio      # avoid heavy compute()
+        self.addCleanup(setattr, nw, 'live_portfolio_by_bucket', original_live_portfolio_by_bucket)
 
     def test_rate_sgd_is_one(self):
         self.assertEqual(nw.rate_for(self.s, "SGD", dt.date(2026, 6, 1)), Decimal(1))
@@ -265,7 +267,9 @@ class TestEmptyCatalogue(unittest.TestCase):
 
     def setUp(self):
         self.s = make_session()          # schema only: nw_item deliberately left empty
+        original_live_portfolio_by_bucket = nw.live_portfolio_by_bucket
         nw.live_portfolio_by_bucket = _no_portfolio
+        self.addCleanup(setattr, nw, 'live_portfolio_by_bucket', original_live_portfolio_by_bucket)
 
     def tearDown(self):
         self.s.close()
@@ -297,7 +301,9 @@ class SourceTest(unittest.TestCase):
         self.s.execute(text("INSERT INTO fx_rate(date, currency, rate_to_sgd) VALUES "
                             "('2026-06-01','USD',1.30)"))
         self.s.commit()
+        original_live_portfolio_by_bucket = nw.live_portfolio_by_bucket
         nw.live_portfolio_by_bucket = _no_portfolio
+        self.addCleanup(setattr, nw, 'live_portfolio_by_bucket', original_live_portfolio_by_bucket)
 
     def tearDown(self):
         self.s.close()
@@ -384,7 +390,9 @@ class PortfolioBucketsTest(unittest.TestCase):
         self.s.commit()
         self.split = {"cash": Decimal("700000"), "cpf": Decimal("200000"),
                       "srs": Decimal("129006.95")}
+        original_live_portfolio_by_bucket = nw.live_portfolio_by_bucket
         nw.live_portfolio_by_bucket = lambda s: dict(self.split)
+        self.addCleanup(setattr, nw, 'live_portfolio_by_bucket', original_live_portfolio_by_bucket)
 
     def tearDown(self):
         self.s.close()
@@ -420,7 +428,9 @@ class TestSeededCatalogueStillWorks(unittest.TestCase):
         self.s.execute(text("INSERT INTO fx_rate(date, currency, rate_to_sgd) VALUES "
                             "('2026-07-01','USD',1.28)"))     # tiger_usd is a USD item
         self.s.commit()
+        original_live_portfolio_by_bucket = nw.live_portfolio_by_bucket
         nw.live_portfolio_by_bucket = _no_portfolio
+        self.addCleanup(setattr, nw, 'live_portfolio_by_bucket', original_live_portfolio_by_bucket)
 
     def tearDown(self):
         self.s.close()
