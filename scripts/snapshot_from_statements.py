@@ -11,6 +11,11 @@ Sources (authoritative for the listed nw_item codes):
 All other catalogue items (posb, ibkr_sgd, cpf_*, hdb, home_loan*) are carried
 forward unchanged from the most recent existing snapshot.
 
+Provenance: every written value carries its `nw_value.source` — `statement`, `carried` or
+`default_zero`. This script is the only writer that names one, because it is the only writer
+that *knows*: it decided between the three itself. The snapshot form and the API write NULL,
+because a user leaving an unchanged field alone has confirmed the figure, not carried it.
+
 FX: create_snapshot freezes rate_to_sgd via networth.rate_for(date), which needs an
 fx_rate row dated <= the snapshot date. If none exists for a needed currency, we
 backfill one from the nearest later fx_rate (source='carry-back') so history stays usable.
@@ -137,6 +142,29 @@ def ensure_fx(s, currencies: set[str], on_date: dt.date) -> list[str]:
     return notes
 
 
+def plan_values(items: dict, statement_vals: dict, carry: dict) -> list[dict]:
+    """One entry per active catalogue item: the figure to write and where it came from.
+
+    `source` is a `nw_value.source` value, not display text (networth.VALUE_SOURCES). The script
+    has computed this decision since it was written and used to print it into the dry-run table
+    and drop it — so a committed snapshot could not say which of its numbers a bank had actually
+    reported and which were last month's carried forward untouched. `statement` outranks `carry`
+    for the same item: the statement is the fresher measurement, and recording it as carried
+    would understate what is confirmed."""
+    out = []
+    for code, it in items.items():
+        if code in statement_vals:
+            source, d = "statement", statement_vals[code]
+        elif code in carry:
+            source, d = "carried", carry[code]
+        else:
+            source, d = "default_zero", {"native_value": Decimal(0),
+                                         "currency": it.currency_default or "SGD"}
+        out.append({"code": code, "native_value": d["native_value"],
+                    "currency": d["currency"], "source": source})
+    return out
+
+
 def month_end(yyyymm: str) -> dt.date:
     y, m = int(yyyymm[:4]), int(yyyymm[4:6])
     return dt.date(y, m, calendar.monthrange(y, m)[1])
@@ -178,17 +206,7 @@ def build_snapshot(s, snap_date: dt.date, dbs_path: str, tiger_path: str, commit
                 carry[v.item.code] = {"native_value": v.native_value, "currency": v.currency}
 
     items = {i.code: i for i in s.scalars(select(NwItem).where(NwItem.active)).all()}
-    values = []
-    for code in items:
-        if code in statement_vals:
-            src, d = "statement", statement_vals[code]
-        elif code in carry:
-            src, d = f"carry<-{prev.date}", carry[code]
-        else:
-            src, d = "default 0", {"native_value": Decimal(0),
-                                   "currency": items[code].currency_default or "SGD"}
-        values.append({"code": code, "native_value": d["native_value"],
-                       "currency": d["currency"], "_src": src})
+    values = plan_values(items, statement_vals, carry)
 
     fx_notes = ensure_fx(s, {v["currency"] for v in values}, snap_date)
 
@@ -199,10 +217,14 @@ def build_snapshot(s, snap_date: dt.date, dbs_path: str, tiger_path: str, commit
         print(f"carry-forward base: snapshot {prev.date}")
     for n in fx_notes:
         print(f"  ! {n}")
-    print(f"\n{'code':<18}{'native':>16} {'ccy':<4} {'src'}")
+    print(f"\n{'code':<18}{'native':>16} {'ccy':<4} {'source'}")
     print("-" * 60)
     for v in sorted(values, key=lambda v: items[v["code"]].sort_order):
-        print(f"{v['code']:<18}{float(v['native_value']):>16,.2f} {v['currency']:<4} {v['_src']}")
+        # The column records the provenance; the preview also names *which* snapshot a carry came
+        # from — the one thing a dry-run reader wants that the column deliberately omits. `prev`
+        # is never None here: `carry` is only populated when there is one.
+        src = f"carried <- {prev.date}" if v["source"] == "carried" else v["source"]
+        print(f"{v['code']:<18}{float(v['native_value']):>16,.2f} {v['currency']:<4} {src}")
 
     if not commit:
         print("\nDRY-RUN. Re-run with --commit to write.")
@@ -210,11 +232,10 @@ def build_snapshot(s, snap_date: dt.date, dbs_path: str, tiger_path: str, commit
 
     s.commit()  # persist any fx backfill before create_snapshot opens its own work
     note = f"statements: tiger {os.path.basename(tiger_path)} + dbs {os.path.basename(dbs_path)} (as at {dbs_asat})"
-    res = networth.create_snapshot(
-        snap_date,
-        [{"code": v["code"], "native_value": v["native_value"], "currency": v["currency"]}
-         for v in values],
-        note=note, s=s)
+    # `values` is passed straight through rather than re-projected: the projection that used to
+    # sit here existed only to strip a display-only key, and it is exactly the shape that dropped
+    # the provenance on the floor for as long as this script has run.
+    res = networth.create_snapshot(snap_date, values, note=note, s=s)
     print("\nCOMMITTED. Snapshot metrics:")
     for k in ("net_worth", "total_assets", "total_liabilities", "liquid_assets",
               "net_worth_excl_housing", "net_worth_excl_housing_cpf", "portfolio_value_sgd"):

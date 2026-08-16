@@ -122,4 +122,14 @@ _Avoid_: balance, statement
 
 **Catalogue**:
 The single source of truth for which net-worth line items exist and whether each is auto-pulled
-from statements or entered manually.
+from statements or entered manually. Its flags reach **line items only** — the frozen portfolio
+value is not a catalogue row — so every flag-excluding metric excludes only the catalogue side of
+what its name implies.
+
+**Band**:
+The partition of the catalogue the composition chart stacks — derived from the item flags by
+precedence (`is_housing` → `is_cpf` → `is_liquid` → else), never stored. A stored band column
+would be a fourth grouping free to disagree with the three that exist. Four values — `housing`,
+`cpf`, `cash`, `srs` — plus a synthetic `portfolio` that is not a catalogue item at all and is
+synthesised from the snapshot's frozen portfolio value.
+_Avoid_: group (frontend form furniture, deleted), category (that is spending's)

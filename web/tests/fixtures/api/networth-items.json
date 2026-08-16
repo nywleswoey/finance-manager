@@ -8,6 +8,7 @@
   "is_liquid": true,
   "is_housing": false,
   "is_cpf": false,
+  "band": "cash",
   "sort_order": 0,
   "is_manual": true
  },
@@ -20,6 +21,7 @@
   "is_liquid": true,
   "is_housing": false,
   "is_cpf": false,
+  "band": "cash",
   "sort_order": 1,
   "is_manual": false
  },
@@ -32,6 +34,7 @@
   "is_liquid": false,
   "is_housing": false,
   "is_cpf": false,
+  "band": "srs",
   "sort_order": 2,
   "is_manual": false
  },
@@ -44,6 +47,7 @@
   "is_liquid": true,
   "is_housing": false,
   "is_cpf": false,
+  "band": "cash",
   "sort_order": 3,
   "is_manual": false
  },
@@ -56,6 +60,7 @@
   "is_liquid": true,
   "is_housing": false,
   "is_cpf": false,
+  "band": "cash",
   "sort_order": 4,
   "is_manual": false
  },
@@ -68,6 +73,7 @@
   "is_liquid": true,
   "is_housing": false,
   "is_cpf": false,
+  "band": "cash",
   "sort_order": 5,
   "is_manual": false
  },
@@ -80,6 +86,7 @@
   "is_liquid": true,
   "is_housing": false,
   "is_cpf": false,
+  "band": "cash",
   "sort_order": 6,
   "is_manual": false
  },
@@ -92,6 +99,7 @@
   "is_liquid": true,
   "is_housing": false,
   "is_cpf": false,
+  "band": "cash",
   "sort_order": 7,
   "is_manual": true
  },
@@ -104,6 +112,7 @@
   "is_liquid": false,
   "is_housing": false,
   "is_cpf": true,
+  "band": "cpf",
   "sort_order": 8,
   "is_manual": true
  },
@@ -116,6 +125,7 @@
   "is_liquid": false,
   "is_housing": false,
   "is_cpf": true,
+  "band": "cpf",
   "sort_order": 9,
   "is_manual": true
  },
@@ -128,6 +138,7 @@
   "is_liquid": false,
   "is_housing": false,
   "is_cpf": true,
+  "band": "cpf",
   "sort_order": 10,
   "is_manual": true
  },
@@ -140,6 +151,7 @@
   "is_liquid": false,
   "is_housing": true,
   "is_cpf": false,
+  "band": "housing",
   "sort_order": 11,
   "is_manual": true
  },
@@ -152,6 +164,7 @@
   "is_liquid": false,
   "is_housing": true,
   "is_cpf": false,
+  "band": "housing",
   "sort_order": 12,
   "is_manual": true
  },
@@ -164,6 +177,7 @@
   "is_liquid": false,
   "is_housing": true,
   "is_cpf": false,
+  "band": "housing",
   "sort_order": 13,
   "is_manual": true
  }

@@ -227,6 +227,54 @@ class ApplyTest(Stores):
         self.assertEqual(self.promoted("2026-06-21").portfolio_value_sgd, Decimal("1029006.9500"))
         self.assertEqual(self.promoted("2026-06-30").portfolio_value_sgd, Decimal("1117722.2500"))
 
+    def test_write_path_provenance_is_carried_rather_than_re_derived(self):
+        """`nw_value.source` is the field a copy is most tempted to recompute: every value
+        promotion writes was supplied to it, so re-deriving would stamp them all NULL and lose
+        exactly the `default_zero` marks that say a payload was dropped."""
+        snap = self.src.scalar(select(NwSnapshot).where(NwSnapshot.date == dt.date(2026, 6, 21)))
+        for v in snap.values:
+            v.source = {"tiger_usd": "statement", "cpf_oa": "default_zero"}.get(v.item.code)
+        self.src.commit()
+        self.apply()
+        got = {v.item.code: v.source for v in self.promoted("2026-06-21").values}
+        self.assertEqual(got["tiger_usd"], "statement")
+        self.assertEqual(got["cpf_oa"], "default_zero")
+        self.assertIsNone(got["posb"])            # NULL is a value too, and it travels as one
+
+    def test_the_portfolio_bucket_split_is_carried_including_its_nulls(self):
+        """The buckets are frozen money like the total. Carrying the NULL matters as much as
+        carrying a figure: a snapshot captured before the columns existed has no split to
+        recover, and a target that filled one in would be inventing history."""
+        snap = self.src.scalar(select(NwSnapshot).where(NwSnapshot.date == dt.date(2026, 6, 21)))
+        snap.portfolio_cash_sgd = Decimal("700000.1234")
+        snap.portfolio_cpf_sgd = Decimal("200000.5678")
+        snap.portfolio_srs_sgd = Decimal("129006.2588")
+        self.src.commit()
+        self.apply()
+        got = self.promoted("2026-06-21")
+        self.assertEqual(got.portfolio_cash_sgd, Decimal("700000.1234"))
+        self.assertEqual(got.portfolio_cpf_sgd, Decimal("200000.5678"))
+        self.assertEqual(got.portfolio_srs_sgd, Decimal("129006.2588"))
+        # 06-30 was captured with no split at all; it must arrive with none.
+        older = self.promoted("2026-06-30")
+        self.assertIsNone(older.portfolio_cash_sgd)
+        self.assertIsNone(older.portfolio_cpf_sgd)
+        self.assertIsNone(older.portfolio_srs_sgd)
+
+    def test_a_readback_catches_a_dropped_source_or_bucket(self):
+        """The check that would have failed before the copy carried them: `frozen_money_diff`
+        compares every field in VALUE_FIELDS / SNAPSHOT_FIELDS, so a promotion that stopped
+        carrying either one is a reported problem rather than a silent loss."""
+        self.apply()
+        self.assertEqual(promote.frozen_money_diff(self.src, self.tgt), [])
+        got = [v for v in self.promoted("2026-06-21").values if v.item.code == "tiger_usd"][0]
+        got.source = "carried"                    # as if the copy had re-derived it
+        self.promoted("2026-06-21").portfolio_cash_sgd = Decimal("1")
+        self.tgt.commit()
+        problems = promote.frozen_money_diff(self.src, self.tgt)
+        self.assertTrue(any("source" in p for p in problems), problems)
+        self.assertTrue(any("portfolio_cash_sgd" in p for p in problems), problems)
+
     def test_items_are_matched_by_code_not_by_id(self):
         """The two stores are seeded on different id sequences. A copy that carried `item_id`
         across would land every value on the wrong band, or on no item at all."""
