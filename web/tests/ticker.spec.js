@@ -33,8 +33,11 @@ const byTicker = (positions) => {
 
 const holdingsCard = (page) => page.locator(".card").filter({ hasText: /^Holdings/ });
 const groupBy = (page) => holdingsCard(page).locator("select").first();
-const rowFor = (page, ticker) =>
-  page.locator(".pinned tbody tr").filter({ has: page.locator(`.pill`, { hasText: new RegExp(`^${ticker}$`) }) });
+const rowFor = (page, ticker) => {
+  // Escape regex metacharacters so tickers like BRK.B match exactly
+  const escaped = ticker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return page.locator(".pinned tbody tr").filter({ has: page.locator(`.pill`, { hasText: new RegExp(`^${escaped}$`) }) });
+};
 
 test.beforeEach(async ({ page, baseURL }) => {
   await mockApi(page, baseURL);
@@ -102,5 +105,58 @@ test("P/L folds what each leg would have shown, not the raw field", async ({ pag
     expect.soft(expected).not.toBeCloseTo(openOnly, 0);
     expect.soft(await cell.innerText()).toBe(`S$${Math.round(expected).toLocaleString("en-US")}`);
     await expect.soft(cell).toHaveAttribute("title", /realised .* closed .* unrealised .* open/);
+  }
+});
+
+test("Net folds cost-known constituents while remaining partial when any leg lacks cost", async ({ page }) => {
+  await page.getByLabel("Show closed positions").check();
+  await groupBy(page).selectOption("ticker");
+
+  // Find tickers with mixed cost_known values (some legs cost_known, some not)
+  const mixedCost = [...byTicker(closedFixture.positions)]
+    .filter(([, rs]) => rs.length > 1 && rs.some((r) => r.cost_known) && rs.some((r) => !r.cost_known));
+
+  // If no fixture has mixed cost, create a synthetic expectation based on the fold logic
+  if (mixedCost.length === 0) {
+    // Test the logic by checking any multi-leg ticker where we can verify partial state
+    const anyMulti = [...byTicker(closedFixture.positions)].filter(([, rs]) => rs.length > 1);
+    expect(anyMulti.length).toBeGreaterThan(0);
+
+    for (const [ticker, legs] of anyMulti) {
+      const netCell = rowFor(page, ticker).locator("td").nth(11);
+      const hasPartial = legs.some((r) => !r.cost_known);
+
+      // Expected net: sum pl_sgd from cost_known legs, income_sgd from others, plus options
+      const expectedNet = legs.reduce((a, r) => {
+        const opt = r.options_pl_sgd || 0;
+        if (r.cost_known && r.pl_sgd != null) return a + r.pl_sgd + opt;
+        return a + (r.income_sgd || 0) + opt;
+      }, 0);
+
+      const cellText = await netCell.innerText();
+      // Net cell shows value, and ~ suffix if partial
+      expect.soft(cellText).toContain(`S$${Math.round(expectedNet).toLocaleString("en-US")}`);
+      if (hasPartial) {
+        expect.soft(cellText).toContain("~");
+      }
+    }
+  } else {
+    for (const [ticker, legs] of mixedCost) {
+      const netCell = rowFor(page, ticker).locator("td").nth(11);
+
+      // Expected net: sum pl_sgd from cost_known legs, income_sgd from cost-unknown legs, plus all options
+      const expectedNet = legs.reduce((a, r) => {
+        const opt = r.options_pl_sgd || 0;
+        if (r.cost_known && r.pl_sgd != null) return a + r.pl_sgd + opt;
+        return a + (r.income_sgd || 0) + opt;
+      }, 0);
+
+      const cellText = await netCell.innerText();
+      // Net should sum all cost-known P/L values, not drop them
+      expect.soft(cellText).toContain(`S$${Math.round(expectedNet).toLocaleString("en-US")}`);
+      // But still be marked partial because some legs lack cost
+      expect.soft(cellText).toContain("~");
+      await expect.soft(netCell.locator("span[title]")).toHaveAttribute("title", /cost basis unknown/);
+    }
   }
 });

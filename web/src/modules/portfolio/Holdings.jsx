@@ -49,6 +49,8 @@ const plOf = (r) => (r.pl_folded !== undefined ? r.pl_folded : plBase(r));
 // known cash streams (dividends + premiums) and is flagged partial.
 const netOf = (r) => {
   const opt = r.options_pl_sgd || 0;
+  // consolidated rows carry folded Net and partial state; use those first
+  if (r.net_folded !== undefined) return { net: r.net_folded + opt, partial: r.net_partial };
   if (r.cost_known && r.pl_sgd != null) return { net: r.pl_sgd + opt, partial: false };
   return { net: (r.income_sgd || 0) + opt, partial: true };
 };
@@ -100,6 +102,14 @@ function mergeTicker(rows) {
   // cost is fully known only if every part's is; this drives `netOf`'s partial flag, so a merge
   // that swallows a cost-unknown leg is marked `~` rather than quietly reported as complete.
   const costKnown = rs.every((r) => r.cost_known);
+  // Fold each constituent's Net value, summing only from cost-known legs; partial if ANY leg
+  // lacks cost. This preserves the per-constituent Net calculation that would otherwise be lost
+  // when netOf sees a consolidated row's cost_known=false (because one leg was cost-unknown).
+  const netFolded = rs.reduce((a, r) => {
+    if (r.cost_known && r.pl_sgd != null) return a + r.pl_sgd;
+    return a + (r.income_sgd || 0);
+  }, 0);
+  const netPartial = rs.some((r) => !r.cost_known);
   return {
     ...first,
     // `bucket` stays a single value: it is the drill target, and `/api/holding` takes one bucket.
@@ -118,6 +128,8 @@ function mergeTicker(rows) {
     realised_pl_sgd: sumOrNull(rs, (r) => r.realised_pl_sgd),
     pl_sgd: costKnown ? sumOrNull(rs, (r) => r.pl_sgd) : null,
     cost_known: costKnown,
+    net_folded: netFolded,                                   // folded Net for netOf to consume
+    net_partial: netPartial,                                 // whether any leg is partial
     uncosted_units: sumOf(rs, (r) => r.uncosted_units),
     mv_native: sumOf(rs, (r) => r.mv_native),
     mv_sgd: sumOf(rs, (r) => r.mv_sgd),
