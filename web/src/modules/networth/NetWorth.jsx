@@ -66,10 +66,10 @@ export default function NetWorth() {
 const CARDS = [
   ["Total Assets", "total_assets"],
   ["Total Liabilities", "total_liabilities"],
-  ["Liquid Assets", "liquid_assets"],
+  ["Spendable Cash", "liquid_assets"],
   ["Net Worth", "net_worth"],
   ["Net Worth excl. Housing", "net_worth_excl_housing"],
-  ["Net Worth excl. Housing & CPF", "net_worth_excl_housing_cpf"],
+  ["Net Worth excl. Housing & CPF Cash", "net_worth_excl_housing_cpf"],
 ];
 
 function SummaryCards({ m }) {
@@ -308,7 +308,7 @@ function History({ snaps, onSelect, onDelete }) {
             <tr>
               <th style={{ textAlign: "left" }}>Date</th>
               <th>Total Assets</th><th>Total Liab</th><th>Net Worth</th>
-              <th>Excl. Housing</th><th>Excl. Hou+CPF</th><th></th>
+              <th>Excl. Housing</th><th>Excl. Hou+CPF Cash</th><th></th>
             </tr>
           </thead>
           <tbody>
