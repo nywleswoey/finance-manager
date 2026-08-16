@@ -101,6 +101,44 @@ test("both multi-series charts carry a DOM key", () => {
   expect(keyed, "a multi-series chart with no key is anonymous on touch").toEqual(wanted);
 });
 
+test("no spending surface indexes the positional palette", () => {
+  // `POSITIONAL_COLOURS` is an ordered array, so reading it is reading a *position*. The
+  // donut's list, the monthly stacked bar and the by-category row markers each indexed it
+  // with their own `i` — and those three orders are three different sorts of the same four
+  // names (spend descending, alphabetical, and this-year's spend descending), which is how
+  // Personal came out blue in one card and green in the next one down.
+  //
+  // The array itself stays: the portfolio donut slices by market and by account, which is
+  // not a taxonomy anything can key a map on. What is forbidden is a *second* consumer, and
+  // the file that owns the donut is the only one allowed to be it.
+  //
+  // Comments stripped, like its siblings above — `charts.jsx` and both spending views
+  // explain at length what they used to index and why they no longer do.
+  const importers = sourceFiles(path.join(WEB, "src"))
+    .filter((f) => /\bPOSITIONAL_COLOURS\b/.test(stripComments(fs.readFileSync(f, "utf8"))))
+    .map((f) => path.relative(WEB, f))
+    .sort();
+  expect(importers, "colour by name — `categoryColour` / `BAND_COLOURS` in `palette.js`")
+    .toEqual(["src/charts.jsx", "src/palette.js"]);
+});
+
+test("the two colour maps agree about Housing", async () => {
+  // THE COUPLING IS DELIBERATE AND THIS IS WHERE IT IS ENFORCED. Spend Housing holds
+  // Mortgage, Property Taxes and Utilities — the running cost of the same HDB whose equity
+  // is the net-worth Housing band — so the two maps name one thing and share its colour.
+  // Not a homonym, and so not something to break apart when one map is recoloured.
+  //
+  // A test rather than only a comment because the two maps are read by different views and
+  // nothing renders them side by side: recolour one and no viewport in this suite would
+  // look wrong. If a future decision genuinely decouples them, this is the file that has to
+  // be edited to say so — which is the whole point, since editing it means having looked at
+  // the other map.
+  const { CATEGORY_COLOURS, BAND_COLOURS } = await import("../src/palette.js");
+  expect(CATEGORY_COLOURS.Housing,
+    "a recolour of either map must check the other — see `palette.js`")
+    .toBe(BAND_COLOURS.housing);
+});
+
 test("`640` is written in exactly four places", () => {
   // The stylesheet, the suite, `Holdings.jsx`'s read-at-mount and `cards.jsx`'s `usePhone` —
   // no build step makes a single source of truth possible, so what is left is counting them

@@ -2,20 +2,23 @@ import React from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
 import { sgd, fmt } from "./api.js";
 import { usePhone } from "./cards.jsx";
+import { POSITIONAL_COLOURS } from "./palette.js";
 
 /**
- * The one donut in the app, and the palette behind it.
+ * The one donut in the app.
  *
  * It lives beside `api.js` rather than under a module because both sections draw it:
  * `portfolio/Overview` carried a hand-copied duplicate with its own 7-colour palette, so
- * every chart change had to land twice across four call sites. The 8-entry palette is the
- * one kept — the two only differ once a donut has 8+ slices, where the 7-entry one wraps
- * back to blue. The palette also colours the spending Overview stacked bars and the By
- * Category row markers, so every chart in the app stays on one colour order.
+ * every chart change had to land twice across four call sites.
+ *
+ * `colourOf` IS HOW THE TWO KINDS OF CALLER DIFFER, and it is the whole of what this donut
+ * knows about colour. The spending call sites pass `categoryColour` and get a name-keyed
+ * map; the portfolio ones pass nothing and fall back to `POSITIONAL_COLOURS` by slice
+ * position, which is all a slicing by market or by account can do — those are not a
+ * taxonomy. See `palette.js`: the fallback is the *only* surviving positional read, and one
+ * that no spending surface may reach.
  */
-export const COLORS = ["#388bfd", "#2ea043", "#d29922", "#8957e5", "#f85149", "#39c5cf", "#db61a2", "#6e7681"];
-
-export function Donut({ title, data }) {
+export function Donut({ title, data, colourOf }) {
   // Descending, internally, with no `sort` prop: `portfolio/spending.py:58` is
   // `ORDER BY v DESC`, so the spending call sites already arrive sorted and both depend on
   // it (`groups[0]` is their "Top Category" tile) — sorting again is a no-op there and
@@ -43,6 +46,11 @@ export function Donut({ title, data }) {
    * four sites.
    */
   const phone = usePhone();
+  // Named once, read twice — the ring and the list beneath it are one chart at every width
+  // and the same slice cannot take two colours. Below 640 the list IS the chart, so this is
+  // the only one of the two that always runs.
+  const colour = (row, i) =>
+    (colourOf ? colourOf(row.name) : POSITIONAL_COLOURS[i % POSITIONAL_COLOURS.length]);
   return (
     <div className="card">
       <h3>{title}</h3>
@@ -50,7 +58,7 @@ export function Donut({ title, data }) {
         <ResponsiveContainer width="100%" height={240}>
           <PieChart>
             <Pie data={rows} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>
-              {rows.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+              {rows.map((row, i) => <Cell key={i} fill={colour(row, i)} />)}
             </Pie>
             <Tooltip formatter={(v) => sgd(v)} contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }} itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
           </PieChart>
@@ -66,13 +74,13 @@ export function Donut({ title, data }) {
       <div className="donutlist">
         {rows.map((x, i) => {
           const share = total ? (x.value / total) * 100 : 0;
-          const colour = COLORS[i % COLORS.length];
+          const fill = colour(x, i);
           return (
             <div className="barrow" key={x.name}>
               {/* The track is the row: a percentage width behind the text, so it stays
                   proportional at any card width. The 220px constant it replaces did not. */}
-              <span className="barfill" style={{ width: share + "%", background: colour }} />
-              <span className="chip" style={{ background: colour }} />
+              <span className="barfill" style={{ width: share + "%", background: fill }} />
+              <span className="chip" style={{ background: fill }} />
               <span className="nm">{x.name}</span>
               <span className="val">{sgd(x.value)} · {fmt(share, 0)}%</span>
             </div>

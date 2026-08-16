@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { get, sgd, fmt, catName } from "../../api.js";
-import { COLORS, Donut } from "../../charts.jsx";
+import { Donut } from "../../charts.jsx";
+import { categoryColour } from "../../palette.js";
 import { CardGroup, Cards, RowCard, usePhone } from "../../cards.jsx";
 
 // Expenses for a single calendar year, broken down by category. The year selector loads that
@@ -153,7 +154,7 @@ export default function SpendByCategory() {
             <Tile lbl="Transactions" val={count} />
           </div>
           <div className="grid2">
-            <Donut title={`By Category · ${year}`} data={groups} />
+            <Donut title={`By Category · ${year}`} data={groups} colourOf={categoryColour} />
             <div className="card">
               <h3>Categories</h3>
               {/* Levels one and two, read through the pinned pattern below 1024px: the name
@@ -164,7 +165,7 @@ export default function SpendByCategory() {
                 <table>
                   <thead><tr><th className="l">Category</th><th>Spend</th><th>%</th><th>Txns</th></tr></thead>
                   <tbody>
-                    {groups.map((g, i) => (
+                    {groups.map((g) => (
                       <React.Fragment key={g.name}>
                         {/* `rowtap`, not `rowlink`. Both take the same `:active` flash, and
                             only `rowlink` grows the persistent `›` in the pinned cell — which
@@ -174,7 +175,12 @@ export default function SpendByCategory() {
                         <tr className={g.cat ? "rowtap" : undefined}
                             onClick={() => g.cat && toggle(g.cat)} style={{ cursor: g.cat ? "pointer" : "default" }}>
                           <td className="l">
-                            <span style={{ color: COLORS[i % COLORS.length] }}>{g.cat ? (open === g.cat ? "▾" : "▸") : "·"}</span> {g.name}
+                            {/* Keyed on `g.name` and not on the row's index. This table's
+                                order is this *year's* spend descending — a third order
+                                again, different from the donut beside it in a year where
+                                two categories swap rank, and different from the stacked
+                                bar's alphabetical one on the other view. */}
+                            <span style={{ color: categoryColour(g.name) }}>{g.cat ? (open === g.cat ? "▾" : "▸") : "·"}</span> {g.name}
                           </td>
                           <td>{sgd(g.value)}</td>
                           <td className="mut">{fmt((g.value / total) * 100, 1)}%</td>

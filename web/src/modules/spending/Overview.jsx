@@ -4,7 +4,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { get, sgd, fmt, catName } from "../../api.js";
-import { COLORS, ChartKey, Donut } from "../../charts.jsx";
+import { ChartKey, Donut } from "../../charts.jsx";
+import { categoryColour } from "../../palette.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
 export default function SpendOverview() {
@@ -35,7 +36,11 @@ export default function SpendOverview() {
         <Tile lbl="Months Tracked" val={sum.months} />
       </div>
       <div className="grid2">
-        <Donut title="Spending by Category" data={groups} />
+        {/* THE TWO CHARTS ON THIS PAGE ARE THE REASON THE MAP EXISTS. This donut's data is
+            `by_group`, sorted by spend descending; the stacked bar's series are `groups`,
+            sorted alphabetically. Both used to index one array by their own position, so
+            Personal was blue here and green ~600px further down, in one viewport. */}
+        <Donut title="Spending by Category" data={groups} colourOf={categoryColour} />
         <div className="card">
           {/* The count is in the title because the card list below 640 has no header to
               carry it — see `cards.jsx`. It is the number of rows rendered, which is the
@@ -104,15 +109,17 @@ export default function SpendOverview() {
               <Tooltip formatter={(v) => sgd(v)}
                        contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
                        itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
-              {trend.groups.map((g, i) => (
-                <Bar key={g} dataKey={g} stackId="s" fill={COLORS[i % COLORS.length]} />
+              {trend.groups.map((g) => (
+                <Bar key={g} dataKey={g} stackId="s" fill={categoryColour(g)} />
               ))}
             </BarChart>
           </ResponsiveContainer>
           {/* The `<Legend>` this replaces was inside the chart, so its ~75px came out of the
-              300px plot. Same colours, same order — both read `COLORS[i % COLORS.length]`
-              off the same index, which is what keeps the key honest. */}
-          <ChartKey items={trend.groups.map((g, i) => ({ name: g, colour: COLORS[i % COLORS.length] }))} />
+              300px plot. The key and the bars now agree because both ask the map for the
+              same *name* — they used to agree because both indexed one array at the same
+              `i`, which is a weaker guarantee than it looks: it held between these two and
+              said nothing at all about the donut above, which indexed a different order. */}
+          <ChartKey items={trend.groups.map((g) => ({ name: g, colour: categoryColour(g) }))} />
         </div>
       )}
     </div>
