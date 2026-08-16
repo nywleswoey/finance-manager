@@ -104,6 +104,13 @@ test.describe("the tier's one rule: any table that overflows is pinned", () => {
         // tier measured and rejected: you reach a number and lose the row it belongs to.
         expect.soft(t.pinned,
           `"${t.table}" is contained but not pinned — the tier's rule is pattern A`).toBe(true);
+        if (t.pinnedFirstCell === null) {
+          testInfo.annotations.push({
+            type: "empty-tbody",
+            description: `${viewName} · "${t.table}" has no data rows`,
+          });
+          continue;
+        }
         expect.soft(t.pinnedFirstCell,
           `"${t.table}" has a .pinned wrapper but its identity column is not sticky`)
           .toBe("sticky");
