@@ -37,6 +37,15 @@ export default defineConfig({
     // table inventory, the fixtures' own integrity. They do not depend on a viewport, so
     // running them ten times would only make ten identical failures out of one.
     { name: "inventory", testMatch: /inventory\.spec\.js/ },
+    // Holdings' ticker fold is arithmetic, not layout: a consolidated row is either the right
+    // number or the wrong one, and it is the same number at every width. One viewport, once —
+    // running it ten times would only make ten identical failures out of one, which is the same
+    // reasoning the inventory project is built on.
+    {
+      name: "ticker",
+      testMatch: /ticker\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
       testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts|editors|tablet|tap)\.spec\.js/,

@@ -178,6 +178,20 @@ does not exist on touch, so a gate on the five that existed would not stop a six
 reach: `MatchTable` renders only after a POST the GET-captured fixtures do not carry, and that gap is
 annotated on every run.
 
+`tests/ticker.spec.js` — Holdings' **Group by: Ticker** fold, and the one spec here whose subject is
+arithmetic rather than layout. A consolidated row folds several positions of one security into one
+row, so it is either the right number or a wrong number rendered beautifully at ten viewports —
+which is why it has a **project of its own at one viewport**, on the same reasoning the inventory
+project runs once. Every expectation is **derived from the fixture**, never written as a literal, so
+recapturing the fixtures cannot quietly turn the gate into a tautology; it also asserts the fixtures
+still *carry* a split and a mixed open/closed split, because both gates are vacuous without one. The
+defect it was written for is the one the responsive suite could never see: the P/L column resolves
+per row — realised when closed, unrealised when open — so folding the raw fields read
+`unrealised_pl_sgd` for a ticker open in one bucket and closed in another and silently dropped the
+closed leg's realised result. What it deliberately does not check is anything responsive; the pin,
+the column count and the row shape stay `pinned.spec.js`'s, because consolidated rows are ordinary
+data rows and inherit those gates already.
+
 `tests/viewports.js` — the ten viewports, declared once. They mirror `RESPONSIVE.md`'s table
 one-for-one and a test fails if the two lists drift apart.
 

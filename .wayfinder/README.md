@@ -1,6 +1,12 @@
-# Wayfinder — local-markdown tracker
+# Wayfinder — local-markdown copies
 
-GitHub Issues is disabled on this repo, so wayfinder maps live here as files.
+**GitHub Issues is the tracker.** It is enabled, and wayfinder uses it: the map *Spending &
+net-worth over time* is issue #74 carrying `wayfinder:map`, its decision tickets are #83–#90 under
+the `wayfinder:*` labels, and the label vocabulary below exists on the repo. This directory holds
+**local copies**, not the canonical record — an earlier version of this file claimed Issues was
+disabled, which was never checkable and is plainly false.
+
+Prefer the tracker. Read a file here as a working copy that may be behind it.
 
 ## Layout
 - `map-<slug>.md` — a **map** (label `wayfinder:map`). The index; loaded once per session.
