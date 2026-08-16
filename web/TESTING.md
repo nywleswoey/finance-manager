@@ -142,11 +142,23 @@ would otherwise pass for the wrong reason. The stacked bar chart used to be the 
 not reach — its fixture was a 500 — so its key was source-grepped in `inventory.spec.js` instead.
 #35 fixed the endpoint, and the key is asserted here now, against the fixture's own `groups` rather
 than a literal: those strings are `<Bar dataKey>`s, so a group that renders under a different name is
-a group whose bar drew nothing. The grep stays for the charts no fixture happens to mount.
+a group whose bar drew nothing. The grep stays for the charts no fixture happens to mount. It also
+carries the **one-palette** gate, which is the key-versus-fill assertion's strict sibling: that one
+compares two surfaces against *each other*, and both used to index one array at the same `i`, so it
+passed by construction while the donut two cards up — indexing a differently sorted payload — coloured
+Personal a different colour in the same viewport. The palette gate compares every spending surface
+against the map declared in `src/palette.js`, which it **imports rather than restates**: a table of
+hexes in the suite is a second palette, and the drift it would be blind to is the one it exists to
+catch.
 
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no chart renders a `<Legend>` and that both multi-series charts
-carry a `<ChartKey>`, that `640` is a literal in exactly four files **and that the two JavaScript
+carry a `<ChartKey>`, that **no spending surface mentions the `POSITIONAL_COLOURS` array** — only
+`palette.js`, which declares it, and `charts.jsx`, whose portfolio donut slices by market and by
+account and so has no taxonomy to key a map on — and that **the two colour maps agree about
+Housing**, which is a deliberate coupling (spend Housing is the running cost of the same HDB whose
+equity is the net-worth Housing band) that nothing renders side by side, so no viewport would look
+wrong if one map drifted, that `640` is a literal in exactly four files **and that the two JavaScript
 media queries say character for character what the stylesheet says** — counting the sites is not
 checking they agree, and `(max-width: 640px)` would keep the count at four while moving the tier into
 a 1px dead zone — that **no `vh` unit** survives under `web/src` — widened from `100vh` when the rule modal's `6vh`/`84vh` became `svh`, since `\dvh` does not match `100svh` and so does not catch the unit that is correct — the viewport meta's `viewport-fit=cover`,

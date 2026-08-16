@@ -31,6 +31,10 @@ import { expect, test } from "@playwright/test";
 import { PHONE_TIER_BELOW, VIEWPORTS } from "./viewports.js";
 import { openView } from "./support/app.js";
 import { readFixture } from "./fixtures/index.js";
+// The declared map itself, not a copy of it — see the `one palette` describe below for why
+// a table of hexes in this file would be the defect rather than the gate. `palette.js` is
+// plain data with no React or recharts import, which is what makes it importable here.
+import { categoryColour } from "../src/palette.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
 
@@ -192,6 +196,110 @@ test.describe("every chart", () => {
         return rect ? getComputedStyle(rect).fill : null;
       }));
     expect.soft(stackedChips, "the key's chips do not match the bars they name").toEqual(perSeries);
+  });
+});
+
+test.describe("one palette", () => {
+  /**
+   * A category keeps one colour on every spending surface.
+   *
+   * The gate above this one is weaker than it reads: it compares the key against the bars,
+   * and both of those used to read `COLORS[i % COLORS.length]` off the *same* index, so it
+   * passed by construction and would have gone on passing while the donut two cards up
+   * coloured Personal blue and the bar chart coloured it green — which is what shipped. What
+   * makes a positional palette wrong is that two surfaces index it with two different `i`:
+   * `by_group` arrives sorted by spend and `groups` arrives sorted alphabetically, so the
+   * same four names take two different orders in one viewport.
+   *
+   * So this compares every surface against the **declared map** rather than against each
+   * other. Imported from the source rather than restated here: a literal table of four hexes
+   * in the suite is a second palette, and the failure it would then be blind to is precisely
+   * the one it exists to catch.
+   */
+  const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+
+  test("Spending › Overview colours its three surfaces by name", async ({ page, baseURL }) => {
+    await openView(page, baseURL, "Spending › Overview");
+    await barsSettled(page);
+
+    // The donut's list, which below 640 *is* the donut. Read as name→colour pairs rather
+    // than as an ordered array, because the order here is the payload's (descending spend)
+    // and the order in the key below is the payload's too — a different one.
+    const listed = await page.locator(".main .donutlist .barrow").evaluateAll((rows) =>
+      rows.map((row) => ({
+        name: row.querySelector(".nm").textContent,
+        chip: getComputedStyle(row.querySelector(".chip")).backgroundColor,
+        // The percentage track behind the text is the same fact about the row, so it is the
+        // same colour or the row states one category two ways.
+        fill: getComputedStyle(row.querySelector(".barfill")).backgroundColor,
+      })));
+    expect.soft(listed.length, "the donut's list drew no rows").toBeGreaterThan(0);
+    for (const row of listed) {
+      expect.soft(row.chip, `${row.name}: the donut list's chip is off the map`)
+        .toBe(rgb(categoryColour(row.name)));
+      expect.soft(row.fill, `${row.name}: the donut list's track is off the map`)
+        .toBe(rgb(categoryColour(row.name)));
+    }
+
+    // The stacked bar's key and its bars, each against the map — not against each other.
+    //
+    // COUNTED AGAINST THE FIXTURE FIRST, and that guard is not ceremony: the whole chart is
+    // behind `trend && trend.series.length > 0`, and the fetch's `.catch` sets `groups: []`,
+    // so a trends call that failed the way it failed for the whole of #35 would leave both
+    // loops below iterating nothing and reporting green. The count comes from the payload's
+    // own `groups` for the same reason the key's text does one test up — those strings are
+    // the `<Bar dataKey>`s.
+    const key = page.locator(".main .chartkey");
+    const named = await key.locator(".ck-item").evaluateAll((items) =>
+      items.map((el) => ({
+        name: el.textContent,
+        chip: getComputedStyle(el.querySelector(".chip")).backgroundColor,
+      })));
+    expect.soft(named.length, "the stacked bar's key drew nothing — did its fixture 500?")
+      .toBe(readFixture("spending-trends.json").groups.length);
+    for (const item of named) {
+      expect.soft(item.chip, `${item.name}: the key's chip is off the map`)
+        .toBe(rgb(categoryColour(item.name)));
+    }
+    const fills = await page.locator(".main .recharts-bar").evaluateAll((series) =>
+      series.map((el) => {
+        const rect = el.querySelector(".recharts-bar-rectangle path");
+        return rect ? getComputedStyle(rect).fill : null;
+      }));
+    expect.soft(fills, "one bar series per key item").toHaveLength(named.length);
+    for (const [i, fill] of fills.entries()) {
+      expect.soft(fill, `${named[i].name}: the bar fill is off the map`)
+        .toBe(rgb(categoryColour(named[i].name)));
+    }
+  });
+
+  test("Spending › By Category colours its row markers by name", async ({ page, baseURL }) => {
+    // The third spending surface, and the one that was hardest to see going wrong: the
+    // marker is a 9px glyph in a table cell, on a different view from the two above, so no
+    // viewport ever showed it disagreeing with them. It indexed the shared array by row
+    // position, which is a *third* order again — this view's summary is a different window.
+    await openView(page, baseURL, "Spending › By Category");
+    const marked = await page.locator(".main .pinned tbody tr td.l:first-child")
+      .evaluateAll((cells) => cells.map((cell) => ({
+        name: cell.textContent.replace(/^[▸▾·]\s*/, ""),
+        colour: getComputedStyle(cell.querySelector("span")).color,
+      })));
+    expect.soft(marked.length, "the category table drew no rows").toBeGreaterThan(0);
+    for (const row of marked) {
+      expect.soft(row.colour, `${row.name}: the row marker is off the map`)
+        .toBe(rgb(categoryColour(row.name)));
+    }
+
+    // Same view, same names, the other surface on it.
+    const listed = await page.locator(".main .donutlist .barrow").evaluateAll((rows) =>
+      rows.map((row) => ({
+        name: row.querySelector(".nm").textContent,
+        chip: getComputedStyle(row.querySelector(".chip")).backgroundColor,
+      })));
+    for (const row of listed) {
+      expect.soft(row.chip, `${row.name}: the donut list's chip is off the map`)
+        .toBe(rgb(categoryColour(row.name)));
+    }
   });
 });
 
