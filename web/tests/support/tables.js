@@ -66,8 +66,16 @@ export function tableFacts(page) {
           : null,
         // `:not(.grouprow)` for the reason the stylesheet excludes it: Holdings' group banner
         // is a `colSpan` cell as wide as seven columns and is deliberately not pinned.
+        // When the tbody is empty, querySelector returns null. Using `?? t` as a fallback
+        // measures the <table> element itself (position: static), which makes the sweep
+        // report a false "identity column is not sticky" failure. Return null instead to
+        // signal "no rows to measure" - the caller annotates this as "empty-tbody" rather
+        // than treating it as a pin failure.
         pinnedFirstCell: box
-          ? getComputedStyle(t.querySelector("tbody tr:not(.grouprow) > *") ?? t).position
+          ? (() => {
+              const cell = t.querySelector("tbody tr:not(.grouprow) > *");
+              return cell ? getComputedStyle(cell).position : null;
+            })()
           : null,
       };
     });
