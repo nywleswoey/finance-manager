@@ -352,6 +352,12 @@ class NwSnapshot(Base):
     date: Mapped[dt.date] = mapped_column(Date, unique=True, index=True)
     note: Mapped[str | None] = mapped_column(String(256))
     portfolio_value_sgd: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    # The frozen portfolio's funding-bucket split, stamped at capture beside the total. NULL for
+    # every snapshot taken before the columns existed and never backfilled — a bucket split can
+    # only be recorded live, so inventing one for an old snapshot would be fabricated history.
+    portfolio_cash_sgd: Mapped[Decimal | None] = mapped_column(MONEY)
+    portfolio_cpf_sgd: Mapped[Decimal | None] = mapped_column(MONEY)
+    portfolio_srs_sgd: Mapped[Decimal | None] = mapped_column(MONEY)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     values: Mapped[list[NwValue]] = relationship(back_populates="snapshot", cascade="all, delete-orphan")
@@ -367,6 +373,10 @@ class NwValue(Base):
     currency: Mapped[str] = mapped_column(String(3), default="SGD")
     rate_to_sgd: Mapped[Decimal] = mapped_column(RATE, default=1)
     value_sgd: Mapped[Decimal] = mapped_column(MONEY, default=0)
+    # What the write path knew about where this figure came from: statement | carried |
+    # default_zero, or NULL when the caller asserted nothing (the form and the API always do).
+    # See portfolio.networth.VALUE_SOURCES. Nullable and never backfilled.
+    source: Mapped[str | None] = mapped_column(String(12))
 
     snapshot: Mapped[NwSnapshot] = relationship(back_populates="values")
     item: Mapped[NwItem] = relationship()

@@ -8,11 +8,13 @@ neither environment has ever shown the whole series. This copies the missing sna
 one store holds all five.
 
 **Copy, never recompute.** `networth.create_snapshot` cannot do this job: it stamps *today's*
-`live_portfolio_sgd()` and derives `value_sgd` from native x rate at the target's FX. Both are
-frozen money captured at the snapshot date, and the target store has neither the prices nor the
+`live_portfolio_by_bucket()` and derives `value_sgd` from native x rate at the target's FX. Both
+are frozen money captured at the snapshot date, and the target store has neither the prices nor the
 rates that produced them — recomputing would rewrite history to the value of the day it ran. So
-every one of `native_value`, `currency`, `rate_to_sgd`, `value_sgd`, `portfolio_value_sgd`,
-`note` and `created_at` is carried over verbatim.
+every one of `native_value`, `currency`, `rate_to_sgd`, `value_sgd`, `source`,
+`portfolio_value_sgd`, `portfolio_{cash,cpf,srs}_sgd`, `note` and `created_at` is carried over
+verbatim — including where that value is NULL, which is what the two newest columns hold for
+every snapshot taken before they existed.
 
 Items are matched by **code**, never by id: the two stores keep their own `nw_item` id sequences,
 and a copied `item_id` would land a value on the wrong band or on nothing at all. The catalogues
@@ -169,9 +171,12 @@ def plan(src: Session, tgt: Session) -> list[dict]:
             "note": snap.note,
             "created_at": snap.created_at,
             "portfolio_value_sgd": snap.portfolio_value_sgd,
+            "portfolio_cash_sgd": snap.portfolio_cash_sgd,
+            "portfolio_cpf_sgd": snap.portfolio_cpf_sgd,
+            "portfolio_srs_sgd": snap.portfolio_srs_sgd,
             "values": [{"code": v.item.code, "native_value": v.native_value,
                         "currency": v.currency, "rate_to_sgd": v.rate_to_sgd,
-                        "value_sgd": v.value_sgd}
+                        "value_sgd": v.value_sgd, "source": v.source}
                        for v in sorted(snap.values, key=lambda v: v.item.sort_order)],
             "fx": _fx_rows(src, snap),
         })
@@ -182,10 +187,14 @@ def series_fingerprint(s: Session) -> dict:
     """Every snapshot in a store reduced to a comparable tuple, keyed by date: its id, the frozen
     snapshot fields, and every value row. The `id` is in there deliberately — "renumbered" is one
     of the three things the promotion promises not to do, and it is the one a field-by-field money
-    comparison would miss entirely."""
+    comparison would miss entirely.
+
+    `v.source or ""` only so the tuples stay sortable — Python will not order None against a str.
+    Nothing is lost: "" is not a source any writer produces, so it collides with no real value."""
     return {sn.date: (sn.id, sn.note, sn.portfolio_value_sgd, sn.created_at,
+                      sn.portfolio_cash_sgd, sn.portfolio_cpf_sgd, sn.portfolio_srs_sgd,
                       tuple(sorted((v.item.code, v.native_value, v.currency, v.rate_to_sgd,
-                                    v.value_sgd) for v in sn.values)))
+                                    v.value_sgd, v.source or "") for v in sn.values)))
             for sn in s.scalars(select(NwSnapshot))}
 
 
@@ -217,7 +226,10 @@ def write_snapshots(tgt: Session, rows: list[dict]) -> None:
             tgt.add(FxRate(date=f["date"], currency=f["currency"],
                            rate_to_sgd=f["rate_to_sgd"]))
         snap = NwSnapshot(date=r["date"], note=r["note"],
-                          portfolio_value_sgd=r["portfolio_value_sgd"])
+                          portfolio_value_sgd=r["portfolio_value_sgd"],
+                          portfolio_cash_sgd=r["portfolio_cash_sgd"],
+                          portfolio_cpf_sgd=r["portfolio_cpf_sgd"],
+                          portfolio_srs_sgd=r["portfolio_srs_sgd"])
         if r.get("created_at") is not None:
             # When it was captured, not when it was copied. Guarded rather than assigned blind:
             # the column is NOT NULL with only a server_default, so passing a source NULL
@@ -229,7 +241,8 @@ def write_snapshots(tgt: Session, rows: list[dict]) -> None:
         for v in r["values"]:
             tgt.add(NwValue(snapshot_id=snap.id, item_id=items[v["code"]].id,
                             native_value=v["native_value"], currency=v["currency"],
-                            rate_to_sgd=v["rate_to_sgd"], value_sgd=v["value_sgd"]))
+                            rate_to_sgd=v["rate_to_sgd"], value_sgd=v["value_sgd"],
+                            source=v["source"]))
     tgt.flush()
     drift = fingerprint_drift(before, series_fingerprint(tgt))
     if drift:
@@ -274,11 +287,17 @@ def series_expectation(s: Session, count: int | None = None,
 
 # What must survive the copy untouched, per row. `native_value` and `currency` are here as much
 # as the money is: a rate that round-trips against a rewritten native is still a rewritten value.
-VALUE_FIELDS = ("native_value", "currency", "rate_to_sgd", "value_sgd")
+# `source` is here because it is the one field a copy is *tempted* to recompute: the promoted
+# snapshot's items were all supplied, so re-deriving would stamp them all NULL and lose exactly
+# the `default_zero` marks the composition endpoint reads to find a dropped payload.
+VALUE_FIELDS = ("native_value", "currency", "rate_to_sgd", "value_sgd", "source")
 # `created_at` is here because `apply` carries it deliberately — when the snapshot was captured,
 # not when it was copied. Left out, a snapshot that arrived stamped with the copy time would read
-# back clean and the promotion's "verbatim" claim would go unchecked.
-SNAPSHOT_FIELDS = ("note", "portfolio_value_sgd", "created_at")
+# back clean and the promotion's "verbatim" claim would go unchecked. The portfolio buckets are
+# frozen money like the total, and NULL on every snapshot taken before they existed — carrying
+# the NULL is as much the point as carrying a figure, since the alternative is inventing a split.
+SNAPSHOT_FIELDS = ("note", "portfolio_value_sgd", "created_at",
+                   "portfolio_cash_sgd", "portfolio_cpf_sgd", "portfolio_srs_sgd")
 
 
 def frozen_money_diff(src: Session, tgt: Session) -> list[str]:
