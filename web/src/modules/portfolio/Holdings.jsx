@@ -8,6 +8,7 @@ const GROUPS = {                                   // group key -> label
   market: "Market",
   bucket: "Bucket",
   account: "Account",
+  ticker: "Ticker",
   none: "None (flat)",
 };
 
@@ -32,16 +33,132 @@ const startsCollapsed = () =>
 
 const groupKey = (r, by) =>
   by === "account" ? ((r.accounts || []).join(", ") || "—") : (r[by] || "—");
-const plOf = (r) => (r.status === "closed" ? r.pl_sgd : r.unrealised_pl_sgd);
+// The P/L column means a different field depending on the row: a closed position has realised its
+// result, an open one has not. `plBase` is that per-row choice.
+const plBase = (r) => (r.status === "closed" ? r.pl_sgd : r.unrealised_pl_sgd);
+
+// A consolidated ticker row resolves the choice per *leg* and sums the answers, because a name can
+// be open in one bucket and closed in another — F34 is held in cash and sold out of CPF. Folding
+// the raw fields instead would read `unrealised_pl_sgd` for the whole row and silently drop the
+// closed leg's realised result. This is the rule the group subtotal below already uses on its own
+// members (`a.pl += plOf(r)`); `pl_folded` is how a single row carries the same answer.
+const plOf = (r) => (r.pl_folded !== undefined ? r.pl_folded : plBase(r));
 
 // the verdict: total economic P/L (realised + unrealised + dividends) + option premiums.
 // cost-unknown names (CDP / transferred-in) can't give a true stock P/L → net shows only the
 // known cash streams (dividends + premiums) and is flagged partial.
 const netOf = (r) => {
   const opt = r.options_pl_sgd || 0;
+  // consolidated rows carry folded Net and partial state; use those first
+  if (r.net_folded !== undefined) return { net: r.net_folded + opt, partial: r.net_partial };
   if (r.cost_known && r.pl_sgd != null) return { net: r.pl_sgd + opt, partial: false };
   return { net: (r.income_sgd || 0) + opt, partial: true };
 };
+
+/**
+ * Ticker mode: fold the positions of one security into the row a reader means by "how much
+ * D05 do I own".
+ *
+ * A row everywhere else in this table is a **position** — `(funding bucket, security)`, the key
+ * `CONTEXT.md` chose on purpose so a transfer inside a bucket keeps one cost history. That key is
+ * also why a name held in two buckets is two rows that never add up on screen: D05 is 3080 units
+ * of cash and 1210 of CPF, and nothing in the view states 4290. This fold is the only place that
+ * answers it, and it is **render-time only** — nothing here is stored or served, so a consolidated
+ * row is a presentation of several positions and never a position itself.
+ *
+ * Sum, pass through, or refuse — every column is one of the three:
+ *
+ *   - Sum: units, cost, MV, P/L, dividends, options, and the flows Net is built from. Options need
+ *     no double-count guard, because `performance.py` attaches the per-underlying options stream to
+ *     the `cash` row alone — a guard here would be dead code reading as if a hazard existed.
+ *   - Pass through: price, currency, market, name. Both rows resolve the same `security_id`, so
+ *     these are the same lookup; recomputing them would invent a disagreement that cannot exist.
+ *   - Refuse: XIRR. It is an internal rate of return over dated cashflows, and the mean of two IRRs
+ *     is not the IRR of the merged flows. The splits disagree sharply — D05 19.5% against 28.7% —
+ *     so a weighted mean would be a fabricated figure wearing a measured one's clothes. The cell
+ *     says `—` and the tooltip says why. Recomputing over merged flows is the real fix and needs a
+ *     second fold keyed on the security alone, which is a backend read shape, not this.
+ *
+ * Avg cost is the interesting one: it folds **exactly**, not approximately. `cost_basis` is
+ * `avg_cost × units`, so pooled cost basis over pooled units *is* the true weighted average
+ * (D05 → 24.7283 from 26.1747 and 21.0464). It wants no caveat in the UI.
+ */
+const sumOf = (rs, f) => rs.reduce((a, r) => a + (f(r) || 0), 0);
+
+// null only when every part is null, so a closed constituent — whose cost basis is null because it
+// holds nothing — contributes 0 rather than erasing the open side's real figure.
+const sumOrNull = (rs, f) =>
+  rs.every((r) => f(r) == null) ? null : sumOf(rs, f);
+
+function mergeTicker(rows) {
+  if (rows.length === 1) return rows[0];
+  // Biggest leg first, so the drill target is the pill the row leads with. `/api/positions`
+  // already sorts by market value, so this changes no order today — it makes the order a property
+  // of this fold rather than a favour from the endpoint, which is what the drill target rests on.
+  const rs = [...rows].sort((a, b) => (b.mv_sgd || 0) - (a.mv_sgd || 0));
+  const first = rs[0];
+  const units = sumOf(rs, (r) => r.units);
+  const costNative = sumOrNull(rs, (r) => r.cost_basis_native);
+  // cost is fully known only if every part's is; this drives `netOf`'s partial flag, so a merge
+  // that swallows a cost-unknown leg is marked `~` rather than quietly reported as complete.
+  const costKnown = rs.every((r) => r.cost_known);
+  // Fold each constituent's Net value, summing only from cost-known legs; partial if ANY leg
+  // lacks cost. This preserves the per-constituent Net calculation that would otherwise be lost
+  // when netOf sees a consolidated row's cost_known=false (because one leg was cost-unknown).
+  const netFolded = rs.reduce((a, r) => {
+    if (r.cost_known && r.pl_sgd != null) return a + r.pl_sgd;
+    return a + (r.income_sgd || 0);
+  }, 0);
+  const netPartial = rs.some((r) => !r.cost_known);
+  return {
+    ...first,
+    // `bucket` stays a single value: it is the drill target, and `/api/holding` takes one bucket.
+    // `rs` is largest-MV-first, so clicking D05 lands on the side holding 227.7k of its 317.2k.
+    bucket: first.bucket,
+    buckets: [...new Set(rs.map((r) => r.bucket))],          // what the Bucket cell renders
+    accounts: [...new Set(rs.flatMap((r) => r.accounts || []))].sort(),
+    status: rs.some((r) => r.status !== "closed") ? "open" : "closed",
+    units,
+    avg_cost: costNative != null && units > 1e-6 ? costNative / units : null,
+    cost_basis_native: costNative,
+    cost_basis_sgd: sumOrNull(rs, (r) => r.cost_basis_sgd),
+    unrealised_pl_sgd: sumOrNull(rs, (r) => r.unrealised_pl_sgd),
+    pl_folded: sumOrNull(rs, plBase),                        // what the P/L column shows — see plOf
+    pl_mixed: new Set(rs.map((r) => r.status)).size > 1,     // …and whether that fold spans both
+    realised_pl_sgd: sumOrNull(rs, (r) => r.realised_pl_sgd),
+    pl_sgd: costKnown ? sumOrNull(rs, (r) => r.pl_sgd) : null,
+    cost_known: costKnown,
+    net_folded: netFolded,                                   // folded Net for netOf to consume
+    net_partial: netPartial,                                 // whether any leg is partial
+    uncosted_units: sumOf(rs, (r) => r.uncosted_units),
+    mv_native: sumOf(rs, (r) => r.mv_native),
+    mv_sgd: sumOf(rs, (r) => r.mv_sgd),
+    income_native: sumOf(rs, (r) => r.income_native),
+    income_sgd: sumOf(rs, (r) => r.income_sgd),
+    invested_sgd: sumOf(rs, (r) => r.invested_sgd),
+    options_pl_sgd: sumOf(rs, (r) => r.options_pl_sgd),
+    xirr: null,                                              // refused — see the note above
+    simple_return: null,
+  };
+}
+
+/**
+ * One row per ticker, ordered the way `/api/positions` orders positions: open first by market
+ * value, then closed by realised P/L. Re-sorting rather than keeping first-appearance order is
+ * what keeps the biggest holding at the top once two of its rows have become one.
+ */
+function consolidate(rows) {
+  const m = new Map();
+  for (const r of rows) {
+    if (!m.has(r.ticker)) m.set(r.ticker, []);
+    m.get(r.ticker).push(r);
+  }
+  return [...m.values()].map(mergeTicker).sort(
+    (a, b) =>
+      (a.status !== "open") - (b.status !== "open") ||
+      (a.status === "open" ? (b.mv_sgd || 0) - (a.mv_sgd || 0)
+                           : (b.pl_sgd || 0) - (a.pl_sgd || 0)));
+}
 
 function NetCell({ net, partial, max }) {
   const w = max > 0 ? Math.min(100, (Math.abs(net) / max) * 100) : 0;
@@ -78,14 +195,24 @@ function DataRow({ r, onClick, max }) {
         {closed && <span className="pill" style={{ marginLeft: 4, color: "var(--mut)" }}>closed</span>}
         <div className="mut" style={{ fontSize: 11 }}>
           <span className="pill">{r.ticker}</span>{(r.accounts || []).length ? " " + (r.accounts || []).join(", ") : ""}</div></td>
-      <td className="l"><span className="pill">{r.bucket}</span></td>
+      {/* One pill per funding bucket. Only a consolidated ticker row carries more than one, and
+          it says the thing that row would otherwise hide: this name is held in two pools.
+          `nowrap` because `.pill` is inline: two of them are free to wrap in a narrow column, and
+          a taller row costs rows-per-screen against the floor RESPONSIVE.md measured. The table
+          owns its own sideways scroll, so widening this column is what that scroll is for. */}
+      <td className="l" style={{ whiteSpace: "nowrap" }}>{(r.buckets || [r.bucket]).map((b) => (
+        <span key={b} className="pill" style={{ marginRight: 3 }}>{b}</span>))}</td>
       <td className="l"><span className="pill">{r.market}</span></td>
       <td>{closed ? <span className="mut">—</span> : fmt(r.units, r.units < 10 ? 2 : 0)}</td>
       <td className="mut">{money(r.avg_cost, r.currency, 4)}</td>
       <td className="mut">{money(r.price, r.currency, 4)}</td>
       <td>{r.cost_basis_sgd == null ? <span className="mut">n/a</span> : sgd(r.cost_basis_sgd)}</td>
       <td>{closed ? <span className="mut">—</span> : sgd(r.mv_sgd)}</td>
-      <td className={cls(pl)} title={closed ? "realised P/L" : "unrealised P/L"}>
+      {/* A consolidated row spanning an open and a closed bucket is neither one nor the other, and
+          saying "unrealised" over a figure that folds in a realised leg would be the wrong word. */}
+      <td className={cls(pl)}
+          title={r.pl_mixed ? "realised P/L on closed buckets, unrealised on open ones"
+                            : closed ? "realised P/L" : "unrealised P/L"}>
         {pl == null ? <span className="mut">n/a</span> : sgd(pl)}</td>
       {/* SGD like the Cost/MV/P/L columns it sits between (and like Net, which folds it in);
           the native amount stays as the tooltip for statement reconciliation. */}
@@ -94,7 +221,13 @@ function DataRow({ r, onClick, max }) {
       <td className={cls(r.options_pl_sgd)} title="realised options (wheel) P/L">
         {r.options_pl_sgd ? sgd(r.options_pl_sgd) : "—"}</td>
       <NetCell net={net} partial={partial} max={max} />
-      <td className={cls(r.xirr)}>{r.xirr == null ? "—" : pct(r.xirr)}</td>
+      {/* A pooled row's XIRR is refused, not blank-by-accident — say so on hover, since the dash
+          is the same glyph a position with too short a span already renders. */}
+      <td className={cls(r.xirr)}
+          title={r.xirr == null && r.buckets
+            ? "no pooled return — an IRR over merged cashflows can't be averaged from its parts"
+            : undefined}>
+        {r.xirr == null ? "—" : pct(r.xirr)}</td>
     </tr>
   );
 }
@@ -107,6 +240,10 @@ export default function Holdings() {
   const [collapsed, setCollapsed] = useState({});
   const [noteOpen, setNoteOpen] = useState(() => !startsCollapsed());
 
+  // Two modes render one ungrouped list, for opposite reasons: `none` has no grouping to show,
+  // and `ticker` has already spent the grouping on the row itself.
+  const flat = by === "none" || by === "ticker";
+
   useEffect(() => {
     setRows(null);
     // {as_of, positions}: the endpoint carries the date its prices are as of (issue #56).
@@ -117,11 +254,16 @@ export default function Holdings() {
       .catch(() => setRows([]));
   }, [showClosed]);
 
+  // Ticker mode is the one option that changes the row *set* rather than only bracketing it, so
+  // everything downstream — the group fold, the bar scale, the heading count — reads `display`.
+  const display = useMemo(
+    () => (rows && by === "ticker" ? consolidate(rows) : rows), [rows, by]);
+
   const groups = useMemo(() => {
-    if (!rows) return [];
-    if (by === "none") return [{ key: null, label: null, rows }];
+    if (!display) return [];
+    if (flat) return [{ key: null, label: null, rows: display }];
     const m = new Map();
-    for (const r of rows) {
+    for (const r of display) {
       const k = groupKey(r, by);
       if (!m.has(k)) m.set(k, []);
       m.get(k).push(r);
@@ -137,16 +279,17 @@ export default function Holdings() {
     return [...m.entries()]
       .map(([key, rs]) => ({ key, label: key, rows: rs, ...subtotal(rs) }))
       .sort((a, b) => b.mv - a.mv);
-  }, [rows, by]);
+  }, [display, by, flat]);
 
-  // bar scale: largest |net| across all rows, so bars are comparable everywhere
+  // bar scale: largest |net| across the rows on screen, so bars are comparable everywhere. Read
+  // from `display` rather than `rows`: in ticker mode a merged row's Net is the sum of its parts,
+  // and scaling those bars against an unmerged maximum would cap the biggest one at the rail.
   const maxNet = useMemo(
-    () => (rows ? rows.reduce((m, r) => Math.max(m, Math.abs(netOf(r).net)), 0) : 0), [rows]);
+    () => (display ? display.reduce((m, r) => Math.max(m, Math.abs(netOf(r).net)), 0) : 0), [display]);
 
   if (sel) return <SecurityDetail ticker={sel.ticker} bucket={sel.bucket} onBack={() => setSel(null)} />;
   if (!rows) return <div className="loading">Loading…</div>;
 
-  const flat = by === "none";
   const toggle = (k) => setCollapsed((c) => ({ ...c, [k]: !c[k] }));
   const open = (r) => {
     setSel({ ticker: r.ticker, bucket: r.bucket });
@@ -156,7 +299,8 @@ export default function Holdings() {
   return (
     <div className="card">
       <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 12, flexWrap: "wrap" }}>
-        <h3 style={{ margin: 0 }}>Holdings ({rows.length})</h3>
+        {/* the count of what is on screen, so ticker mode's heading agrees with its own rows */}
+        <h3 style={{ margin: 0 }}>Holdings ({display.length})</h3>
         <label className="mut" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 6 }}>
           Group by
           <select value={by} onChange={(e) => { setBy(e.target.value); posthog.capture("holdings_grouped", { group_by: e.target.value }); }}>
@@ -172,8 +316,10 @@ export default function Holdings() {
         </label>
         <span className="mut" style={{ fontSize: 12, marginLeft: "auto" }}>click a row for full history</span>
       </div>
-      {/* The widest table in the app — 1302px of content, 13 columns — read through the
-          pinned-column pattern: Security stays put, the numbers scroll under it. The wrapper
+      {/* The widest table in the app — 1302px of content, 13 columns, measured in the grouping
+          modes that render one position per row; ticker mode's split rows carry a second bucket
+          pill and sit a little wider, which the wrapper's own sideways scroll absorbs — read
+          through the pinned-column pattern: Security stays put, the numbers scroll under it. The wrapper
           is what owns the sideways scroll below 1024px, so `.main` no longer does. */}
       <div className="pinned">
         <table>
@@ -187,7 +333,7 @@ export default function Holdings() {
           </tr></thead>
           <tbody>
             {flat
-              ? rows.map((r, i) => <DataRow key={i} r={r} max={maxNet} onClick={() => open(r)} />)
+              ? display.map((r, i) => <DataRow key={i} r={r} max={maxNet} onClick={() => open(r)} />)
               : groups.map((g) => {
                 const hidden = collapsed[g.key];
                 return (

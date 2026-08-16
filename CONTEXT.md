@@ -26,6 +26,18 @@ The running state of one (funding bucket, security) pair: units held, cost, cash
 Building it up by replaying transactions in order is the **position fold**.
 _Avoid_: holding (reserve for the current non-zero units specifically), lot
 
+**Consolidated ticker row**:
+The Holdings table's fold of every position sharing one canonical ticker into a single row — the
+only place the app answers "how much of this name do I own, across every bucket". Units, cost,
+market value, P/L, dividends and option premiums sum; price and currency pass through (one
+security, one lookup); average cost pools as `Σcost_basis ÷ Σunits`, which is *exact* rather than
+approximate because cost basis is average cost × units. **Derived at render, never stored and
+never served** — no endpoint returns one — so it is a presentation of several positions and never
+itself a Position. XIRR is deliberately not folded: an IRR over merged cashflows cannot be
+averaged from its parts, so a consolidated row of two positions shows no return rather than a
+plausible one.
+_Avoid_: position (the fold's *input* is positions, and the whole point is that this is not one)
+
 ### Cashflows & their classification
 
 **External flow**:
