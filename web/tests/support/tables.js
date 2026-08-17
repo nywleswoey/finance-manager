@@ -26,7 +26,8 @@
  *     "absorbing" wrapper that absorbs nothing passes the other two.
  *   - `pinnedFirstCell` — the identity column inside it is `sticky`. Only the fully-responsive
  *     views owe this one; the editors' cells hold live inputs and neither table pattern
- *     applies to them.
+ *     applies to them. It is `null` when there is no identity column to read, which is a
+ *     table with an empty `tbody` as much as it is a table with no wrapper — see below.
  *
  * `room` IS THE TABLE'S OWN PARENT, NOT THE PANE, and the distinction outlived the case that
  * forced it. `.grid2`'s track floor used to be a hard `minmax(420px, 1fr)` — wider than a 360px
@@ -37,6 +38,15 @@
  * A table is responsible for fitting the box it was put in; whether that box fits the pane is
  * the box's problem and a different fix, and reading the pane here would make every future
  * ancestor-width bug look like a missing wrapper.
+ *
+ * AN EMPTY `tbody` READS AS `null`, NOT AS A MEASUREMENT, and the case is real rather than
+ * defensive. `Dividends` runs two independent fetches and gates its render on one of them, so the
+ * detail ledger's wrapper is on the page for however long `/api/dividend-details` takes to land
+ * after `/api/dividends-annual` — with no rows in it. The `?? t` fallback that used to stand in for
+ * the missing cell measured the `<table>` element in that window, and a table's computed `position`
+ * is `static`, so a view that had merely rendered early failed CI as "the identity column is not
+ * sticky" on a pin nothing had touched (#111). A table with no rows has no identity column to
+ * measure; `null` says exactly that, and `tablet.spec.js` annotates it rather than asserting.
  */
 export function tableFacts(page) {
   return page.evaluate(() => {
@@ -54,6 +64,10 @@ export function tableFacts(page) {
       }
       const headers = [...t.querySelectorAll("thead th")]
         .map((th) => th.textContent.trim()).filter(Boolean);
+      // `:not(.grouprow)` for the reason the stylesheet excludes it: Holdings' group banner
+      // is a `colSpan` cell as wide as seven columns and is deliberately not pinned. `null`
+      // when the `tbody` is empty, which the header block above says is a state of its own.
+      const identityCell = t.querySelector("tbody tr:not(.grouprow) > *");
       return {
         table: headers.slice(0, 2).join("/") || "(unheaded)",
         width: t.getBoundingClientRect().width,
@@ -64,19 +78,7 @@ export function tableFacts(page) {
         fitsItsParent: box
           ? box.getBoundingClientRect().width <= box.parentElement.clientWidth + 1
           : null,
-        // `:not(.grouprow)` for the reason the stylesheet excludes it: Holdings' group banner
-        // is a `colSpan` cell as wide as seven columns and is deliberately not pinned.
-        // When the tbody is empty, querySelector returns null. Using `?? t` as a fallback
-        // measures the <table> element itself (position: static), which makes the sweep
-        // report a false "identity column is not sticky" failure. Return null instead to
-        // signal "no rows to measure" - the caller annotates this as "empty-tbody" rather
-        // than treating it as a pin failure.
-        pinnedFirstCell: box
-          ? (() => {
-              const cell = t.querySelector("tbody tr:not(.grouprow) > *");
-              return cell ? getComputedStyle(cell).position : null;
-            })()
-          : null,
+        pinnedFirstCell: box && identityCell ? getComputedStyle(identityCell).position : null,
       };
     });
   });
