@@ -76,6 +76,23 @@ does not give you — the identity column inside it is `sticky`. That last gate 
 sixth table: `Dividends`' detail ledger had been inside an inline 520px scroll box since long
 before this work, so it never appeared in the pane ratchet and read as done.
 
+The sweep **names every table it did not put through all five gates** rather than passing over it
+quietly, and there are three such annotations: `no-tables-here`, a view that renders no `<table>` at
+that viewport (card-per-row replaces six of them below 640); `fits-outright`, a table that owes no
+wrapper because it fits — gated on fitting, then recorded with its width against the room it had;
+and `empty-tbody`, a wrapped table whose `tbody` holds no rows. The last is the one to read closely, because it is a hole rather than a
+non-event: `Dividends` runs two independent fetches and gates its render on one of them, so between
+them the ledger is on the page with its wrapper and nothing in it, and a table with no rows has no
+identity column for the `sticky` gate to measure. That gate is skipped for that table on that run —
+the other four still run — and the run says so by name. It is annotated rather than asserted because
+the alternative was worse: until #111 the reader measured the `<table>` element as a stand-in for the
+missing cell, and a table's computed `position` is `static`, so the sweep failed CI intermittently on
+a pin nothing had touched. **An `empty-tbody` annotation on a view that should have had rows is a
+question about that view's loading gate, not about the pin.** The window is asserted rather than
+waited for: one test in the file stalls `/api/dividend-details` outright and checks that the ledger
+comes back wrapped, alone, fitting and pinned, with `null` where the reading would be — so the
+fallback cannot come back on a green suite.
+
 `tests/tap.spec.js` — the phone tier's two rules about every fully-responsive *screen*: 16px form
 controls and a 44px square tap floor, below 639.98px. **The only spec in the suite that is a sweep
 rather than a list**, and the reason is the bug it exists for: both rules were decided in ticket 015,
