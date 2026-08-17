@@ -104,10 +104,16 @@ test.describe("the tier's one rule: any table that overflows is pinned", () => {
         // tier measured and rejected: you reach a number and lose the row it belongs to.
         expect.soft(t.pinned,
           `"${t.table}" is contained but not pinned — the tier's rule is pattern A`).toBe(true);
+        // A wrapped table with no rows in it has no identity column, so there is nothing for
+        // the gate below to read and asserting anyway is how the sweep invented a failure:
+        // `Dividends` renders its ledger before `/api/dividend-details` lands and the reader's
+        // old fallback measured the `<table>`, whose `position` is `static` (#111). Reported
+        // rather than skipped, in the manner of `no-tables-here` — an empty table is a fact
+        // about the run, and the four gates above it have already had their say.
         if (t.pinnedFirstCell === null) {
           testInfo.annotations.push({
             type: "empty-tbody",
-            description: `${viewName} · "${t.table}" has no data rows`,
+            description: `${viewName} · "${t.table}" renders no data row to pin`,
           });
           continue;
         }
@@ -117,6 +123,62 @@ test.describe("the tier's one rule: any table that overflows is pinned", () => {
       }
     });
   }
+
+  /**
+   * The case the sweep above cannot produce on a machine this fast, held open on purpose.
+   *
+   * `Dividends` runs two independent fetches and gates its render on the annual one, so the
+   * detail ledger is on the page — card, wrapper and pin — for as long as
+   * `/api/dividend-details` takes to arrive, with nothing in its `tbody`. On a developer's
+   * machine that window is invisible; on a loaded runner it was wide enough to fail CI twice
+   * on the same commit (#111). Stalling the fetch outright is what turns a race into a fact.
+   *
+   * WHAT IS ASSERTED IS THE READER'S HONESTY, NOT THE TIER'S RULE. The four gates that can
+   * still be answered with no rows are answered — the ledger is wrapped, the wrapper holds
+   * the table alone, it fits its parent, and it is pinned — and the fifth reads `null`,
+   * meaning "no identity column to measure", which is what the sweep annotates rather than
+   * rejects. The `?? t` fallback this replaced measured the `<table>` in that window, and a
+   * table's computed `position` is `static`, so an empty ledger read as a broken pin.
+   */
+  test("a ledger whose rows have not arrived is unmeasurable, not unpinned",
+    async ({ page, baseURL }, testInfo) => {
+      // The tier's own range and no wider: below 640 the ledger is card-per-row, so there is
+      // no table to measure and nothing this test could be about.
+      test.skip(viewportOf(testInfo.project.name).width < PHONE_TIER_BELOW,
+        "below 640 the ledger is cards, not a table");
+      await loadApp(page, baseURL);
+      // Held, not dropped: the view settles on its other fetch while this one is in flight,
+      // and the fixture is served at the end so the test leaves no request open behind it.
+      // Registered after `mockApi`'s catch-all, so the narrower route wins — the same
+      // ordering `loadSignIn` relies on.
+      let arrive;
+      const held = new Promise((resolve) => { arrive = resolve; });
+      await page.route("**/api/dividend-details*", async (route) => {
+        await held;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ rows: [], flagged: 0, total: 0, total_sgd: 0 }),
+        });
+      });
+      await VIEWS.find((v) => v.name === "Portfolio › Dividends").open(page);
+
+      expect(await page.locator(".pinned.selfscroll tbody tr").count(),
+        "the ledger is supposed to be empty here — this test is measuring that window").toBe(0);
+
+      const ledger = (await tableFacts(page)).find((t) => t.table === "Date/Security");
+      expect(ledger, "the ledger renders before its rows do, which is the whole case").toBeTruthy();
+      expect.soft(ledger.container).toBe("div.pinned.selfscroll");
+      expect.soft(ledger.wrapsTableAlone).toBe(true);
+      expect.soft(ledger.fitsItsParent).toBe(true);
+      expect.soft(ledger.pinned).toBe(true);
+      expect.soft(ledger.pinnedFirstCell,
+        "an empty tbody has no identity column, and `static` off the <table> is not a reading of one")
+        .toBe(null);
+
+      arrive();
+      await expect(page.locator(".pinned.selfscroll")).toBeVisible();
+    });
 });
 
 test("card-per-row does not render at 640px or above", async ({ page, baseURL }, testInfo) => {
