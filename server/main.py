@@ -458,6 +458,13 @@ def nw_latest():
     return nw.latest()
 
 
+@app.get("/api/networth/composition")
+def nw_composition():
+    """`{bands, series, dropped}` — the composition chart's band-level history, ascending by date.
+    Its own path rather than a widened /snapshots: see portfolio.networth.composition."""
+    return nw.composition()
+
+
 @app.get("/api/networth/snapshots/{snap_id}")
 def nw_get(snap_id: int):
     d = nw.get_snapshot(snap_id)

@@ -121,6 +121,10 @@ ENDPOINTS: list[tuple[str, str]] = [
     ("networth-items", "/api/networth/items"),
     ("networth-snapshots", "/api/networth/snapshots"),
     ("networth-latest", "/api/networth/latest"),
+    # The composition chart's band-level history. Its own path rather than a widened
+    # /snapshots — see portfolio.networth.composition — which also keeps this key free of a
+    # date, so a recapture writes the same key and the unmatched-paths gate keeps holding.
+    ("networth-composition", "/api/networth/composition"),
     # --- spending ---
     ("spending-summary", "/api/spending/summary"),
     ("spending-trends", "/api/spending/trends"),
