@@ -9,7 +9,7 @@ import unittest
 from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import sessionmaker
 
 from portfolio import networth as nw
@@ -48,17 +48,47 @@ def seed_items(s):
     s.commit()
 
 
-def build_snapshot(s, p_value, lines):
-    """lines: {code: (native, ccy, rate)} -> builds a snapshot with frozen value_sgd."""
+def build_snapshot(s, p_value, lines, date=dt.date(2026, 6, 1), sources=None):
+    """lines: {code: (native, ccy, rate)} -> builds a snapshot with frozen value_sgd.
+
+    `sources` stamps nw_value.source for named codes — the write path's provenance, which is
+    what the composition's `dropped` list is read from. `date` is a parameter because the
+    composition is a *series*: a builder pinned to one date can only ever test one point.
+    """
     items = {i.code: i for i in s.query(NwItem).all()}
-    snap = NwSnapshot(date=dt.date(2026, 6, 1), portfolio_value_sgd=Decimal(str(p_value)))
+    sources = sources or {}
+    snap = NwSnapshot(date=date, portfolio_value_sgd=Decimal(str(p_value)))
     s.add(snap); s.flush()
     for code, (native, ccy, rate) in lines.items():
         s.add(NwValue(snapshot_id=snap.id, item_id=items[code].id,
                       native_value=Decimal(str(native)), currency=ccy,
-                      rate_to_sgd=Decimal(str(rate)), value_sgd=Decimal(str(native)) * Decimal(str(rate))))
+                      rate_to_sgd=Decimal(str(rate)), value_sgd=Decimal(str(native)) * Decimal(str(rate)),
+                      source=sources.get(code)))
     s.commit(); s.refresh(snap)
     return snap
+
+
+class count_queries:
+    """Count the SQL statements a block issues, on the session's own engine.
+
+    The composition endpoint's cost has to be constant in the number of snapshots, and "we added
+    a selectinload" is not an assertion. This is.
+    """
+
+    def __init__(self, session):
+        self.engine = session.get_bind()
+        self.n = 0
+
+    def _tick(self, *args, **kwargs):
+        self.n += 1
+
+    def __enter__(self):
+        event.listen(self.engine, "before_cursor_execute", self._tick)
+        return self
+
+    def __exit__(self, *exc):
+        event.remove(self.engine, "before_cursor_execute", self._tick)
+        return False
 
 
 class MetricsTest(unittest.TestCase):
@@ -441,6 +471,253 @@ class TestSeededCatalogueStillWorks(unittest.TestCase):
                                s=self.s)
         self.assertEqual(len(d["values"]), n_items)
         self.assertGreater(n_items, 0)
+
+
+# ---------------------------------------------------------------------------------------------
+# The composition read shape. Two snapshots, real proportions, and the numbers chosen so the
+# three named edges are figures a reader can check by hand against the metrics beside them.
+# ---------------------------------------------------------------------------------------------
+
+#: 2026-06-21, close to the live first point. cash 171,565.04 / portfolio 1,029,006.95 /
+#: cpf 445,534.30 / housing 600,000 - 480,000 - 10,649.09 = 109,350.91.
+POINT_A = {
+    "posb": (100000, "SGD", 1),
+    "tiger_usd": (50000, "USD", 1.35),
+    "srs": (4065.04, "SGD", 1),
+    "cpf_oa": (445534.30, "SGD", 1),
+    "hdb": (600000, "SGD", 1),
+    "home_loan": (480000, "SGD", 1),
+    "home_loan_accrued": (10649.09, "SGD", 1),
+}
+#: 2026-08-05. Every band moves, and housing moves the other way (the loan is paid down while
+#: the valuation holds), so a sign error cannot pass by moving everything together.
+POINT_B = {
+    "posb": (112000, "SGD", 1),
+    "tiger_usd": (52000, "USD", 1.31),
+    "srs": (4065.04, "SGD", 1),
+    "cpf_oa": (451727.55, "SGD", 1),
+    "hdb": (600000, "SGD", 1),
+    "home_loan": (478000, "SGD", 1),
+    "home_loan_accrued": (12823.17, "SGD", 1),
+}
+
+
+class CompositionTest(unittest.TestCase):
+    """`composition()` — the only surface in this app carrying band-level history."""
+
+    def setUp(self):
+        self.s = make_session()
+        seed_items(self.s)
+
+    def tearDown(self):
+        self.s.close()
+
+    def two_points(self):
+        # Written newest-first on purpose: the payload must be ascending by date, and insertion
+        # order is what a naive `select` returns under SQLite.
+        build_snapshot(self.s, 1137390.04, POINT_B, date=dt.date(2026, 8, 5))
+        build_snapshot(self.s, 1029006.95, POINT_A, date=dt.date(2026, 6, 21))
+        return nw.composition(self.s)
+
+    # ---- shape -------------------------------------------------------------------------
+
+    def test_bands_are_the_stacking_order_not_a_sort(self):
+        self.assertEqual(self.two_points()["bands"], ["cash", "portfolio", "cpf", "housing"])
+
+    def test_series_is_ascending_by_date_with_iso_strings_on_the_wire(self):
+        dates = [r["date"] for r in self.two_points()["series"]]
+        self.assertEqual(dates, ["2026-06-21", "2026-08-05"])
+
+    def test_every_band_is_keyed_on_every_point(self):
+        p = self.two_points()
+        for row in p["series"]:
+            self.assertEqual(set(row), {"date", *p["bands"]})
+
+    def test_the_bands_carry_the_figures_the_breakdown_would_give(self):
+        first = self.two_points()["series"][0]
+        self.assertEqual(first["cash"], 171565.04)        # posb + USD@1.35 + srs, folded
+        self.assertEqual(first["portfolio"], 1029006.95)  # the frozen scalar, untouched
+        self.assertEqual(first["cpf"], 445534.30)
+        self.assertEqual(first["housing"], 109350.91)     # 600,000 net of loan + accrued
+
+    def test_empty_history_is_an_empty_series_not_an_error(self):
+        p = nw.composition(self.s)
+        self.assertEqual(p["series"], [])
+        self.assertEqual(p["dropped"], [])
+        self.assertEqual(p["bands"], list(nw.STACK_ORDER))   # the chart still knows its keys
+
+    # ---- the anchor --------------------------------------------------------------------
+
+    def test_the_cumulative_edges_are_the_summary_tiles_to_the_cent(self):
+        """THE ANCHOR. Three of the four cumulative edges of the stack ARE three of the six
+        metrics, exactly — not approximately, because a cent of drift is the whole failure this
+        catches. It is the one test that notices a band-order change (which moves no total and
+        so breaks nothing else), a sign error, and an item that landed in no band.
+
+        The edges are summed in exact decimal rather than with `+` on floats: every band on the
+        wire is a cent quantity, float addition is not associative, and an identity asserted
+        with `==` must not depend on which end you start from.
+        """
+        p = self.two_points()
+        by_date = {m["date"].isoformat(): m for m in nw.list_snapshots(self.s)}
+        self.assertEqual(len(p["series"]), 2)
+        for row in p["series"]:
+            m = by_date[row["date"]]
+            edge = Decimal(0)
+            edges = {}
+            for b in p["bands"]:
+                edge += Decimal(str(row[b]))
+                edges[b] = float(edge)
+            self.assertEqual(edges["portfolio"], m["net_worth_excl_housing_cpf"], row["date"])
+            self.assertEqual(edges["cpf"], m["net_worth_excl_housing"], row["date"])
+            self.assertEqual(edges["housing"], m["net_worth"], row["date"])
+
+    # ---- the rules that cannot be read off a passing chart ------------------------------
+
+    def test_srs_folds_into_cash_and_is_not_its_own_key(self):
+        """The fold is server-side and one line. `srs` is 4,065.04 against a 171,565.04 cash
+        band — 1/42nd of it, and sub-pixel in the chart — so it rides with cash until it is
+        worth its own band."""
+        p = self.two_points()
+        self.assertNotIn("srs", p["bands"])
+        self.assertEqual(p["series"][0]["cash"], 171565.04)     # 167,500 + 4,065.04
+        self.assertEqual(nw.FOLDED_BANDS, {"srs": "cash"})
+
+    def test_a_deactivated_item_stays_in_its_band(self):
+        """The executable form of why banding is server-side. The catalogue endpoint is
+        active-only; the composition walks every value unfiltered. A frontend copy of the
+        precedence would only ever see the active catalogue, so a retired CPF account would
+        vanish out of the CPF band — and the top edge would stop equalling net worth — with no
+        error anywhere."""
+        build_snapshot(self.s, 0, POINT_A, date=dt.date(2026, 6, 21))
+        self.s.query(NwItem).filter(NwItem.code == "cpf_oa").one().active = False
+        self.s.commit()
+        self.assertNotIn("cpf_oa", [i["code"] for i in nw.catalogue(self.s)])   # gone from there
+        self.assertEqual(nw.composition(self.s)["series"][0]["cpf"], 445534.30)  # still here
+
+    def test_every_band_is_keyed_even_when_no_value_lands_in_it(self):
+        """Zero-fill, which cannot fire today: `create_snapshot` writes one value per catalogue
+        item and the catalogue covers every band, so every band is present on every point by
+        construction. Staged here because that construction ends the day the Portfolio split
+        lands, and a band absent from the early rows is exactly the hole a stacked chart draws
+        when it reads one dataKey straight through the series."""
+        build_snapshot(self.s, 500, {"posb": (1000, "SGD", 1)}, date=dt.date(2026, 6, 21))
+        row = nw.composition(self.s)["series"][0]
+        self.assertEqual(row, {"date": "2026-06-21", "cash": 1000.0, "portfolio": 500.0,
+                               "cpf": 0.0, "housing": 0.0})
+
+    def test_housing_is_netted_and_may_go_negative(self):
+        """Signed on the wire, negated once here. The frontend applies no sign to anything, so
+        negative equity has to arrive negative or the stack draws a debt bar across the assets."""
+        build_snapshot(self.s, 0, {**POINT_A, "hdb": (400000, "SGD", 1)}, date=dt.date(2026, 6, 21))
+        row = nw.composition(self.s)["series"][0]
+        self.assertEqual(row["housing"], -90649.09)     # 400,000 - 480,000 - 10,649.09
+
+    def test_a_non_housing_liability_refuses_to_draw(self):
+        """A car loan sits in an asset band as a negative: every total stays right and two of the
+        three edges quietly stop equalling their tile. `band()` refuses instead."""
+        self.s.add(NwItem(code="car_loan", label="Car Loan", kind="liability",
+                          currency_default="SGD", sort_order=99, active=True))
+        self.s.commit()
+        build_snapshot(self.s, 0, {**POINT_A, "car_loan": (30000, "SGD", 1)},
+                       date=dt.date(2026, 6, 21))
+        with self.assertRaises(ValueError) as cm:
+            nw.composition(self.s)
+        self.assertIn("car_loan", str(cm.exception))
+
+    # ---- provenance ---------------------------------------------------------------------
+
+    def test_dropped_is_read_from_write_path_provenance(self):
+        """`dropped` cannot be inferred from the payload — a fabricated $0 and a real $0 are the
+        same number. It comes off `nw_value.source`, which is what the write path knew."""
+        build_snapshot(self.s, 0, POINT_A, date=dt.date(2026, 6, 21),
+                       sources={"cpf_oa": "default_zero", "posb": "default_zero",
+                                "tiger_usd": "statement"})
+        self.assertEqual(nw.composition(self.s)["dropped"], [
+            {"date": "2026-06-21", "band": "cash", "codes": ["posb"]},
+            {"date": "2026-06-21", "band": "cpf", "codes": ["cpf_oa"]},
+        ])
+
+    def test_dropped_is_empty_when_nothing_was_fabricated(self):
+        self.assertEqual(self.two_points()["dropped"], [])
+
+    def test_dropped_is_a_sibling_of_series_never_a_key_inside_a_row(self):
+        """A row that mixes numbers with a flag is how a non-dataKey ends up handed to a
+        `dataKey`."""
+        build_snapshot(self.s, 0, POINT_A, date=dt.date(2026, 6, 21),
+                       sources={"posb": "default_zero"})
+        p = nw.composition(self.s)
+        self.assertEqual(set(p["series"][0]), {"date", *p["bands"]})
+
+    # ---- cost ---------------------------------------------------------------------------
+
+    def test_composition_costs_three_queries_whatever_the_history(self):
+        """Constant in N, asserted rather than assumed. Lazily this is 1 + N + one-per-item;
+        `expunge_all` empties the identity map first so the item load is actually paid for,
+        the way it is on a cold request."""
+        self.two_points()
+        build_snapshot(self.s, 1117722.25, POINT_A, date=dt.date(2026, 6, 30))
+        self.s.expunge_all()
+        with count_queries(self.s) as q:
+            nw.composition(self.s)
+        self.assertEqual(q.n, 3, "snapshots, their values, and the catalogue items")
+
+    def test_the_snapshots_list_costs_three_queries_too(self):
+        self.two_points()
+        self.s.expunge_all()
+        with count_queries(self.s) as q:
+            nw.list_snapshots(self.s)
+        self.assertEqual(q.n, 3)
+
+
+class CompositionRoundingTest(unittest.TestCase):
+    """The rounding discipline, on a fixture engineered to straddle the half-cent rather than
+    passing on round numbers.
+
+    Both bands here land on exactly half a cent: cpf_oa is 100.005 SGD, and the cash band is
+    66.67 USD at 1.5 — an FX tail that is *exactly* .005 rather than merely long. Each rounds
+    DOWN on its own (a float cannot hold 100.005, so it sits a hair below), while the two
+    together are 200.01 and round UP. Which makes the two disciplines disagree by a full cent:
+
+        round each band, then sum   ->  100.00 + 100.00 = 200.00
+        sum exactly, then round     ->             200.010 = 200.01   <- the metric
+
+    The metrics report 200.01, so only the second one keeps the edge identity. Emitting the
+    bands as deltas between the rounded EDGES puts the residual in the upper band and leaves
+    the edge exact, which is the whole rule.
+    """
+
+    def setUp(self):
+        self.s = make_session()
+        seed_items(self.s)
+        build_snapshot(self.s, 0, {
+            "tiger_usd": (66.67, "USD", 1.5),      # 100.005 exactly
+            "cpf_oa": (100.005, "SGD", 1),         # 100.005 exactly
+        }, date=dt.date(2026, 6, 21))
+        self.row = nw.composition(self.s)["series"][0]
+        self.m = nw.list_snapshots(self.s)[0]
+
+    def tearDown(self):
+        self.s.close()
+
+    def test_each_band_alone_rounds_down(self):
+        self.assertEqual(self.row["cash"], 100.00)
+
+    def test_the_residual_lands_in_the_band_above_so_the_edge_stays_exact(self):
+        self.assertEqual(self.row["cpf"], 100.01)      # not 100.00 — it carries the half cent
+
+    def test_the_edge_still_equals_the_tile_exactly(self):
+        edge = Decimal(str(self.row["cash"])) + Decimal(str(self.row["portfolio"])) \
+            + Decimal(str(self.row["cpf"]))
+        self.assertEqual(float(edge), self.m["net_worth_excl_housing"])
+        self.assertEqual(float(edge), 200.01)
+
+    def test_summing_rounded_bands_would_have_been_a_cent_short(self):
+        """The failure mode this discipline exists for, stated as a number rather than as a
+        comment: round each band on its own and the edge is 200.00 against a tile of 200.01."""
+        naive = round(float(Decimal("100.005")), 2) + round(float(Decimal("100.005")), 2)
+        self.assertEqual(naive, 200.00)
+        self.assertNotEqual(naive, self.m["net_worth_excl_housing"])
 
 
 if __name__ == "__main__":

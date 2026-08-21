@@ -71,6 +71,10 @@
   "file": "networth-latest.json",
   "status": 200
  },
+ "/api/networth/composition": {
+  "file": "networth-composition.json",
+  "status": 200
+ },
  "/api/spending/summary": {
   "file": "spending-summary.json",
   "status": 200
