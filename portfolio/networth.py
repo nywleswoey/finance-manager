@@ -93,10 +93,6 @@ def band(it: NwItem) -> str:
     liability — netted into the Housing band, they cancel there and nowhere else. A car loan or
     a carried card balance would sit in an asset band as a negative and break that identity
     without changing a single number's sign, so it fails here instead of drawing wrong."""
-    if it.is_housing and it.is_cpf:
-        raise ValueError(
-            f"catalogue item has conflicting band flags: {it.code!r} ({it.label!r}). "
-            "An item cannot be both is_housing and is_cpf — each item belongs to exactly one band.")
     if it.kind == "liability" and not it.is_housing:
         raise ValueError(
             f"non-housing liability in the net-worth catalogue: {it.code!r} ({it.label!r}). "
