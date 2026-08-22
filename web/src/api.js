@@ -45,6 +45,44 @@ export const sgd = (n) => "S$" + fmt(n, 0);
 export const money = (n, ccy, d = 2) =>
   n == null ? "—" : (SYM[ccy] || (ccy ? ccy + " " : "")) + fmt(n, d);
 export const cls = (n) => (n == null ? "" : n >= 0 ? "pos" : "neg");
+/**
+ * A signed magnitude, with the typographic minus this app's copy uses rather than a hyphen.
+ *
+ * Beside `fmt` because it is the same job — how a number reads — and in ONE place because the
+ * two charts that print deltas want different precision from the same idea: the composition's
+ * per-band chips are whole dollars and its net-worth line is one decimal of a percent, while a
+ * spend panel's caption is whole percent. Two local copies under one name, differing only in a
+ * digit count, is how a reader comes to believe they are the same function.
+ */
+export const signed = (n, d = 0) => (n < 0 ? "\u2212" : "+") + fmt(Math.abs(n), d);
+export const signedPct = (n, d = 1) => (n < 0 ? "\u2212" : "+") + fmt(Math.abs(n) * 100, d) + "%";
+
+/**
+ * How a date reads on a chart — en-US and UTC, both pinned, both deliberately.
+ *
+ * EN-US BECAUSE THE ORDER IS THE DECISION. `en-GB` renders "21 Jun" where these axes and
+ * captions want "Jun 21", and the browser's own locale is whatever the reader's machine says —
+ * so the format is pinned rather than inherited.
+ *
+ * UTC FOR A STRONGER REASON. A snapshot date and a spend month are *dates*, not instants.
+ * Parsing "2026-06-21" and formatting it in a zone west of Greenwich renders June 20 — a
+ * measurement silently attributed to the wrong day.
+ *
+ * Here rather than in either chart because both charts make the same two choices, and a second
+ * copy is free to drift from the first: the `Intl` options are the claim, so they get one home.
+ * Every one of these takes epoch milliseconds; a caller holding an ISO string parses it once.
+ */
+const at = (opts) => new Intl.DateTimeFormat("en-US", { timeZone: "UTC", ...opts });
+const MONTH_DAY = at({ month: "short", day: "numeric" });
+const MONTH_SHORT = at({ month: "short" });
+const MONTH_YEAR = at({ month: "short", year: "numeric" });
+const DAY_MONTH_YEAR = at({ month: "short", day: "numeric", year: "numeric" });
+export const monthDay = (t) => MONTH_DAY.format(t);          // Jun 21
+export const monthShort = (t) => MONTH_SHORT.format(t);      // Jun
+export const monthYear = (t) => MONTH_YEAR.format(t);        // Jun 2026
+export const dayMonthYear = (t) => DAY_MONTH_YEAR.format(t); // Aug 21, 2025
+
+
 // Unclassified spend — `category IS NULL` — as the app names it. Beside the formatters
 // because that is what it is: the null is the value, this is how the value reads.
 //

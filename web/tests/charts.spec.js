@@ -568,6 +568,15 @@ test.describe("Net Worth › composition", () => {
         .toContain("cpf cash");
       expect.soft(edges).toContain("net worth");
 
+      // ONE NAME PER BOUNDARY ABOVE THE FIRST BAND, counted against the payload rather than
+      // against a literal. This is what makes the day the Portfolio split adds a band a loud
+      // failure: without it the footnote would go on naming three boundaries out of four, and
+      // nothing else on the page would notice. `Composition.jsx`'s `EDGE_NAMES` names this
+      // gate as the thing that holds it.
+      expect.soft(edges.replace(/^edges:\s*/, "").split("/").map((t) => t.trim()).filter(Boolean),
+        "the edge footnote names a different number of boundaries than the stack has")
+        .toHaveLength(bands.length - 1);
+
       // PER-BAND DELTAS, which exist nowhere else on the page and are the whole answer to a
       // band too thin to see. Derived from the payload, so this cannot pass by agreeing with a
       // second copy of the arithmetic.

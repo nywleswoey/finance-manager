@@ -2,8 +2,8 @@ import React from "react";
 import {
   Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { fmt, sgd } from "../../api.js";
-import { ChartKey } from "../../charts.jsx";
+import { fmt, monthDay, monthShort, monthYear, sgd, signed, signedPct } from "../../api.js";
+import { ChartKey, TOOLTIP } from "../../charts.jsx";
 import { BAND_COLOURS, BAND_FILL_OPACITY } from "../../palette.js";
 
 /**
@@ -57,10 +57,11 @@ const BAND_LABELS = {
  * Abbreviated where the tiles are not, because this line sits under a four-chip key at 390px
  * and the tiles have a box each.
  *
- * THREE NAMES FOR THE BOUNDARIES ABOVE THE FIRST BAND, so this list and `bands` move together.
- * `inventory.spec.js` asserts `bands.length - 1` equals the number of named edges, which is what
- * makes the day the Portfolio split adds a band a loud failure rather than a footnote that
- * quietly names three of four boundaries.
+ * ONE NAME PER BOUNDARY ABOVE THE FIRST BAND, so this list and `bands` move together.
+ * `charts.spec.js` counts the names in the RENDERED footnote against `bands.length - 1`, which
+ * is what makes the day the Portfolio split adds a band a loud failure rather than a footnote
+ * that quietly names three of four boundaries. Separately, `inventory.spec.js` holds the
+ * arithmetic those names refer to — the cumulative edges against the metrics, to the cent.
  */
 const EDGE_NAMES = ["excl. hsg+CPF cash", "excl. hsg", "net worth"];
 
@@ -81,33 +82,31 @@ const EDGE_NAMES = ["excl. hsg+CPF cash", "excl. hsg", "net worth"];
 const SPARSE_AT_MOST = 6;
 
 /**
+ * The colour a fabricated point is marked in — `--neg`, the app's one "this is wrong" red.
+ *
+ * A LITERAL BECAUSE IT IS AN SVG PROP. recharts writes it onto the element as an attribute
+ * rather than as CSS, so `var(--neg)` resolves to nothing there; `styles.css`'s `:root` block
+ * is the other site and this comment is the cross-reference. It is deliberately NOT from
+ * `palette.js`, which colours *series* — this is a status colour, and a dropped point is a
+ * data failure rather than a band.
+ */
+const DROPPED_MARK = "#f85149";
+
+/**
  * The declared plot height, one number at every viewport width.
  *
  * 480 rather than the ~704px the grid cell would allow: the chart is free to grow up to the
  * New Snapshot form's height beside it, but the band count is scheduled to reach as many as
  * seven chips, and chips eat overhead rather than plot. Not full-width and not phone-only —
  * full-width costs page length 1:1 at every width and would give this `.grid2` a third child.
+ *
+ * `charts.spec.js` asserts this number at all ten viewports, and writes it out for the reason
+ * the crossover above is written twice: no build step here can share a constant with a spec.
  */
 const PLOT_HEIGHT = 480;
 
-/**
- * en-US, deliberately, and UTC, deliberately.
- *
- * en-GB renders "21 Jun" where this axis wants "Jun 21", and the browser's own locale is
- * whatever the reader's machine says — so the format is pinned rather than inherited. The
- * time zone is pinned for a stronger reason: a snapshot is a *date*, not an instant, and
- * parsing "2026-06-21" west of Greenwich and formatting it locally renders June 20.
- */
-const MMM_D = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-const MMM = new Intl.DateTimeFormat("en-US", { month: "short", timeZone: "UTC" });
-const MMM_YYYY = new Intl.DateTimeFormat("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
-
 /** An ISO date on the wire → epoch ms at UTC midnight. Parsed once, at render. */
 const epoch = (iso) => Date.parse(iso + "T00:00:00Z");
-
-/** A signed magnitude in words, with the typographic minus the app's copy uses. */
-const signed = (v) => (v < 0 ? "−" : "+") + fmt(Math.abs(v), 0);
-const signedPct = (v) => (v < 0 ? "−" : "+") + fmt(Math.abs(v) * 100, 1) + "%";
 
 /**
  * Every UTC month start inside `[first, last]`.
@@ -134,13 +133,13 @@ function monthStarts(first, last) {
  */
 function axisTicks(points) {
   if (points.length <= SPARSE_AT_MOST) {
-    return { ticks: points.map((p) => p.t), format: (t) => MMM_D.format(t) };
+    return { ticks: points.map((p) => p.t), format: monthDay };
   }
   const first = points[0].t;
   const last = points[points.length - 1].t;
   return {
     ticks: monthStarts(first, last),
-    format: (t) => (new Date(t).getUTCMonth() === 0 ? MMM_YYYY.format(t) : MMM.format(t)),
+    format: (t) => (new Date(t).getUTCMonth() === 0 ? monthYear(t) : monthShort(t)),
   };
 }
 
@@ -168,13 +167,14 @@ export default function Composition({ comp }) {
         <div className="mut" data-testid="composition-empty">
           {series.length === 0
             ? "No snapshots yet — this chart draws from the second. Start in the New Snapshot card."
-            : `One snapshot so far (${MMM_D.format(epoch(series[0].date))}). Capture a second in ` +
+            : `One snapshot so far (${monthDay(epoch(series[0].date))}). Capture a second in ` +
               "the New Snapshot card and this becomes a trend."}
         </div>
       </Card>
     );
   }
 
+  const dropped = comp.dropped ?? [];
   const points = series.map((r) => ({ ...r, t: epoch(r.date) }));
   const first = points[0];
   const last = points[points.length - 1];
@@ -196,14 +196,19 @@ export default function Composition({ comp }) {
   const ageDays = Math.max(0, Math.floor((Date.now() - last.t) / 86_400_000));
 
   return (
-    <Card pill={`as at ${MMM_D.format(last.t)} · ${ageDays}d`}>
+    <Card pill={`as at ${monthDay(last.t)} · ${ageDays}d`}>
       <ResponsiveContainer width="100%" height={PLOT_HEIGHT}>
         {/*
           `stackOffset="sign"` IS LOAD-BEARING, NOT INSURANCE. A negative value already exists
           on an asset row on the very first point this chart draws, and the default offset
           would fold it into the positive stack and garble every band above it.
         */}
-        <AreaChart data={points} stackOffset="sign" margin={{ top: 8, right: 12, left: 4, bottom: 4 }}>
+        {/* THE RIGHT MARGIN IS THE LAST TICK'S, not the plot's. A tick is centred on its own x,
+              so the right-most one — always the newest snapshot, the date a reader looks for
+              first — is drawn half outside the card at any margin narrower than half its label.
+              28 clears `MMM D` at 11px; the collision gate in `charts.spec.js` measures what is
+              left of the plot after it. */}
+        <AreaChart data={points} stackOffset="sign" margin={{ top: 8, right: 28, left: 4, bottom: 4 }}>
           <CartesianGrid stroke="#20262e" vertical={false} />
           {/*
             A TRUE TIME AXIS: numeric, UTC-scaled, with an explicit `[first, last]` domain.
@@ -237,10 +242,8 @@ export default function Composition({ comp }) {
             // and make the tooltip disagree with both the key and the stack it is describing.
             // `null` is the library's own "leave it alone".
             itemSorter={null}
-            labelFormatter={(t) => MMM_D.format(t)}
-            formatter={(v) => sgd(v)}
-            contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
-            itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
+            labelFormatter={monthDay}
+            formatter={(v) => sgd(v)} {...TOOLTIP} />
           {/*
             THE STACK IS DRAWN TWICE, AND THAT IS THE MECHANISM RATHER THAN A DUPLICATE.
 
@@ -288,8 +291,8 @@ export default function Composition({ comp }) {
             rather than a styled dot because dots stop at the crossover above and this must
             not; the footnote below names the date, the band and the codes.
           */}
-          {(comp.dropped ?? []).map((d, i) => (
-            <ReferenceLine key={i} x={epoch(d.date)} stroke="#f85149" strokeDasharray="3 3" />
+          {dropped.map((d, i) => (
+            <ReferenceLine key={i} x={epoch(d.date)} stroke={DROPPED_MARK} strokeDasharray="3 3" />
           ))}
         </AreaChart>
       </ResponsiveContainer>
@@ -314,11 +317,11 @@ export default function Composition({ comp }) {
             zero rendered into the page is the kind of thing a reader reports as a broken chart
             rather than as an empty history. */}
         net worth {signed(netDelta)}
-        {opening ? ` (${signedPct(netDelta / opening)})` : ""} since {MMM_D.format(first.t)}
+        {opening ? ` (${signedPct(netDelta / opening)})` : ""} since {monthDay(first.t)}
       </div>
-      {(comp.dropped ?? []).map((d, i) => (
+      {dropped.map((d, i) => (
         <div className="chartnote neg" key={i} data-testid="composition-dropped">
-          {MMM_D.format(epoch(d.date))}: {BAND_LABELS[d.band] ?? d.band} carries a fabricated $0 —
+          {monthDay(epoch(d.date))}: {BAND_LABELS[d.band] ?? d.band} carries a fabricated $0 —
           no value was supplied for {d.codes.join(", ")}. Drawn as captured, not repaired.
         </div>
       ))}
