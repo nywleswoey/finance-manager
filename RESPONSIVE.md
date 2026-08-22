@@ -165,8 +165,8 @@ person still looks at, and "—" means the suite has all of it.
 | Portfolio › Options | contract ledger **A**, pinning `Underlying` · by-ticker and by-type unchanged (273/261px — they genuinely fit) · monthly P/L 6 bars below the tier against 24 above it, with the reserved band only when the window holds a loss | — |
 | Portfolio › Transactions | **B** below 640 · **A** on `Date` from 640 to 1024 | — *(telling two same-day trades apart is an [open call](#open-calls), not a check)* |
 | Portfolio › SecurityDetail | txn history **B** · dividend history **B** · options history **A**, pinning the merged two-line `Contract` cell — and **B, A, A** above 640, since the tier gives both histories the pin on `Date` · `← Holdings` is `a.backlink`, a ≥44px target below the tier and the only way back — it was 17px until #47, see [Observations](#observations) | the dividend history renders for no fixture (PLTR has none) — its wrapper is the one thing in the tier no fixture reaches, and `pinned.spec.js` annotates that on every run |
-| Net Worth | editor floor · line chart carries a DOM `.chartkey`, not `<Legend>` · Breakdown and History `.contained` **below 1024**, not unconditionally · row grid unchanged | readable — the editors' remaining criterion |
-| Spending › Overview | donut dropped below 640, the list is the chart · stacked bar chart's `<Legend>` is a `.chartkey` · Top Line Items **B** below 640, **A** on `Category` from 640 to 1024 | — *(the stacked bar chart was unreachable while `/api/spending/trends` was captured as a **500**; **#35** fixed the endpoint, the fixture holds a real chart, and `charts.spec.js` asserts its key in the DOM. The view's hscroll residual did not move — the chart is a full-width card holding a percentage-width container, and that number was always the `.grid2` track floor)* |
+| Net Worth | editor floor · composition chart at a declared **480** at every width, in the grid cell the two-line chart had, with a DOM `.chartkey` carrying a per-band delta rather than a `<Legend>` · Breakdown and History `.contained` **below 1024**, not unconditionally · row grid unchanged | readable — the editors' remaining criterion · whether four bands and a four-chip key are legible at 390 in a cell that is also 480px tall |
+| Spending › Overview | donut dropped below 640, the list is the chart · stacked bar chart's `<Legend>` is a `.chartkey` · **spend trend** a full-width sibling card between the grid and the stacked bar, `auto-fit` at a **185px floor / 14px gap**, panels **140px**, present at 390 as one column — 4 columns from 810px of card, 2 from 544, 1 below 384, and **three-and-an-orphan at 844×390 alone** (see Observations) · Top Line Items **B** below 640, **A** on `Category` from 640 to 1024 | — *(the stacked bar chart was unreachable while `/api/spending/trends` was captured as a **500**; **#35** fixed the endpoint, the fixture holds a real chart, and `charts.spec.js` asserts its key in the DOM. The view's hscroll residual did not move — the chart is a full-width card holding a percentage-width container, and that number was always the `.grid2` track floor)* |
 | Spending › By Category | donut dropped below 640 · Categories **A** with the name column pinned, keeping its own `▸`/`▾` and the `.rowtap` flash *instead of* the persistent `›` · drilled transactions **B**, **outside the `.grid2` entirely** rather than merely outside the table | whether three levels of drill read as one structure once the third leaves the grid |
 | Spending › Classify | editor floor · `.fillpane`/`.grow` become blocks below 640 so the page scrolls as one, `.scroll` deliberately untouched · ⇅ Reorder `display: none`, so the reorder modal is unreachable below the tier by design · `RuleModal` on `svh`, its control rows wrap, `CatSelect` capped at `max-width: 100%`, `MatchTable` `.contained` | readable · `MatchTable` renders only after a POST the GET-captured fixtures do not carry — `editors.spec.js` annotates that gap |
 | Spending › Recurring | monitor **A** · candidates **A** | the monitor never mounts — the owner tracks nothing, so `/api/spending/recurring` is `[]` and its pin is eyes-only (`pinned.spec.js` annotates it) · the **two nested scroll regions**, which is the feel check |
@@ -518,6 +518,37 @@ Things the build session must be told, not left to discover.
 - **Recharts renders a `LabelList` only after the bar animation ends**, so a label count taken on
   arrival is 0 — and a gate expecting 0 passes for the wrong reason. `charts.spec.js`'s `barsSettled`
   waits for two identical samples of every bar's path; there is no marker in the DOM for this.
+- **The spend trend's third rung is unavoidable, and it lands at 844×390.** #100 asks for
+  4 → 2 → 1 with no third rung; the 185px floor and 14px gap deliver that at nine of the ten
+  viewports and draw **three panels and an orphan** at the rotated phone, where the card is
+  **754px** inner — the phone navigation shell at a 844px width, which is exactly the viewport the
+  ten-viewport list exists to catch, because a naive sweep never sees it. **It is not a wrong constant.** The card's inner width
+  is 298 · 328 · 350 · 368 · 544 · 577 · 754 · 810 · 990 · 1150 across the ten, and a search of
+  every floor from 100 to 320 against every gap from 8 to 24 finds **no pair** that avoids a
+  three-track rung at all ten: the 204 pairs that do all draw **two ~118px panels at 390px**,
+  which is the one outcome #100 rules out by name (the chart stays at 390 as *one* column, at
+  ~35px per point). The nearest miss is instructive — 754px of card needs a pitch of ≤192 to seat
+  four, and 577px needs >197 to seat two, so the two constraints cross. `charts.spec.js` pins the
+  count as the arithmetic of the two declared constants rather than as a set of allowed rungs,
+  and annotates the viewport where the rung is three.
+- **recharts 3.x renders tick labels OUTSIDE the axis subtree**, in their own z-index layer
+  (`.recharts-xAxis-tick-labels`), and hoists series dots the same way (`.recharts-area-dots`). The
+  obvious `.recharts-xAxis .recharts-cartesian-axis-tick text` matches **nothing** — and a gate
+  written that way passes by finding zero ticks. `charts.spec.js` and `composition.spec.js` both
+  cross-reference this; it is the selector shape, not a bug to work around.
+- **An explicit `ticks` array is silently THINNED without `interval={0}`** — a probe supplied eight
+  and recharts drew five. So an axis that decides its own tick set is indistinguishable from one
+  that was given a set, and `interval={0}` is mandatory wherever `ticks` is passed.
+- **A stacked area cannot have full-opacity strokes AND a surface gap in one pass.** recharts draws
+  each series as `area` then `curve` inside its own layer, so the next band's fill paints over the
+  previous band's stroke, and any gap drawn with it goes too. `Composition.jsx` draws the stack
+  **twice** — fills with no stroke, then a second `stackId` carrying only strokes and dots — so
+  every curve is painted after every fill. The second stack is also why the edges are *right*
+  rather than merely visible: under `stackOffset="sign"` a diverging offset lays negatives below
+  zero rather than adding them, so four `<Line>`s over cumulative sums would not land on the drawn
+  boundaries.
+- **A stacked area over ONE point renders zero area paths**, which is where the composition chart's
+  empty-state threshold of two comes from. It is the library's floor, not a taste call.
 - **`<Legend>` is a chart child, so its space comes out of the plot** — ~75px of a 300px chart.
   Every key in the app is `.chartkey` DOM under the container. `inventory.spec.js` forbids `<Legend`
   in source *and* names the two files that must carry a `<ChartKey>`, because "no legend" is also

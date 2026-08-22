@@ -104,8 +104,15 @@ export function Donut({ title, data, colourOf }) {
  * the case that makes this a defect rather than a preference — it never imported `Legend` at
  * all, so two coloured lines were anonymous at *every* width, desktop included.
  *
- * `items` is `[{ name, colour }]` in series order, and the caller passes the same colour it
- * gave the series: a key with its own palette is a key that goes wrong silently.
+ * `items` is `[{ name, colour, note? }]` in series order, and the caller passes the same
+ * colour it gave the series: a key with its own palette is a key that goes wrong silently.
+ *
+ * `note` IS OPTIONAL AND IS NOT DECORATION. The composition chart passes each band's delta
+ * over the drawn domain, because a band that moves less than a pixel has no other way to say
+ * what it did — "state it in words where the pixels cannot carry the precision" is that
+ * chart's recurring move, and this is one of its three uses. The stacked bar passes nothing
+ * and renders exactly what it rendered before, which is what keeps this one component rather
+ * than two.
  */
 export function ChartKey({ items }) {
   return (
@@ -114,6 +121,7 @@ export function ChartKey({ items }) {
         <span className="ck-item" key={s.name}>
           <span className="chip" style={{ background: s.colour }} />
           {s.name}
+          {s.note ? <span className="ck-note">{s.note}</span> : null}
         </span>
       ))}
     </div>

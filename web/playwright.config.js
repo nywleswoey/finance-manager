@@ -54,6 +54,16 @@ export default defineConfig({
       testMatch: /catalogue\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // The composition chart's four unreachable states, on the same reasoning again: an empty
+    // state is copy, a tick crossover is a count, and where a negative band lands is
+    // arithmetic. None of the three is a claim about width, and two of them need a payload the
+    // live database cannot hold — see that file's docstring. `charts.spec.js` keeps everything
+    // the chart does that IS about width at all ten.
+    {
+      name: "composition",
+      testMatch: /composition\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
       testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts|editors|tablet|tap)\.spec\.js/,

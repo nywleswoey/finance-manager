@@ -7,6 +7,7 @@ import { get, sgd, fmt, catName } from "../../api.js";
 import { ChartKey, Donut } from "../../charts.jsx";
 import { categoryColour } from "../../palette.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
+import SpendTrend from "./SpendTrend.jsx";
 
 export default function SpendOverview() {
   const [sum, setSum] = useState(null);
@@ -98,6 +99,12 @@ export default function SpendOverview() {
           )}
         </div>
       </div>
+      {/* TRAJECTORY BEFORE THE PER-MONTH DETAIL, and a SIBLING of the grid above rather than a
+          third child of it: coarse-to-fine survives, `.grid2` keeps exactly two children, and
+          the stacked bar below is untouched — it still answers "what did I spend in March" on
+          this same page. `SpendTrend` slices the array already fetched here, so one payload
+          feeds both charts and they cannot disagree about a shared month. */}
+      <SpendTrend trend={trend} />
       {trend && trend.series.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <h3>Monthly Spend by Category</h3>

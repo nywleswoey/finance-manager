@@ -2,7 +2,7 @@
 # the only ones that arrive with nobody having run anything locally — but it gates every PR.
 #
 # Two jobs, split by what they can tell you and how fast: `python` answers in ~2 minutes,
-# `web` runs the 1367-assertion viewport suite and takes ~10. Neither needs a secret; the
+# `web` runs the 1497-assertion viewport suite and takes ~10. Neither needs a secret; the
 # suite serves every API call from web/tests/fixtures and the Python tests build their own
 # throwaway database.
 name: CI

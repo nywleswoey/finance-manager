@@ -145,7 +145,7 @@ coordinates the rejected layout passes. It also carries the group header — the
 and the chevron carve-out, which is the only place pattern A's affordance rule is deliberately not
 applied.
 
-`tests/charts.spec.js` — the six chart surfaces. Below 640 the donuts are not rendered and the
+`tests/charts.spec.js` — every chart surface in the app. Below 640 the donuts are not rendered and the
 `.barrow` list beneath them becomes the chart, which is the one gate here that asserts an *absence*:
 `display: none` starves a `ResponsiveContainer` to 0×0, so a hidden chart and a collapsed chart are
 the same DOM and the treatment has to be a hook rather than a rule. Everything else it checks holds at
@@ -168,9 +168,29 @@ against the map declared in `src/palette.js`, which it **imports rather than res
 hexes in the suite is a second palette, and the drift it would be blind to is the one it exists to
 catch.
 
+Since the two trajectory charts landed it also carries them, and **neither is dropped on a phone** —
+the donut precedent is about redundancy rather than size, and nothing else on either page carries
+trajectory, so both have gates at all ten viewports rather than a phone branch. For the **net-worth
+composition** it asserts the payload's `bands` order (the literal bottom→top stacking order: three of
+the four cumulative edges are summary tiles only because of it, and nothing else notices if it
+moves), the composited fill opacity and the 2px surface gap the palette validator was run at, the x
+axis's tick set and formats, that **no two tick labels overlap at any viewport** — which is the whole
+reason the crossover is one constant rather than a function of width — that the curve is `linear`
+read off the path commands rather than off the prop, that a dot lands on every band edge while the
+series is sparse, and that the stack **never contradicts the tiles printed above it**. For the
+**spend trend** it asserts one panel per group with no cap and no fold, colour by name off the shared
+map with `Uncategorized` dashed, one vertex per month **in the window** (which is what proves it
+slices rather than draws the whole array), **newest at the left** read off the geometry against the
+payload's own direction, the 4 → 2 → 1 reflow with no third rung, and that the card adds no key, no
+bars and no control to a page whose existing gates claim exactly one of the first and none of the
+last.
+
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no chart renders a `<Legend>` and that both multi-series charts
-carry a `<ChartKey>`, that **no source file names a net-worth catalogue item code** — the New
+carry a `<ChartKey>`, that **the composition's cumulative edges are the summary metrics to the
+cent** — the anchor claim of that chart and the only place the cents survive, since every rendered
+surface rounds to the dollar; it is checked over the dates the two fixtures share and fails loudly
+if they share none — that **no source file names a net-worth catalogue item code** — the New
 Snapshot form's headings and rows are derived from the catalogue's `band`, and the codes are read
 out of the fixture so a recapture cannot leave the gate asserting a stale list (`srs` is held out,
 because one word is a code, a band value *and* a funding bucket, so the claim is about the other
@@ -213,6 +233,22 @@ per row — realised when closed, unrealised when open — so folding the raw fi
 closed leg's realised result. What it deliberately does not check is anything responsive; the pin,
 the column count and the row shape stay `pinned.spec.js`'s, because consolidated rows are ordinary
 data rows and inherit those gates already.
+
+`tests/composition.spec.js` — the four states of the **net-worth composition chart** the committed
+fixture cannot reach, and the third spec here whose subject is not layout. An empty state is copy, a
+tick crossover is a count, and whether a negative band lands above or below the zero line is
+arithmetic; none of the three is a claim about width, so it runs at **one viewport in a project of
+its own**. Two of them the live database can never hold again — this installation has five snapshots
+and has permanently left the zero- and one-snapshot states — and a fixture cannot carry both sides of
+a crossover, so this is the one file whose seam moves up a layer: it answers
+`/api/networth/composition` itself and derives every expectation from what it served. It gates the
+two empty strings (both **name** the New Snapshot card rather than pointing at it — the grid is one
+column on a phone, where "beside" is false, and two above it, where "below" is), the dense tick
+branch (month starts, `MMM`, the year on January — and the count is really asserting `interval={0}`,
+without which recharts silently thins an explicit `ticks` array), and **sign-aware stacking**: a
+negative band must hang below the zero line rather than be subtracted from the running total, which
+is the assertion that separates the two stack offsets and matters because a negative value already
+exists on an asset row on the first point the live chart draws.
 
 `tests/catalogue.spec.js` — the New Snapshot form's **headings**, and the second spec here whose
 subject is not layout. Which item a person types under which heading is either the catalogue's own

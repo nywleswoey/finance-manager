@@ -4,7 +4,7 @@
 #
 # Grouping is the whole point of the config below. Ungrouped, this repo opens ~10 PRs a week
 # (react + react-dom, sqlalchemy + psycopg, every @playwright/* in lockstep) and each one runs
-# the full 1367-assertion viewport suite. Grouped, related bumps arrive as one PR that either
+# the full 1497-assertion viewport suite. Grouped, related bumps arrive as one PR that either
 # passes together or fails together, which is also how they would be deployed.
 version: 2
 

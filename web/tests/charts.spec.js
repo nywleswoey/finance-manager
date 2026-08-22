@@ -1,10 +1,16 @@
 /**
- * Charts on a phone: the donuts are deleted and the list becomes the chart.
+ * Charts on a phone: the donuts are deleted and the list becomes the chart — and, since the
+ * two trajectory charts landed, what each of those two claims at every width.
  *
- * Six chart surfaces across five views. Below 640px three of them lose chrome — the donut
- * itself, and one chart's value labels — and one is halved to six bars. Everything else the
- * charts needed turned out to belong at *every* width: the multi-series key, the reserved
- * band under the bars, and the two containers that could collapse to nothing.
+ * Below 640px three surfaces lose chrome — the donut itself, and one chart's value labels —
+ * and one is halved to six bars. Everything else the charts needed turned out to belong at
+ * *every* width: the multi-series key, the reserved band under the bars, and the two
+ * containers that could collapse to nothing.
+ *
+ * NEITHER TRAJECTORY CHART IS DROPPED ON A PHONE, and that is the one place the donut
+ * precedent does not reach. The donut goes because it *restates* the list printed under it;
+ * nothing on either of those pages carries trajectory, so there is no redundancy to spend.
+ * Both therefore have gates at all ten viewports here rather than a phone branch.
  *
  * WHY THE DONUT GOES, since it is the one thing here that is not a defect. At percentage
  * radii in a one-column `.grid2` it renders at ⌀216px, larger than desktop's 180px, so this
@@ -34,9 +40,15 @@ import { readFixture } from "./fixtures/index.js";
 // The declared map itself, not a copy of it — see the `one palette` describe below for why
 // a table of hexes in this file would be the defect rather than the gate. `palette.js` is
 // plain data with no React or recharts import, which is what makes it importable here.
-import { categoryColour } from "../src/palette.js";
+import { BAND_COLOURS, BAND_FILL_OPACITY, CATEGORY_DASH, categoryColour } from "../src/palette.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
+
+/** A declared hex as the browser reports it, so a map entry can be compared to a computed style. */
+const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+
+/** A rendered figure, the way `api.js`'s `fmt` writes one — grouped, no decimals. */
+const grouped = (n) => Math.round(Math.abs(n)).toLocaleString("en-US");
 
 /** Every view that draws a donut, and how many it draws. */
 const DONUT_VIEWS = [
@@ -151,18 +163,31 @@ test.describe("every chart", () => {
     // Net Worth is the case that makes this a defect rather than a preference: it imported no
     // `Legend` at all, so `name="Net Worth"` / `name="Excl. Housing"` reached the tooltip and
     // nowhere else, and touch has no hover. Two anonymous coloured lines.
+    //
+    // THE CLAIM MOVED WITH THE CHART RATHER THAN BEING DELETED. Those two lines are retired:
+    // they are edges of the composition stack now — `cash + portfolio` is one summary tile and
+    // `+ cpf` is another — so the two names they were given here are asserted against the tiles
+    // in the composition describe below, and what this gate keeps is the thing it was written
+    // for: every series is named in the DOM, and the key's colours are the series' own.
+    //
+    // ONE CHIP PER BAND ON THE WIRE, counted from the payload rather than from a literal —
+    // `bands` is scheduled to grow the day the Portfolio split lands, and a hard four here
+    // would fail for the right reason at the wrong place.
     await openView(page, baseURL, "Net Worth");
+    const comp = readFixture("networth-composition.json");
     const key = page.locator(".main .chartkey");
     await expect.soft(key).toHaveCount(1);
-    await expect.soft(key.locator(".ck-item")).toHaveText(["Net Worth", "Excl. Housing"]);
+    await expect.soft(key.locator(".ck-item"), "one key chip per band").toHaveCount(comp.bands.length);
 
-    // The chips must carry the lines' own colours — a key with an independent palette is a
-    // key that can go wrong without anything noticing.
+    // The chips must carry the areas' own strokes — a key with an independent palette is a
+    // key that can go wrong without anything noticing. `.nwband-edge` rather than every area:
+    // the stack is drawn twice, fills then strokes, so that a 2px surface gap can survive the
+    // next band being painted over the previous band's edge. See `Composition.jsx`.
     const chips = await key.locator(".chip").evaluateAll((els) =>
       els.map((el) => getComputedStyle(el).backgroundColor));
-    const strokes = await page.locator(".main .recharts-line .recharts-curve").evaluateAll((els) =>
+    const strokes = await page.locator(".main .nwband-edge .recharts-area-curve").evaluateAll((els) =>
       els.map((el) => getComputedStyle(el).stroke));
-    expect.soft(chips, "the key's chips do not match the lines they name").toEqual(strokes);
+    expect.soft(chips, "the key's chips do not match the bands they name").toEqual(strokes);
 
     expect.soft(await page.locator(".main .recharts-legend-wrapper").count(),
       "recharts' own `<Legend>` takes its space out of the plot — the key is DOM").toBe(0);
@@ -216,8 +241,6 @@ test.describe("one palette", () => {
    * in the suite is a second palette, and the failure it would then be blind to is precisely
    * the one it exists to catch.
    */
-  const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
-
   test("Spending › Overview colours its three surfaces by name", async ({ page, baseURL }) => {
     await openView(page, baseURL, "Spending › Overview");
     await barsSettled(page);
@@ -401,4 +424,377 @@ test.describe("Portfolio › Options", () => {
         });
       }
     });
+});
+
+/* ── the net-worth composition chart ─────────────────────────────────────────────────────
+   What net worth is MADE OF, over time, in the grid cell where two anonymous lines used to
+   be. Every gate here runs at all ten viewports, because every rule the chart carries was
+   decided as one number for every width — the declared height, the tick crossover, the
+   presence of the chart at all — and a rule that is "6 at every width" is only a rule if
+   something checks it at more than one. */
+test.describe("Net Worth › composition", () => {
+  const comp = () => readFixture("networth-composition.json");
+  const netAt = (row, bands) => bands.reduce((a, b) => a + row[b], 0);
+
+  test("stacks the payload's bands, in the payload's order, in the payload's colours",
+    async ({ page, baseURL }) => {
+      // THE ORDER IS LOAD-BEARING AND NOTHING ELSE NOTICES IF IT MOVES. `bands` is the literal
+      // bottom→top stacking order, and three of the stack's four cumulative edges equal a
+      // summary tile only because of it — reorder it and every band still sums to the same
+      // total, so only the boundaries silently stop meaning anything. Compared against the
+      // declared map by name, never by position, for the reason `palette.js` gives: the band
+      // count is scheduled to change, and a positional palette would recolour three bands the
+      // moment a fourth was inserted below them.
+      await openView(page, baseURL, "Net Worth");
+      const { bands } = comp();
+      const strokes = await page.locator(".main .nwband-edge .recharts-area-curve")
+        .evaluateAll((els) => els.map((el) => getComputedStyle(el).stroke));
+      expect.soft(strokes, "one stroked edge per band, bottom→top")
+        .toEqual(bands.map((b) => rgb(BAND_COLOURS[b])));
+
+      // The fills are the same series again, at the declared opacity, with the surface gap
+      // that lets the strokes above survive being painted over. Reading the composited value
+      // matters: `palette.js` records the validator run at this opacity over this surface, so
+      // a fill drawn at a different one invalidates a measurement rather than a preference.
+      const fills = await page.locator(".main .nwband-fill .recharts-area-area")
+        .evaluateAll((els) => els.map((el) => {
+          const cs = getComputedStyle(el);
+          return { fill: cs.fill, opacity: cs.fillOpacity, gap: cs.strokeWidth, edge: cs.stroke };
+        }));
+      expect.soft(fills.map((f) => f.fill)).toEqual(bands.map((b) => rgb(BAND_COLOURS[b])));
+      for (const f of fills) {
+        // IMPORTED, NEVER RESTATED — the same discipline the palette gate above holds. A `0.85`
+        // written here is a second declaration of the number the validator record in
+        // `palette.js` was measured at, and the drift it would be blind to is the one it exists
+        // to catch. The surface hex is the exception and has to be: `--panel` is a CSS custom
+        // property, which no JavaScript in this repo can read.
+        expect.soft(Number(f.opacity), "the fill opacity `palette.js` was validated at")
+          .toBe(BAND_FILL_OPACITY);
+        expect.soft(f.gap, "the 2px surface gap between stacked segments").toBe("4px");
+        expect.soft(f.edge, "the gap must be `--panel`, the card surface, not a colour")
+          .toBe("rgb(22, 27, 34)");
+      }
+    });
+
+  test("draws a true time axis, ticked and formatted", async ({ page, baseURL }) => {
+    await openView(page, baseURL, "Net Worth");
+    const { series } = comp();
+
+    // AT n <= 6 EVERY SNAPSHOT DATE IS A TICK, `MMM D`, en-US — `en-GB` renders "21 Jun". The
+    // expected strings come from the payload's own dates rather than from a literal, so a
+    // recapture that adds a sixth snapshot keeps this honest instead of stale.
+    //
+    // THE SELECTOR IS NOT AN AXIS DESCENDANT, AND THAT IS THE POINT. recharts 3.x renders tick
+    // labels in their own z-index layer outside the axis subtree, so the obvious
+    // `.recharts-xAxis .recharts-cartesian-axis-tick text` matches nothing and a gate written
+    // that way passes by finding zero ticks.
+    const ticks = page.locator(".main .recharts-xAxis-tick-labels .recharts-cartesian-axis-tick-value");
+    const fmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+    if (series.length <= 6) {
+      await expect.soft(ticks, "at or under the crossover every snapshot date is ticked")
+        .toHaveText(series.map((r) => fmt.format(Date.parse(r.date + "T00:00:00Z"))));
+    } else {
+      // The other branch is month starts, `MMM`, with the year on January. No fixture reaches
+      // it yet — five snapshots — so it is annotated rather than asserted blind.
+      await expect.soft(ticks.first()).toHaveText(/^[A-Z][a-z]{2}( \d{4})?$/);
+    }
+
+    // NO TICK MAY COLLIDE WITH ITS NEIGHBOUR, at any viewport this app supports — which is the
+    // whole reason the crossover is one constant rather than a function of width. The plot
+    // width in this grid is non-monotonic in viewport width (726px at 1100, 335px at 1180), so
+    // a width-derived rule would hand the generous branch to the narrower plot.
+    const boxes = await ticks.evaluateAll((els) =>
+      els.map((el) => { const r = el.getBoundingClientRect(); return { t: el.textContent, l: r.left, r: r.right }; }));
+    const overlaps = boxes.slice(1)
+      .filter((b, i) => b.l < boxes[i].r)
+      .map((b, i) => `${boxes[i].t} / ${b.t}`);
+    expect.soft(overlaps, "x tick labels overlap").toEqual([]);
+
+    // ZERO-BASED AND UNCLIPPED. A clipped domain stops band heights being proportional to
+    // value, which is a lie about the one thing this chart exists to show. Read as the span the
+    // ticks cover rather than as a tick on zero: recharts places its own y ticks, and on a
+    // domain that reaches below zero not one of them need land on it — `composition.spec.js`
+    // is the file that exercises that half.
+    const yTicks = (await page.locator(".main .recharts-yAxis-tick-labels .recharts-cartesian-axis-tick-value")
+      .allTextContents()).map((t) => Number(t.replace(/[k,]/g, "")));
+    expect.soft(Math.min(...yTicks), "the y axis does not reach zero").toBeLessThanOrEqual(0);
+  });
+
+  test("is linear, dotted on every edge, and 480px tall at every width",
+    async ({ page, baseURL }) => {
+      await openView(page, baseURL, "Net Worth");
+      const { series, bands } = comp();
+
+      // CURVE `linear`, asserted on the geometry rather than on the prop. All three candidate
+      // curves invent a shape between two measurements; only linear's slope is a real quantity
+      // — the true average rate over the interval — and the view shipped cubic control points
+      // in production. A cubic path writes `C`; a linear one is `M` and `L` alone.
+      const commands = await page.locator(".main .nwband-edge .recharts-area-curve")
+        .evaluateAll((els) => [...new Set(els.flatMap((el) =>
+          (el.getAttribute("d") ?? "").match(/[A-Za-z]/g) ?? []))].sort());
+      expect.soft(commands, "a curved edge invents a slope that was never measured")
+        .toEqual(["L", "M"]);
+
+      // DOTS ON EVERY EDGE, not only the top one — three of the four cumulative edges are named
+      // tiles — and on the same constant as the tick crossover, so one number drives both.
+      // NOT SCOPED TO `.nwband-edge`, for the same reason the tick gate above is not scoped to
+      // the axis: recharts 3.x hoists dots into their own z-index layer, outside the series
+      // layer that carries the class. The count is exact anyway — the fill stack draws none.
+      const dots = await page.locator(".main .recharts-area-dots .recharts-area-dot").count();
+      expect.soft(dots, "a dot on every band edge while the series is sparse")
+        .toBe(series.length <= 6 ? bands.length * series.length : 0);
+
+      const boxes = await page.locator(".main .recharts-responsive-container").evaluateAll(
+        (els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+      expect.soft(boxes, "one declared height, at every viewport width").toEqual([480]);
+    });
+
+  test("names the edges the tiles name, and states what each band did",
+    async ({ page, baseURL }) => {
+      await openView(page, baseURL, "Net Worth");
+      const { series, bands } = comp();
+      const first = series[0];
+      const last = series[series.length - 1];
+
+      // THE EDGE FOOTNOTE IS A THIRD SURFACE NAMING TWO METRICS THE TILES ALREADY NAME, so
+      // renaming two of the three leaves the third lying. This is what couples them: the tile
+      // that says what it excludes and the footnote that names the same boundary have to agree
+      // on the word, and "CPF Cash" is the word #97 settled on — the portfolio's own CPF
+      // holdings sit in the Portfolio band, not in this one.
+      const tile = page.getByTestId("networth-summary");
+      await expect.soft(tile).toContainText("CPF Cash");
+      const edges = (await page.getByTestId("composition-edges").textContent()).toLowerCase();
+      expect.soft(edges, "the edge footnote and the tile must name one metric one way")
+        .toContain("cpf cash");
+      expect.soft(edges).toContain("net worth");
+
+      // PER-BAND DELTAS, which exist nowhere else on the page and are the whole answer to a
+      // band too thin to see. Derived from the payload, so this cannot pass by agreeing with a
+      // second copy of the arithmetic.
+      const notes = await page.locator(".main .chartkey .ck-note").allTextContents();
+      expect.soft(notes, "each chip carries its own band's delta over the drawn domain")
+        .toEqual(bands.map((b) => (last[b] - first[b] < 0 ? "−" : "+") + grouped(last[b] - first[b])));
+
+      const net = netAt(last, bands) - netAt(first, bands);
+      const delta = await page.getByTestId("composition-delta").textContent();
+      expect.soft(delta, "the net-worth delta since the first drawn date")
+        .toContain((net < 0 ? "−" : "+") + grouped(net));
+
+      // The staleness pill, matching the Breakdown card two cards down. The age rides with the
+      // date because the age is the half that motivates a capture — and the axis deliberately
+      // ends at the last snapshot rather than at today, so this line is where the silence the
+      // chart does not draw gets stated.
+      await expect.soft(page.getByTestId("networth-composition").locator("h3"))
+        .toHaveText(/as at [A-Z][a-z]{2} \d{1,2} · \d+d$/);
+    });
+
+  test("never contradicts the tiles printed above it", async ({ page, baseURL }, testInfo) => {
+    // THE CHART'S WHOLE CLAIM ON THE PAGE. Three of the four cumulative edges are summary
+    // tiles, so a stack that disagreed with the boxes ~500px above it would be the one failure
+    // this chart cannot survive — it exists to make the composition legible, and a composition
+    // whose top edge is not net worth is not this composition.
+    //
+    // RENDERED, TO THE DOLLAR. `sgd()` prints no decimals, so the cent is out of reach here by
+    // construction; the exact-cent form of this identity is in `inventory.spec.js`, over the
+    // committed payloads. What this adds is that the two surfaces agree *as drawn*.
+    await openView(page, baseURL, "Net Worth");
+    const { series, bands } = comp();
+    const latest = readFixture("networth-latest.json");
+    const row = series.find((r) => r.date === String(latest.date));
+
+    if (!row) {
+      // The tiles read `/api/networth/latest` and the chart reads `/api/networth/composition`;
+      // the two fixtures were captured either side of the June promotion, so the composition
+      // carries five points where its siblings carry two. In production both come off one
+      // store and this branch cannot happen — so it is annotated rather than passed over, and
+      // a recapture of the sibling fixtures retires the annotation.
+      testInfo.annotations.push({
+        type: "not-covered-by-fixtures",
+        description: `networth-latest.json is ${latest.date}, which networth-composition.json ` +
+          "does not carry — its siblings were captured before the June snapshots were promoted",
+      });
+      return;
+    }
+
+    const EDGES = ["net_worth_excl_housing_cpf", "net_worth_excl_housing", "net_worth"];
+    let cumulative = 0;
+    for (const [i, band] of bands.entries()) {
+      cumulative += row[band];
+      if (i === 0) continue;
+      const tile = page.getByTestId("metric-" + EDGES[i - 1]);
+      await expect.soft(tile, `the edge above ${band} must be the ${EDGES[i - 1]} tile`)
+        .toHaveText("S$" + grouped(cumulative));
+    }
+  });
+
+  test("renders no dropped-point footnote for a payload with none", async ({ page, baseURL }) => {
+    // A `dropped` point is a fabricated $0 the write path admits to, and it is marked and
+    // footnoted rather than repaired or interpolated over — a data failure must never be drawn
+    // as a balance-sheet event. Both directions are asserted from the payload, so the day a
+    // capture picks one up this gate flips rather than going quiet.
+    await openView(page, baseURL, "Net Worth");
+    const { dropped } = comp();
+    await expect.soft(page.getByTestId("composition-dropped")).toHaveCount(dropped.length);
+    expect.soft(await page.locator(".main .recharts-reference-line").count(),
+      "one marker per dropped point").toBe(dropped.length);
+  });
+});
+
+/* ── the spend trend ─────────────────────────────────────────────────────────────────────
+   Small multiples on Spending › Overview: four panels, one per category, each on its own
+   y-axis, drawn newest-at-the-left over a window that is a rule rather than a control. */
+test.describe("Spending › Overview › spend trend", () => {
+  const trends = () => readFixture("spending-trends.json");
+  const win = () => readFixture("spending-window.json");
+  const drawn = () => trends().series.filter((r) => r.ym >= win().start && r.ym <= win().end);
+
+  test("draws one panel per category, in the payload's colours", async ({ page, baseURL }) => {
+    await openView(page, baseURL, "Spending › Overview");
+    const { groups } = trends();
+    await expect.soft(page.locator(".main .smpanel"),
+      "no top-N and no Other fold — every group gets a panel").toHaveCount(groups.length);
+
+    // Colour by NAME off the shared map, like every other spending surface on this page. The
+    // dash is the other half of what makes Uncategorized read as residue rather than as a
+    // category anyone chose: `#6e7681` fails the validator's chroma floor precisely because
+    // grey carries no identity, and the dash is the secondary encoding that says so.
+    const lines = await page.locator(".main .smpanel .recharts-line-curve").evaluateAll((els) =>
+      els.map((el) => ({ stroke: getComputedStyle(el).stroke, dash: getComputedStyle(el).strokeDasharray })));
+    expect.soft(lines.map((l) => l.stroke)).toEqual(groups.map((g) => rgb(categoryColour(g))));
+    expect.soft(lines.map((l) => l.dash !== "none")).toEqual(groups.map((g) => Boolean(CATEGORY_DASH[g])));
+  });
+
+  test("draws the window, newest at the left", async ({ page, baseURL }) => {
+    await openView(page, baseURL, "Spending › Overview");
+    const { groups } = trends();
+    const months = drawn();
+
+    // ONE VERTEX PER MONTH IN THE WINDOW — which is what proves the chart slices rather than
+    // draws the whole array. `trends()` carries nineteen months; the rule admits ten, and the
+    // two it drops at the ends are 98.6% and 1.4% of the money the footnote says is off-chart.
+    const paths = await page.locator(".main .smpanel .recharts-line-curve")
+      .evaluateAll((els) => els.map((el) => el.getAttribute("d") ?? ""));
+    for (const [i, d] of paths.entries()) {
+      expect.soft((d.match(/[ML]/g) ?? []).length, `${groups[i]}: one vertex per drawn month`)
+        .toBe(months.length);
+      expect.soft(d.includes("C"), `${groups[i]}: raw monthly totals, no smoothing`).toBe(false);
+    }
+
+    // NEWEST AT THE LEFT, read off the geometry rather than off a prop, because this is the
+    // decision the whole panel header exists to caption: a declining category slopes *up*, and
+    // a panel has no y-axis to say otherwise. SVG y grows downward, so a leftmost point that is
+    // lower on the page than the rightmost one is a leftmost point with the smaller value —
+    // and whether that is right is a fact about the payload, so the payload decides it.
+    const ends = await page.locator(".main .smpanel .recharts-line-curve").evaluateAll((els) =>
+      els.map((el) => {
+        const pts = (el.getAttribute("d") ?? "").split(/[ML]/).filter(Boolean)
+          .map((p) => Number(p.split(",")[1]));
+        return { first: pts[0], last: pts[pts.length - 1] };
+      }));
+    for (const [i, e] of ends.entries()) {
+      const g = groups[i];
+      const newest = months[months.length - 1][g];
+      const oldest = months[0][g];
+      if (newest === oldest) continue;
+      expect.soft(e.first > e.last, `${g}: the newest month must be the leftmost point`)
+        .toBe(newest < oldest);
+    }
+  });
+
+  // The two constants `.smallmultiples` is declared with, cross-referenced here the way the
+  // four `640` sites cross-reference each other: a spec file cannot import a stylesheet, and
+  // this repo takes no build step that would make one source of truth possible.
+  const GRID = { floor: 185, gap: 14 };
+
+  test("reflows on the declared floor and gap, at 140px panels",
+    async ({ page, baseURL }, testInfo) => {
+      await openView(page, baseURL, "Spending › Overview");
+      const vp = viewportOf(testInfo.project.name);
+
+      // PINNED AS THE ARITHMETIC RATHER THAN AS A SET OF ALLOWED RUNGS, which is the stronger
+      // gate: `{1, 2, 4}` would go on passing if the floor moved to 220px, because 220 draws
+      // four columns at 1280 too. Predicting the count from the card's own measured width ties
+      // both constants to what actually rendered, at ten different widths.
+      const { tracks, width, gap } = await page.locator(".main .smallmultiples").evaluate((el) => {
+        const cs = getComputedStyle(el);
+        return {
+          // `auto-fit` leaves collapsed 0px tracks in the computed value, so count the ones
+          // that were actually given room rather than every token.
+          tracks: cs.gridTemplateColumns.split(/\s+/).filter((t) => parseFloat(t) > 0).length,
+          width: el.getBoundingClientRect().width,
+          gap: parseFloat(cs.columnGap),
+        };
+      });
+      expect.soft(gap, "the declared gap").toBe(GRID.gap);
+      const fits = Math.min(4, Math.max(1,
+        Math.floor((width + GRID.gap) / (GRID.floor + GRID.gap))));
+      expect.soft(tracks,
+        `${Math.round(width)}px of card at ${vp.name} seats ${fits} panels on a ` +
+        `${GRID.floor}px floor, not ${tracks}`).toBe(fits);
+
+      // THE THIRD RUNG IS UNAVOIDABLE AND IS RECORDED WHERE IT LANDS. #100 asks for 4 → 2 → 1
+      // with no third rung, and that holds at nine of these ten — but at 844×390 the card is
+      // 754px inner (the phone navigation shell at a 844px width, the viewport a naive sweep
+      // never sees) and 754 seats exactly three. It is not a wrong constant: searching every
+      // floor from 100 to 320 against every gap from 8 to 24, the only pairs that avoid a
+      // third rung at all ten widths draw TWO ~118px panels at 390px, which is the one thing
+      // #100 rules out by name. So the constants stay and the rung is annotated.
+      if (fits === 3) {
+        testInfo.annotations.push({
+          type: "third-rung",
+          description: `${vp.name}: ${Math.round(width)}px of card seats three panels and an ` +
+            "orphan — see RESPONSIVE.md's Observations for why no floor/gap pair avoids it",
+        });
+      }
+
+      const heights = await page.locator(".main .smpanel .recharts-responsive-container")
+        .evaluateAll((els) => [...new Set(els.map((el) => Math.round(el.getBoundingClientRect().height)))]);
+      expect.soft(heights, "panels are 140px at every width").toEqual([140]);
+    });
+
+  test("derives its footnote from the window payload", async ({ page, baseURL }) => {
+    await openView(page, baseURL, "Spending › Overview");
+    const w = win();
+    const material = w.sources.filter((s) => s.material);
+    const note = await page.getByTestId("spend-trend-window").textContent();
+
+    // DERIVED FROM THE MATERIAL-SOURCE FLAGS, NEVER TYPED. Typed, the sentence says "two of
+    // three sources" — which is wrong at three of four, and was only ever right among the
+    // material ones. So both counts are checked, and they are different numbers.
+    expect.soft(material.length, "the fixture must carry an immaterial source or this is vacuous")
+      .toBeLessThan(w.sources.length);
+    expect.soft(note).toContain(`all ${material.length} material sources`);
+    expect.soft(note).toContain(`of ${w.sources.length} seen`);
+
+    // AND HOW MUCH MONEY IS OFF THE CHART, split rather than totalled — the leading months are
+    // 98.6% of it, so one figure would misread as "a bit is missing from the end". The payload
+    // computes these from the DATED total; the undated line below is the other half, and it is
+    // guarded on a count rather than folded in here.
+    const e = w.excluded;
+    const outside = e.before.total_sgd + e.after.total_sgd + (e.gaps?.total_sgd ?? 0);
+    expect.soft(note).toContain("S$" + grouped(outside));
+    expect.soft(note).toContain("S$" + grouped(e.before.total_sgd));
+
+    const undated = readFixture("spending-undated.json");
+    await expect.soft(page.getByTestId("spend-trend-undated"),
+      "the undated line is guarded on a non-zero count").toHaveCount(undated.n > 0 ? 1 : 0);
+  });
+
+  test("adds no key, no bars and no control to the page", async ({ page, baseURL }) => {
+    // The three claims the existing chart spec makes about this view, restated as the thing
+    // that could break them. The panel headers ARE the trend's key, so the page's one
+    // `.chartkey` is still the stacked bar's; the trend draws lines, so the chips-versus-fills
+    // comparison still has one bar series per key item; and the window is a rule rather than a
+    // control, so `tap.spec.js`'s "Spending › Overview renders no control at all" holds.
+    await openView(page, baseURL, "Spending › Overview");
+    await expect.soft(page.locator(".main .chartkey")).toHaveCount(1);
+    expect.soft(await page.locator(".main .smpanel .recharts-bar").count(),
+      "the trend draws no bars").toBe(0);
+    expect.soft(await page.locator(".main [data-testid=spend-trend] button, " +
+      ".main [data-testid=spend-trend] select, .main [data-testid=spend-trend] input").count(),
+      "no window control — the window is a rule whose grounds are data defects").toBe(0);
+
+    // And the chart it sits above is untouched: it still answers "what did I spend in March".
+    await expect.soft(page.getByRole("heading", { name: "Monthly Spend by Category" })).toBeVisible();
+  });
 });
