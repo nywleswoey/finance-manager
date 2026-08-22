@@ -134,6 +134,48 @@ test("no spending surface indexes the positional palette", () => {
     .toEqual(["src/charts.jsx", "src/palette.js"]);
 });
 
+test("no source file hard-codes a net-worth catalogue code", () => {
+  // WHAT THIS FORBIDS IS A LIST OF ITEMS. The New Snapshot form used to render a constant that
+  // named fourteen item codes under four headings — not the catalogue it is capturing — so an
+  // item in no list rendered no row, `save()` never sent it, and the creator's zeroing rule
+  // fabricated a $0 for it on every capture with nothing on screen to say so. The form now reads
+  // `band` off the catalogue; this is what stops the constant coming back, in that file or in a
+  // new one, because a paste re-introduces it in ten seconds and nothing else would notice.
+  //
+  // A behavioural gate cannot close this on its own. `catalogue.spec.js` proves the *rendering*
+  // is derived — it serves a fifteenth item and finds its row — but a list kept for the headings
+  // alone, or for a subset of rows, would pass every assertion in that file and still be a second
+  // catalogue free to drift from the first.
+  //
+  // DERIVED FROM THE FIXTURE, so a recapture keeps the gate honest rather than stale. `srs` is
+  // the one code held out, and the reason is a three-way collision rather than an exemption: the
+  // same word is a catalogue *code*, a *band* value (`NetWorth.jsx`'s `BAND_TITLES` is keyed on
+  // bands and legitimately writes it) and a *funding bucket* (`Dividends.jsx`'s `BUCKET_LABEL`,
+  // `account.funding_bucket` server-side). Three partitions, one word — so this gate cannot see
+  // it, and the gate's claim is therefore about the other thirteen. They still cover the deleted
+  // constant, which named all fourteen. RENAMING THE `srs` ITEM IS THE ONE CHANGE THIS WOULD NOT
+  // CATCH: `BAND_TITLES.srs` would go dead silently, so check it by hand if that day comes.
+  //
+  // Comments stripped, like its siblings above: this file and `NetWorth.jsx` both explain at
+  // length what the constant was, and a gate that cannot tell prose from markup gets the
+  // explanation deleted rather than the defect. `stripComments` only strips a `//` that starts a
+  // line, so a code written in a TRAILING comment would fail this gate on prose — `palette.js`
+  // already has one for `srs`, which the hold-out above happens to cover. The next one will not
+  // be covered, and the fix then is that comment or this regex, not the exemption list.
+  const codes = readFixture("networth-items.json").map((i) => i.code).filter((c) => c !== "srs");
+  expect(codes.length, "the catalogue fixture is empty — this gate would be vacuous")
+    .toBeGreaterThan(0);
+
+  const offenders = sourceFiles(path.join(WEB, "src")).flatMap((f) => {
+    const src = stripComments(fs.readFileSync(f, "utf8"));
+    return codes
+      .filter((c) => new RegExp(`\\b${c}\\b`).test(src))
+      .map((c) => `${path.relative(WEB, f)}: ${c}`);
+  });
+  expect(offenders, "group by `band` off the catalogue — see `BAND_TITLES` in `NetWorth.jsx`")
+    .toEqual([]);
+});
+
 test("the two colour maps agree about Housing", async () => {
   // THE COUPLING IS DELIBERATE AND THIS IS WHERE IT IS ENFORCED. Spend Housing holds
   // Mortgage, Property Taxes and Utilities — the running cost of the same HDB whose equity
