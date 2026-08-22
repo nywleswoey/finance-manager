@@ -145,7 +145,7 @@ coordinates the rejected layout passes. It also carries the group header — the
 and the chevron carve-out, which is the only place pattern A's affordance rule is deliberately not
 applied.
 
-`tests/charts.spec.js` — the six chart surfaces. Below 640 the donuts are not rendered and the
+`tests/charts.spec.js` — the six chart surfaces, plus the spend trend's four panels. Below 640 the donuts are not rendered and the
 `.barrow` list beneath them becomes the chart, which is the one gate here that asserts an *absence*:
 `display: none` starves a `ResponsiveContainer` to 0×0, so a hidden chart and a collapsed chart are
 the same DOM and the treatment has to be a hook rather than a rule. Everything else it checks holds at
@@ -168,14 +168,33 @@ against the map declared in `src/palette.js`, which it **imports rather than res
 hexes in the suite is a second palette, and the drift it would be blind to is the one it exists to
 catch.
 
+It also carries the **spend trend**, whose gates are shaped by what that chart would still look
+right while getting wrong. Its four series span two orders of magnitude, so the load-bearing claim is
+that **no series is flattened onto the floor**: the file computes what the smallest of them would draw
+under one shared axis — under 3px of a 140px plot — and then measures what each one actually draws, so
+a regression to a shared scale is caught by geometry rather than by a prop. The **caption** is gated
+for the same reason it exists: newest is at the **left**, so every panel reads backwards and a panel
+has no y-axis at all, which makes "latest value and signed delta, in words" the thing that keeps the
+slope from lying. The **footnote** is checked against figures recomputed from `/api/spending/window`'s
+material-source flags rather than against a sentence, because a typed "two of three sources" is right
+on today's ledger and wrong on the very payload that ships with it — four sources, three material.
+The **dash** on Uncategorized is read only after the line has finished drawing itself: recharts
+animates a line by rewriting `stroke-dasharray`, so mid-animation every line is dashed and the
+declared pattern is unreadable — which is also why the settle helper here samples the dash rather
+than `d`, the way the bar helper samples geometry. And the **grid** is asserted against the rule
+rather than against ten literals: the column count is derived from the card's measured inner width,
+and the one viewport that draws three panels and an orphan — 844×390, where the rail leaves the flow
+but the 28px desktop gutter does not — is pinned **by name**, so a second orphan is a failure.
+
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
-single donut implementation, that no chart renders a `<Legend>` and that both multi-series charts
-carry a `<ChartKey>`, that **no source file names a net-worth catalogue item code** — the New
+single donut implementation, that no chart renders a `<Legend>` and that every multi-series chart that
+needs a `<ChartKey>` carries one — the spend trend is deliberately *not* on that list, because its
+panel headers are the key and a key under the grid would restate four names written four times
+immediately above it, that **no source file names a net-worth catalogue item code** — the New
 Snapshot form's headings and rows are derived from the catalogue's `band`, and the codes are read
 out of the fixture so a recapture cannot leave the gate asserting a stale list (`srs` is held out,
 because one word is a code, a band value *and* a funding bucket, so the claim is about the other
-thirteen) — that
-**no spending surface mentions the `POSITIONAL_COLOURS` array** — only
+thirteen) — that **no spending surface mentions the `POSITIONAL_COLOURS` array** — only
 `palette.js`, which declares it, and `charts.jsx`, whose portfolio donut slices by market and by
 account and so has no taxonomy to key a map on — and that **the two colour maps agree about
 Housing**, which is a deliberate coupling (spend Housing is the running cost of the same HDB whose
@@ -245,11 +264,16 @@ intercepted in the browser: real Chromium, real layout, real media queries above
 fixtures below it. No test touches Postgres or the network, and the auth gate is satisfied by
 a mocked session endpoint, so Google's identity script never loads.
 
-Fixtures are not hand-written and should not be hand-edited. They carry four deliberately
+Fixtures are not hand-written and should not be hand-edited. They carry five deliberately
 pathological rows — a 30-character subcategory name, a security with 73 option trades, a
-65-character merchant string, and the null-category row — each with a comment saying why.
+65-character merchant string, the null-category row, and the two-orders-of-magnitude spread
+across the four spend series inside the trend's window — each with a comment saying why.
 Plausible-looking data is what produced the 415px-vs-519px error that made fixtures
-necessary in the first place.
+necessary in the first place. The last of the five is the only one that is a claim about **two**
+payloads at once, since the spread only exists inside the window a second endpoint defines, and
+it is the one that keeps a gate from going vacuous rather than a measurement from being wrong:
+a window whose four series happened to agree in magnitude would pass "no series is flattened
+onto the floor" under a shared axis too.
 
 ## Where the reasoning lives
 
