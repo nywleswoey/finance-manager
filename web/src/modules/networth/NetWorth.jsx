@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from "react";
 import posthog from "posthog-js";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { get, post, patch, del, sgd, money, fmt, cls } from "../../api.js";
-import { ChartKey } from "../../charts.jsx";
+import Composition from "./Composition.jsx";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -72,17 +71,20 @@ export default function NetWorth() {
   const [items, setItems] = useState(null);
   const [snaps, setSnaps] = useState([]);
   const [detail, setDetail] = useState(null);     // currently shown snapshot metrics+values
+  const [comp, setComp] = useState(null);         // band-level history for the composition chart
   const [err, setErr] = useState("");
 
   async function reload() {
-    const [it, sn, lt] = await Promise.all([
+    const [it, sn, lt, cp] = await Promise.all([
       get("/api/networth/items"),
       get("/api/networth/snapshots"),
       get("/api/networth/latest"),
+      get("/api/networth/composition"),
     ]);
     setItems(it);
     setSnaps(sn);
     setDetail(lt);
+    setComp(cp);
   }
   useEffect(() => { reload().catch((e) => setErr(e.message)); }, []);
 
@@ -99,7 +101,7 @@ export default function NetWorth() {
     <div className="editor">
       <SummaryCards m={detail} />
       <div className="grid2" style={{ marginTop: 22 }}>
-        <Trend snaps={snaps} />
+        <Composition payload={comp} />
         <SnapshotForm items={items} prefill={detail} onSaved={reload} setErr={setErr} />
       </div>
       {err && <div className="nw-err" data-testid="networth-error">{err}</div>}
@@ -140,50 +142,6 @@ function SummaryCards({ m }) {
         <div className="lbl">Live Portfolio (incl.)</div>
         <div className="val">{sgd(m.portfolio_value_sgd)}</div>
       </div>
-    </div>
-  );
-}
-
-/**
- * The two lines, named once — the chart reads this for its `stroke` and the key reads it for
- * its chip, so they cannot disagree.
- *
- * This view's chart was the least broken surface in the app at 390px and had the one defect
- * nothing else did: no legend of any kind, ever, at any width. `name=` reaches the tooltip
- * and nowhere else, and touch has no hover, so both series were anonymous coloured lines.
- */
-const SERIES = [
-  { key: "net_worth", name: "Net Worth", colour: "#388bfd" },
-  { key: "excl_housing", name: "Excl. Housing", colour: "#2ea043" },
-];
-
-function Trend({ snaps }) {
-  const data = [...snaps].reverse().map((s) => ({
-    date: String(s.date), net_worth: s.net_worth, excl_housing: s.net_worth_excl_housing,
-  }));
-  return (
-    <div className="card">
-      <h3>Net Worth Over Time</h3>
-      {data.length < 2 ? <div className="mut">Need ≥2 snapshots to chart.</div> : (
-        <>
-          <ResponsiveContainer width="100%" height={240}>
-            <LineChart data={data}>
-              <CartesianGrid stroke="#20262e" />
-              <XAxis dataKey="date" stroke="#8b97a5" fontSize={11} />
-              <YAxis stroke="#8b97a5" fontSize={11} tickFormatter={(v) => fmt(v / 1000) + "k"} />
-              <Tooltip formatter={(v) => sgd(v)}
-                       contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
-                       itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
-              {SERIES.map((s) => (
-                <Line key={s.key} type="monotone" dataKey={s.key} stroke={s.colour}
-                      strokeWidth={2} dot={false} name={s.name} />
-              ))}
-            </LineChart>
-          </ResponsiveContainer>
-          {/* DOM, not `<Legend>` — the chart keeps its declared 240px. */}
-          <ChartKey items={SERIES} />
-        </>
-      )}
     </div>
   );
 }

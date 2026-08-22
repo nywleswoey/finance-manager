@@ -54,6 +54,15 @@ export default defineConfig({
       testMatch: /catalogue\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // What the composition chart says, as opposed to how it lays out, on the same reasoning: a
+    // caption is either the right number or a wrong number rendered beautifully at ten viewports,
+    // and it is the same number at every width. `charts.spec.js` keeps that chart's geometry at
+    // all ten.
+    {
+      name: "readings",
+      testMatch: /readings\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
       testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts|editors|tablet|tap)\.spec\.js/,

@@ -4,16 +4,26 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { get, sgd, fmt, catName } from "../../api.js";
-import { ChartKey, Donut } from "../../charts.jsx";
+import { ChartKey, Donut, TOOLTIP_SKIN } from "../../charts.jsx";
 import { categoryColour } from "../../palette.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
+import SpendTrend from "./SpendTrend.jsx";
 
 export default function SpendOverview() {
   const [sum, setSum] = useState(null);
   const [trend, setTrend] = useState(null);
+  // The trend card's window rule and its undated footnote. Two calls of their own rather than a
+  // parameter on the trends one: a windowed trends key would embed a date that drifts every
+  // month, so the suite's committed fixture would go dead on the next recapture. Both fail soft
+  // — the trend card simply does not render without a window, and the stacked bar below is
+  // untouched either way.
+  const [win, setWin] = useState(null);
+  const [undated, setUndated] = useState(null);
   const phone = usePhone();
   useEffect(() => { get("/api/spending/summary").then(setSum).catch(() => setSum({ error: true })); }, []);
   useEffect(() => { get("/api/spending/trends").then(setTrend).catch(() => setTrend({ groups: [], series: [] })); }, []);
+  useEffect(() => { get("/api/spending/window").then(setWin).catch(() => setWin(null)); }, []);
+  useEffect(() => { get("/api/spending/undated").then(setUndated).catch(() => setUndated(null)); }, []);
   if (!sum) return <div className="loading">Loading…</div>;
   if (sum.error) return <div className="loading">API not reachable.</div>;
 
@@ -98,6 +108,16 @@ export default function SpendOverview() {
           )}
         </div>
       </div>
+      {/* TRAJECTORY PRECEDES THE PER-MONTH DETAIL, so the page stays coarse-to-fine: tiles →
+          grid[donut | top line items] → trend → stacked bar. A sibling card rather than a third
+          child of the grid above, which is what keeps "every `.grid2` has exactly two children"
+          a fact about the data as well as about the CSS.
+
+          THE TWO CHARTS BELOW RUN IN OPPOSITE DIRECTIONS AND THAT IS ACCEPTED — the trend is
+          newest-first and the bar is oldest-first. Every trend panel states its own direction in
+          words, so the adjacent left-to-right bar cannot silently mislead. The bar is not
+          flipped: it answers "what did I spend in March", which reads forwards. */}
+      <SpendTrend trend={trend} spendWindow={win} undated={undated} />
       {trend && trend.series.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <h3>Monthly Spend by Category</h3>
@@ -106,9 +126,7 @@ export default function SpendOverview() {
               <CartesianGrid strokeDasharray="3 3" stroke="#222a33" vertical={false} />
               <XAxis dataKey="ym" tick={{ fill: "#8b949e", fontSize: 11 }} />
               <YAxis tick={{ fill: "#8b949e", fontSize: 11 }} tickFormatter={(v) => (v >= 1000 ? v / 1000 + "k" : v)} />
-              <Tooltip formatter={(v) => sgd(v)}
-                       contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
-                       itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
+              <Tooltip formatter={(v) => sgd(v)} {...TOOLTIP_SKIN} />
               {trend.groups.map((g) => (
                 <Bar key={g} dataKey={g} stackId="s" fill={categoryColour(g)} />
               ))}

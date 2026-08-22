@@ -452,9 +452,11 @@ button { min-height: 24px; }
   min-height: 38px; padding: 0 8px; border-radius: 4px; overflow: hidden; }
 .barfill { position: absolute; left: 0; top: 0; bottom: 0; opacity: .3; border-radius: 4px; }
 .barrow > .chip, .barrow > .nm, .barrow > .val { position: relative; }
-/* One swatch, two lists. The donut's rows and a multi-series key are the same thing — a
-   colour standing for a series — so they take one rule rather than two identical ones. */
-.barrow .chip, .chartkey .chip { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+/* One swatch, three lists. The donut's rows, a multi-series key and a small-multiple's header
+   are the same thing — a colour standing for a series — so they take one rule rather than three
+   identical ones. The trend's panel headers ARE its key, which is why they join this rule
+   rather than growing a swatch of their own. */
+.barrow .chip, .chartkey .chip, .sptrend-head .chip { flex: none; width: 8px; height: 8px; border-radius: 2px; }
 .barrow .nm { flex: 1 1 auto; min-width: 0; color: var(--txt); font-size: 13px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .barrow .val { flex: none; color: var(--mut); font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -464,6 +466,51 @@ button { min-height: 24px; }
    it. No media query: a key is worth the same on a desktop that has no hover state either. */
 .chartkey { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; padding: 0 8px; }
 .ck-item { display: inline-flex; align-items: center; gap: 6px; color: var(--mut); font-size: 12px; }
+/* The reading a chip carries when the pixels cannot: the composition chart's per-band delta
+   over the drawn window. Full text colour rather than muted, because it is the number — the
+   series name beside it is the label. Tabular, so four chips wrapping into two rows line up. */
+.ck-note { color: var(--txt); font-variant-numeric: tabular-nums; }
+/* The composition chart's footnote: the three named edges, net worth's own movement, and a line
+   per dropped point. Under the key rather than in it — an edge is a boundary between two chips,
+   so it belongs to no single one. */
+.nwc-foot { font-size: 12px; margin-top: 10px; padding: 0 8px; display: flex;
+  flex-direction: column; gap: 3px; }
+
+/* The spend trend's small multiples, and the whole of their reflow: no breakpoint, no media
+   query, just an `auto-fit` floor and a gap.
+
+   A 185px FLOOR RATHER THAN 220px, and the number was measured rather than chosen: at the gated
+   1100 viewport this card is 809px inner — the grid above it is single-column there — and a
+   220px floor draws three panels and an orphan in the pane that matters most. `min(185px, 100%)`
+   for the reason `.grid2` carries it: a floor wider than the container is an overflow, and the
+   ratchet is at zero.
+
+   IT IS NOT "4 -> 2 -> 1 WITH NO THIRD RUNG", and the measurement is in `RESPONSIVE.md`'s
+   Observations: with four panels and any fixed floor a three-across band exists by construction,
+   and 844x390 lands in it at 780px of grid. The floor decides *where* that band falls, not
+   whether it exists. `charts.spec.js` derives the expected track count from these two numbers
+   rather than tabulating the ladder, and annotates the rung on every run — so 185 and 14 are
+   written in two places and cross-referenced here, the way `640` is across its four. */
+.sptrend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(185px, 100%), 1fr));
+  gap: 14px; }
+/* `.sptrend-panel` CARRIES NO CSS AND IS NOT MEANT TO, like `donutlist` above it: a grid item is
+   already the box it needs to be, and what the class exists for is to be measurable — the suite
+   reads a panel's header, its curve and its container through it. Named rather than reached by
+   `.sptrend-grid > div`, which would silently follow whatever is added here next. */
+/* The header wraps rather than truncating a category's name: at four panels across, the name,
+   the latest month and the signed delta do not always fit on one line, and the delta is the
+   panel's whole reading — an ellipsis through it is the one loss this card cannot take. */
+.sptrend-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px;
+  font-size: 12px; color: var(--txt); }
+.sptrend-head .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap; }
+.sptrend-head .val, .sptrend-head .dlt { flex: none; font-variant-numeric: tabular-nums; }
+/* Deliberately not `.pos` / `.neg`: those are gains and losses, and spending more is not a loss.
+   A red +30% here would be this card taking a view it has no business taking. */
+.sptrend-head .dlt { color: var(--txt); }
+.sptrend-range { font-size: 11px; color: var(--mut); margin: 1px 0 2px; padding-left: 14px;
+  font-variant-numeric: tabular-nums; }
+.sptrend-foot { font-size: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
 /* `textarea` joins the rule it was always missing from: it is styled nowhere else in the
    app, so it rendered UA-default — a white box on a dark modal — at every width. */
 input, select, textarea { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);

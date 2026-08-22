@@ -6,8 +6,9 @@
  * colour: `styles.css` owns the surface and text tokens, and the amber `#d29922` on
  * Recurring's "due soon" pill, Classify's error card and the breakdown's "unsaved" pill is a
  * status colour, which is a different job that happens to share a hex. `NetWorth.jsx`'s
- * two-line chart also still carries its own two hexes; it is deliberately not migrated,
- * because the composition chart retires that chart rather than recolouring it.
+ * two-line chart used to carry its own two hexes and was deliberately not migrated; the
+ * composition chart has since retired that chart rather than recolouring it, so BAND_COLOURS
+ * below is now read by something and those two hexes are gone.
  *
  * WHY NAME-KEYED. The app used to colour every series by its *position* in a single 8-entry
  * array. That is fine for one chart and wrong for four, because two surfaces index the same

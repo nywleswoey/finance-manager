@@ -93,7 +93,14 @@ test("both multi-series charts carry a DOM key", () => {
   // interesting one. The `<Legend>` gate forbids a construct, so a prose mention would fail it
   // wrongly; this gate *requires* one, so a prose mention would PASS it wrongly. `charts.jsx`
   // names `<ChartKey>` in its own docstring, which is exactly the shape that would.
-  const wanted = ["src/modules/networth/NetWorth.jsx", "src/modules/spending/Overview.jsx"];
+  //
+  // `NetWorth.jsx` LEFT THIS LIST BY LOSING ITS CHART, not by losing its key: the two anonymous
+  // lines were replaced by the composition chart in a file of its own, so the multi-series
+  // surface on that view is now `Composition.jsx` and the key moved with it. The spend trend is
+  // deliberately NOT here and must not be added: it is small multiples, four panels of one
+  // series each, and its panel headers *are* its key — a shared key beneath the grid would
+  // restate four names written immediately above four panels.
+  const wanted = ["src/modules/networth/Composition.jsx", "src/modules/spending/Overview.jsx"];
   const keyed = sourceFiles(path.join(WEB, "src"))
     .filter((f) => /<ChartKey[\s/>]/.test(stripComments(fs.readFileSync(f, "utf8"))))
     .map((f) => path.relative(WEB, f))
@@ -179,6 +186,66 @@ test("the two colour maps agree about Housing", async () => {
   expect(CATEGORY_COLOURS.Housing,
     "a recolour of either map must check the other — see `palette.js`")
     .toBe(BAND_COLOURS.housing);
+});
+
+test("the composition's cumulative edges are the summary tiles, to the cent", () => {
+  // THE ANCHOR CLAIM OF THE COMPOSITION CHART, and the reason its band order is load-bearing:
+  // accumulate the bands bottom→top and three of the four running totals ARE three of the six
+  // tiles printed directly above the chart. The chart stacks in the payload's `bands` order and
+  // names those edges in its footnote, so a reordered `bands` array would leave the footnote
+  // pointing at boundaries that equal nothing — with no viewport looking wrong.
+  //
+  // Two payloads compared against each other rather than pixels read off a chart, because that
+  // is where the identity lives: `/api/networth/composition`'s last point and
+  // `/api/networth/latest`'s metrics are two views of one snapshot. `tests/test_networth.py`
+  // holds the same identity one layer down, against the database; this holds it across the two
+  // committed fixtures the browser actually draws, which is what a recapture could break.
+  //
+  // Exact equality, never approximate: the server derives each band as the difference between
+  // adjacent *rounded* edges precisely so this is true by arithmetic instead of by luck.
+  // ASSERTED AT THE SNAPSHOT THE TWO FIXTURES SHARE, not at the composition's last point, and
+  // the difference is a fact about the capture rather than about the identity: the composition
+  // fixture was captured against the merged five-point history the chart is specced for, while
+  // `latest` and `snapshots` still hold the two-point capture that predates the promotion. So
+  // the newest point has no metrics fixture to be compared against. Finding the shared date
+  // keeps the gate true both today and after a recapture folds them back together — and fails
+  // loudly if a recapture ever leaves them with no snapshot in common at all.
+  const comp = readFixture("networth-composition.json");
+  const latest = readFixture("networth-latest.json");
+  const point = comp.series.find((p) => String(p.date) === String(latest.date));
+  expect(point, `no composition point for ${latest.date} — the two fixtures share no snapshot`)
+    .toBeTruthy();
+
+  const edges = {};
+  let running = 0;
+  for (const b of comp.bands) edges[b] = running = Math.round((running + point[b]) * 100) / 100;
+
+  // Bottom→top: cash is no tile, then the three that are. Named here rather than derived,
+  // because the mapping from an edge to a metric is the decision this gate exists to pin —
+  // `Composition.jsx`'s EDGE_NAMES prints these same three, in these same words.
+  expect(edges[comp.bands[1]], "excl. Housing & CPF Cash is the edge above Portfolio")
+    .toBe(latest.net_worth_excl_housing_cpf);
+  expect(edges[comp.bands[2]], "excl. Housing is the edge above CPF cash")
+    .toBe(latest.net_worth_excl_housing);
+  expect(edges[comp.bands[3]], "net worth is the top edge").toBe(latest.net_worth);
+});
+
+test("the composition chart's crossover is not keyed to viewport width", () => {
+  // ITS TICK RULE AND ITS DOTS SHARE ONE CONSTANT — six — and the reason it must never become a
+  // function of viewport width is measured rather than stylistic: the plot width of a chart in
+  // this app's two-column grid is NON-MONOTONIC in viewport width, 726px at 1100 and 335px at
+  // 1180 where the grid flips to two columns. A width-derived rule therefore hands the generous
+  // branch to the narrower plot, at the chart's own worst width.
+  //
+  // Asserted as an absence of any viewport read in that file: no `matchMedia`, and no `usePhone`.
+  // The `640` gate below cannot catch this — a rule keyed to 1024, or to a `usePhone()` call,
+  // would leave that count at four. Comments are stripped, because the file explains at length
+  // what it must not do.
+  const src = stripComments(
+    fs.readFileSync(path.join(WEB, "src/modules/networth/Composition.jsx"), "utf8"));
+  expect(src.match(/matchMedia|usePhone|innerWidth|ResizeObserver/g),
+    "the tick crossover must be one constant at every width — see `TICK_CROSSOVER`")
+    .toBeNull();
 });
 
 test("`640` is written in exactly four places", () => {
