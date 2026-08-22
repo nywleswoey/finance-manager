@@ -196,8 +196,7 @@ chart anonymous with nothing failing, that **no source file names a net-worth ca
 Snapshot form's headings and rows are derived from the catalogue's `band`, and the codes are read
 out of the fixture so a recapture cannot leave the gate asserting a stale list (`srs` is held out,
 because one word is a code, a band value *and* a funding bucket, so the claim is about the other
-thirteen) — that
-**no spending surface mentions the `POSITIONAL_COLOURS` array** — only
+thirteen) — that **no spending surface mentions the `POSITIONAL_COLOURS` array** — only
 `palette.js`, which declares it, and `charts.jsx`, whose portfolio donut slices by market and by
 account and so has no taxonomy to key a map on — and that **the two colour maps agree about
 Housing**, which is a deliberate coupling (spend Housing is the running cost of the same HDB whose
@@ -267,11 +266,16 @@ intercepted in the browser: real Chromium, real layout, real media queries above
 fixtures below it. No test touches Postgres or the network, and the auth gate is satisfied by
 a mocked session endpoint, so Google's identity script never loads.
 
-Fixtures are not hand-written and should not be hand-edited. They carry four deliberately
+Fixtures are not hand-written and should not be hand-edited. They carry five deliberately
 pathological rows — a 30-character subcategory name, a security with 73 option trades, a
-65-character merchant string, and the null-category row — each with a comment saying why.
+65-character merchant string, the null-category row, and the two-orders-of-magnitude spread
+across the four spend series inside the trend's window — each with a comment saying why.
 Plausible-looking data is what produced the 415px-vs-519px error that made fixtures
-necessary in the first place.
+necessary in the first place. The last of the five is the only one that is a claim about **two**
+payloads at once, since the spread only exists inside the window a second endpoint defines, and
+it is the one that keeps a gate from going vacuous rather than a measurement from being wrong:
+a window whose four series happened to agree in magnitude would pass "no series is flattened
+onto the floor" under a shared axis too.
 
 ## Where the reasoning lives
 

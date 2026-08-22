@@ -64,15 +64,46 @@ export function fixtureFor(pathAndQuery) {
 
 
 /**
- * The four pathological rows the fixtures exist to carry, each with the reason it is
+ * The spend trend's counterfactual: how many pixels the SMALLEST of the four series would get
+ * if all four shared one y-axis floored at zero, in a panel plot 140px tall
+ * (`SpendTrend.jsx`'s PANEL_H).
+ *
+ * Exported because two things need it and they need it for opposite reasons. The pathological
+ * row below asserts the fixtures still CARRY the spread — a window whose four series happened
+ * to agree in magnitude would pass "no series is flattened onto the floor" under a shared axis
+ * too, which is the one way that gate goes quietly vacuous. `charts.spec.js` prints the same
+ * number as the annotation beside what each panel actually drew. Two copies of this arithmetic
+ * could disagree, and the pair only means anything if they cannot.
+ *
+ * `scripts/capture_web_fixtures.py` carries the third — deliberately, and for the reason every
+ * pathological row is asserted twice: that one fails at the source, the moment a recapture
+ * would have dropped the spread. Move the 5px threshold in one and move it in the other.
+ */
+export function sharedAxisSpanPx(trends, window, plotPx = 140) {
+  const rows = trends.series.filter((r) => r.ym >= window.start && r.ym <= window.end);
+  const spans = trends.groups.map((name) => {
+    const vals = rows.map((r) => Number(r[name] ?? 0));
+    return { name, lo: Math.min(...vals), hi: Math.max(...vals) };
+  });
+  const ceiling = Math.max(...spans.map((s) => s.hi));
+  const worst = spans.reduce((a, b) => (b.hi - b.lo < a.hi - a.lo ? b : a));
+  return { name: worst.name, px: ((worst.hi - worst.lo) / ceiling) * plotPx };
+}
+
+/**
+ * The five pathological rows the fixtures exist to carry, each with the reason it is
  * here. `inventory.spec.js` asserts every one of them, so these are load-bearing checks
  * rather than commentary: the moment a recapture drops one, the suite says so.
  *
  * Every one of these came out of planning, and each of them either broke a measurement
  * or would have. Fixtures that were merely *plausible* would not contain any of them.
  *
- * `scripts/capture_web_fixtures.py` asserts the same four at capture time, so a
+ * `scripts/capture_web_fixtures.py` asserts the same five at capture time, so a
  * recapture cannot quietly drop one. Move a threshold here and move it there.
+ *
+ * `fixture` IS ONE FILE OR SEVERAL. Four of these are a claim about one payload; the
+ * fifth is a claim about two together, because the spread that decides the spend trend's
+ * whole form only exists inside the window a second endpoint defines.
  */
 export const PATHOLOGICAL = [
   {
@@ -108,6 +139,22 @@ export const PATHOLOGICAL = [
     holds: (body) => {
       const longest = body.reduce((m, r) => Math.max(m, (r.merchant ?? "").length), 0);
       return { ok: longest >= 65, saw: `longest merchant is ${longest} chars` };
+    },
+  },
+  {
+    name: "the ~150x spread inside the spend-trend window",
+    // What makes the spend trend small multiples rather than one chart. Four series in the
+    // same window differ by two orders of magnitude, so under a single y-axis floored at
+    // zero the smallest of them is drawn flat: this computes that counterfactual and holds
+    // it under 5px of the 140px plot the panels actually get. A recapture that flattened the
+    // spread — a quiet month, a reclassification — would leave `charts.spec.js`'s "none is
+    // flattened onto the floor" gate passing against data where a shared axis would have
+    // passed it too, which is the one way that gate can go quietly vacuous.
+    fixture: ["spending-trends.json", "spending-window.json"],
+    holds: (trends, win) => {
+      const { name, px } = sharedAxisSpanPx(trends, win);
+      return { ok: px < 5,
+               saw: `${name} would draw ${px.toFixed(1)}px of a 140px plot under a shared axis` };
     },
   },
   {
