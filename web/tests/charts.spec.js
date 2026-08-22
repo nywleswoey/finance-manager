@@ -2,10 +2,12 @@
  * Charts on a phone: the donuts are deleted and the list becomes the chart — and, since the
  * two trajectory charts landed, what each of those two claims at every width.
  *
- * Below 640px three surfaces lose chrome — the donut itself, and one chart's value labels —
- * and one is halved to six bars. Everything else the charts needed turned out to belong at
- * *every* width: the multi-series key, the reserved band under the bars, and the two
- * containers that could collapse to nothing.
+ * Six chart surfaces across five views, plus the spend trend's four panels — which are one
+ * surface by decision and four by measurement, and are gated at the bottom of this file.
+ * Below 640px three of the six lose chrome — the donut itself, and one chart's value labels
+ * — and one is halved to six bars. Everything else the charts needed turned out to belong at
+ * *every* width: the multi-series key, the reserved band under the bars, the two containers
+ * that could collapse to nothing, and the trend's whole grid.
  *
  * NEITHER TRAJECTORY CHART IS DROPPED ON A PHONE, and that is the one place the donut
  * precedent does not reach. The donut goes because it *restates* the list printed under it;
@@ -36,15 +38,19 @@
 import { expect, test } from "@playwright/test";
 import { PHONE_TIER_BELOW, VIEWPORTS } from "./viewports.js";
 import { openView } from "./support/app.js";
-import { readFixture } from "./fixtures/index.js";
+import { readFixture, sharedAxisSpanPx } from "./fixtures/index.js";
 // The declared map itself, not a copy of it — see the `one palette` describe below for why
 // a table of hexes in this file would be the defect rather than the gate. `palette.js` is
 // plain data with no React or recharts import, which is what makes it importable here.
 import { BAND_COLOURS, BAND_FILL_OPACITY, CATEGORY_DASH, categoryColour } from "../src/palette.js";
+// The app's own formatters, for the same reason the map is imported rather than restated:
+// a caption asserted against a second `toLocaleString` call is asserting the spec file's
+// formatting, and `api.js` is plain functions with no React import.
+import { catName, fmt, monthName, monthTick, sgd } from "../src/api.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
 
-/** A declared hex as the browser reports it, so a map entry can be compared to a computed style. */
+/** A declared hex as the `rgb(r, g, b)` string `getComputedStyle` hands back. */
 const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
 
 /** A rendered figure, the way `api.js`'s `fmt` writes one — grouped, no decimals. */
@@ -242,6 +248,10 @@ test.describe("one palette", () => {
    * the one it exists to catch.
    */
   test("Spending › Overview colours its three surfaces by name", async ({ page, baseURL }) => {
+    // THREE IS WHAT THIS TEST READS, NOT WHAT THE VIEW DRAWS. The spend trend added two more
+    // colour-by-name surfaces to this page — each panel's caption chip and the line it names —
+    // and they are asserted against the same map in the spend-trend describe below, beside the
+    // rest of that card's claims. Restating them here would be a second copy of one assertion.
     await openView(page, baseURL, "Spending › Overview");
     await barsSettled(page);
 

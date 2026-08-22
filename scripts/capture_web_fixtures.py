@@ -201,12 +201,12 @@ def write(name: str, payload) -> None:
     print(f"  {name}.json  ({size:,} bytes)")
 
 
-# ---------------- the four pathological rows ----------------
+# ---------------- the five pathological rows ----------------
 # Each of these broke, or nearly broke, a measurement during planning. Fixtures that
 # were merely *plausible* would reproduce the original error, so capture asserts they
 # are present and fails loudly if the database no longer holds them.
 #
-# The same four are asserted again on every test run, from the committed files, in
+# The same five are asserted again on every test run, from the committed files, in
 # `web/tests/fixtures/index.js` (PATHOLOGICAL). Deliberately both: here it fails at the
 # source, the moment a recapture would have quietly dropped one; there it fails for
 # whoever hand-edits a fixture without ever running this script. Move a threshold in one
@@ -233,6 +233,30 @@ def _ensure_long_merchant(base: str, rows: list[dict]) -> list[dict]:
     rows = rows + [worst]
     rows.sort(key=lambda r: str(r.get("txn_date") or ""), reverse=True)
     return rows
+
+
+def _flat_series_span_px(trends: dict, window: dict, plot_px: float = 140.0) -> tuple[str, float]:
+    """The spend trend's counterfactual: how many pixels the SMALLEST of the four series
+    would get if all four shared one y-axis floored at zero.
+
+    This is the measurement the small-multiples form was chosen on, so it is the one thing
+    that can make `charts.spec.js`'s "none is flattened onto the floor" gate vacuous — a
+    window whose four series happened to agree in magnitude would pass that gate under a
+    shared axis too. 140 is the panel plot height (`SpendTrend.jsx`'s PANEL_H).
+
+    Returns the worst series and its span in pixels. With no window there is nothing to
+    measure and the caller is told so by an empty name.
+    """
+    start, end = window.get("start"), window.get("end")
+    if not start or not end:
+        return "", float("inf")
+    rows = [r for r in trends["series"] if start <= r["ym"] <= end]
+    spans = {g: (min(float(r.get(g) or 0) for r in rows), max(float(r.get(g) or 0) for r in rows))
+             for g in trends["groups"]}
+    ceiling = max(hi for _, hi in spans.values())
+    worst = min(spans, key=lambda g: spans[g][1] - spans[g][0])
+    lo, hi = spans[worst]
+    return worst, (hi - lo) / ceiling * plot_px if ceiling else float("inf")
 
 
 def check_pathological(captured: dict[str, object]) -> None:
@@ -267,6 +291,15 @@ def check_pathological(captured: dict[str, object]) -> None:
         (any(g.get("category") is None for g in groups),
          "no null-category row in the spending summary"),
     ]
+    # The ~150x spread across the four spend categories inside the trend's own window. It is
+    # what makes the spend trend four panels rather than one chart, and a capture that lost
+    # it would leave the "no series is flattened onto the floor" gate passing against data a
+    # shared axis would also have passed.
+    flat_series, flat_px = _flat_series_span_px(captured["spending-trends"], captured["spending-window"])
+    checks.append((flat_px < 5,
+                   f"the four spend series no longer span two orders of magnitude inside the "
+                   f"window: {flat_series or 'no window'} would draw {flat_px:.1f}px of a 140px "
+                   f"plot under a shared axis, expected < 5"))
     # SecurityDetail is reached through PLTR precisely because of its options history. A
     # holding fixture that lost it would silently turn the tallest view in the app into
     # three short tables, and every measurement taken there would be of the wrong view.
@@ -283,7 +316,7 @@ def check_pathological(captured: dict[str, object]) -> None:
         sys.exit(1)
     print(f"\n  pathological rows present: {len(longest_sub)}-char subcategory, "
           f"PLTR x{len(pltr_trades)} option trades, {len(longest_merchant)}-char merchant, "
-          f"null-category row")
+          f"null-category row, {flat_series} at {flat_px:.1f}px under a shared axis")
 
 
 def main() -> None:

@@ -5,8 +5,8 @@ carries most of it.
 
 **The regression trigger is the suite, and the command is `make test-web`.** Ten named viewports ×
 thirteen views, run against a production build through vite's preview server with every API call
-served from committed fixtures: **1,345 passed, 470 skipped, 0 failed, ~7.5 minutes on an unloaded
-machine**, as of #47. The skips are structural rather than disabled tests — a gate
+served from committed fixtures: **1,415 passed, 477 skipped, 0 failed**, as of #100 — and ~7.5
+minutes on an unloaded machine, measured at #47 and not re-measured since. The skips are structural rather than disabled tests — a gate
 whose subject does not render at a viewport skips there, which is what makes "no card-per-row at 640
 and above" and "the desktop table is untouched" separate claims from their positive halves.
 `web/TESTING.md` says what each spec claims. The table-inventory grep this file used to ask a human
@@ -166,7 +166,7 @@ person still looks at, and "—" means the suite has all of it.
 | Portfolio › Transactions | **B** below 640 · **A** on `Date` from 640 to 1024 | — *(telling two same-day trades apart is an [open call](#open-calls), not a check)* |
 | Portfolio › SecurityDetail | txn history **B** · dividend history **B** · options history **A**, pinning the merged two-line `Contract` cell — and **B, A, A** above 640, since the tier gives both histories the pin on `Date` · `← Holdings` is `a.backlink`, a ≥44px target below the tier and the only way back — it was 17px until #47, see [Observations](#observations) | the dividend history renders for no fixture (PLTR has none) — its wrapper is the one thing in the tier no fixture reaches, and `pinned.spec.js` annotates that on every run |
 | Net Worth | editor floor · composition chart at a declared **480** at every width, in the grid cell the two-line chart had, with a DOM `.chartkey` carrying a per-band delta rather than a `<Legend>` · Breakdown and History `.contained` **below 1024**, not unconditionally · row grid unchanged | readable — the editors' remaining criterion · whether four bands and a four-chip key are legible at 390 in a cell that is also 480px tall |
-| Spending › Overview | donut dropped below 640, the list is the chart · stacked bar chart's `<Legend>` is a `.chartkey` · **spend trend** a full-width sibling card between the grid and the stacked bar, `auto-fit` at a **185px floor / 14px gap**, panels **140px**, present at 390 as one column — 4 columns from 810px of card, 2 from 544, 1 below 384, and **three-and-an-orphan at 844×390 alone** (see Observations) · Top Line Items **B** below 640, **A** on `Category` from 640 to 1024 | — *(the stacked bar chart was unreachable while `/api/spending/trends` was captured as a **500**; **#35** fixed the endpoint, the fixture holds a real chart, and `charts.spec.js` asserts its key in the DOM. The view's hscroll residual did not move — the chart is a full-width card holding a percentage-width container, and that number was always the `.grid2` track floor)* |
+| Spending › Overview | donut dropped below 640, the list is the chart · stacked bar chart's `<Legend>` is a `.chartkey` · spend-trend small multiples full-width between the grid and the stacked bar: `auto-fit` at a **185px floor and a 14px gap**, 4 → 2 → 1 with **no new breakpoint**, panels 140px, present at 390 as one column — and three panels with an orphan at 844×390 and only there, see [Observations](#observations) · that card carries **no `.chartkey` by decision** — its four panel headers are the key · Top Line Items **B** below 640, **A** on `Category` from 640 to 1024 | whether the two charts reading in **opposite directions** is confusing in one viewport — the trend runs newest-at-the-left and the stacked bar left-to-right, which is accepted because every panel's caption states its direction in words, and the bar is deliberately **not** flipped *(the stacked bar chart was unreachable while `/api/spending/trends` was captured as a **500**; **#35** fixed the endpoint, the fixture holds a real chart, and `charts.spec.js` asserts its key in the DOM. The view's hscroll residual did not move — both charts are full-width cards holding percentage-width containers, and that number was always the `.grid2` track floor)* |
 | Spending › By Category | donut dropped below 640 · Categories **A** with the name column pinned, keeping its own `▸`/`▾` and the `.rowtap` flash *instead of* the persistent `›` · drilled transactions **B**, **outside the `.grid2` entirely** rather than merely outside the table | whether three levels of drill read as one structure once the third leaves the grid |
 | Spending › Classify | editor floor · `.fillpane`/`.grow` become blocks below 640 so the page scrolls as one, `.scroll` deliberately untouched · ⇅ Reorder `display: none`, so the reorder modal is unreachable below the tier by design · `RuleModal` on `svh`, its control rows wrap, `CatSelect` capped at `max-width: 100%`, `MatchTable` `.contained` | readable · `MatchTable` renders only after a POST the GET-captured fixtures do not carry — `editors.spec.js` annotates that gap |
 | Spending › Recurring | monitor **A** · candidates **A** | the monitor never mounts — the owner tracks nothing, so `/api/spending/recurring` is `[]` and its pin is eyes-only (`pinned.spec.js` annotates it) · the **two nested scroll regions**, which is the feel check |
@@ -221,6 +221,18 @@ reconciliation unless marked otherwise.
   ~45px → ~88px. Right direction, wrong magnitude in both readings: the cell already carried more
   than the bare buttons, so the floor cost **18px** rather than the 43px predicted. Paid in scroll
   distance inside a pinned table, which is what the forecast said it would be.
+- **The spend trend draws three panels and an orphan at 844×390, and only there.** The card is
+  **754px** inner at that viewport against **809px** at the gated 1100 — narrower on a *wider*
+  screen, which is the rotated phone's own contradiction showing up in a column count: 844×390
+  takes the phone shell on the `(max-height: 500px)` guard so the 200px rail leaves the flow,
+  but `.main`'s gutter follows **width**, so a 844px-wide pane keeps the 28px desktop padding
+  it would have had with the rail. 754 holds three 185px tracks; 809 holds four.
+  **Accepted rather than tuned away, and the arithmetic is why**: a floor big enough to make
+  754 draw two makes 809 draw three, and 809 is the width the whole 185-over-220 decision turns
+  on. The only other lever is a breakpoint, and the rule is specced not to add one. Recorded
+  here because the ticket's "4 → 2 → 1 with no third rung" is true at nine viewports and not at
+  the tenth; `charts.spec.js` asserts the orphan happens at **exactly** that named viewport, so
+  a second one — or its disappearance — is a failure rather than a surprise.
 - **The drawer's row height at 844×390 — 39px** (`Settings`, the dim one, 37.5px), against **44px**
   for the same rows at 390×844. Predicted ~38px. This is the residual the tablet tier's height guard
   creates and the one place two of that tier's decisions pull against each other: the shell travels
