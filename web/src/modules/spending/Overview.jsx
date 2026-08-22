@@ -7,6 +7,7 @@ import { get, sgd, fmt, catName } from "../../api.js";
 import { ChartKey, Donut } from "../../charts.jsx";
 import { categoryColour } from "../../palette.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
+import SpendTrend from "./SpendTrend.jsx";
 
 export default function SpendOverview() {
   const [sum, setSum] = useState(null);
@@ -98,6 +99,20 @@ export default function SpendOverview() {
           )}
         </div>
       </div>
+      {/* TRAJECTORY BEFORE DETAIL, AND IT IS A SIBLING CARD RATHER THAN A GRID CELL. The page
+          reads tiles → grid[donut | top line items] → trend → stacked bar, so the coarse-to-fine
+          order survives: where the money went, then where it is going, then what happened in
+          March. Full-width because small multiples want all four panels adjacent in ONE row —
+          that adjacency is the only thing that partly recovers what per-panel scaling gives up,
+          and a half-width cell in the grid above would take it away. It replaces nothing: the
+          stacked bar below still answers the per-month question on the same page.
+
+          `trend` rather than a second fetch — this is a slice of the array the bar chart is
+          already drawing, so the two cannot disagree about a shared month. Rendered
+          unconditionally, unlike the card below: it also needs the window endpoint before it
+          can draw anything, so both of its "not yet" branches are one guard inside it rather
+          than half a guard here and half there. */}
+      <SpendTrend trend={trend} />
       {trend && trend.series.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <h3>Monthly Spend by Category</h3>
