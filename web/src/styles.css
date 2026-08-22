@@ -464,6 +464,16 @@ button { min-height: 24px; }
    it. No media query: a key is worth the same on a desktop that has no hover state either. */
 .chartkey { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; padding: 0 8px; }
 .ck-item { display: inline-flex; align-items: center; gap: 6px; color: var(--mut); font-size: 12px; }
+/* The reading a chip carries when the pixels cannot: the composition chart's per-band delta
+   over the drawn window. Full text colour rather than muted, because it is the number — the
+   series name beside it is the label. Tabular, so four chips wrapping into two rows line up. */
+.ck-note { color: var(--txt); font-variant-numeric: tabular-nums; }
+/* The composition chart's footnote: the three named edges, net worth's own movement, and a line
+   per dropped point. Under the key rather than in it — an edge is a boundary between two chips,
+   so it belongs to no single one. */
+.nwc-foot { font-size: 12px; margin-top: 10px; padding: 0 8px; display: flex;
+  flex-direction: column; gap: 3px; }
+
 /* `textarea` joins the rule it was always missing from: it is styled nowhere else in the
    app, so it rendered UA-default — a white box on a dark modal — at every width. */
 input, select, textarea { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);

@@ -145,7 +145,7 @@ coordinates the rejected layout passes. It also carries the group header — the
 and the chevron carve-out, which is the only place pattern A's affordance rule is deliberately not
 applied.
 
-`tests/charts.spec.js` — the six chart surfaces. Below 640 the donuts are not rendered and the
+`tests/charts.spec.js` — the chart surfaces, now seven. Below 640 the donuts are not rendered and the
 `.barrow` list beneath them becomes the chart, which is the one gate here that asserts an *absence*:
 `display: none` starves a `ResponsiveContainer` to 0×0, so a hidden chart and a collapsed chart are
 the same DOM and the treatment has to be a hook rather than a rule. Everything else it checks holds at
@@ -159,7 +159,21 @@ would otherwise pass for the wrong reason. The stacked bar chart used to be the 
 not reach — its fixture was a 500 — so its key was source-grepped in `inventory.spec.js` instead.
 #35 fixed the endpoint, and the key is asserted here now, against the fixture's own `groups` rather
 than a literal: those strings are `<Bar dataKey>`s, so a group that renders under a different name is
-a group whose bar drew nothing. The grep stays for the charts no fixture happens to mount. It also
+a group whose bar drew nothing. The grep stays for the charts no fixture happens to mount.
+
+The seventh arrived with the composition chart, and its gate is the *responsive* half of that card
+— what it says is `readings.spec.js`'s. It is one test carrying four claims only a browser can
+hold: the declared **480** at every width (one number,
+no phone branch — the donut precedent is about redundancy, not size), that its x tick labels **do
+not collide** at any viewport including 390 and that there are as many of them as the payload has
+points (recharts 3.x silently thins an explicit `ticks` array without `interval={0}`, and renders
+those labels in their own layer **outside** the axis subtree, so the obvious axis-descendant
+selector matches nothing), that every band's curve is **linear** — a `d` with no curve command,
+which is the gate on the cubic this view shipped in production — and that a dot sits on **every**
+band edge while the point count is at or below the crossover, because three of the four edges are
+named tiles.
+
+It also
 carries the **one-palette** gate, which is the key-versus-fill assertion's strict sibling: that one
 compares two surfaces against *each other*, and both used to index one array at the same `i`, so it
 passed by construction while the donut two cards up — indexing a differently sorted payload — coloured
@@ -170,12 +184,15 @@ catch.
 
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no chart renders a `<Legend>` and that both multi-series charts
-carry a `<ChartKey>`, that **no source file names a net-worth catalogue item code** — the New
-Snapshot form's headings and rows are derived from the catalogue's `band`, and the codes are read
-out of the fixture so a recapture cannot leave the gate asserting a stale list (`srs` is held out,
-because one word is a code, a band value *and* a funding bucket, so the claim is about the other
-thirteen) — that
-**no spending surface mentions the `POSITIONAL_COLOURS` array** — only
+carry a `<ChartKey>` — `Composition.jsx` and `spending/Overview.jsx`, the first of them having taken
+that slot from `NetWorth.jsx` by taking its chart — that **no source file names a net-worth
+catalogue item code** — the New Snapshot form's headings and rows are derived from the catalogue's
+`band`, and the codes are read out of the fixture so a recapture cannot leave the gate asserting a
+stale list (`srs` is held out, because one word is a code, a band value *and* a funding bucket, so
+the claim is about the other thirteen) — that **the composition's cumulative edges are the summary
+tiles to the cent**, compared across the two committed payloads at the one snapshot they share (the
+band order is what makes that identity hold, and nothing in a viewport would look wrong if it
+moved), that **no spending surface mentions the `POSITIONAL_COLOURS` array** — only
 `palette.js`, which declares it, and `charts.jsx`, whose portfolio donut slices by market and by
 account and so has no taxonomy to key a map on — and that **the two colour maps agree about
 Housing**, which is a deliberate coupling (spend Housing is the running cost of the same HDB whose
@@ -185,6 +202,21 @@ media queries say character for character what the stylesheet says** — countin
 checking they agree, and `(max-width: 640px)` would keep the count at four while moving the tier into
 a 1px dead zone — that **no `vh` unit** survives under `web/src` — widened from `100vh` when the rule modal's `6vh`/`84vh` became `svh`, since `\dvh` does not match `100svh` and so does not catch the unit that is correct — the viewport meta's `viewport-fit=cover`,
 the viewport list against `RESPONSIVE.md`, and the fixtures' own integrity.
+
+`tests/readings.spec.js` — what the composition chart **says**, as opposed to how it lays out, in a
+project of its own at one viewport. Same reasoning as `ticker.spec.js` and `catalogue.spec.js`: a
+caption is either the right number or a wrong number rendered beautifully at ten viewports, and it
+is the same number at every width. "State it in words" is the recurring move of
+the map this card came from — its staleness pill and its per-band chip deltas both exist because the pixels cannot carry the precision, so the words
+are the reading rather than chrome on it. Every expectation is derived from the fixtures, with two
+named exceptions: the band labels and the edge names, which are strings a spec cannot import from a
+module that imports React. It also carries the three branches no captured payload reaches — nought
+snapshots, one snapshot, and a `dropped` point — by answering `/api/networth/composition` with a
+body **derived from** the committed fixture, registered after `mockApi`'s catch-all the way
+`loadSignIn` registers its 401. And it is where the fixture set's one disagreement is written down:
+`networth-composition.json` holds the merged five-point history this chart was specced against while
+`networth-latest.json` and `networth-snapshots.json` still hold the two-point capture that predates
+the promotion, so nothing here compares the chart against the tiles.
 
 `tests/editors.spec.js` — the two editors' floor. `Classify` and `NetWorth` are desktop-optimised by
 decision and are checked against four criteria *instead of* the universal list, so this is the one

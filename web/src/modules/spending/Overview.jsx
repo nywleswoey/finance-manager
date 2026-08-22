@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { get, sgd, fmt, catName } from "../../api.js";
-import { ChartKey, Donut } from "../../charts.jsx";
+import { ChartKey, Donut, TOOLTIP_SKIN } from "../../charts.jsx";
 import { categoryColour } from "../../palette.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
@@ -106,9 +106,7 @@ export default function SpendOverview() {
               <CartesianGrid strokeDasharray="3 3" stroke="#222a33" vertical={false} />
               <XAxis dataKey="ym" tick={{ fill: "#8b949e", fontSize: 11 }} />
               <YAxis tick={{ fill: "#8b949e", fontSize: 11 }} tickFormatter={(v) => (v >= 1000 ? v / 1000 + "k" : v)} />
-              <Tooltip formatter={(v) => sgd(v)}
-                       contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
-                       itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
+              <Tooltip formatter={(v) => sgd(v)} {...TOOLTIP_SKIN} />
               {trend.groups.map((g) => (
                 <Bar key={g} dataKey={g} stackId="s" fill={categoryColour(g)} />
               ))}

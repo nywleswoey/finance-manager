@@ -5,6 +5,20 @@ import { usePhone } from "./cards.jsx";
 import { POSITIONAL_COLOURS } from "./palette.js";
 
 /**
+ * The skin every tooltip in the app wears: the card surface, its border, and readable text.
+ *
+ * Four charts had these three objects written out verbatim, and the two new time-series cards
+ * would have made it six. It is a *skin* and not a component — recharts wants the props on its own
+ * `<Tooltip>`, and wrapping that would hide the props each chart genuinely differs on
+ * (`formatter`, `labelFormatter`, `itemSorter`). Spread it, then set what is yours.
+ */
+export const TOOLTIP_SKIN = {
+  contentStyle: { background: "#161b22", border: "1px solid #2b333d" },
+  itemStyle: { color: "#d7dde4" },
+  labelStyle: { color: "#d7dde4" },
+};
+
+/**
  * The one donut in the app.
  *
  * It lives beside `api.js` rather than under a module because both sections draw it:
@@ -60,7 +74,7 @@ export function Donut({ title, data, colourOf }) {
             <Pie data={rows} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>
               {rows.map((row, i) => <Cell key={i} fill={colour(row, i)} />)}
             </Pie>
-            <Tooltip formatter={(v) => sgd(v)} contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }} itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
+            <Tooltip formatter={(v) => sgd(v)} {...TOOLTIP_SKIN} />
           </PieChart>
         </ResponsiveContainer>
       )}
@@ -104,8 +118,15 @@ export function Donut({ title, data, colourOf }) {
  * the case that makes this a defect rather than a preference — it never imported `Legend` at
  * all, so two coloured lines were anonymous at *every* width, desktop included.
  *
- * `items` is `[{ name, colour }]` in series order, and the caller passes the same colour it
- * gave the series: a key with its own palette is a key that goes wrong silently.
+ * `items` is `[{ name, colour, note? }]` in series order, and the caller passes the same colour
+ * it gave the series: a key with its own palette is a key that goes wrong silently.
+ *
+ * `note` IS A READING, NOT A DECORATION, and it is optional because only one caller has one.
+ * The composition chart's four bands move by less than a pixel each over a 45-day domain, so
+ * every chip carries its own band's delta over the drawn window — the number the pixels cannot
+ * carry, stated in words beside the thing it belongs to. It is a second span rather than more
+ * text in `name` so that a gate can read the series' name and its reading apart, and so the
+ * stacked bar's key — which has no reading to state — renders exactly the markup it did before.
  */
 export function ChartKey({ items }) {
   return (
@@ -114,6 +135,7 @@ export function ChartKey({ items }) {
         <span className="ck-item" key={s.name}>
           <span className="chip" style={{ background: s.colour }} />
           {s.name}
+          {s.note ? <span className="ck-note">{s.note}</span> : null}
         </span>
       ))}
     </div>

@@ -6,6 +6,13 @@
  * charts needed turned out to belong at *every* width: the multi-series key, the reserved
  * band under the bars, and the two containers that could collapse to nothing.
  *
+ * A SEVENTH ARRIVED AFTER THAT COUNT WAS TAKEN and keeps its chrome at every width: the
+ * net-worth composition chart, which replaced the two-line chart in place. It has no phone
+ * branch — the donut precedent is about *redundancy*, not size, and nothing else on that page
+ * carries composition over time. Its own gate is the `Net Worth composition` describe below, and
+ * what it SAYS rather than how it lays out is `readings.spec.js`, which runs once at one
+ * viewport.
+ *
  * WHY THE DONUT GOES, since it is the one thing here that is not a defect. At percentage
  * radii in a one-column `.grid2` it renders at ⌀216px, larger than desktop's 180px, so this
  * is not a fix. It costs ~240px of an ~800px viewport to restate the `.barrow` list printed
@@ -149,20 +156,48 @@ test.describe("every chart", () => {
 
   test("names its series in the DOM rather than in a tooltip", async ({ page, baseURL }, testInfo) => {
     // Net Worth is the case that makes this a defect rather than a preference: it imported no
-    // `Legend` at all, so `name="Net Worth"` / `name="Excl. Housing"` reached the tooltip and
-    // nowhere else, and touch has no hover. Two anonymous coloured lines.
+    // `Legend` at all, so the two lines' `name=` reached the tooltip and nowhere else, and touch
+    // has no hover. Two anonymous coloured lines.
+    //
+    // THE CLAIM MOVED WITH THE CHART RATHER THAN BEING DELETED. Those two lines are retired into
+    // the composition stack — they are its second and third cumulative edges now, which is why
+    // the same figure is no longer stated twice — so what is read here is four bands instead of
+    // two lines, and their strokes are `.recharts-area-curve` rather than `.recharts-curve`.
     await openView(page, baseURL, "Net Worth");
     const key = page.locator(".main .chartkey");
     await expect.soft(key).toHaveCount(1);
-    await expect.soft(key.locator(".ck-item")).toHaveText(["Net Worth", "Excl. Housing"]);
 
-    // The chips must carry the lines' own colours — a key with an independent palette is a
-    // key that can go wrong without anything noticing.
-    const chips = await key.locator(".chip").evaluateAll((els) =>
-      els.map((el) => getComputedStyle(el).backgroundColor));
-    const strokes = await page.locator(".main .recharts-line .recharts-curve").evaluateAll((els) =>
+    // The names are restated here rather than imported, for the reason `NEG_LABEL_BAND` is: a
+    // spec file cannot import a module that imports React, so the two sides cross-reference in
+    // comments. `Composition.jsx`'s `BAND_LABELS` is the declaration. The count and the order
+    // come from the fixture's own `bands`, which is the literal bottom→top stacking order — so
+    // this fails if a band is added, dropped or moved without the key following.
+    const bands = readFixture("networth-composition.json").bands;
+    const LABELS = { cash: "Cash & SRS", portfolio: "Portfolio", cpf: "CPF cash", housing: "Housing (net)" };
+    const named = await key.locator(".ck-item").evaluateAll((items) =>
+      items.map((el) => ({
+        text: el.textContent,
+        note: el.querySelector(".ck-note")?.textContent ?? null,
+        chip: getComputedStyle(el.querySelector(".chip")).backgroundColor,
+      })));
+    expect.soft(named.map((n) => n.text.replace(n.note ?? "", "")),
+      "the key does not name the bands the payload stacks")
+      .toEqual(bands.map((b) => LABELS[b]));
+
+    // Each chip carries its own band's delta over the drawn domain — the number the sub-pixel
+    // bands cannot carry, and the one reading on this card that exists nowhere else on the page.
+    // Asserted as a shape rather than as a value: the value is the fixture's, and restating it
+    // here would make a recapture rewrite the gate.
+    for (const [i, n] of named.entries()) {
+      expect.soft(n.note, `${bands[i]}: the chip carries no delta`).toMatch(/^[+−][\d,]+$/);
+    }
+
+    // The chips must carry the bands' own colours — a key with an independent palette is a key
+    // that can go wrong without anything noticing.
+    const strokes = await page.locator(".main .recharts-area-curve").evaluateAll((els) =>
       els.map((el) => getComputedStyle(el).stroke));
-    expect.soft(chips, "the key's chips do not match the lines they name").toEqual(strokes);
+    expect.soft(named.map((n) => n.chip), "the key's chips do not match the bands they name")
+      .toEqual(strokes);
 
     expect.soft(await page.locator(".main .recharts-legend-wrapper").count(),
       "recharts' own `<Legend>` takes its space out of the plot — the key is DOM").toBe(0);
@@ -197,6 +232,70 @@ test.describe("every chart", () => {
       }));
     expect.soft(stackedChips, "the key's chips do not match the bars they name").toEqual(perSeries);
   });
+});
+
+/**
+ * The composition chart's geometry, at every viewport — the half of #101 that is about pixels.
+ * What it *says* is `readings.spec.js`, which runs once.
+ */
+test.describe("Net Worth composition", () => {
+  /** recharts 3.x renders tick labels in their own layer, outside the axis subtree. */
+  const xTicks = (page) => page.locator(".main .recharts-xAxis-tick-labels text");
+
+  test("draws one declared height, honest ticks and a linear curve at every viewport",
+    async ({ page, baseURL }) => {
+      await openView(page, baseURL, "Net Worth");
+      const points = readFixture("networth-composition.json").series.length;
+      const bands = readFixture("networth-composition.json").bands.length;
+
+      // ONE NUMBER AT EVERY VIEWPORT WIDTH, and the phone gets the same chart as the desktop:
+      // the donut precedent is about redundancy, not size, and nothing else on this page carries
+      // composition over time. A phone-only height would halve the thinnest band exactly where
+      // there is least room to compare it.
+      const box = await page.locator(".main .recharts-responsive-container").first().boundingBox();
+      expect.soft(Math.round(box.height), "the declared height is 480 at every width").toBe(480);
+
+      // TICKS THAT NEVER COLLIDE, which is the criterion — not the prop that produces it. The
+      // crossover is 6 and the fixture is five points, so every snapshot date is ticked; without
+      // `interval={0}` recharts silently thins the explicit array and this count drops.
+      const ticks = await xTicks(page).evaluateAll((els) => els.map((el) => {
+        const r = el.getBoundingClientRect();
+        return { text: el.textContent, left: r.left, right: r.right };
+      }));
+      expect.soft(ticks.length, "recharts thinned the explicit ticks array — `interval={0}`")
+        .toBe(points);
+      const ordered = [...ticks].sort((a, b) => a.left - b.left);
+      const collisions = ordered.slice(1)
+        .filter((t, i) => t.left < ordered[i].right)
+        .map((t, i) => `${ordered[i].text} / ${t.text}`);
+      expect.soft(collisions, "two tick labels overlap").toEqual([]);
+      // Raw epoch milliseconds are what an unformatted numeric axis prints, so this is the gate
+      // on `tickFormatter` existing at all rather than on which format it chose.
+      for (const t of ticks) {
+        expect.soft(t.text, "a tick printed a raw epoch value").not.toMatch(/^\d{10,}$/);
+      }
+
+      // LINEAR, because it is the only candidate curve whose slope is a real quantity — the true
+      // average rate over the interval between two measurements. A cubic `d` carries `C`
+      // commands; this view shipped one in production.
+      const ds = await page.locator(".main .recharts-area-curve")
+        .evaluateAll((els) => els.map((el) => el.getAttribute("d") ?? ""));
+      expect.soft(ds.length, "one curve per band").toBe(bands);
+      expect.soft(ds.filter((d) => /[CcSsQqTtAa]/.test(d)),
+        "a curve invents a shape between two measurements").toEqual([]);
+
+      // A dot on EVERY band edge while n <= 6, not just the top one: three of the four
+      // cumulative edges are named tiles, so a reader checking the chart against them has to see
+      // where each was measured.
+      expect.soft(await page.locator(".main .recharts-area-dot").count(),
+        "dots are missing from a band edge").toBe(bands * points);
+
+      // ZERO-BASED AND UNCLIPPED. A clipped domain stops band heights being proportional to
+      // value, which is the one thing this chart exists to show.
+      const yTicks = await page.locator(".main .recharts-yAxis-tick-labels text")
+        .evaluateAll((els) => els.map((el) => el.textContent));
+      expect.soft(yTicks, "the y axis does not reach zero").toContain("0k");
+    });
 });
 
 test.describe("one palette", () => {
