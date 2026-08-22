@@ -170,7 +170,12 @@ catch.
 
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no chart renders a `<Legend>` and that both multi-series charts
-carry a `<ChartKey>`, that **no spending surface mentions the `POSITIONAL_COLOURS` array** — only
+carry a `<ChartKey>`, that **no source file names a net-worth catalogue item code** — the New
+Snapshot form's headings and rows are derived from the catalogue's `band`, and the codes are read
+out of the fixture so a recapture cannot leave the gate asserting a stale list (`srs` is held out,
+because one word is a code, a band value *and* a funding bucket, so the claim is about the other
+thirteen) — that
+**no spending surface mentions the `POSITIONAL_COLOURS` array** — only
 `palette.js`, which declares it, and `charts.jsx`, whose portfolio donut slices by market and by
 account and so has no taxonomy to key a map on — and that **the two colour maps agree about
 Housing**, which is a deliberate coupling (spend Housing is the running cost of the same HDB whose
@@ -208,6 +213,28 @@ per row — realised when closed, unrealised when open — so folding the raw fi
 closed leg's realised result. What it deliberately does not check is anything responsive; the pin,
 the column count and the row shape stay `pinned.spec.js`'s, because consolidated rows are ordinary
 data rows and inherit those gates already.
+
+`tests/catalogue.spec.js` — the New Snapshot form's **headings**, and the second spec here whose
+subject is not layout. Which item a person types under which heading is either the catalogue's own
+banding or it is a second banding that agrees with the first until the day it does not — and that is
+the same partition at every width, so it runs at **one viewport in a project of its own**, on the
+reasoning `ticker.spec.js` and the inventory project already carry. The defect it was written for is
+one no responsive gate could ever see: the form rendered a frontend constant listing item codes, so a
+**fifteenth seeded item was invisible in the entry form and silently absent from every snapshot
+typed** — the creator's zeroing rule fabricating a $0 for it on every capture, forever, with nothing
+on screen to say so. So the central test serves a catalogue this frontend has never heard of and
+asserts the new item both renders a row and reaches the POST; the others assert the partition both
+ways (one band per heading *and* one heading per band — either alone is satisfiable by a degenerate
+layout) and that the payload is byte-for-byte the one the form always sent, prefill included. Every
+expectation is derived from the fixtures, and nothing in it names a catalogue code or a real band
+value: a gate that restated the constant would be the constant. Two more tests close the windows the
+first four leave open — an item whose band the frontend has no heading for is still typed, under a
+heading titled with the band itself, and a catalogue that GROWS while the form is open does not take
+the view down (the view refetches `/items` after every save, and `rows` is re-seeded by an effect
+that runs after that render). Three of the six would have passed against the deleted constant, which
+listed exactly the fixture's fourteen codes in exactly its band order; they are characterization, and
+the other three are the regression gates. What none of them check is the form's geometry, which stays
+`editors.spec.js`'s at all ten viewports.
 
 `tests/viewports.js` — the ten viewports, declared once. They mirror `RESPONSIVE.md`'s table
 one-for-one and a test fails if the two lists drift apart.

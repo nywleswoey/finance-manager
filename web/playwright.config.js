@@ -46,6 +46,14 @@ export default defineConfig({
       testMatch: /ticker\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // The New Snapshot form's groupings, on the same reasoning: which item is typed under which
+    // heading is the catalogue's banding or it is a second banding, and that is the same
+    // partition at every width. `editors.spec.js` keeps the form's geometry at all ten.
+    {
+      name: "catalogue",
+      testMatch: /catalogue\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
       testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts|editors|tablet|tap)\.spec\.js/,
