@@ -61,6 +61,11 @@ export default function SpendByCategory() {
 
   // counted spend with no txn_date falls outside every year window, so name it once here —
   // otherwise the per-year totals silently undershoot the all-time Overview total.
+  //
+  // NOT THE ONLY SURFACE THAT SAYS THIS ANY MORE. `SpendTrend.jsx`'s footnote carries the
+  // same guard on the same payload, and says "fall in no **month**" where this one says
+  // "no year" — its window is months, this one's is the year in the `<select>`. Two
+  // sentences on purpose; change one and read the other.
   useEffect(() => {
     get("/api/spending/undated").then(setUndated).catch(() => setUndated(null));
   }, []);

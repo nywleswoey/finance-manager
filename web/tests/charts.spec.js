@@ -43,7 +43,7 @@ import { categoryColour } from "../src/palette.js";
 // reason the palette is: a restated `S$1,234` in this file is a second formatter, and the
 // mismatch it would then be blind to is the one it exists to catch. `api.js` touches
 // `window` only inside function bodies, so it imports cleanly into node.
-import { sgd } from "../src/api.js";
+import { sgd, catName } from "../src/api.js";
 
 /** A palette hex as the `rgb(r, g, b)` string `getComputedStyle` hands back. */
 const rgbOf = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
@@ -425,19 +425,47 @@ test.describe("Portfolio › Options", () => {
 test.describe("Spending › Overview — the spend trend", () => {
   const trends = () => readFixture("spending-trends.json");
   const win = () => readFixture("spending-window.json");
-  /** The months the chart may draw: the trends array sliced to the window, ascending. */
-  const drawn = () => trends().series.filter((r) => r.ym >= win().start && r.ym <= win().end);
+  /**
+   * The months the chart may draw: the window's range MINUS its gaps, ascending.
+   *
+   * `gaps` is the clause a range slice loses — a month inside `[start, end]` in which not
+   * every material source reported. It is empty on the committed fixture, so this reduces to
+   * the range here and the branch is annotated as unreachable below rather than left looking
+   * covered.
+   */
+  const drawn = () => trends().series.filter(
+    (r) => r.ym >= win().start && r.ym <= win().end && !win().gaps.includes(r.ym));
+
+  /**
+   * The order the panels must be in: the drawn window's spend descending, with the residue
+   * pinned last. Recomputed from the payload rather than typed, for the reason every other
+   * derived assertion in this describe is — and NOT taken from `groups`, which is the
+   * payload's alphabetical sort and would lock in Housing-before-Personal.
+   */
+  const panelOrder = () => {
+    const rows = drawn();
+    const residue = catName(null);
+    const spend = (g) => rows.reduce((a, r) => a + Number(r[g] || 0), 0);
+    return [...trends().groups].sort(
+      (a, b) => (a === residue) - (b === residue) || spend(b) - spend(a));
+  };
 
   const card = (page) => page.locator(".main .card").filter({ has: page.locator(".smallmult") });
   const panels = (page) => card(page).locator(".smallmult .panel");
 
-  test("draws one panel per group, between the grid and the stacked bar", async ({ page, baseURL }) => {
+  test("draws one panel per group, between the grid and the stacked bar",
+    async ({ page, baseURL }, testInfo) => {
     await openView(page, baseURL, "Spending › Overview");
     const groups = trends().groups;
     await expect.soft(panels(page)).toHaveCount(groups.length);
     // The panel headers ARE the key, so the names have to be the payload's own group
-    // strings — the same ones the stacked bar feeds to `<Bar dataKey>`.
-    await expect.soft(panels(page).locator(".panelhead .nm")).toHaveText(groups);
+    // strings — the same ones the stacked bar feeds to `<Bar dataKey>` — in the spec's
+    // order: spend descending with the residue last, which is Personal · Housing ·
+    // Transport · Uncategorized on this fixture.
+    await expect.soft(panels(page).locator(".panelhead .nm")).toHaveText(panelOrder());
+    await expect.soft(panels(page).locator(".panelhead .nm").last(),
+      "the residue is not a category anyone chose — it sorts last, whatever it spent")
+      .toHaveText(catName(null));
 
     // Placement: tiles → grid[donut | top line items] → trend → stacked bar. Asserted as
     // document order rather than as pixel tops, which would also be satisfied by a card
@@ -463,6 +491,16 @@ test.describe("Spending › Overview — the spend trend", () => {
 
     // The caption, which is load-bearing: newest is at the LEFT, so the slope reads
     // backwards and the header is the only thing that says which way the category moved.
+    if (win().gaps.length === 0) {
+      testInfo.annotations.push({
+        type: "not-covered-by-fixtures",
+        description:
+          "spending-window.json's `gaps` is empty on the live ledger, so the drop-a-gap-month " +
+          "clause in SpendTrend's slice is exercised only in its no-op branch — the panels " +
+          "below are the range and the drawable set at once",
+      });
+    }
+
     const rows = drawn();
     const newest = rows[rows.length - 1];
     for (const g of groups) {
@@ -553,10 +591,18 @@ test.describe("Spending › Overview — the spend trend", () => {
       // undated rows and subtracting it would absorb them into the outside-the-window money.
       const dated = w.sources.reduce((a, s) => a + s.total_sgd, 0);
 
+      // The source that answers "why does it start there": the latest first-transaction
+      // among the material ones, since the window starts the month after it. Re-derived by
+      // argmax here rather than read off a fixed index — `sources` is sorted by spend, not
+      // by date, so the two orders agree on this payload by coincidence.
+      const startedBy = material.reduce((a, b) => (a.first_txn >= b.first_txn ? a : b));
+
       const line = foot.locator("> div").first();
       await expect.soft(line, "the window's month count").toContainText(`${drawn().length} months`);
       await expect.soft(line, "how many sources are material, and of how many")
         .toContainText(`${material.length} of ${w.sources.length}`);
+      await expect.soft(line, "the source whose first line sets the start")
+        .toContainText(startedBy.source);
       await expect.soft(line, "the money outside the window").toContainText(sgd(outside));
       await expect.soft(line, "and what share of the dated total that is")
         .toContainText(`${Math.round((outside / dated) * 100)}%`);

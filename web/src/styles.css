@@ -494,7 +494,12 @@ button { min-height: 24px; }
    orphan there, which is precisely the failure the 185 floor was chosen over 220 to avoid.
 
    So the panels are grided in PAIRS: the outer grid's floor is 384 = 185 + 14 + 185, one
-   pair, and the inner grid splits a pair into two. The rungs are then 4 (two pairs abreast),
+   pair, and the inner grid splits a pair into two. THE 384 IS NOT A SECOND FLOOR — it is the
+   185 written for two panels and their gap, and it moves the day 185 does. There is still
+   one panel floor, one gap and no breakpoint; what the second grid adds is a constraint on
+   how many panels a row may hold, which is the thing a floor alone cannot express. The spec
+   describes this grid as one `auto-fit` on 185/14 and that reads as one element; it is two,
+   deliberately, and RESPONSIVE.md's Observations carries the measurement that chose it. The rungs are then 4 (two pairs abreast),
    2 (one pair per row) and 1 (a pair collapsed), and 3 is not expressible. The geometry is
    identical to the flat grid wherever the flat grid was right: both levels are `1fr` tracks
    with the same 14px gap, so four abreast are four equal quarters with three equal gaps.

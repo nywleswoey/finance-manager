@@ -221,18 +221,19 @@ reconciliation unless marked otherwise.
   ~45px → ~88px. Right direction, wrong magnitude in both readings: the cell already carried more
   than the bare buttons, so the floor cost **18px** rather than the 43px predicted. Paid in scroll
   distance inside a pinned table, which is what the forecast said it would be.
-- **The spend trend's rung at 844×390 — the one viewport a flat `auto-fit` grid gets wrong.**
-  `rotated-phone` is the only viewport at or above 640 with **no 200px rail** — the shell moves to
-  the drawer on the `(max-height: 500px)` guard while `.main` keeps its 28px landscape gutter — so
-  its card is ~756px inner. That is past three 185px tracks (583) and short of four (782), and a
-  single `auto-fit` grid therefore draws **three panels and an orphan** there: exactly the failure
-  the 185px floor was chosen over 220px to avoid, arriving at a different viewport than the one the
-  floor was measured at. **A flat grid cannot promise "no third rung"** — the number of tracks that
-  fit is monotone in the floor, so every rung is reachable at some width. `.smallmult` therefore
-  grids the panels in **pairs**: an outer floor of 384 (= 185 + 14 + 185) and an inner one of 185,
-  which makes the rungs 4, 2 and 1 and 3 inexpressible, with no media query and no second number.
-  Recorded rather than folded into the per-view row because it is the measurement that chose the
-  structure, and a reader who sees two nested grids will otherwise flatten them.
+- **The spend trend's card at 844×390 — ~756px inner, the widest card in the app below 1024.**
+  `rotated-phone` is the only viewport at or above 640 with **no 200px rail**: the shell moves to
+  the drawer on the `(max-height: 500px)` guard while `.main` keeps its 28px landscape gutter. That
+  is the measurement that chose `.smallmult`'s structure — 756 sits between three 185px tracks and
+  four, so a flat `auto-fit` grid draws three panels and an orphan there. **The rule is in
+  `styles.css` at `.smallmult` and is asserted by `charts.spec.js`; this entry is only the number**,
+  recorded because it is the width no other card in the tier reaches and the next full-width card
+  will want it.
+  **It is also the one place the build reads #92 §E against itself.** That section asks for a 185px
+  floor, a 14px gap *and* "no third rung", and a single `auto-fit` grid cannot deliver all three —
+  the tracks that fit are monotone in the floor, so every rung is reachable at some width. The floor
+  and the gap are unchanged; the grid is nested one level so a row holds 4, 2 or 1. Written down
+  here because it reads as a deviation from that line and is not one from the outcome.
 - **The drawer's row height at 844×390 — 39px** (`Settings`, the dim one, 37.5px), against **44px**
   for the same rows at 390×844. Predicted ~38px. This is the residual the tablet tier's height guard
   creates and the one place two of that tier's decisions pull against each other: the shell travels

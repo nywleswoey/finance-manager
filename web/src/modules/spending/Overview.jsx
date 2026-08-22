@@ -12,12 +12,16 @@ import SpendTrend from "./SpendTrend.jsx";
 export default function SpendOverview() {
   const [sum, setSum] = useState(null);
   const [trend, setTrend] = useState(null);
-  // The spend trend's window and its footnote. Two more calls rather than a wider trends
-  // payload, and that is the decision rather than an accident: a windowed trends call would
-  // put a date in its own fixture key, and a date in a fixture key drifts every month — the
-  // recapture writes a different key, the old one goes dead and the unmatched-paths gate
-  // fails. The trend chart slices the array below instead, so one payload feeds both charts
-  // on this page and they cannot disagree about a month they share.
+  // The spend trend's window and its footnote, fetched HERE rather than inside the chart,
+  // because that is where every other payload on this view is fetched and the charts under
+  // it are renderers. `trend` is the case that makes it more than a convention: the stacked
+  // bar and the trend draw the same array, and a chart that fetched its own copy would be
+  // two requests that can disagree about a month they share.
+  //
+  // Two calls rather than one windowed trends call, and that is the decision rather than an
+  // accident: a windowed key embeds a date that drifts every month, so a recapture writes a
+  // *different* fixture key, the old one goes dead and the unmatched-paths gate fails. The
+  // trend slices the array below instead.
   const [win, setWin] = useState(null);
   const [undated, setUndated] = useState(null);
   const phone = usePhone();

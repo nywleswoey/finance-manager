@@ -1,8 +1,7 @@
 import React from "react";
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
-import { sgd, fmt } from "../../api.js";
+import { sgd, fmt, catName } from "../../api.js";
 import { categoryColour, CATEGORY_DASH } from "../../palette.js";
-import { usePhone } from "../../cards.jsx";
 
 /**
  * The spend trend on Spending › Overview: small multiples, four panels, four scales.
@@ -61,17 +60,21 @@ const dayName = (iso) => new Date(iso + "T00:00:00Z")
   .toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 /**
- * The signed change across the drawn window, oldest to newest, as the header prints it.
+ * The signed change across the drawn window, oldest to newest, as the header PRINTS it —
+ * a label, not a number. Named for that: nothing downstream may do arithmetic on it.
  *
  * A percentage, because that is what makes a $52 move in Transport comparable with a $1,700
  * move in Personal — which is the whole reason four panels with four scales need a caption
  * at all. From a zero start there is no percentage to state, so it states the money instead
  * rather than printing an infinity or silently dropping the caption.
  *
- * U+2212 MINUS, not a hyphen: it is the character the app's other signed labels use, and it
- * lines up in a tabular-nums column where a hyphen does not.
+ * U+2212 MINUS, AND THIS IS THE ONLY PLACE IN `web/src` THAT WRITES A SIGN ITSELF. Every
+ * other negative in the app comes out of `fmt()`, i.e. out of `toLocaleString`, which hands
+ * back an ASCII hyphen — so there is no house character to match here, and the pairing that
+ * matters is the local one: `+` and `−` are the same width in this font where `+` and `-`
+ * are not, and the two signs sit in the same 12px slot of four headers read together.
  */
-function delta(first, last) {
+function deltaLabel(first, last) {
   const sign = last >= first ? "+" : "−";
   if (first === 0) return sign + sgd(Math.abs(last - first));
   return sign + fmt(Math.abs((last - first) / first) * 100, 0) + "%";
@@ -81,18 +84,35 @@ function delta(first, last) {
 const pairs = (xs) => xs.reduce((a, x, i) => (i % 2 ? a[a.length - 1].push(x) : a.push([x]), a), []);
 
 export default function SpendTrend({ trend, win, undated }) {
-  // Desktop hover only, and additive only: the tooltip repeats the month and the amount,
-  // and nothing in this chart exists in it alone. Touch has no hover, so a tooltip is not a
-  // place a fact can live — which is the same reasoning the donut is deleted on.
-  const phone = usePhone();
   if (!trend || !win || !win.start || !win.end) return null;
 
-  // The window is a rule, and this is the whole of applying it: the months the endpoint says
-  // are drawable, in the order the payload gives them. There is no window control, by
-  // decision — the grounds for excluding a month are data defects, so a control that let a
-  // reader select them back in would re-open a settled decision as an affordance and make
-  // the load-bearing delta captions user-authored.
-  const inWindow = trend.series.filter((r) => r.ym >= win.start && r.ym <= win.end);
+  // THE WINDOW IS A RULE, AND `gaps` IS PART OF IT — the range alone is not the rule. A
+  // drawable month is one at or after `start`, before the partial tail, AND one in which
+  // every material source reported; `_window_shape` puts the months that fail the last
+  // clause in `gaps`, and they sit *inside* `[start, end]`. Slicing on the range alone would
+  // draw an ingestion gap as a collapse in spending — which is the single failure this whole
+  // endpoint exists to prevent — and would then double-count it, because the footnote below
+  // adds `excluded.gaps` to the money it says is off the chart. Empty on today's ledger, so
+  // nothing in the suite can reach this branch; `charts.spec.js` annotates that on every run.
+  //
+  // WHAT A HOLE LOOKS LIKE once a month is dropped is deliberately out of scope (spec §B) —
+  // the line joins its neighbours. That is the unspecified half; drawing the gap as a real
+  // point is the specified-and-wrong half, and this is the clause that settles it.
+  //
+  // There is no window control, by decision: the grounds for excluding a month are data
+  // defects, so a control that let a reader select them back in would re-open a settled
+  // decision as an affordance and make the load-bearing delta captions user-authored.
+  const gaps = new Set(win.gaps || []);
+  const inWindow = trend.series.filter(
+    (r) => r.ym >= win.start && r.ym <= win.end && !gaps.has(r.ym));
+
+  // TWO POINTS, the same floor the composition chart takes: below it a line renders no
+  // segment and the header's first-versus-last delta has nothing to compare. The card is
+  // then absent rather than explaining itself, and that is the decision rather than an
+  // oversight — the net-worth chart writes copy at this threshold because it is the only
+  // thing in its cell, where this page still has the stacked bar, the donut and the tiles
+  // covering the same months. A card whose whole content is "not enough months to draw a
+  // trajectory" is a row of page length restating what the tiles above already show.
   if (inWindow.length < 2) return null;
 
   // NEWEST AT THE LEFT, which is why the header below is load-bearing rather than
@@ -102,10 +122,26 @@ export default function SpendTrend({ trend, win, undated }) {
   const oldest = inWindow[0];
   const newest = inWindow[inWindow.length - 1];
 
-  // THE PAYLOAD'S OWN ORDER, not a re-sort. Sorting by spend would re-rank the panels
-  // silently as the window grows — the same defect that rules out a top-N cap — and
-  // `_trend_shape` already sorts Uncategorized last, which is where the residue belongs.
-  const groups = trend.groups;
+  // PANEL ORDER: the drawn window's spend, descending, with the residue pinned last —
+  // Personal · Housing · Transport · Uncategorized on today's ledger, which is the order the
+  // spec names. Derived rather than typed, and both halves are load-bearing.
+  //
+  // Descending, because the payload's own order is ALPHABETICAL (`_trend_shape` sorts the
+  // group strings) and alphabetical is not a ranking of anything a reader is looking for —
+  // it put Housing first purely because H precedes P. This is not the re-ranking the spec
+  // rules out: that argument is about a top-N *cap*, which silently drops a series as the
+  // window grows. Four panels that are all always drawn cannot drop one, so the worst a
+  // re-sort can do is swap two adjacent panels, and the header on each one names it.
+  //
+  // The pin is separate because spend does not produce it: over this window Uncategorized
+  // outspends Transport 4.6x, so sorting alone puts the residue third. It goes last for the
+  // reason `_trend_shape` stacks it last — it is not a category anyone chose. `catName(null)`
+  // rather than the literal: that function is the app's one place that names the null
+  // category, and a second spelling here is a second name for one thing.
+  const residue = catName(null);
+  const spend = (g) => inWindow.reduce((a, r) => a + (Number(r[g]) || 0), 0);
+  const groups = [...trend.groups].sort(
+    (a, b) => (a === residue) - (b === residue) || spend(b) - spend(a));
 
   const material = win.sources.filter((s) => s.material);
   // The source whose first line is the latest among the material ones: the window starts the
@@ -118,8 +154,14 @@ export default function SpendTrend({ trend, win, undated }) {
     ? `, and the window starts the month after the last of them first reported`
       + ` (${startedBy.source}, ${dayName(startedBy.first_txn)})`
     : "";
+  // THREE BUCKETS, EACH OPTIONAL. `gaps` is the third kind of off-chart money and the newest
+  // key on the payload — the spec's own printed example carries only `before` and `after` —
+  // so a reader who checks this against the spec must not find a chart that throws on a
+  // payload the spec documents. Summed rather than subtracted from a total: the only
+  // subtraction available is `dated - before - after`, which counts every gap month's spend
+  // as drawn, and those months are precisely the ones dropped above.
   const outside = ["before", "after", "gaps"]
-    .reduce((a, k) => a + Number(win.excluded[k].total_sgd), 0);
+    .reduce((a, k) => a + Number(win.excluded?.[k]?.total_sgd || 0), 0);
   // THE DATED TOTAL, which is what the per-source totals sum to. `summary()`'s `total_sgd`
   // includes undated rows, so dividing by that would quietly absorb undated spend into the
   // outside-the-window share — and undated spend is the third footnote line's to report.
@@ -158,7 +200,7 @@ export default function SpendTrend({ trend, win, undated }) {
                 {/* Not `cls()`, deliberately: the app's pos/neg tokens mean gain and loss,
                     and spending more is neither. A green "−68%" on Transport would be this
                     card making a judgement it has no budget model to make. */}
-                <span className="delta">{delta(Number(oldest[g]) || 0, Number(newest[g]) || 0)}</span>
+                <span className="delta">{deltaLabel(Number(oldest[g]) || 0, Number(newest[g]) || 0)}</span>
               </div>
               {/* Min-max, demoted: it is the panel's range, which the reader needs only
                   once they have decided the slope is worth reading. */}
@@ -176,13 +218,19 @@ export default function SpendTrend({ trend, win, undated }) {
                       collide at 27px of spacing. */}
                   <XAxis dataKey="ym" hide />
                   <YAxis hide domain={[0, "auto"]} />
-                  {!phone && (
-                    <Tooltip
-                      formatter={(v) => [sgd(v), g]}
-                      labelFormatter={monthName}
-                      contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
-                      itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
-                  )}
+                  {/* ADDITIVE ONLY, AND THEREFORE UNGATED. It repeats the month and the
+                      amount; nothing in this chart exists in it alone, so a device with no
+                      hover loses nothing by never opening it. Not behind `usePhone()`: the
+                      hook decides whether a surface is RENDERED, and the donut is deleted
+                      below 640 because the list under it restates every row — a cost this
+                      tooltip does not have. The stacked bar directly below is ungated for
+                      the same reason, and two adjacent charts disagreeing about it would be
+                      the defect. */}
+                  <Tooltip
+                    formatter={(v) => [sgd(v), g]}
+                    labelFormatter={monthName}
+                    contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
+                    itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
                   {/* `linear`, no smoothing: a curve invents a shape between two months that
                       were each measured. Colour comes from the name-keyed map, and the dash
                       from the map beside it — grey alone is the weaker half of "residue
@@ -235,7 +283,14 @@ export default function SpendTrend({ trend, win, undated }) {
         </div>
         {/* Guarded on the count, and invisible today at n=0/$0. Undated spend is in no month,
             so it is in no panel — and it is not part of the money the first line calls
-            "outside the window" either, which is computed from the dated total. */}
+            "outside the window" either, which is computed from the dated total.
+
+            THE SAME SENTENCE IS IN `ByCategory.jsx`, and the two are deliberately not one
+            component. That one says "fall in no **year**", because its window is a year
+            picked from a `<select>`; this one says "no **month**", because the panels are
+            months. Same rows, same guard, two different reasons they are missing — which is
+            what a shared component would have to erase. Change the wording here and read
+            that one, the way `catName` in `api.js` is read against the compute layer. */}
         {undated && undated.n > 0 && (
           <div>
             Excludes {sgd(undated.total_sgd)} across {undated.n} undated
