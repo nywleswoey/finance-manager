@@ -6,13 +6,67 @@ import { ChartKey } from "../../charts.jsx";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
-// catalogue groups for the form layout
-const GROUPS = [
-  { title: "Cash / Liquid", codes: ["posb", "dbs_multiplier", "tiger_hkd", "tiger_sgd", "tiger_usd", "tiger_vault", "ibkr_sgd"] },
-  { title: "SRS", codes: ["srs"] },
-  { title: "CPF", codes: ["cpf_oa", "cpf_sa", "cpf_ma"] },
-  { title: "Housing", codes: ["hdb", "home_loan", "home_loan_accrued"] },
-];
+/**
+ * Band → the heading the New Snapshot form types it under. THE WORDS ONLY.
+ *
+ * Which item sits under which heading is `band` on the catalogue row, decided once server-side
+ * by `portfolio/networth.py`'s precedence function and read here — the same rule the composition
+ * chart will read, so the form a person types into and the chart they read are grouped by one
+ * decision that lives in one place.
+ *
+ * WHAT THIS REPLACED, because the difference is not tidiness. This was a constant listing item
+ * *codes* under four titles, and the form rendered the constant rather than the catalogue it is
+ * capturing: an item in no list rendered no row, so `save()` never sent it, so the creator's
+ * zeroing rule fabricated a $0 for it on every capture, forever, with nothing on screen to say
+ * so. A fifteenth seeded item was invisible in the form and silently absent from every snapshot
+ * typed. `tests/catalogue.spec.js` serves a catalogue this file has never heard of and asserts
+ * the row and the payload both carry it.
+ *
+ * THE FORM DOES NOT FOLD SRS INTO CASH, and that is not an oversight against `palette.js`'s
+ * `BAND_COLOURS`. Four keys either side, and deliberately not the same four: this map is keyed on
+ * what the *catalogue* partitions into, `BAND_COLOURS` on what the *chart* stacks — which folds
+ * `srs` into `cash` (an SRS area would be sub-pixel) and adds a synthetic `portfolio` that is no
+ * catalogue row at all. A heading costs one line and a field is a field, so the form shows every
+ * band a person can actually type into.
+ *
+ * A MISSING KEY FALLS BACK TO THE BAND ITSELF rather than dropping the rows, which is the whole
+ * failure mode this ticket removed: `band()` returns one of four values today, so a fifth is a
+ * server-side change that should arrive as an unstyled heading a reader can see and report — not
+ * as fields nobody can find.
+ */
+const BAND_TITLES = {
+  cash: "Cash / Liquid",
+  srs: "SRS",
+  cpf: "CPF",
+  housing: "Housing",
+};
+
+/**
+ * The catalogue, partitioned into the form's headed sections.
+ *
+ * SECTIONS AND NOT "GROUPS": `CONTEXT.md`'s Band entry names *group* as the word to avoid for
+ * exactly this thing, because it was this file's deleted constant. The CSS classes are still
+ * `.nw-group` / `.nw-grouptitle` and stay that way — renaming a stylesheet is a different change
+ * from renaming a decision.
+ *
+ * ORDER IS THE CATALOGUE'S, both ways: rows follow `sort_order` within a section because the
+ * endpoint already returns them that way, and the sections themselves follow the order their
+ * first item appears in. So there is no second ordering constant to disagree with the seed —
+ * re-order the catalogue and the form re-orders with it.
+ */
+function bandSections(items) {
+  const sections = [];
+  const byBand = new Map();
+  for (const it of items) {
+    if (!byBand.has(it.band)) {
+      const section = { band: it.band, title: BAND_TITLES[it.band] ?? it.band, items: [] };
+      byBand.set(it.band, section);
+      sections.push(section);
+    }
+    byBand.get(it.band).items.push(it);
+  }
+  return sections;
+}
 
 export default function NetWorth() {
   const [items, setItems] = useState(null);
@@ -152,15 +206,35 @@ function SnapshotForm({ items, prefill, onSaved, setErr }) {
   useEffect(() => { setRows(init()); }, [prefill, items]);   // eslint-disable-line
 
   const byCode = Object.fromEntries(items.map((it) => [it.code, it]));
-  const set = (code, field, val) => setRows((r) => ({ ...r, [code]: { ...r[code], [field]: val } }));
+
+  /**
+   * One item's typed row — and the reason nothing here reads `rows[code]` directly.
+   *
+   * `rows` is re-seeded by an EFFECT, which runs after the render that new `items` cause. The
+   * view refetches the catalogue after every save and after every delete, so there is one render
+   * in which the form is asked to draw an item that has no row yet — and that is not a
+   * hypothetical, it is precisely the newly-seeded item this form now renders *because* it reads
+   * the catalogue. Read unguarded it throws out of render into the whole-app `ErrorBoundary`, so
+   * the person who just saved a snapshot loses the page rather than gaining a field. `save()`
+   * reads through here for the same reason and inside the same window.
+   *
+   * The seed is what `init()` will put there a moment later — the catalogue's own default
+   * currency, not a blank — so the field cannot flicker through a different value on its way to
+   * being correct.
+   */
+  const blank = (code) => ({ native_value: 0, currency: byCode[code]?.currency_default ?? "SGD" });
+  const row = (code) => rows[code] ?? blank(code);
+
+  const set = (code, field, val) =>
+    setRows((r) => ({ ...r, [code]: { ...(r[code] ?? blank(code)), [field]: val } }));
 
   async function save() {
     setBusy(true); setErr("");
     try {
       const values = items.map((it) => ({
         code: it.code,
-        native_value: parseFloat(rows[it.code].native_value) || 0,
-        currency: rows[it.code].currency,
+        native_value: parseFloat(row(it.code).native_value) || 0,
+        currency: row(it.code).currency,
       }));
       await post("/api/networth/snapshots", { date, note: note || null, values });
       posthog.capture("net_worth_snapshot_saved", { has_note: Boolean(note) });
@@ -182,20 +256,20 @@ function SnapshotForm({ items, prefill, onSaved, setErr }) {
         <label>Note <input type="text" value={note} placeholder="optional"
                            onChange={(e) => setNote(e.target.value)} /></label>
       </div>
-      {GROUPS.map((g) => (
-        <div key={g.title} className="nw-group">
-          <div className="nw-grouptitle">{g.title}</div>
-          {g.codes.map((code) => {
-            const it = byCode[code];
-            if (!it) return null;
-            const sgdItem = (rows[code].currency || "SGD") === "SGD";
+      {bandSections(items).map((sec) => (
+        <div key={sec.band} className="nw-group">
+          <div className="nw-grouptitle">{sec.title}</div>
+          {sec.items.map((it) => {
+            const code = it.code;
+            const r = row(code);
+            const sgdItem = (r.currency || "SGD") === "SGD";
             return (
               <div className="nw-row" key={code}>
                 <span className="nw-label">{it.label}{it.kind === "liability" && <span className="pill">liab</span>}</span>
-                <input type="number" step="0.01" value={rows[code].native_value}
+                <input type="number" step="0.01" value={r.native_value}
                        data-testid={"input-" + code}
                        onChange={(e) => set(code, "native_value", e.target.value)} />
-                <select value={rows[code].currency} disabled={["SGD"].includes(it.currency_default) && sgdItem}
+                <select value={r.currency} disabled={["SGD"].includes(it.currency_default) && sgdItem}
                         onChange={(e) => set(code, "currency", e.target.value)}>
                   {["SGD", "USD", "HKD"].map((c) => <option key={c} value={c}>{c}</option>)}
                 </select>
