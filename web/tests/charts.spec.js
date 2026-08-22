@@ -6,12 +6,12 @@
  * charts needed turned out to belong at *every* width: the multi-series key, the reserved
  * band under the bars, and the two containers that could collapse to nothing.
  *
- * A SEVENTH ARRIVED AFTER THAT COUNT WAS TAKEN and keeps its chrome at every width: the
- * net-worth composition chart, which replaced the two-line chart in place. It has no phone
- * branch — the donut precedent is about *redundancy*, not size, and nothing else on that page
- * carries composition over time. Its own gate is the `Net Worth composition` describe below, and
- * what it SAYS rather than how it lays out is `readings.spec.js`, which runs once at one
- * viewport.
+ * TWO SURFACES ARRIVED AFTER THAT COUNT WAS TAKEN, and both keep their chrome at every width:
+ * the net-worth composition chart, which replaced the two-line chart in place, and the spend
+ * trend's four small multiples on Spending › Overview. Neither has a phone branch — the donut
+ * precedent is about *redundancy*, not size, and nothing else on either page carries what these
+ * two carry. Their own gates are the last two describes in this file, and what they SAY rather
+ * than how they lay out is `readings.spec.js`, which runs once at one viewport.
  *
  * WHY THE DONUT GOES, since it is the one thing here that is not a defect. At percentage
  * radii in a one-column `.grid2` it renders at ⌀216px, larger than desktop's 180px, so this
@@ -298,6 +298,97 @@ test.describe("Net Worth composition", () => {
     });
 });
 
+/**
+ * The spend trend's geometry, at every viewport. Its readings are `readings.spec.js`'s.
+ */
+test.describe("Spending › Overview trend", () => {
+  test("keeps four panels and reflows without a new breakpoint",
+    async ({ page, baseURL }, testInfo) => {
+    await openView(page, baseURL, "Spending › Overview");
+    const groups = readFixture("spending-trends.json").groups;
+
+    // AT 390px THE CHART STAYS, one column. Trajectory exists on no other surface in this app,
+    // and the donut precedent is about redundancy rather than size.
+    const grid = page.getByTestId("spend-trend-grid");
+    await expect.soft(grid, "the trend was dropped at this width").toBeVisible();
+    await expect.soft(page.locator(".main .sptrend-panel")).toHaveCount(groups.length);
+
+    // THE RUNGS ARE ARITHMETIC RATHER THAN A BREAKPOINT: an `auto-fit` track floor of 185px
+    // against a 14px gap, and nothing else. Derived here rather than tabulated, so the gate says
+    // what the CSS says and moves when the CSS moves.
+    //
+    // "4 -> 2 -> 1 WITH NO THIRD RUNG" IS NOT ASSERTED, AND THE MEASUREMENT IS WHY. With four
+    // panels and any fixed floor, `auto-fit` has a three-across band by construction — the rung
+    // is a property of the container width, not of the number chosen — and one viewport in this
+    // suite lands in it: 844x390, where the shell's height guard makes the pane full-width while
+    // the content tier does not follow, giving a 780px grid and three panels with an orphan
+    // under them. 185px is still the right floor: it is what puts four panels across the gated
+    // 1100 viewport, where a 220px floor draws three and an orphan in the pane that matters. The
+    // rung is annotated on every run rather than hidden, so a future change to the gutter or the
+    // card's padding shows up as a different ladder instead of as nothing at all.
+    // `auto-fit` COLLAPSES THE TRACKS IT HAS NO ITEM FOR RATHER THAN DROPPING THEM, and the
+    // computed value still lists them, at `0px`. A raw count is therefore "how many panels would
+    // fit" rather than "how many panels are across", which is the number this rung claim is
+    // about — `.grid2`'s own gate never meets this because it has exactly two children and at
+    // most two tracks.
+    const seen = await grid.evaluate((el) => ({
+      tracks: getComputedStyle(el).gridTemplateColumns.split(/\s+/)
+        .filter((t) => t && parseFloat(t) > 0).length,
+      width: el.getBoundingClientRect().width,
+    }));
+    // 185 and 14 are `styles.css`'s `.sptrend-grid`, restated here because no build step can
+    // share a number between a stylesheet and a spec — the same arrangement `640` has across
+    // its four sites, and that rule's own comment names this one.
+    const want = Math.min(4, Math.max(1, Math.floor((seen.width + 14) / (185 + 14))));
+    expect.soft(seen.tracks, `${Math.round(seen.width)}px of grid should seat ${want} panels`)
+      .toBe(want);
+    testInfo.annotations.push({
+      type: "trend-grid-rung",
+      description: `${Math.round(seen.width)}px of grid · ${seen.tracks} panels across`,
+    });
+
+    // Panels are 140px tall at every width.
+    const heights = await page.locator(".main .sptrend-panel .recharts-responsive-container")
+      .evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+    expect.soft(heights, "a trend panel is not 140px tall")
+      .toEqual(groups.map(() => 140));
+
+    // NO PANEL'S SERIES IS FLATTENED ONTO THE FLOOR, which is the whole reason this card exists
+    // and the one thing a shared axis cannot give: on the stacked bar below, Transport is 2.4% of
+    // plot height against Personal's ceiling and never leaves the baseline. Measured as the
+    // curve's own vertical extent against its panel, so it is the compression that is asserted
+    // rather than the prop that fixes it — 20% is far above the 2.4% a shared axis produces and
+    // far below the ~41% the tightest panel actually draws, and the measured value is annotated.
+    const spans = await page.locator(".main .sptrend-panel").evaluateAll((panels) =>
+      panels.map((panel) => {
+        const curve = panel.querySelector(".recharts-line-curve");
+        const plot = panel.querySelector(".recharts-responsive-container");
+        if (!curve || !plot) return null;
+        return {
+          name: panel.getAttribute("data-testid"),
+          share: curve.getBBox().height / plot.getBoundingClientRect().height,
+        };
+      }));
+    for (const s of spans) {
+      expect.soft(s, "a panel drew no curve").not.toBeNull();
+      expect.soft(s.share, `${s.name}: the series is on the floor`).toBeGreaterThan(0.2);
+    }
+    testInfo.annotations.push({
+      type: "trend-panel-extent",
+      description: spans.map((s) => `${s.name.replace("spend-panel-", "")} ${Math.round(s.share * 100)}%`)
+        .join(" · "),
+    });
+
+    // THE PANEL HEADERS ARE THE KEY, so the trend adds no `.chartkey` — the single key on this
+    // view is still the stacked bar's. Asserted here because it is the claim that would break
+    // silently if someone "helpfully" added a shared key underneath the grid.
+    await expect.soft(page.locator(".main .chartkey")).toHaveCount(1);
+    // The trend draws no bars either, which is what keeps the chips-versus-bar-fills comparison
+    // below a comparison against the stacked bar alone.
+    await expect.soft(page.locator(".main .sptrend-panel .recharts-bar")).toHaveCount(0);
+  });
+});
+
 test.describe("one palette", () => {
   /**
    * A category keeps one colour on every spending surface.
@@ -360,6 +451,24 @@ test.describe("one palette", () => {
       expect.soft(item.chip, `${item.name}: the key's chip is off the map`)
         .toBe(rgb(categoryColour(item.name)));
     }
+    // The trend's panel headers are its key, so they are a fourth surface on this view and take
+    // their colour from the same map — a small multiple whose chip disagreed with the bar beneath
+    // it would be the original defect back at one panel's scale.
+    const heads = await page.locator(".main .sptrend-panel").evaluateAll((panels) =>
+      panels.map((panel) => ({
+        name: panel.querySelector(".sptrend-head .nm").textContent,
+        chip: getComputedStyle(panel.querySelector(".sptrend-head .chip")).backgroundColor,
+        stroke: getComputedStyle(panel.querySelector(".recharts-line-curve")).stroke,
+      })));
+    expect.soft(heads.length, "the trend drew no panels")
+      .toBe(readFixture("spending-trends.json").groups.length);
+    for (const h of heads) {
+      expect.soft(h.chip, `${h.name}: the panel's chip is off the map`)
+        .toBe(rgb(categoryColour(h.name)));
+      expect.soft(h.stroke, `${h.name}: the panel's line is off the map`)
+        .toBe(rgb(categoryColour(h.name)));
+    }
+
     const fills = await page.locator(".main .recharts-bar").evaluateAll((series) =>
       series.map((el) => {
         const rect = el.querySelector(".recharts-bar-rectangle path");
