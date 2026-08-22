@@ -171,11 +171,7 @@ those labels in their own layer **outside** the axis subtree, so the obvious axi
 selector matches nothing), that every band's curve is **linear** — a `d` with no curve command,
 which is the gate on the cubic this view shipped in production — and that a dot sits on **every**
 band edge while the point count is at or below the crossover, because three of the four edges are
-named tiles. The trend's is the grid: four panels, 140px tall, a track count **derived from** the
-185px floor and the 14px gap rather than tabulated, and the two absences that keep the older gates
-in this file meaningful — it adds no `.chartkey` (its panel headers are its key) and it draws no
-bars. Its rung is annotated rather than asserted as `4 → 2 → 1`; `RESPONSIVE.md`'s Observations
-carries the three-across measurement at 844×390 and why 185 is still the right floor.
+named tiles.
 
 It also
 carries the **one-palette** gate, which is the key-versus-fill assertion's strict sibling: that one
@@ -185,6 +181,24 @@ Personal a different colour in the same viewport. The palette gate compares ever
 against the map declared in `src/palette.js`, which it **imports rather than restates**: a table of
 hexes in the suite is a second palette, and the drift it would be blind to is the one it exists to
 catch.
+
+It also carries the **spend trend**, whose gates are shaped by what that chart would still look
+right while getting wrong. Its four series span two orders of magnitude, so the load-bearing claim is
+that **no series is flattened onto the floor**: the file computes what the smallest of them would draw
+under one shared axis — under 3px of a 140px plot — and then measures what each one actually draws, so
+a regression to a shared scale is caught by geometry rather than by a prop. The **caption** is gated
+for the same reason it exists: newest is at the **left**, so every panel reads backwards and a panel
+has no y-axis at all, which makes "latest value and signed delta, in words" the thing that keeps the
+slope from lying. The **footnote** is checked against figures recomputed from `/api/spending/window`'s
+material-source flags rather than against a sentence, because a typed "two of three sources" is right
+on today's ledger and wrong on the very payload that ships with it — four sources, three material.
+The **dash** on Uncategorized is read only after the line has finished drawing itself: recharts
+animates a line by rewriting `stroke-dasharray`, so mid-animation every line is dashed and the
+declared pattern is unreadable — which is also why the settle helper here samples the dash rather
+than `d`, the way the bar helper samples geometry. And the **grid** is asserted against the rule
+rather than against ten literals: the column count is derived from the card's measured inner width,
+and the one viewport that draws three panels and an orphan — 844×390, where the rail leaves the flow
+but the 28px desktop gutter does not — is pinned **by name**, so a second orphan is a failure.
 
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
 single donut implementation, that no chart renders a `<Legend>` and that both multi-series charts
@@ -284,11 +298,16 @@ intercepted in the browser: real Chromium, real layout, real media queries above
 fixtures below it. No test touches Postgres or the network, and the auth gate is satisfied by
 a mocked session endpoint, so Google's identity script never loads.
 
-Fixtures are not hand-written and should not be hand-edited. They carry four deliberately
+Fixtures are not hand-written and should not be hand-edited. They carry five deliberately
 pathological rows — a 30-character subcategory name, a security with 73 option trades, a
-65-character merchant string, and the null-category row — each with a comment saying why.
+65-character merchant string, the null-category row, and the two-orders-of-magnitude spread
+across the four spend series inside the trend's window — each with a comment saying why.
 Plausible-looking data is what produced the 415px-vs-519px error that made fixtures
-necessary in the first place.
+necessary in the first place. The last of the five is the only one that is a claim about **two**
+payloads at once, since the spread only exists inside the window a second endpoint defines, and
+it is the one that keeps a gate from going vacuous rather than a measurement from being wrong:
+a window whose four series happened to agree in magnitude would pass "no series is flattened
+onto the floor" under a shared axis too.
 
 ## Where the reasoning lives
 

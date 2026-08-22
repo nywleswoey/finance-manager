@@ -97,3 +97,17 @@ export const utcMonth = (ym) => Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice
 // straight to `<Bar dataKey>`, and JSON has no null key — so that one must be named before
 // it is serialized or it becomes the string "null". Change the word and change it in both.
 export const catName = (c) => c || "Uncategorized";
+/**
+ * A `YYYY-MM` bucket as prose, and as a label with ~40px to live in.
+ *
+ * Beside the money formatters because that is what these are: the compute layer emits months
+ * as `to_char(txn_date,'YYYY-MM')` strings and every surface that prints one has to turn it
+ * into a word. Here rather than in the one chart that draws them so the suite can assert a
+ * rendered label against the app's own formatter instead of restating the month names — a
+ * restated table of abbreviations is a second formatter, free to disagree with the first, and
+ * a spec file cannot import a module that imports React.
+ */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+export const monthName = (ym) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} ${ym.slice(0, 4)}`;
+export const monthTick = (ym) => `${MONTHS[Number(ym.slice(5, 7)) - 1]} '${ym.slice(2, 4)}`;

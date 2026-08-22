@@ -452,11 +452,9 @@ button { min-height: 24px; }
   min-height: 38px; padding: 0 8px; border-radius: 4px; overflow: hidden; }
 .barfill { position: absolute; left: 0; top: 0; bottom: 0; opacity: .3; border-radius: 4px; }
 .barrow > .chip, .barrow > .nm, .barrow > .val { position: relative; }
-/* One swatch, three lists. The donut's rows, a multi-series key and a small-multiple's header
-   are the same thing — a colour standing for a series — so they take one rule rather than three
-   identical ones. The trend's panel headers ARE its key, which is why they join this rule
-   rather than growing a swatch of their own. */
-.barrow .chip, .chartkey .chip, .sptrend-head .chip { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+/* One swatch, two lists. The donut's rows and a multi-series key are the same thing — a
+   colour standing for a series — so they take one rule rather than two identical ones. */
+.barrow .chip, .chartkey .chip, .tp-head .chip { flex: none; width: 8px; height: 8px; border-radius: 2px; }
 .barrow .nm { flex: 1 1 auto; min-width: 0; color: var(--txt); font-size: 13px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .barrow .val { flex: none; color: var(--mut); font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -476,41 +474,63 @@ button { min-height: 24px; }
 .nwc-foot { font-size: 12px; margin-top: 10px; padding: 0 8px; display: flex;
   flex-direction: column; gap: 3px; }
 
-/* The spend trend's small multiples, and the whole of their reflow: no breakpoint, no media
-   query, just an `auto-fit` floor and a gap.
+/* ─── the spend trend's small multiples ─────────────────────────────────────────────────
+   Four panels, one row, no new breakpoint. `auto-fit` at a 185px floor with a 14px gap gives
+   4 → 2 → 1 at nine of the ten viewports, which is the whole reason the floor is 185 and not
+   220. At 220 the gated 1100 viewport draws three panels and an orphan: the card is 809px
+   inner there (1100 less the 200px rail, `.main`'s 2x28 and the card's own 2x16 plus border)
+   and 809 holds three 220px tracks with room to spare and four only at 185.
 
-   A 185px FLOOR RATHER THAN 220px, and the number was measured rather than chosen: at the gated
-   1100 viewport this card is 809px inner — the grid above it is single-column there — and a
-   220px floor draws three panels and an orphan in the pane that matters most. `min(185px, 100%)`
-   for the reason `.grid2` carries it: a floor wider than the container is an overflow, and the
-   ratchet is at zero.
+   THE TENTH IS 844x390 AND IT DRAWS THE ORPHAN ANYWAY. A rotated phone takes the phone shell
+   on the `(max-height: 500px)` guard, so the rail leaves the flow — but this pane's gutter
+   follows WIDTH, and 844 is above the phone tier, so it keeps the 28px desktop padding. That
+   pairing exists at no other viewport and lands the card on 754px inner: three 185px tracks,
+   not four. NO FLOOR FIXES IT — one big enough to make 754 draw two makes 809 draw three, and
+   809 is the width the 185-over-220 argument turns on. The alternative is a breakpoint, which
+   this rule is specced not to add, so the orphan is accepted at exactly that viewport and
+   `charts.spec.js` names it rather than tolerating a third rung in general.
 
-   IT IS NOT "4 -> 2 -> 1 WITH NO THIRD RUNG", and the measurement is in `RESPONSIVE.md`'s
-   Observations: with four panels and any fixed floor a three-across band exists by construction,
-   and 844x390 lands in it at 780px of grid. The floor decides *where* that band falls, not
-   whether it exists. `charts.spec.js` derives the expected track count from these two numbers
-   rather than tabulating the ladder, and annotates the rung on every run — so 185 and 14 are
-   written in two places and cross-referenced here, the way `640` is across its four. */
-.sptrend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(185px, 100%), 1fr));
-  gap: 14px; }
-/* `.sptrend-panel` CARRIES NO CSS AND IS NOT MEANT TO, like `donutlist` above it: a grid item is
-   already the box it needs to be, and what the class exists for is to be measurable — the suite
-   reads a panel's header, its curve and its container through it. Named rather than reached by
-   `.sptrend-grid > div`, which would silently follow whatever is added here next. */
-/* The header wraps rather than truncating a category's name: at four panels across, the name,
-   the latest month and the signed delta do not always fit on one line, and the delta is the
-   panel's whole reading — an ellipsis through it is the one loss this card cannot take. */
-.sptrend-head { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px;
-  font-size: 12px; color: var(--txt); }
-.sptrend-head .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis;
-  white-space: nowrap; }
-.sptrend-head .val, .sptrend-head .dlt { flex: none; font-variant-numeric: tabular-nums; }
-/* Deliberately not `.pos` / `.neg`: those are gains and losses, and spending more is not a loss.
-   A red +30% here would be this card taking a view it has no business taking. */
-.sptrend-head .dlt { color: var(--txt); }
-.sptrend-range { font-size: 11px; color: var(--mut); margin: 1px 0 2px; padding-left: 14px;
+   THE FLOOR IS A BARE `185px`, NOT `min(185px, 100%)` — and the difference to `.grid2`'s
+   track floor is that this one never binds. The narrowest pane in the suite gives this card
+   298px of inner width at 360, well clear of 185, so `auto-fit` collapses to one full-width
+   track on its own and there is no width in the tier where a hard floor could overflow the
+   pane. `.grid2`'s 420px floor DID overflow a 362px pane, which is what that `min()` is for.
+
+   AT 390 THE CHART STAYS, one column, ~35px per point — better than the desktop row's 25px.
+   The donut's phone treatment does not transfer: that deletion is about REDUNDANCY, not size
+   — the list beneath restated every one of its numbers — and nothing else on this page
+   carries trajectory. */
+.trendgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 14px; }
+/* `min-width: 0` because a grid item's default `min-width: auto` refuses to shrink below its
+   content, and a `ResponsiveContainer` inside one measures the track it was given — so
+   without this the panel that holds the widest caption would push the row wider than the
+   card and take the pane's horizontal-overflow ratchet off zero. */
+.trendpanel { min-width: 0; }
+/* The caption, on two lines: chip · name · delta, then the latest value with min–max demoted
+   beside it. Two rather than one because at the 1100 viewport a panel is ~192px and the four
+   parts measure ~195px on one line — a caption that wraps only sometimes would leave the
+   four plots in a row starting at different heights. See `SpendTrend.jsx`, which says why
+   the caption is load-bearing in the first place. */
+.tp-cap { min-width: 0; }
+.tp-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.tp-name { flex: 1 1 auto; min-width: 0; font-size: 13px; font-weight: 600; color: var(--txt);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-delta { flex: none; font-size: 12px; color: var(--mut); font-variant-numeric: tabular-nums; }
+.tp-sub { display: flex; align-items: baseline; gap: 6px; margin: 2px 0 4px; min-width: 0; }
+.tp-latest { flex: 1 1 auto; font-size: 14px; font-weight: 600; color: var(--txt);
   font-variant-numeric: tabular-nums; }
-.sptrend-foot { font-size: 12px; margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.tp-range { flex: none; font-size: 11px; color: var(--mut); font-variant-numeric: tabular-nums; }
+/* The panel's x-axis, as DOM under the plot rather than as a chart child — `.chartkey`'s
+   reason at a smaller scale, plus one this chart has on its own: an axis tick sits at its data
+   point, the first point is at the plot's left edge, and a centred label there is half outside
+   the SVG. `space-between` puts the newest month under the newest point. */
+.tp-axis { display: flex; justify-content: space-between; margin-top: 2px;
+  color: var(--mut); font-size: 11px; font-variant-numeric: tabular-nums; }
+/* The disclosure block under the whole grid — three lines, two of them unconditional. 12px
+   and muted, the same treatment `ByCategory`'s undated line already carries, because it is
+   the same kind of sentence. */
+.trendnote { display: flex; flex-direction: column; gap: 4px; margin-top: 14px;
+  color: var(--mut); font-size: 12px; line-height: 1.5; }
 /* `textarea` joins the rule it was always missing from: it is styled nowhere else in the
    app, so it rendered UA-default — a white box on a dark modal — at every width. */
 input, select, textarea { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);

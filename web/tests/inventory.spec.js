@@ -83,11 +83,22 @@ test("no chart renders the library's own legend", () => {
   expect(offenders, "render the key as DOM — `ChartKey` in `charts.jsx`").toEqual([]);
 });
 
-test("both multi-series charts carry a DOM key", () => {
+test("every multi-series chart that needs a DOM key carries one", () => {
   // The counterpart of the gate above: forbidding `<Legend>` is satisfied by having no key
   // at all, which is exactly the state `NetWorth` shipped in — two coloured lines named only
   // in a tooltip that touch never opens. Named files rather than a count, because "multi-
   // series" is not greppable and a third one arriving should have to be added here by hand.
+  //
+  // AND A THIRD ONE HAS ARRIVED, DELIBERATELY WITHOUT A KEY. `SpendTrend.jsx` draws four
+  // series and is not on this list, which is what "needs" in the title is carrying: it draws
+  // them as small multiples, one series per panel, and every panel's header states that
+  // series' colour, name, latest value and signed delta directly above its own plot. A key
+  // under that grid would restate four names and four colours written four times immediately
+  // above it. The panel headers ARE the key, and `charts.spec.js` asserts them as one — chip
+  // against the map, caption against the payload — so the claim this gate exists to hold is
+  // held there rather than dropped. What must not happen is that file appearing here quietly:
+  // if it ever renders a `<ChartKey>`, this list is wrong in the direction that matters and
+  // the exact equality below is what says so.
   //
   // Comments stripped, like its two siblings — and here the direction of the mistake is the
   // interesting one. The `<Legend>` gate forbids a construct, so a prose mention would fail it
@@ -105,7 +116,8 @@ test("both multi-series charts carry a DOM key", () => {
     .filter((f) => /<ChartKey[\s/>]/.test(stripComments(fs.readFileSync(f, "utf8"))))
     .map((f) => path.relative(WEB, f))
     .sort();
-  expect(keyed, "a multi-series chart with no key is anonymous on touch").toEqual(wanted);
+  expect(keyed, "a multi-series chart with no key is anonymous on touch — unless every series "
+    + "is captioned at its own panel, which is `SpendTrend.jsx` and only that").toEqual(wanted);
 });
 
 test("no spending surface indexes the positional palette", () => {
@@ -368,10 +380,15 @@ test.describe("the fixtures carry the pathological rows they exist for", () => {
   // Fixtures that were merely *plausible* are what produced the error these exist to
   // prevent: the top-line-items card measured 415px against invented rows during
   // planning and 519px against real ones. Each case below names why it is here.
+  //
+  // `fixture` is one file or several, spread into `holds` in the order it lists them: the
+  // spend trend's spread is a claim about the trends payload *inside* the window a second
+  // endpoint defines, and neither file states it alone.
   for (const c of PATHOLOGICAL) {
     test(c.name, () => {
-      const { ok, saw } = c.holds(readFixture(c.fixture));
-      expect(ok, `${c.fixture}: ${saw}`).toBe(true);
+      const files = [].concat(c.fixture);
+      const { ok, saw } = c.holds(...files.map(readFixture));
+      expect(ok, `${files.join(" + ")}: ${saw}`).toBe(true);
     });
   }
 });

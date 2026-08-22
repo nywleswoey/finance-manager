@@ -1,202 +1,267 @@
-import React from "react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { sgd, fmt, signed, monthYearLabel, fullDateLabel, utcDay, utcMonth } from "../../api.js";
+import React, { useEffect, useState } from "react";
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip } from "recharts";
+import { get, sgd, fmt, catName, monthName, monthTick } from "../../api.js";
 import { categoryColour, CATEGORY_DASH } from "../../palette.js";
-import { usePhone } from "../../cards.jsx";
-import { TOOLTIP_SKIN } from "../../charts.jsx";
+
+/** The plot's height. The caption sits above it; 140 is the drawing, not the grid cell. */
+const PANEL_H = 140;
 
 /**
- * Is Transport rising? — the question the stacked bar beside this card cannot answer.
+ * The spend trend: small multiples, one panel per spend category, each on its own y-axis.
  *
- * Small multiples: one panel per spend category, EACH WITH ITS OWN Y-AXIS. In the stacked bar
- * every band except the bottom one sits on a moving baseline, so its own shape is unreadable;
- * and it is a ~150x spread across four series, so on a shared linear axis Transport gets 2.4% of
- * plot height and never leaves the floor. Measured on a throwaway prototype against real data:
- * dropping Uncategorized does not relieve the compression (Personal sets the ceiling and
- * Transport stays at 3.4px) and dropping Personal barely helps (6.2px, because the unclassified
- * spike then sets it). Only a per-series or a log scale touches it, and per-panel wins because
- * it fixes the compression WITHOUT CHANGING WHAT A PIXEL MEANS — inside a panel, dollars stay
- * dollars.
+ * WHY FOUR SCALES AND NOT ONE. Measured on a throwaway prototype against real data, the four
+ * series span ~150×, and under one shared axis the smallest of them is drawn flat on the
+ * floor — 3.4px of plot for Transport. Dropping Uncategorized does not relieve it (Personal
+ * still sets a $12,000 ceiling and Transport stays at 3.4px) and dropping Personal barely
+ * helps (6.2px, because the $3,279 unclassified spike then sets the ceiling). Only a
+ * per-series scale or a log scale touches it, and per-panel wins because it fixes the
+ * compression WITHOUT CHANGING WHAT A PIXEL MEANS: inside a panel, dollars stay dollars, and
+ * the axis is floored at zero so a pixel is the same number of dollars all the way down.
  *
- * THIS FORM IS SAFE ONLY BECAUSE THE TAXONOMY IS LOCKED AT THREE CATEGORIES, which makes the
- * grid permanently four panels. The recommendation inverts at subcategory depth.
+ * WHAT MAKES THIS FORM SAFE IS THE TAXONOMY BEING LOCKED AT THREE CATEGORIES, which makes
+ * the grid permanently four panels — one row on a desktop, and small enough to hold in one
+ * glance. THE RECOMMENDATION INVERTS AT SUBCATEGORY DEPTH: there are dozens of those, and
+ * dozens of panels is a contact sheet, not a chart.
  *
- * IT DOES NOT REPLACE THE STACKED BAR, and it reads the same payload: this slices the array
- * `Overview` already fetches, so one response feeds two charts and they cannot disagree about a
- * shared month. Its window comes from `/api/spending/window`, which is a rule computed
- * server-side from source coverage — so the disclosure prose beneath the grid is derived rather
- * than typed, and cannot go stale.
+ * FOUR SERIES, NO CAP AND NO FOLD. No top-N — the window grows every month, so a top-N would
+ * silently re-rank and a category would leave the chart with nothing to say it had. No
+ * "Other" fold either: it would collide with the real `Personal/Others` subcategory, and a
+ * chart naming one thing two ways is the defect the colour map exists for one file over.
+ *
+ * IT ADDS NO SPEND PAYLOAD. The series are a slice of the `/api/spending/trends` array the
+ * view has already fetched for the stacked bar below, so the two charts on this page cannot
+ * disagree about a shared month. What this component fetches for itself is the window rule
+ * and the undated count — both of which are footnote, not series.
+ *
+ * NOT A REPLACEMENT FOR THE STACKED BAR. That chart answers "what did I spend in March";
+ * this one answers "where is this going". They are ordered coarse-to-fine on the page —
+ * trajectory, then the per-month detail — and they run in OPPOSITE DIRECTIONS, which is
+ * accepted: the per-panel caption states every panel's direction in words, so the bar chart
+ * beside it cannot silently mislead. The stacked bar is not flipped.
  */
+export default function SpendTrend({ trend }) {
+  const [win, setWin] = useState(null);
+  const [undated, setUndated] = useState(null);
+  useEffect(() => { get("/api/spending/window").then(setWin).catch(() => setWin(null)); }, []);
+  useEffect(() => { get("/api/spending/undated").then(setUndated).catch(() => setUndated(null)); }, []);
 
-/**
- * Panel order, left to right, and it is a constant rather than a ranking on purpose.
- *
- * A spend-ordered grid would silently re-rank as the growing window moves, which is the same
- * defect that rules out a top-N cap: the panels would swap places for reasons that have nothing
- * to do with the reading. The payload's own `groups` is alphabetical, which puts the residue
- * band in the middle of the chosen categories.
- *
- * MEMBERSHIP STILL COMES FROM THE PAYLOAD — this list only orders what arrives, and a group that
- * is in no list is appended rather than dropped. So a fifth category draws (in an unfamiliar
- * colour, from `palette.js`'s reserve) instead of vanishing, which is the failure this whole
- * card exists to stop happening to Transport.
- */
-const PANEL_ORDER = ["Personal", "Housing", "Transport", "Uncategorized"];
-
-/** Panels are 140px tall at every width — see the grid rule in `styles.css` for the reflow. */
-const PANEL_HEIGHT = 140;
-
-/** `2025-09` → `Sep 2025`. The window is stated in months because the rule is stated in months. */
-const ymLabel = (ym) => monthYearLabel(utcMonth(ym));
-
-export default function SpendTrend({ trend, spendWindow: win, undated }) {
-  // BEFORE THE GUARDS, NOT AFTER THEM. `usePhone` is a hook, `Overview` fires its four fetches
-  // independently and gates its render on the summary alone, so this card is mounted with
-  // `spendWindow` still null and handed one later — it renders once with the guards below
-  // returning early and again with them satisfied.
+  // NO WINDOW, NO CHART. `_window_shape` returns a null `start`/`end` when no source is
+  // material or no month is drawable, and every dated month then falls in `before` — there
+  // is nothing to draw and, more to the point, nothing the footnote could truthfully say
+  // about a range that does not exist. Rendering nothing is the honest branch; a chart of
+  // every month would be exactly the undisclosed leading-months defect the window exists for.
+  if (!win || !win.start || !win.end || !trend || !trend.series) return null;
+  // THE WINDOW MINUS ITS GAPS, and the subtraction is not optional. `_window_shape` states the
+  // arithmetic as `drawn = dated_total - before - after - gaps`, and the footnote below counts
+  // gap money as off-chart — so drawing a gap month would make that sentence false. A gap is a
+  // month inside the window where some material source reported nothing, which means its total
+  // is missing a source rather than low: plotted, it is a dip the ledger never had, and it is
+  // exactly the defect the window rule exists to keep off this chart.
   //
-  // MEASURED, RATHER THAN ASSUMED: with the call left below the guards that ordering does NOT
-  // throw on React 19.2, because a render that reached no hook leaves `memoizedState` null and
-  // the next one is dispatched as a mount. What it is is an unexercised dependence on that,
-  // pointing the wrong way — the reverse transition (a good render followed by an early return)
-  // is the one React refuses, and nothing in this component's shape promises it can never happen
-  // once a payload can be replaced rather than only filled. Every other `usePhone` caller in this
-  // app calls it first; this one does too, and the ordering it is safe under is asserted in
-  // `readings.spec.js` rather than left to luck.
-  const phone = usePhone();
+  // DROPPED, NOT ANNOTATED. What the chart should SHOW about a gap is out of scope here (the
+  // endpoint's docstring says so); what it must not do is draw one silently. Empty on today's
+  // ledger, so this is the branch no fixture reaches — `charts.spec.js` annotates that on every
+  // run rather than letting a green suite read as coverage.
+  const gaps = new Set(win.gaps);
+  const rows = trend.series.filter(
+    (r) => r.ym >= win.start && r.ym <= win.end && !gaps.has(r.ym));
+  if (rows.length === 0) return null;
 
-  // The window is the chart. Without it there is no honest set of months to draw, and drawing
-  // every month the ledger holds is precisely the fabricated collapse the rule exists to stop.
-  if (!trend || !win || !win.start) return null;
+  /**
+   * PANEL ORDER: spend inside the window, descending, with Uncategorized pinned last.
+   *
+   * Derived rather than typed, so a category that grows past another is not left sitting
+   * where a literal put it. Uncategorized is pinned out of that ordering because it is not
+   * a category anyone chose — it is residue, and residue belongs at the end however much of
+   * it there is. (On today's ledger it outspends Transport, so this pin is doing work.)
+   *
+   * Re-ranking is safe HERE in a way it is not for a top-N: every panel is drawn whatever
+   * its rank, so the order is a reading aid rather than a filter, and nothing can leave the
+   * chart by sliding down it.
+   */
+  const total = (g) => rows.reduce((a, r) => a + Number(r[g] ?? 0), 0);
+  // `catName(null)` rather than the literal: what is being pinned last is the NULL category,
+  // and that name is `api.js`' to say. The string is a JSON key on this payload — the compute
+  // layer has to name the null before it serializes — so the two words have to agree, and
+  // asking the function is how they do.
+  const residue = (g) => (g === catName(null) ? 1 : 0);
+  const groups = [...trend.groups].sort((a, b) => residue(a) - residue(b) || total(b) - total(a));
 
-  const rows = (trend.series ?? []).filter((r) => r.ym >= win.start && r.ym <= win.end);
-  if (rows.length < 2) return null;
-
-  // NEWEST AT THE LEFT. The page reads coarse-to-fine downward and this card is the coarse one,
-  // so its most recent month is where the eye lands first. What that costs is paid for in the
-  // panel headers — see below, and do not remove them.
-  const points = [...rows].reverse();
-  const groups = trend.groups ?? [];
-  const panels = [
-    ...PANEL_ORDER.filter((g) => groups.includes(g)),
-    ...groups.filter((g) => !PANEL_ORDER.includes(g)),
-  ];
-
-  const outside = ["before", "after", "gaps"]
-    .reduce((a, k) => a + (win.excluded?.[k]?.total_sgd ?? 0), 0);
-  const sources = win.sources ?? [];
-  // THE DENOMINATOR IS THE DATED COUNTED TOTAL, taken as the sum of the per-source coverage —
-  // which is the very figure `_window_shape` divides by to decide materiality, so the share
-  // printed here is against the same total the flags beside it were judged on.
-  //
-  // NOT `outside + <the rows this chart drew>`, which is the reading that looks obvious and is
-  // wrong: `excluded.gaps` is inside `outside`, while a gap month can still carry rows and so is
-  // still summed by the drawn slice. The two agree only while `gaps` is empty, which is exactly
-  // the "wrong on the day the list first fires" that endpoint's docstring warns about. And it is
-  // the dated total rather than the summary's, because the summary's includes undated rows —
-  // those are the third footnote line's to report, not this one's.
-  const dated = sources.reduce((a, x) => a + (x.total_sgd ?? 0), 0);
-  const material = sources.filter((s) => s.material);
-  // The last material source to appear is what sets the start: the window begins the month after
-  // it did. Named from the payload's flags rather than typed — typed, this line says "two of
-  // three sources", which is wrong at three of four and right only among the material ones.
-  //
-  // A window with no material source is a window the server does not emit — `_window_shape`
-  // returns a null `start`, which the guard above already sent home — so this reduce cannot see an
-  // empty list. Guarded anyway, because the alternative to a guard here is a blank card.
-  if (!material.length) return null;
-  const startedLast = material.reduce((a, b) => (a.first_txn > b.first_txn ? a : b));
+  const material = win.sources.filter((s) => s.material);
+  // The material share and the dated total are both sums over the payload's own per-source
+  // figures — never a typed count and never a typed range. Typed, the line says "two of
+  // three sources", which is wrong on this very payload: there are four sources and three of
+  // them are material. The flags are the only thing that knows which.
+  const share = material.reduce((a, s) => a + s.share, 0);
+  const dated = win.sources.reduce((a, s) => a + s.total_sgd, 0);
+  // Three-way, not two: a gap month is a third kind of off-chart money and the endpoint
+  // splits it out precisely so this line can add it back in. Empty today, and silently wrong
+  // the day it is not if this only summed `before` and `after`.
+  const outside = win.excluded.before.total_sgd + win.excluded.after.total_sgd
+    + win.excluded.gaps.total_sgd;
 
   return (
-    <div className="card" style={{ marginTop: 16 }} data-testid="spend-trend">
+    <div className="card" style={{ marginTop: 16 }}>
       <h3>Spend Trend by Category</h3>
-      <div className="sptrend-grid" data-testid="spend-trend-grid">
-        {panels.map((name) => {
-          const data = points.map((r) => ({ ym: r.ym, v: r[name] ?? 0 }));
-          const values = data.map((d) => d.v);
-          const latest = values[0];
-          const oldest = values[values.length - 1];
-          const colour = categoryColour(name);
-          return (
-            <div className="sptrend-panel" key={name} data-testid={"spend-panel-" + name}>
-              {/* THE PANEL HEADER IS THE CAPTION AND IT IS LOAD-BEARING. Newest-at-the-left makes
-                  every panel read backwards — a declining category slopes *upward* — and a panel
-                  has no y-axis at all, so slope is the whole of its content. The signed delta is
-                  the only thing on screen that says which way the category actually went. Drop
-                  this line and the chart lies. Min-max is demoted beneath it because it is a
-                  range rather than a direction.
-
-                  It is also the key: four names beside four colours, immediately above the four
-                  panels they belong to. A shared key underneath would restate all of it. */}
-              <div className="sptrend-head">
-                <span className="chip" style={{ background: colour }} />
-                <span className="nm">{name}</span>
-                <span className="val">{sgd(latest)}</span>
-                {/* A percentage needs something to be a percentage OF. A category whose oldest
-                    drawn month is zero has no rate to state, and a bare signed figure on this
-                    line would read as one — so it says the direction in the only word that is
-                    true of it. Cannot fire on the drawn window today; Transport's zeros are all
-                    before the window starts, which is most of why the window exists. */}
-                <span className="dlt">
-                  {oldest ? signed(((latest - oldest) / oldest) * 100) + "%"
-                          : latest ? "new" : "—"}
-                </span>
-              </div>
-              <div className="sptrend-range">
-                min {sgd(Math.min(...values))} · max {sgd(Math.max(...values))}
-              </div>
-              <ResponsiveContainer width="100%" height={PANEL_HEIGHT}>
-                <LineChart data={data} margin={{ top: 4, right: 4, left: 4, bottom: 4 }}>
-                  {/* Both axes hidden, and the y one still scales the panel — that is what "its
-                      own y-axis" buys. Ticks would collide at a 185px panel and the window is
-                      stated once beneath the grid instead of ten times inside it. */}
-                  <XAxis dataKey="ym" hide />
-                  <YAxis hide />
-                  {/* Desktop hover, per panel, and strictly additive — nothing exists only in
-                      here, because a tooltip does not exist on touch. */}
-                  {!phone && (
-                    <Tooltip formatter={(v) => [sgd(v), name]}
-                             labelFormatter={ymLabel} {...TOOLTIP_SKIN} />
-                  )}
-                  {/* Raw monthly totals, `linear`, no smoothing. A rolling window is impossible
-                      rather than unwanted: a trailing-12 needs twelve honest months and the rule
-                      yields ten, so it would draw zero points.
-
-                      Uncategorized comes back dashed from `CATEGORY_DASH`, which is the secondary
-                      encoding its grey needs — grey alone fails the palette validator's chroma
-                      floor precisely because grey is what a colour looks like when it carries no
-                      identity, and residue is the one thing this series must read as. */}
-                  <Line type="linear" dataKey="v" name={name} stroke={colour} strokeWidth={2}
-                        strokeDasharray={CATEGORY_DASH[name]} dot={false}
-                        isAnimationActive={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          );
-        })}
+      <div className="trendgrid">
+        {groups.map((g) => <Panel key={g} name={g} rows={rows} />)}
       </div>
-      {/* Three lines, two of them unconditional. Every number and every count in the first one is
-          read off `/api/spending/window`, so the day a fourth source turns material this prose
-          changes with it. */}
-      <div className="mut sptrend-foot" data-testid="spend-trend-foot">
-        <div data-testid="spend-trend-window">
-          {ymLabel(win.start)} – {ymLabel(win.end)} · {points.length} months, newest first.
-          Drawn only where all {material.length} material {material.length === 1 ? "source" : "sources"} of{" "}
-          {sources.length} have reported: it starts the month after the last of them first did
-          ({startedLast.source}, {fullDateLabel(utcDay(startedLast.first_txn))}),
-          and stops before the month still being collected. {sgd(outside)} —{" "}
-          {fmt(dated ? (outside / dated) * 100 : 0, 0)}% of counted dated spend — sits outside it.
-        </div>
+      {/* THE FOOTNOTE IS BENEATH THE WHOLE GRID, not per panel: all three lines are facts
+          about the chart rather than about a category, and four copies of them would be
+          four times the prose and no more disclosure. */}
+      <div className="trendnote">
         <div>
-          Subcategory detail lives in <b>By Category</b>; the unclassified rows behind the grey
-          panel live in <b>Classify</b>, where they can be classified rather than inspected.
+          {monthName(win.start)} – {monthName(win.end)}: every month in which all{" "}
+          {material.length} material sources report — {material.length} of{" "}
+          {win.sources.length}, carrying {fmt(share * 100, 1)}% of dated spend between them. It
+          opens the month after the last of them began reporting and stops short of the
+          ledger's partial current month. {sgd(outside)} of dated spend,{" "}
+          {fmt((outside / dated) * 100, 1)}% of it, falls outside the window and is not drawn
+          here.
         </div>
+        {/* DEPTH, AND WHY IT IS PROSE RATHER THAN A LINK. There is no drill-down in v1 and
+            not for time: a per-point target is 19.2px of spacing at the 1100 viewport against
+            the app's own 24px floor, the transactions view has no date filter to receive one,
+            a panel target would need the app's first cross-tab navigation and would land on a
+            different window — and the Uncategorized panel cannot drill at all, because the
+            category filter has no null match. Its honest destination is Classify: that row
+            needs classifying, not inspecting. So the two destinations are named, not wired. */}
+        <div>
+          Subcategory detail lives in By Category; unclassified rows in Classify.
+        </div>
+        {/* Guarded on the count, not rendered empty: undated spend is n=0/$0 today, and a line
+            that reads "excludes S$0 across 0 transactions" is noise standing where a real
+            disclosure will one day be. `ByCategory` guards the same figure the same way. */}
         {undated && undated.n > 0 && (
-          <div data-testid="spend-trend-undated">
+          <div>
             Excludes {sgd(undated.total_sgd)} across {undated.n} undated
             transaction{undated.n === 1 ? "" : "s"}, which carry no date and so fall in no month.
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * One panel: a caption, and a line with no y-axis under it.
+ *
+ * THE CAPTION IS LOAD-BEARING. DROP IT AND THE CHART LIES. Newest is at the LEFT, so every
+ * panel reads backwards against every other time axis a reader has ever seen — Transport's
+ * line RISES left-to-right while its number has FALLEN, and Personal's falls while its
+ * number has risen. And a panel has no y-axis at all, so the slope is the panel's entire
+ * visual content. What makes that legible rather than misleading is this header stating the
+ * latest value and the signed delta IN WORDS, where neither depends on which way the reader
+ * happens to read the line. Anything that moves the caption out of the panel, or demotes the
+ * delta into the muted line below it, breaks that and must not be done casually.
+ *
+ * THE PANEL HEADERS ARE ALSO THE KEY. There is no `<ChartKey>` under this grid, deliberately:
+ * a key would restate four names and four colours written immediately above four charts.
+ * `inventory.spec.js` names the files that must carry one, and this is not one of them.
+ *
+ * TWO LINES RATHER THAN ONE, and the number is why. At the gated 1100 viewport the card is
+ * 809px inner and four columns leave a panel ~192px wide; chip + "Uncategorized" + a latest
+ * value + a delta measures ~195px on one line, so a single-line caption wraps *sometimes*,
+ * which would leave the four plots in a row starting at different heights. Splitting it puts
+ * the delta beside the name — where the direction claim belongs — and the latest value beside
+ * the demoted min–max.
+ */
+function Panel({ name, rows }) {
+  const colour = categoryColour(name);
+  const vals = rows.map((r) => Number(r[name] ?? 0));
+  const oldest = vals[0];
+  const latest = vals[vals.length - 1];
+  const lo = Math.min(...vals);
+  const hi = Math.max(...vals);
+  // First month of the window to last, which is what "latest, and how it got there" means on
+  // a panel whose only other content is a slope. A zero opening month has no percentage —
+  // Transport's is $258.95 so this cannot fire on today's window, but the window grows.
+  //
+  // THE MAGNITUDES DO NOT REPRODUCE THE ONES IN THE SPEC, and that is the data rather than the
+  // formula. The spec quotes Transport at -68% and Personal at +39% from a prototype run
+  // against the live ledger months before the fixture was captured; first-to-last over the
+  // committed window gives -80% and +30%. What the spec was making a claim about is the SIGNS
+  // against the SLOPES — "Transport is negative and slopes up, Personal is positive and slopes
+  // down" — and this reproduces both exactly, which is the half that matters: it is the
+  // mismatch between them that the caption exists to resolve.
+  const delta = oldest ? (latest - oldest) / oldest : null;
+  const signed = delta == null ? "—"
+    : (delta >= 0 ? "+" : "−") + fmt(Math.abs(delta) * 100, 0) + "%";
+
+  // NEWEST AT THE LEFT, done by reversing the data rather than by `<XAxis reversed>`: the
+  // tooltip, the ticks and the line then all read one array in one order, and there is no
+  // second place for the direction to be set differently.
+  const points = [...rows].reverse().map((r) => ({ ym: r.ym, v: Number(r[name] ?? 0) }));
+
+  return (
+    <div className="trendpanel">
+      {/* ONE CAPTION, TWO LINES — see the docstring for why it cannot be one. `.tp-cap` exists
+          so the four parts are one element in the DOM as well as one idea on the page. */}
+      <div className="tp-cap">
+        <div className="tp-head">
+        <span className="chip" style={{ background: colour }} />
+        <span className="tp-name">{name}</span>
+        {/* MUTED, NOT RED/GREEN. `cls()` would paint a rise green, and on a spending chart
+            "up" is not good news — the app's pos/neg pair means something else everywhere
+            it is used. The sign glyph carries the direction on its own. */}
+        <span className="tp-delta">{signed}</span>
+      </div>
+        <div className="tp-sub">
+          <span className="tp-latest">{sgd(latest)}</span>
+          <span className="tp-range">{sgd(lo)} – {sgd(hi)}</span>
+        </div>
+      </div>
+      <ResponsiveContainer width="100%" height={PANEL_H}>
+        <LineChart data={points} margin={{ top: 6, right: 6, left: 6, bottom: 0 }}>
+          {/* HIDDEN, NOT ABSENT. The scale is the whole feature — this is what makes the
+              panel's own maximum its ceiling — but four sets of dollar ticks in a 185px
+              column would cost more width than the lines they label. Floored at zero so a
+              pixel is a fixed number of dollars inside the panel; `'auto'` at both ends
+              would exaggerate every wiggle into a mountain. */}
+          <YAxis hide domain={[0, "auto"]} />
+          {/* DECLARED AND HIDDEN, because the tooltip's label reads off it: without an x-axis
+              recharts has no idea the row's identity is `ym` and the tooltip is headed by an
+              array index. The two months a reader actually needs are DOM under the plot —
+              see `.tp-axis` below. */}
+          <XAxis dataKey="ym" hide />
+          {/* ADDITIVE ONLY — nothing exists solely in here. The month it names is between two
+              ticks that are drawn, and the value it prints is a point on a line whose latest
+              and whose min–max are both in the caption above. */}
+          <Tooltip formatter={(v) => [sgd(v), name]}
+                   labelFormatter={monthName}
+                   contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
+                   itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
+          {/* `linear` AND NO SMOOTHING: these are ten monthly totals, not a sampled signal,
+              and a monotone curve would invent values between months that no row supports.
+              No rolling window either — a trailing-12 needs twelve honest months and the
+              window has ten, so it would draw zero points.
+
+              Uncategorized is DASHED, from the map. Grey alone is the weaker half of "this is
+              residue rather than a category anyone chose" — it fails the palette validator's
+              chroma floor precisely because grey carries no identity — and the dash is the
+              secondary encoding that makes the accepted failure legal. It is drawn rather
+              than hidden: a single $3,259 unclassified row must not silently vanish from the
+              largest unclassified month in the window. */}
+          <Line type="linear" dataKey="v" stroke={colour} strokeWidth={2}
+                strokeDasharray={CATEGORY_DASH[name]} dot={false}
+                activeDot={{ r: 3, fill: colour, stroke: "none" }} />
+        </LineChart>
+      </ResponsiveContainer>
+      {/* THE ENDPOINTS, AS DOM UNDER THE PLOT RATHER THAN AS AXIS TICKS — `ChartKey`'s reason,
+          at a smaller scale. A recharts `<XAxis>` is a chart child and takes its height out of
+          the 140px drawing, and at this width it also clips: the ticks sit at the data points,
+          the first data point is at the plot's left edge, and a centred 40px label there is
+          half outside the SVG. Two ordinary spans pushed apart cannot clip, cost the plot
+          nothing, and put the newest month on the left where the newest point is.
+
+          THEY ARE HERE TO SHOW THE REVERSAL, which is the one thing the caption above cannot:
+          it says the number has fallen, and only this says that the falling end is the one on
+          the left. Two rather than ten — ten months of ticks is unreadable in a 185px column,
+          and the months in between are the tooltip's. 11px is the app's single type minimum,
+          at iOS HIG's 11pt. */}
+      <div className="tp-axis">
+        <span>{monthTick(points[0].ym)}</span>
+        <span>{monthTick(points[points.length - 1].ym)}</span>
       </div>
     </div>
   );

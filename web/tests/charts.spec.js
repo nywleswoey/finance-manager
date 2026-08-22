@@ -1,10 +1,12 @@
 /**
  * Charts on a phone: the donuts are deleted and the list becomes the chart.
  *
- * Six chart surfaces across five views. Below 640px three of them lose chrome — the donut
- * itself, and one chart's value labels — and one is halved to six bars. Everything else the
- * charts needed turned out to belong at *every* width: the multi-series key, the reserved
- * band under the bars, and the two containers that could collapse to nothing.
+ * Six chart surfaces across five views, plus the spend trend's four panels — which are one
+ * surface by decision and four by measurement, and are gated at the bottom of this file.
+ * Below 640px three of the six lose chrome — the donut itself, and one chart's value labels
+ * — and one is halved to six bars. Everything else the charts needed turned out to belong at
+ * *every* width: the multi-series key, the reserved band under the bars, the two containers
+ * that could collapse to nothing, and the trend's whole grid.
  *
  * TWO SURFACES ARRIVED AFTER THAT COUNT WAS TAKEN, and both keep their chrome at every width:
  * the net-worth composition chart, which replaced the two-line chart in place, and the spend
@@ -37,13 +39,20 @@
 import { expect, test } from "@playwright/test";
 import { PHONE_TIER_BELOW, VIEWPORTS } from "./viewports.js";
 import { openView } from "./support/app.js";
-import { readFixture } from "./fixtures/index.js";
+import { readFixture, sharedAxisSpanPx } from "./fixtures/index.js";
 // The declared map itself, not a copy of it — see the `one palette` describe below for why
 // a table of hexes in this file would be the defect rather than the gate. `palette.js` is
 // plain data with no React or recharts import, which is what makes it importable here.
-import { categoryColour } from "../src/palette.js";
+import { CATEGORY_DASH, categoryColour } from "../src/palette.js";
+// The app's own formatters, for the same reason the map is imported rather than restated:
+// a caption asserted against a second `toLocaleString` call is asserting the spec file's
+// formatting, and `api.js` is plain functions with no React import.
+import { catName, fmt, monthName, monthTick, sgd } from "../src/api.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
+
+/** A declared hex as the `rgb(r, g, b)` string `getComputedStyle` hands back. */
+const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
 
 /** Every view that draws a donut, and how many it draws. */
 const DONUT_VIEWS = [
@@ -406,9 +415,11 @@ test.describe("one palette", () => {
    * in the suite is a second palette, and the failure it would then be blind to is precisely
    * the one it exists to catch.
    */
-  const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
-
   test("Spending › Overview colours its three surfaces by name", async ({ page, baseURL }) => {
+    // THREE IS WHAT THIS TEST READS, NOT WHAT THE VIEW DRAWS. The spend trend added two more
+    // colour-by-name surfaces to this page — each panel's caption chip and the line it names —
+    // and they are asserted against the same map in the spend-trend describe below, beside the
+    // rest of that card's claims. Restating them here would be a second copy of one assertion.
     await openView(page, baseURL, "Spending › Overview");
     await barsSettled(page);
 
@@ -610,3 +621,336 @@ test.describe("Portfolio › Options", () => {
       }
     });
 });
+
+/**
+ * The spend-trend small multiples on Spending › Overview — four panels, four scales.
+ *
+ * WHY PER-PANEL SCALING IS THE SUBJECT OF A TEST rather than a styling detail. The four
+ * series span ~150× on real data, so under one shared y-axis the smallest of them is drawn
+ * flat on the floor: `sharedAxisSpanPx` in the fixture module computes that counterfactual from
+ * the committed payload and it comes out under 3px of a 140px plot — the same function
+ * `inventory.spec.js` uses to assert the payload has not quietly lost the spread. Per-panel scaling is the
+ * whole feature, and "the line is not flat" is the only thing that says it is working —
+ * a chart that regressed to a shared axis would still draw four panels, four colours and
+ * four captions, and would still pass every other gate in this file.
+ *
+ * THE CAPTION IS LOAD-BEARING AND IS GATED AS SUCH. Newest is at the LEFT, so every panel
+ * reads backwards — Transport's line rises left-to-right while its delta is negative — and
+ * a panel has no y-axis at all. The header states the latest value and the signed delta in
+ * words; drop it and the chart lies. See `SpendTrend.jsx`, which says the same thing at the
+ * header it describes.
+ *
+ * WHAT IS DERIVED RATHER THAN TYPED. The footnote's window line is computed here the same
+ * way the component computes it — from `/api/spending/window`'s material-source flags — and
+ * compared against the rendered text. A typed "two of three sources" is right on today's
+ * ledger and wrong at three of four, which is exactly what the payload holds.
+ */
+test.describe("Spending › Overview — the spend trend", () => {
+  // `styles.css`'s `.trendgrid`, and `SpendTrend.jsx`'s `PANEL_H`. Not shared constants: a
+  // spec file cannot import a module that imports React or CSS, so the two sides
+  // cross-reference in comments the way `640`'s four sites and `NEG_LABEL_BAND` do.
+  const PANEL_FLOOR = 185, PANEL_GAP = 14, PANEL_H = 140;
+
+  /**
+   * The window slice the chart draws: the trends rows inside `[start, end]`, MINUS the gap
+   * months, ascending.
+   *
+   * The subtraction is the endpoint's own arithmetic — `drawn = dated_total - before - after -
+   * gaps` — and it is what makes the footnote's "falls outside the window and is not drawn
+   * here" true of gap money as well as of the leading and trailing months. `gaps` is empty on
+   * the committed payload, so this clause is inert here and annotated as uncovered below
+   * rather than passing for a reason that has nothing to do with the code.
+   */
+  function windowed() {
+    const trends = readFixture("spending-trends.json");
+    const win = readFixture("spending-window.json");
+    const gaps = new Set(win.gaps);
+    const rows = trends.series.filter(
+      (r) => r.ym >= win.start && r.ym <= win.end && !gaps.has(r.ym));
+    return { trends, win, rows };
+  }
+
+  /**
+   * One expectation per panel, keyed by name. `latest` is the LAST row — newest.
+   *
+   * KEYED RATHER THAN ORDERED, because the panels' order is its own claim and is asserted as
+   * one below: comparing a name-keyed caption against a positional expectation is how a
+   * reordering passes as a mismatch four panels deep, in a suite whose whole colour gate
+   * exists because two surfaces read one array at two different `i`.
+   */
+  function expected() {
+    const { trends, rows } = windowed();
+    return Object.fromEntries(trends.groups.map((name) => {
+      const vals = rows.map((r) => Number(r[name] ?? 0));
+      return [name, {
+        name,
+        latest: vals[vals.length - 1],
+        oldest: vals[0],
+        lo: Math.min(...vals),
+        hi: Math.max(...vals),
+        total: vals.reduce((a, b) => a + b, 0),
+      }];
+    }));
+  }
+
+  /**
+   * The order the panels are drawn in: in-window spend descending, Uncategorized pinned last.
+   *
+   * Derived here the way `SpendTrend.jsx` derives it, not typed — and the pin is doing work
+   * on this payload, where unclassified spend outranks Transport. It is residue rather than
+   * a category anyone chose, so it goes last however much of it there is.
+   */
+  function expectedOrder() {
+    const want = expected();
+    const residue = (name) => (name === catName(null) ? 1 : 0);
+    return Object.values(want)
+      .sort((a, b) => residue(a.name) - residue(b.name) || b.total - a.total)
+      .map((p) => p.name);
+  }
+
+  /**
+   * Wait until the lines have finished drawing themselves — `barsSettled`'s reason, for a
+   * `<Line>`, and NOT its mechanism.
+   *
+   * A bar animates its geometry, so sampling `d` twice is the end of the animation. A line
+   * does not: recharts draws a line by holding `d` constant and animating `stroke-dasharray`
+   * from "nothing visible" to "all of it", so a `d` sample is stable on the first frame and a
+   * settle written that way returns instantly and measures a half-drawn chart. The dash IS
+   * the animation here, which is also why it is the thing the dash-pattern gate has to read.
+   */
+  async function linesSettled(page) {
+    await page.evaluate(() => { delete window.__lines; });
+    await page.waitForFunction(() => {
+      const now = [...document.querySelectorAll(".trendpanel .recharts-line .recharts-curve")]
+        .map((p) => p.getAttribute("stroke-dasharray") + p.getAttribute("d")).join("|");
+      const was = window.__lines;
+      window.__lines = now;
+      return now.length > 0 && was === now;
+    }, null, { polling: 200 });
+  }
+
+  test("draws one panel per category, captioned with its latest value and signed delta",
+    async ({ page, baseURL }, testInfo) => {
+      const { win: w } = windowed();
+      if (w.gaps.length === 0) {
+        testInfo.annotations.push({
+          type: "not-covered-by-fixtures",
+          description: "the window has no gap months on the live ledger, so the clause that " +
+            "drops them from the drawn series is exercised only in its no-op branch",
+        });
+      }
+      await openView(page, baseURL, "Spending › Overview");
+      await linesSettled(page);
+      const panels = page.locator(".main .trendpanel");
+      const want = expected();
+
+      await expect.soft(panels, "one panel per spend category, no cap and no fold")
+        .toHaveCount(Object.keys(want).length);
+
+      const drawn = await panels.evaluateAll((els) => els.map((el) => ({
+        name: el.querySelector(".tp-name").textContent,
+        chip: getComputedStyle(el.querySelector(".chip")).backgroundColor,
+        latest: el.querySelector(".tp-latest").textContent,
+        delta: el.querySelector(".tp-delta").textContent,
+        range: el.querySelector(".tp-range").textContent,
+        stroke: getComputedStyle(el.querySelector(".recharts-line .recharts-curve")).stroke,
+        dash: getComputedStyle(el.querySelector(".recharts-line .recharts-curve")).strokeDasharray,
+        axis: [...el.querySelectorAll(".tp-axis span")].map((s) => s.textContent),
+      })));
+
+      expect.soft(drawn.map((p) => p.name), "the panels are the payload's own groups, ordered "
+        + "by in-window spend with unclassified residue last").toEqual(expectedOrder());
+
+      for (const panel of drawn) {
+        const w = want[panel.name];
+        // The colour comes from the name-keyed map on BOTH surfaces of a panel — the chip in
+        // the caption and the line it names. A caption with its own palette is the same
+        // defect `one palette` above exists for, one card further down the page.
+        expect.soft(panel.chip, `${w.name}: the caption's chip is off the map`)
+          .toBe(rgb(categoryColour(w.name)));
+        expect.soft(panel.stroke, `${w.name}: the line is off the map`)
+          .toBe(rgb(categoryColour(w.name)));
+
+        expect.soft(panel.latest, `${w.name}: the caption's latest value is not the newest month`)
+          .toBe(sgd(w.latest));
+        // The SIGN is what the caption exists for, and it is the half a reader cannot get
+        // from the slope: newest is at the left, so a falling line is a rising number.
+        const rising = w.latest >= w.oldest;
+        expect.soft(panel.delta.startsWith(rising ? "+" : "−"),
+          `${w.name}: the delta is ${panel.delta} against ${w.oldest} → ${w.latest}`).toBe(true);
+        expect.soft(panel.range, `${w.name}: min–max is demoted, not dropped`)
+          .toContain(sgd(w.lo));
+        expect.soft(panel.range, `${w.name}: min–max is demoted, not dropped`)
+          .toContain(sgd(w.hi));
+      }
+
+      // Grey is the weaker half of "this is residue, not a category anyone chose" — it fails
+      // the palette validator's chroma floor precisely because grey carries no identity. The
+      // dash is the secondary encoding that makes the accepted failure legal; `palette.js`
+      // declares it as `CATEGORY_DASH` and this is its first consumer.
+      //
+      // ASSERTED AFTER `linesSettled`, WHICH IS NOT A DETAIL. recharts owns this attribute
+      // while the line is drawing itself — it rewrites `stroke-dasharray` into the declared
+      // pattern repeated up to the visible length plus a gap the length of the whole path,
+      // and a line with no declared pattern gets a two-segment version of the same trick. Both
+      // are transient and both are numeric, so a sample taken mid-animation cannot tell a
+      // dashed line from a solid one. Once the draw ends the attribute is the declared value
+      // or nothing at all, which is the only frame where this claim is checkable.
+      //
+      // The expected string is built from `CATEGORY_DASH` rather than typed, for the reason
+      // the colours are read off the map: a literal here is a second declaration of the same
+      // decision, free to disagree with the first.
+      // NEWEST AT THE LEFT, which is the claim the caption cannot make on its own: the caption
+      // says the number has fallen, and only this says the falling end is the one on the left.
+      // Asserted per panel because it is per panel — one reversed panel in a row of four is
+      // worse than four, and nothing else in the card would look wrong.
+      const { win } = windowed();
+      for (const panel of drawn) {
+        expect.soft(panel.axis, `${panel.name}: the panel does not read newest-first`)
+          .toEqual([monthTick(win.end), monthTick(win.start)]);
+      }
+
+      for (const panel of drawn) {
+        const declared = CATEGORY_DASH[panel.name];
+        expect.soft(panel.dash, declared
+          ? `${panel.name}: the declared "${declared}" did not survive`
+          : `${panel.name}: is dashed and should not be`)
+          .toBe(declared ? declared.split(" ").map((n) => n + "px").join(", ") : "none");
+      }
+    });
+
+  test("gives every series its own scale, so none is flattened onto the floor",
+    async ({ page, baseURL }, testInfo) => {
+      await openView(page, baseURL, "Spending › Overview");
+      await linesSettled(page);
+
+      const geom = await page.locator(".main .trendpanel").evaluateAll((els) => els.map((el) => {
+        const curve = el.querySelector(".recharts-line .recharts-curve");
+        const plot = el.querySelector(".recharts-surface").getBoundingClientRect();
+        const box = curve.getBBox();
+        return { name: el.querySelector(".tp-name").textContent, span: box.height, plot: plot.height };
+      }));
+
+      // The counterfactual the per-panel decision was taken on, from the fixture module rather
+      // than recomputed here: `inventory.spec.js` asserts the payload still carries the spread
+      // and this prints what it costs, and the pair says nothing unless both read one function.
+      const { trends, win } = windowed();
+      const shared = sharedAxisSpanPx(trends, win, PANEL_H);
+      testInfo.annotations.push({
+        type: "why-per-panel",
+        description: `under one shared axis ${shared.name} would draw ` +
+          `${shared.px.toFixed(1)}px of a ${PANEL_H}px plot`,
+      });
+      expect.soft(shared.px, "the fixture no longer carries the spread this form exists for")
+        .toBeLessThan(5);
+
+      for (const panel of geom) {
+        // A THIRD OF THE PLOT, not a pixel floor: what "legible" means here is that the
+        // series' own variation is a shape rather than a line, and the four panels differ
+        // by 150× in magnitude while agreeing on that. Measured, the tightest is Housing at
+        // ~44% and the loosest Uncategorized at ~99%.
+        expect.soft(panel.span / panel.plot, `${panel.name}: its line spans ` +
+          `${panel.span.toFixed(1)}px of a ${panel.plot.toFixed(1)}px plot`)
+          .toBeGreaterThan(0.3);
+      }
+    });
+
+  test("reflows 4 → 2 → 1 at a 185px floor, with one named third rung",
+    async ({ page, baseURL }, testInfo) => {
+    await openView(page, baseURL, "Spending › Overview");
+    await linesSettled(page);
+
+    const geom = await page.locator(".main .trendgrid").evaluate((grid) => {
+      const style = getComputedStyle(grid);
+      const panels = [...grid.querySelectorAll(".trendpanel")];
+      return {
+        inner: grid.getBoundingClientRect().width,
+        gap: parseFloat(style.columnGap),
+        columns: new Set(panels.map((p) => Math.round(p.getBoundingClientRect().left))).size,
+        chart: panels.map((p) =>
+          Math.round(p.querySelector(".recharts-responsive-container").getBoundingClientRect().height)),
+      };
+    });
+
+    // The column count is not asserted per viewport but DERIVED from the rule and checked
+    // against the width the card actually got, so the same expectation holds at all ten and
+    // a shell change that moved the card's inner width cannot quietly satisfy a literal.
+    const fits = Math.floor((geom.inner + PANEL_GAP) / (PANEL_FLOOR + PANEL_GAP));
+    const want = Math.min(4, Math.max(1, fits));
+    expect.soft(geom.gap, "the gap is the floor's other half — 185/14 gives 4 → 2 → 1").toBe(PANEL_GAP);
+    expect.soft(geom.columns, `${Math.round(geom.inner)}px of grid should hold ${want} columns`)
+      .toBe(want);
+    // THE THIRD RUNG IS THE POINT OF 185 OVER 220, and it survives at nine viewports out of
+    // ten. Three columns leaves three panels and an orphan; at a 220px floor that is what the
+    // gated 1100 viewport draws, where the card is 809px inner because the grid above it is
+    // single-column there. At 185 that viewport draws four.
+    //
+    // ROTATED PHONE IS THE ONE EXCEPTION, AND IT IS THE SHELL'S DOING RATHER THAN THE GRID'S.
+    // 844x390 takes the phone shell on the `(max-height: 500px)` guard, so the 200px rail
+    // leaves the flow — but `.main`'s gutter follows WIDTH, and 844 is above the phone tier,
+    // so the pane keeps its 28px desktop padding. That combination exists at no other
+    // viewport and lands the card on ~754px inner, which is three 185px tracks and not four.
+    // No floor fixes it: a floor big enough to make 754 draw two makes 809 draw three, and
+    // 809 is the width the whole 185-over-220 argument turns on. The alternative is a
+    // breakpoint, which this rule is specced not to add.
+    //
+    // ASSERTED AS AN EQUIVALENCE RATHER THAN SKIPPED. The claim is that the orphan happens at
+    // exactly one named viewport: a shell or gutter change that produced a second one fails
+    // here, and so does one that quietly took this one away.
+    expect.soft(want === 3, `three panels and an orphan at ${Math.round(geom.inner)}px of card`)
+      .toBe(testInfo.project.name === "rotated-phone");
+    for (const h of geom.chart) {
+      expect.soft(h, "the panel plot is 140px — SpendTrend.jsx's PANEL_H").toBe(PANEL_H);
+    }
+  });
+
+  test("derives its footnote from the window payload rather than typing it",
+    async ({ page, baseURL }, testInfo) => {
+      await openView(page, baseURL, "Spending › Overview");
+      const lines = await page.locator(".main .trendnote > div").allTextContents();
+      const { win } = windowed();
+
+      const material = win.sources.filter((s) => s.material);
+      const share = material.reduce((a, s) => a + s.share, 0);
+      const dated = win.sources.reduce((a, s) => a + s.total_sgd, 0);
+      const outside = win.excluded.before.total_sgd + win.excluded.after.total_sgd
+        + win.excluded.gaps.total_sgd;
+
+      const window_ = lines[0] ?? "";
+      // THE RANGE, THE COUNT AND THE SHARE ARE ALL READ OFF THE PAYLOAD. "two of three
+      // sources" is what a typed line says, and it is wrong on this very fixture — there are
+      // four sources and three of them are material.
+      expect.soft(window_, "the window line does not carry its own range")
+        .toContain(`${material.length} of ${win.sources.length}`);
+      expect.soft(window_, "the material share is derived from the flags")
+        .toContain(fmt(share * 100, 1) + "%");
+      // The money outside the window is computed from the DATED total: `summary()`'s
+      // total_sgd includes undated rows, and subtracting against it would absorb undated
+      // spend into this figure. That is `undated()`'s to report, on the third line.
+      expect.soft(window_, "the off-chart money is not stated").toContain(sgd(outside));
+      expect.soft(window_, "the off-chart share is not stated")
+        .toContain(fmt((outside / dated) * 100, 1) + "%");
+      for (const ym of [win.start, win.end]) {
+        expect.soft(window_, `the window line does not name ${ym}`).toContain(monthName(ym));
+      }
+
+      // Depth: the two places the chart deliberately does not go. No links — the app has no
+      // cross-tab navigation, and adding one here would be its first.
+      expect.soft(lines[1] ?? "", "the depth line names neither destination").toContain("By Category");
+      expect.soft(lines[1] ?? "", "the depth line names neither destination").toContain("Classify");
+
+      const undated = readFixture("spending-undated.json");
+      if (undated.n > 0) {
+        expect.soft(lines[2] ?? "", "the undated line is missing at a non-zero count")
+          .toContain(sgd(undated.total_sgd));
+      } else {
+        expect.soft(lines, "the undated line is guarded on a non-zero count").toHaveLength(2);
+        testInfo.annotations.push({
+          type: "not-covered-by-fixtures",
+          description: "undated spend is n=0/$0 on the live ledger, so the third footnote " +
+            "line is exercised only in its absent branch",
+        });
+      }
+    });
+});
+
