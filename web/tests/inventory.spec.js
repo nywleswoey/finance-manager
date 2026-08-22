@@ -83,7 +83,7 @@ test("no chart renders the library's own legend", () => {
   expect(offenders, "render the key as DOM — `ChartKey` in `charts.jsx`").toEqual([]);
 });
 
-test("both multi-series charts carry a DOM key", () => {
+test("every multi-series chart names its series somewhere in the DOM", () => {
   // The counterpart of the gate above: forbidding `<Legend>` is satisfied by having no key
   // at all, which is exactly the state `NetWorth` shipped in — two coloured lines named only
   // in a tooltip that touch never opens. Named files rather than a count, because "multi-
@@ -99,6 +99,26 @@ test("both multi-series charts carry a DOM key", () => {
     .map((f) => path.relative(WEB, f))
     .sort();
   expect(keyed, "a multi-series chart with no key is anonymous on touch").toEqual(wanted);
+
+  // THE THIRD MULTI-SERIES SURFACE, AND WHY THE LIST ABOVE DID NOT GROW FOR IT. The spend
+  // trend draws four series and carries no `<ChartKey>` — deliberately, because it is small
+  // multiples: each series has a panel of its own and that panel's header already names it,
+  // shows its colour and states its direction in words. A key underneath would restate four
+  // things written immediately above it, and it would take the single-`.chartkey` count on
+  // Spending › Overview — which `charts.spec.js` asserts — from a fact to an off-by-one.
+  //
+  // Asserted rather than merely omitted, in both directions: a `<ChartKey>` added here would
+  // be caught by the `toEqual` above, but a panel header stripped of its chip and name would
+  // leave the chart anonymous with nothing failing. So this is the same claim the list makes,
+  // checked where this chart actually makes it.
+  const trend = stripComments(
+    fs.readFileSync(path.join(WEB, "src/modules/spending/SpendTrend.jsx"), "utf8"));
+  expect(/<ChartKey[\s/>]/.test(trend),
+    "the spend trend's panel headers are its key — a second one would restate them").toBe(false);
+  for (const part of ['className="chip"', 'className="nm"', 'className="delta"']) {
+    expect(trend.includes(part),
+      `the spend trend's panel header must carry ${part} — it is the chart's only key`).toBe(true);
+  }
 });
 
 test("no spending surface indexes the positional palette", () => {

@@ -7,13 +7,24 @@ import { get, sgd, fmt, catName } from "../../api.js";
 import { ChartKey, Donut } from "../../charts.jsx";
 import { categoryColour } from "../../palette.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
+import SpendTrend from "./SpendTrend.jsx";
 
 export default function SpendOverview() {
   const [sum, setSum] = useState(null);
   const [trend, setTrend] = useState(null);
+  // The spend trend's window and its footnote. Two more calls rather than a wider trends
+  // payload, and that is the decision rather than an accident: a windowed trends call would
+  // put a date in its own fixture key, and a date in a fixture key drifts every month — the
+  // recapture writes a different key, the old one goes dead and the unmatched-paths gate
+  // fails. The trend chart slices the array below instead, so one payload feeds both charts
+  // on this page and they cannot disagree about a month they share.
+  const [win, setWin] = useState(null);
+  const [undated, setUndated] = useState(null);
   const phone = usePhone();
   useEffect(() => { get("/api/spending/summary").then(setSum).catch(() => setSum({ error: true })); }, []);
   useEffect(() => { get("/api/spending/trends").then(setTrend).catch(() => setTrend({ groups: [], series: [] })); }, []);
+  useEffect(() => { get("/api/spending/window").then(setWin).catch(() => setWin(null)); }, []);
+  useEffect(() => { get("/api/spending/undated").then(setUndated).catch(() => setUndated(null)); }, []);
   if (!sum) return <div className="loading">Loading…</div>;
   if (sum.error) return <div className="loading">API not reachable.</div>;
 
@@ -98,6 +109,17 @@ export default function SpendOverview() {
           )}
         </div>
       </div>
+      {/* THE TREND SITS BETWEEN THE GRID AND THE STACKED BAR, and the order is the point:
+          tiles -> grid[donut | top line items] -> trend -> stacked bar. Trajectory precedes
+          the per-month detail chart, so coarse-to-fine survives. It does NOT replace the
+          stacked bar below — that one still answers "what did I spend in March", which is a
+          different question and the reason both are on this page.
+
+          THE TWO CHARTS RUN IN OPPOSITE DIRECTIONS AND THAT IS ACCEPTED. The trend is drawn
+          newest-at-the-left; the stacked bar is left-to-right and is NOT flipped. What makes
+          that safe is the trend's per-panel caption, which states every panel's direction in
+          words — so an adjacent left-to-right bar cannot silently mislead. */}
+      <SpendTrend trend={trend} win={win} undated={undated} />
       {trend && trend.series.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <h3>Monthly Spend by Category</h3>

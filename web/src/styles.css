@@ -454,7 +454,7 @@ button { min-height: 24px; }
 .barrow > .chip, .barrow > .nm, .barrow > .val { position: relative; }
 /* One swatch, two lists. The donut's rows and a multi-series key are the same thing — a
    colour standing for a series — so they take one rule rather than two identical ones. */
-.barrow .chip, .chartkey .chip { flex: none; width: 8px; height: 8px; border-radius: 2px; }
+.barrow .chip, .chartkey .chip, .panelhead .chip { flex: none; width: 8px; height: 8px; border-radius: 2px; }
 .barrow .nm { flex: 1 1 auto; min-width: 0; color: var(--txt); font-size: 13px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .barrow .val { flex: none; color: var(--mut); font-size: 13px; font-variant-numeric: tabular-nums; }
@@ -464,6 +464,72 @@ button { min-height: 24px; }
    it. No media query: a key is worth the same on a desktop that has no hover state either. */
 .chartkey { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; padding: 0 8px; }
 .ck-item { display: inline-flex; align-items: center; gap: 6px; color: var(--mut); font-size: 12px; }
+
+/* ── the spend trend's small multiples ──
+   Four panels, one per spend category, each on its own scale. The grid is the whole of the
+   responsive story and it adds NO NEW BREAKPOINT: `auto-fit` on a 185px floor gives 4 -> 2 ->
+   1 by itself, at every width the app supports, which is why there is no media query here and
+   no entry in the phone block at the foot of this file.
+
+   185, NOT 220, AND THE NUMBER WAS MEASURED. At the gated 1100 viewport the card is 809px
+   inner, because the two-column grid above it is single-column there; four 220px tracks plus
+   three gaps need 922, so a 220 floor draws three panels and an orphan on the row a reader is
+   most likely to be on. 185 needs 782 and fits, and it is what makes "no third rung" true
+   rather than lucky — `charts.spec.js` recomputes the expected track count from the measured
+   width at all ten viewports rather than tabulating one per project.
+
+   `min(185px, 100%)` FOR THE REASON `.grid2` USES IT: a bare floor is a hard minimum that
+   `auto-fit` cannot collapse below, so on a 330px card the single track would still be 185
+   only by luck and any larger floor would scroll the pane sideways by the difference. The
+   percentage resolves against the grid container, so the floor gives way where there is no
+   room and is exactly 185 everywhere else.
+
+   TWO GRIDS RATHER THAN ONE, AND THE REASON IS A MEASUREMENT. "No third rung" is not
+   something a single `auto-fit` grid can promise: the number of tracks that fit is monotone
+   in the floor, so every rung between 4 and 1 is reachable at some width, and one of the ten
+   viewports lands in the 3 band. `rotated-phone` (844x390) is the only viewport at or above
+   640 with NO 200px rail — the shell moves to the drawer on a `(max-height: 500px)` guard
+   while `.main` keeps its 28px landscape gutter — so its card is ~756px inner, which is past
+   three 185px tracks (583) and short of four (782). A flat grid draws three panels and an
+   orphan there, which is precisely the failure the 185 floor was chosen over 220 to avoid.
+
+   So the panels are grided in PAIRS: the outer grid's floor is 384 = 185 + 14 + 185, one
+   pair, and the inner grid splits a pair into two. The rungs are then 4 (two pairs abreast),
+   2 (one pair per row) and 1 (a pair collapsed), and 3 is not expressible. The geometry is
+   identical to the flat grid wherever the flat grid was right: both levels are `1fr` tracks
+   with the same 14px gap, so four abreast are four equal quarters with three equal gaps.
+   Still no media query, still one floor, still no new breakpoint. `charts.spec.js` asserts
+   the rung by counting the distinct left edges of the panels themselves — the rendered
+   outcome — rather than a computed track string, which is a statement about the mechanism.
+
+   140px PANELS, and the height is shared with `SpendTrend.jsx`: 16 for the header line, 2, 14
+   for the demoted min-max line, 4, and 104 of plot, which is the `PLOT_H` the chart is given
+   in pixels. It has to be pixels — a percentage height inside a flex child is what starves a
+   `ResponsiveContainer` to 0x0 — so the two numbers are one decision written in two files and
+   each names the other. `overflow: hidden` is the guard that a header which somehow wrapped
+   eats itself rather than the plot. */
+.smallmult { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(384px, 100%), 1fr)); gap: 14px; }
+.smallmult-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(185px, 100%), 1fr)); gap: 14px; }
+.smallmult .panel { height: 140px; overflow: hidden; }
+/* The caption, and it carries the panel's entire meaning — the series is drawn newest-at-the-
+   left, so the slope reads backwards and a panel has no y-axis to read instead. Nothing here
+   wraps: the name ellipses and the two numbers are `flex: none`, so the header stays one 16px
+   line at the 185px floor and the plot below it keeps its declared height. */
+.panelhead { display: flex; align-items: center; gap: 6px; font-size: 12px; line-height: 16px; }
+.panelhead .nm { flex: 1 1 auto; min-width: 0; color: var(--txt); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.panelhead .val { flex: none; color: var(--txt); font-variant-numeric: tabular-nums; }
+/* Muted rather than green/red on purpose: the app's `.pos`/`.neg` mean gain and loss, and
+   spending more of your own money is neither. */
+.panelhead .delta { flex: none; color: var(--mut); font-variant-numeric: tabular-nums; }
+.panelrange { font-size: 11px; line-height: 14px; margin: 2px 0 4px; color: var(--mut);
+  font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* The disclosure block under a chart: prose, so it wraps like prose and needs no tier. 12px is
+   above the app's 11px type minimum, and `<b>` is the only emphasis — this is a paragraph, not
+   a control. */
+.chartfoot { margin-top: 14px; display: flex; flex-direction: column; gap: 6px;
+  color: var(--mut); font-size: 12px; line-height: 1.45; }
+.chartfoot b { color: var(--txt); font-weight: 600; }
 /* `textarea` joins the rule it was always missing from: it is styled nowhere else in the
    app, so it rendered UA-default — a white box on a dark modal — at every width. */
 input, select, textarea { background: var(--panel2); border: 1px solid var(--line); color: var(--txt);

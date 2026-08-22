@@ -145,7 +145,7 @@ coordinates the rejected layout passes. It also carries the group header — the
 and the chevron carve-out, which is the only place pattern A's affordance rule is deliberately not
 applied.
 
-`tests/charts.spec.js` — the six chart surfaces. Below 640 the donuts are not rendered and the
+`tests/charts.spec.js` — the seven chart surfaces. Below 640 the donuts are not rendered and the
 `.barrow` list beneath them becomes the chart, which is the one gate here that asserts an *absence*:
 `display: none` starves a `ResponsiveContainer` to 0×0, so a hidden chart and a collapsed chart are
 the same DOM and the treatment has to be a hook rather than a rule. Everything else it checks holds at
@@ -168,9 +168,31 @@ against the map declared in `src/palette.js`, which it **imports rather than res
 hexes in the suite is a second palette, and the drift it would be blind to is the one it exists to
 catch.
 
+It also carries the **spend trend**, the view's fourth chart surface and the first small-multiples
+one: four panels on four scales, drawn newest-at-the-left. Five gates, and every number in them is
+recomputed from the two committed fixtures rather than typed — the panel names are the trends
+payload's own `groups`, the drawn months are `spending-window.json`'s `start`/`end`, and the
+footnote's material-source count, source name and outside-the-window money are re-derived here from
+the same flags the component reads, because a literal would be a second copy of the window rule.
+The per-panel scaling is asserted as the thing it exists to prevent: each drawn curve's vertical
+extent is measured as a share of its own plot, so a series flattened onto a shared floor scores a
+few percent where a scaled one scores tens. Placement is asserted as document order — tiles, grid,
+trend, stacked bar — rather than as pixel tops, which one viewport could satisfy by accident. The
+rung gate counts the **distinct left edges of the panels**, which is the rendered outcome, not a
+computed track string: `auto-fit` reports collapsed repetitions as `0px` and the grid is nested in
+pairs, so either level's track list describes the mechanism instead of what a reader sees. And a
+third rung is asserted to be impossible, which is a real claim rather than a restatement of the
+CSS — `rotated-phone` is 844px wide with no rail and lands in the 3 band, which is what put the
+pair wrapper there.
+
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the
-single donut implementation, that no chart renders a `<Legend>` and that both multi-series charts
-carry a `<ChartKey>`, that **no source file names a net-worth catalogue item code** — the New
+single donut implementation, that no chart renders a `<Legend>`, that the two multi-series charts
+that need one carry a `<ChartKey>` **and that the spend trend deliberately does not** — it is small
+multiples, so each series has a panel whose header already names it, shows its colour and states its
+direction, and a second key would both restate that and break the single-`.chartkey` count on
+Spending › Overview; the same gate asserts that header still carries its chip, name and delta, since
+a `<ChartKey>` sneaking in would be caught by the list but a header stripped bare would leave the
+chart anonymous with nothing failing, that **no source file names a net-worth catalogue item code** — the New
 Snapshot form's headings and rows are derived from the catalogue's `band`, and the codes are read
 out of the fixture so a recapture cannot leave the gate asserting a stale list (`srs` is held out,
 because one word is a code, a band value *and* a funding bucket, so the claim is about the other

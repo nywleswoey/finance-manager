@@ -1,10 +1,14 @@
 /**
  * Charts on a phone: the donuts are deleted and the list becomes the chart.
  *
- * Six chart surfaces across five views. Below 640px three of them lose chrome — the donut
- * itself, and one chart's value labels — and one is halved to six bars. Everything else the
- * charts needed turned out to belong at *every* width: the multi-series key, the reserved
- * band under the bars, and the two containers that could collapse to nothing.
+ * Seven chart surfaces across five views, and the newest of them is four plots rather than
+ * one — the spend trend's small multiples, which get a describe of their own at the foot of
+ * this file. Below 640px three surfaces lose chrome — the donut itself, and one chart's
+ * value labels — and one is halved to six bars. THE TREND LOSES NEITHER, and that is a
+ * decision rather than an omission: the donut goes because the list under it restates every
+ * row, and nothing else on Spending › Overview carries trajectory at all. Everything else
+ * the charts needed turned out to belong at *every* width: the multi-series key, the
+ * reserved band under the bars, and the two containers that could collapse to nothing.
  *
  * WHY THE DONUT GOES, since it is the one thing here that is not a defect. At percentage
  * radii in a one-column `.grid2` it renders at ⌀216px, larger than desktop's 180px, so this
@@ -35,6 +39,14 @@ import { readFixture } from "./fixtures/index.js";
 // a table of hexes in this file would be the defect rather than the gate. `palette.js` is
 // plain data with no React or recharts import, which is what makes it importable here.
 import { categoryColour } from "../src/palette.js";
+// The two formatters the app renders money and month labels through, imported for the same
+// reason the palette is: a restated `S$1,234` in this file is a second formatter, and the
+// mismatch it would then be blind to is the one it exists to catch. `api.js` touches
+// `window` only inside function bodies, so it imports cleanly into node.
+import { sgd } from "../src/api.js";
+
+/** A palette hex as the `rgb(r, g, b)` string `getComputedStyle` hands back. */
+const rgbOf = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
 
@@ -216,8 +228,6 @@ test.describe("one palette", () => {
    * in the suite is a second palette, and the failure it would then be blind to is precisely
    * the one it exists to catch.
    */
-  const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
-
   test("Spending › Overview colours its three surfaces by name", async ({ page, baseURL }) => {
     await openView(page, baseURL, "Spending › Overview");
     await barsSettled(page);
@@ -236,9 +246,9 @@ test.describe("one palette", () => {
     expect.soft(listed.length, "the donut's list drew no rows").toBeGreaterThan(0);
     for (const row of listed) {
       expect.soft(row.chip, `${row.name}: the donut list's chip is off the map`)
-        .toBe(rgb(categoryColour(row.name)));
+        .toBe(rgbOf(categoryColour(row.name)));
       expect.soft(row.fill, `${row.name}: the donut list's track is off the map`)
-        .toBe(rgb(categoryColour(row.name)));
+        .toBe(rgbOf(categoryColour(row.name)));
     }
 
     // The stacked bar's key and its bars, each against the map — not against each other.
@@ -259,7 +269,7 @@ test.describe("one palette", () => {
       .toBe(readFixture("spending-trends.json").groups.length);
     for (const item of named) {
       expect.soft(item.chip, `${item.name}: the key's chip is off the map`)
-        .toBe(rgb(categoryColour(item.name)));
+        .toBe(rgbOf(categoryColour(item.name)));
     }
     const fills = await page.locator(".main .recharts-bar").evaluateAll((series) =>
       series.map((el) => {
@@ -269,7 +279,7 @@ test.describe("one palette", () => {
     expect.soft(fills, "one bar series per key item").toHaveLength(named.length);
     for (const [i, fill] of fills.entries()) {
       expect.soft(fill, `${named[i].name}: the bar fill is off the map`)
-        .toBe(rgb(categoryColour(named[i].name)));
+        .toBe(rgbOf(categoryColour(named[i].name)));
     }
   });
 
@@ -287,7 +297,7 @@ test.describe("one palette", () => {
     expect.soft(marked.length, "the category table drew no rows").toBeGreaterThan(0);
     for (const row of marked) {
       expect.soft(row.colour, `${row.name}: the row marker is off the map`)
-        .toBe(rgb(categoryColour(row.name)));
+        .toBe(rgbOf(categoryColour(row.name)));
     }
 
     // Same view, same names, the other surface on it.
@@ -298,7 +308,7 @@ test.describe("one palette", () => {
       })));
     for (const row of listed) {
       expect.soft(row.chip, `${row.name}: the donut list's chip is off the map`)
-        .toBe(rgb(categoryColour(row.name)));
+        .toBe(rgbOf(categoryColour(row.name)));
     }
   });
 });
@@ -399,6 +409,207 @@ test.describe("Portfolio › Options", () => {
             "window exercises the no-band branch; the 24-month window above the tier carries " +
             "the three losses that exercise the band",
         });
+      }
+    });
+});
+
+/**
+ * The spend trend: four panels, four scales, and a caption that is the chart's content.
+ *
+ * Everything asserted here is derived from the two committed fixtures rather than typed —
+ * the panel names are `spending-trends.json`'s own `groups`, the window is
+ * `spending-window.json`'s `start`/`end`, and the footnote's numbers are recomputed here
+ * from the same flags the component reads. A literal in this file would be a second copy of
+ * the rule, and the drift it would then be blind to is the one it exists to catch.
+ */
+test.describe("Spending › Overview — the spend trend", () => {
+  const trends = () => readFixture("spending-trends.json");
+  const win = () => readFixture("spending-window.json");
+  /** The months the chart may draw: the trends array sliced to the window, ascending. */
+  const drawn = () => trends().series.filter((r) => r.ym >= win().start && r.ym <= win().end);
+
+  const card = (page) => page.locator(".main .card").filter({ has: page.locator(".smallmult") });
+  const panels = (page) => card(page).locator(".smallmult .panel");
+
+  test("draws one panel per group, between the grid and the stacked bar", async ({ page, baseURL }) => {
+    await openView(page, baseURL, "Spending › Overview");
+    const groups = trends().groups;
+    await expect.soft(panels(page)).toHaveCount(groups.length);
+    // The panel headers ARE the key, so the names have to be the payload's own group
+    // strings — the same ones the stacked bar feeds to `<Bar dataKey>`.
+    await expect.soft(panels(page).locator(".panelhead .nm")).toHaveText(groups);
+
+    // Placement: tiles → grid[donut | top line items] → trend → stacked bar. Asserted as
+    // document order rather than as pixel tops, which would also be satisfied by a card
+    // that merely happens to lay out there at one viewport.
+    const order = await page.evaluate(() => {
+      const trend = document.querySelector(".main .smallmult");
+      if (!trend) return ["no trend card"];
+      // The view root, reached from the card itself rather than by position under `.main` —
+      // the section's tab strip is `.main`'s first child, so an index into it would be
+      // counting tabs.
+      const kids = [...trend.closest(".card").parentElement.children];
+      return kids.map((el) =>
+        el.classList.contains("tiles") ? "tiles"
+          : el.classList.contains("grid2") ? "grid2"
+            : el.querySelector(".smallmult") ? "trend"
+              // The stacked bar is the card carrying the view's one `.chartkey`; the trend
+              // adds none, which is the claim the single-key count on this view rests on.
+              : el.querySelector(".chartkey") ? "stacked"
+                : el.tagName.toLowerCase());
+    });
+    expect.soft(order, "the trend belongs between the two-column grid and the stacked bar")
+      .toEqual(["tiles", "grid2", "trend", "stacked"]);
+
+    // The caption, which is load-bearing: newest is at the LEFT, so the slope reads
+    // backwards and the header is the only thing that says which way the category moved.
+    const rows = drawn();
+    const newest = rows[rows.length - 1];
+    for (const g of groups) {
+      const head = panels(page).filter({ hasText: g }).locator(".panelhead");
+      await expect.soft(head.locator(".chip"), `${g}: no chip in the header`).toBeVisible();
+      await expect.soft(head.locator(".val"), `${g}: the header must carry the latest month`)
+        .toHaveText(sgd(newest[g]));
+      await expect.soft(head.locator(".delta"), `${g}: the header must carry a signed delta`)
+        .toHaveText(/^[+−]/);
+    }
+  });
+
+  test("gives every panel its own scale rather than the shared floor", async ({ page, baseURL }) => {
+    // THE WHOLE REASON THE CHART IS SMALL MULTIPLES. On one shared linear axis Transport is
+    // 3.4px of plot against Personal's ceiling — a flat line on the floor. Per panel it uses
+    // its own range, so this measures the drawn curve's vertical extent as a share of its
+    // own plot: a flattened series scores a few percent, a scaled one scores tens.
+    await openView(page, baseURL, "Spending › Overview");
+    const extents = await panels(page).evaluateAll((els) => els.map((el) => {
+      const curve = el.querySelector(".recharts-line .recharts-curve");
+      const name = el.querySelector(".panelhead .nm").textContent;
+      if (!curve) return { name, share: 0 };
+      const ys = [...curve.getAttribute("d").matchAll(/[ML,](-?[\d.]+),(-?[\d.]+)/g)]
+        .map((m) => parseFloat(m[2]));
+      const plot = el.querySelector(".recharts-responsive-container").getBoundingClientRect().height;
+      return { name, share: (Math.max(...ys) - Math.min(...ys)) / plot };
+    }));
+    for (const p of extents) {
+      expect.soft(p.share, `${p.name}: the series is flattened onto the panel floor`)
+        .toBeGreaterThan(0.25);
+    }
+  });
+
+  test("reflows 4 → 2 → 1 on a 185px floor with a 14px gap and 140px panels",
+    async ({ page, baseURL }) => {
+      await openView(page, baseURL, "Spending › Overview");
+      const grid = await card(page).locator(".smallmult").evaluate((el) => {
+        const boxes = [...el.querySelectorAll(".panel")].map((p) => p.getBoundingClientRect());
+        const gaps = [el, ...el.querySelectorAll(".smallmult-pair")].flatMap((n) => {
+          const cs = getComputedStyle(n);
+          return [Math.round(parseFloat(cs.columnGap)), Math.round(parseFloat(cs.rowGap))];
+        });
+        return {
+          width: el.getBoundingClientRect().width,
+          gaps: [...new Set(gaps)],
+          // THE RENDERED RUNG, not the computed track string. `auto-fit` reports the
+          // repetitions it collapsed as `0px`, and the grid is nested in pairs, so the
+          // track list of either level is a statement about the mechanism rather than
+          // about what a reader sees. How many columns of panels there are is the number
+          // of distinct left edges the panels occupy.
+          columns: new Set(boxes.map((b) => Math.round(b.left))).size,
+          heights: boxes.map((b) => Math.round(b.height)),
+        };
+      });
+      expect.soft(grid.gaps, "every gap in the grid is 14px — see `.smallmult` in styles.css")
+        .toEqual([14]);
+      // The rungs, computed from the measured width rather than tabulated per viewport:
+      // four panels need 4×185 + 3×14, and a pair needs 185 + 14 + 185.
+      const want = grid.width >= 4 * 185 + 3 * 14 ? 4 : grid.width >= 2 * 185 + 14 ? 2 : 1;
+      expect.soft(grid.columns, `${Math.round(grid.width)}px of grid should hold ${want} per row`)
+        .toBe(want);
+      // A THIRD RUNG IS THE FAILURE THE 185 FLOOR WAS CHOSEN OVER 220 TO AVOID — three
+      // panels and an orphan. A single `auto-fit` grid cannot promise this; the pair
+      // wrapper is what makes 3 inexpressible. `rotated-phone` is the viewport that proves
+      // it is not theoretical: no rail at 844px wide puts its card in the 3 band.
+      expect.soft([1, 2, 4], `no third rung — ${grid.columns} panels per row`)
+        .toContain(grid.columns);
+      for (const h of grid.heights) {
+        expect.soft(h, "panels are 140px tall — see `.smallmult .panel` in styles.css").toBe(140);
+      }
+    });
+
+  test("derives its footnote from the window payload rather than typing it",
+    async ({ page, baseURL }, testInfo) => {
+      await openView(page, baseURL, "Spending › Overview");
+      const w = win();
+      const foot = card(page).locator(".chartfoot");
+
+      // Every number below is recomputed here from the payload's own flags. "two of three
+      // sources" typed into the component is wrong at three of four and right only among
+      // the material ones, which is the failure this whole endpoint exists to prevent.
+      const material = w.sources.filter((s) => s.material);
+      expect(material.length, "the fixture has no material source — this gate would be vacuous")
+        .toBeGreaterThan(0);
+      const outside = ["before", "after", "gaps"]
+        .reduce((a, k) => a + w.excluded[k].total_sgd, 0);
+      // The DATED total, which is what the sources sum to — the summary's total_sgd carries
+      // undated rows and subtracting it would absorb them into the outside-the-window money.
+      const dated = w.sources.reduce((a, s) => a + s.total_sgd, 0);
+
+      const line = foot.locator("> div").first();
+      await expect.soft(line, "the window's month count").toContainText(`${drawn().length} months`);
+      await expect.soft(line, "how many sources are material, and of how many")
+        .toContainText(`${material.length} of ${w.sources.length}`);
+      await expect.soft(line, "the money outside the window").toContainText(sgd(outside));
+      await expect.soft(line, "and what share of the dated total that is")
+        .toContainText(`${Math.round((outside / dated) * 100)}%`);
+
+      // Depth: the two surfaces a panel makes a reader want, since the chart itself has no
+      // drill-down in v1.
+      await expect.soft(foot, "where subcategory detail lives").toContainText("By Category");
+      await expect.soft(foot, "where unclassified rows are handled").toContainText("Classify");
+
+      const undated = readFixture("spending-undated.json");
+      const line3 = foot.locator("> div").nth(2);
+      if (undated.n > 0) {
+        await expect.soft(line3, "the undated line").toContainText(sgd(undated.total_sgd));
+      } else {
+        await expect.soft(line3, "the undated line is guarded on a non-zero count")
+          .toHaveCount(0);
+        testInfo.annotations.push({
+          type: "not-covered-by-fixtures",
+          description:
+            "spending-undated.json is n=0/$0 on the live ledger, so the footnote's third " +
+            "line is exercised only in its absent branch",
+        });
+      }
+    });
+
+  test("draws Uncategorized grey and dashed, and every colour off the map",
+    async ({ page, baseURL }) => {
+      await openView(page, baseURL, "Spending › Overview");
+      const lines = await panels(page).evaluateAll((els) => els.map((el) => {
+        const curve = el.querySelector(".recharts-line .recharts-curve");
+        const cs = curve && getComputedStyle(curve);
+        return {
+          name: el.querySelector(".panelhead .nm").textContent,
+          stroke: cs && cs.stroke,
+          dash: cs ? cs.strokeDasharray : "",
+          chip: getComputedStyle(el.querySelector(".panelhead .chip")).backgroundColor,
+        };
+      }));
+      expect.soft(lines.length, "no panels drew").toBe(trends().groups.length);
+      for (const p of lines) {
+        expect.soft(p.stroke, `${p.name}: the panel's line is off the map`)
+          .toBe(rgbOf(categoryColour(p.name)));
+        expect.soft(p.chip, `${p.name}: the panel's chip is off the map`)
+          .toBe(rgbOf(categoryColour(p.name)));
+      }
+      // Grey alone is the weaker half of "residue rather than a category anyone chose" —
+      // `#6e7681` fails the validator's chroma floor precisely because grey carries no
+      // identity, and the dash is the secondary encoding that says so.
+      const residue = lines.find((p) => p.name === "Uncategorized");
+      expect.soft(residue.dash, "Uncategorized must be dashed — see CATEGORY_DASH")
+        .toMatch(/\d/);
+      for (const p of lines.filter((x) => x !== residue)) {
+        expect.soft(p.dash, `${p.name}: only Uncategorized is dashed`).toMatch(/^(none)?$/);
       }
     });
 });
