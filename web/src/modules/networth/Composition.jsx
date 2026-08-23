@@ -137,8 +137,9 @@ function axisTicks(points) {
   }
   const first = points[0].t;
   const last = points[points.length - 1].t;
+  const ticks = monthStarts(first, last);
   return {
-    ticks: monthStarts(first, last),
+    ticks: ticks.length > 0 ? ticks : [first, last],
     format: (t) => (new Date(t).getUTCMonth() === 0 ? monthYear(t) : monthShort(t)),
   };
 }

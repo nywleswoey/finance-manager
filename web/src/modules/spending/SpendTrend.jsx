@@ -55,12 +55,26 @@ export default function SpendTrend({ trend, spendWindow, undated }) {
   // slice. The failed case below is deliberately NOT folded into this one: a card that
   // vanishes because a request failed is indistinguishable from a card nobody built.
   if (!trend || !spendWindow) return null;
+
+  // ERROR STATE BEFORE SHORT-SERIES CHECK: a failed window request is stated explicitly,
+  // distinguishing "error fetching window" from "valid but short series" which still renders
+  // null below. This keeps the card visible when the failure is in fetching the window rules,
+  // not in having insufficient data.
   if (spendWindow.error) {
     return (
       <Card>
         <div className="mut" data-testid="spend-trend-unavailable">
           The months this chart may draw are derived from source coverage, and that request
           failed — so there is no honest range to draw. The monthly totals below are unaffected.
+        </div>
+      </Card>
+    );
+  }
+  if (trend.error) {
+    return (
+      <Card>
+        <div className="mut" data-testid="spend-trend-unavailable">
+          Trend data is unavailable. The monthly totals below are unaffected.
         </div>
       </Card>
     );

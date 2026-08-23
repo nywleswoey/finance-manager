@@ -25,7 +25,7 @@ export default function SpendOverview() {
   const [undated, setUndated] = useState(null);
   const phone = usePhone();
   useEffect(() => { get("/api/spending/summary").then(setSum).catch(() => setSum({ error: true })); }, []);
-  useEffect(() => { get("/api/spending/trends").then(setTrend).catch(() => setTrend({ groups: [], series: [] })); }, []);
+  useEffect(() => { get("/api/spending/trends").then(setTrend).catch(() => setTrend({ error: true })); }, []);
   useEffect(() => { get("/api/spending/window").then(setSpendWindow).catch(() => setSpendWindow({ error: true })); }, []);
   useEffect(() => { get("/api/spending/undated").then(setUndated).catch(() => setUndated(null)); }, []);
   if (!sum) return <div className="loading">Loading…</div>;

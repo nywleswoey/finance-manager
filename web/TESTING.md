@@ -197,7 +197,8 @@ the flow but the 28px desktop gutter does not — is pinned **by name**, so a se
 asserts one panel per group with no cap and no fold, colour by name off the shared map with `Uncategorized`
 dashed, one vertex per month **in the window** (which is what proves it slices rather than draws the whole
 array), **newest at the left** read off the geometry against the payload's own direction, the 4 → 2 → 1
-reflow with no third rung, and that the card adds no key, no bars and no control to a page whose existing
+reflow (with an intentional three-panel row at 844×390, the one viewport where the constants produce that
+orphan), and that the card adds no key, no bars and no control to a page whose existing
 gates claim exactly one of the first and none of the last.
 
 `tests/inventory.spec.js` — the checks that read files rather than pixels: the table count, the

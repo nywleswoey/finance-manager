@@ -81,7 +81,7 @@ export default function NetWorth() {
       // Its own path rather than a widened /snapshots: the history table wants the six metrics
       // newest-first and a time axis wants band-level rows ascending. See
       // `portfolio/networth.py`'s `composition`.
-      get("/api/networth/composition"),
+      get("/api/networth/composition").catch(() => null),
       get("/api/networth/latest"),
     ]);
     setItems(it);
@@ -99,7 +99,8 @@ export default function NetWorth() {
   // chart's top edge stops equalling the tile printed above it.
   const refreshHistory = async () => {
     const [sn, cm] = await Promise.all([
-      get("/api/networth/snapshots"), get("/api/networth/composition"),
+      get("/api/networth/snapshots"),
+      get("/api/networth/composition").catch(() => null),
     ]);
     setSnaps(sn);
     setComp(cm);
