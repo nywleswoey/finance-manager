@@ -64,6 +64,15 @@ export default defineConfig({
       testMatch: /composition\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // What a failed payload does to the page that asked for it, on the same reasoning once
+    // more: whether a component survives a payload it cannot read is the same at 360px and at
+    // 1440px. It needs a deliberately-served failure, because every fixture is a capture of a
+    // working database and so none of them is one.
+    {
+      name: "failures",
+      testMatch: /failures\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
       testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts|editors|tablet|tap)\.spec\.js/,
