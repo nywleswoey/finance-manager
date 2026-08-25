@@ -104,7 +104,14 @@ test("every multi-series chart that needs a DOM key carries one", () => {
   // interesting one. The `<Legend>` gate forbids a construct, so a prose mention would fail it
   // wrongly; this gate *requires* one, so a prose mention would PASS it wrongly. `charts.jsx`
   // names `<ChartKey>` in its own docstring, which is exactly the shape that would.
-  const wanted = ["src/modules/networth/NetWorth.jsx", "src/modules/spending/Overview.jsx"];
+  //
+  // `NetWorth.jsx` LEFT THIS LIST WITHOUT THE CLAIM WEAKENING. Its two-line chart moved into
+  // `Composition.jsx` whole — a new file because the composition chart is ~250 lines of axis,
+  // stack and caption rules — so the view that must carry a key is the one that draws the
+  // chart, and the file that no longer draws one is correctly no longer named. `SpendTrend.jsx`
+  // is deliberately absent for the opposite reason: its four panel headers ARE its key, and a
+  // `<ChartKey>` under the grid would restate four things written immediately above it.
+  const wanted = ["src/modules/networth/Composition.jsx", "src/modules/spending/Overview.jsx"];
   const keyed = sourceFiles(path.join(WEB, "src"))
     .filter((f) => /<ChartKey[\s/>]/.test(stripComments(fs.readFileSync(f, "utf8"))))
     .map((f) => path.relative(WEB, f))
@@ -174,6 +181,52 @@ test("no source file hard-codes a net-worth catalogue code", () => {
   });
   expect(offenders, "group by `band` off the catalogue — see `BAND_TITLES` in `NetWorth.jsx`")
     .toEqual([]);
+});
+
+test("the composition's cumulative edges are the summary metrics, to the cent", () => {
+  // THE ANCHOR CLAIM OF THE WHOLE CHART, AND THE ONLY PLACE THE CENTS SURVIVE. Three of the
+  // stack's four cumulative edges *are* summary metrics — `cash + portfolio` is "excl. Housing
+  // & CPF Cash", `+ cpf` is "excl. Housing", `+ housing` is net worth — which is what lets the
+  // two lines this chart replaced come back as edges rather than as lines drawn on top of it.
+  // Every rendered surface rounds to the dollar (`sgd()` prints no decimals), so a browser gate
+  // can only ever say the page does not contradict itself; this is where the cent is checked.
+  //
+  // IT CATCHES THE THREE REGRESSIONS THAT WOULD ACTUALLY SHIP: a band-order change (the order
+  // is load-bearing and nothing else notices if it moves — every band still sums to the same
+  // total, only the boundaries stop meaning anything), a sign error, and an item landing in no
+  // band. Exact equality, never approximate, for the same reason its server-side sibling in
+  // `tests/test_networth.py` is exact: "close enough" is what a rounding discipline is for.
+  //
+  // OVER THE OVERLAP, AND THE OVERLAP IS ASSERTED NON-EMPTY. The two fixtures were captured at
+  // different times — `networth-composition.json` after the June snapshots were promoted, its
+  // siblings before — so the composition carries five points where `networth-snapshots.json`
+  // carries two. That is a capture-order artefact and not a disagreement: both June dates hold
+  // the identity exactly. A recapture will widen the overlap; a recapture that somehow emptied
+  // it fails here rather than leaving a vacuous gate behind.
+  const comp = readFixture("networth-composition.json");
+  const byDate = new Map(comp.series.map((r) => [r.date, r]));
+  const snaps = readFixture("networth-snapshots.json")
+    .filter((s) => byDate.has(String(s.date)));
+  expect(snaps.length, "no date is in both fixtures — this gate would be vacuous")
+    .toBeGreaterThan(0);
+
+  // Named against the payload's own band order rather than against a literal list, so this
+  // fails loudly the day `STACK_ORDER` gains the Portfolio split rather than passing on a stale
+  // reading of it.
+  const EDGES = ["net_worth_excl_housing_cpf", "net_worth_excl_housing", "net_worth"];
+  expect(comp.bands.length - 1, "one named edge per boundary above the first band")
+    .toBe(EDGES.length);
+
+  for (const snap of snaps) {
+    const row = byDate.get(String(snap.date));
+    let cumulative = 0;
+    comp.bands.forEach((band, i) => {
+      cumulative = Number((cumulative + row[band]).toFixed(2));
+      if (i === 0) return;                       // the first edge names no metric
+      expect(cumulative, `${snap.date}: edge after ${band} is not ${EDGES[i - 1]}`)
+        .toBe(snap[EDGES[i - 1]]);
+    });
+  }
 });
 
 test("the two colour maps agree about Housing", async () => {

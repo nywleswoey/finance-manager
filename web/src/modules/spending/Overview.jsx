@@ -4,7 +4,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
 import { get, sgd, fmt, catName } from "../../api.js";
-import { ChartKey, Donut } from "../../charts.jsx";
+import { ChartKey, Donut, TOOLTIP } from "../../charts.jsx";
 import { categoryColour } from "../../palette.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 import SpendTrend from "./SpendTrend.jsx";
@@ -12,9 +12,22 @@ import SpendTrend from "./SpendTrend.jsx";
 export default function SpendOverview() {
   const [sum, setSum] = useState(null);
   const [trend, setTrend] = useState(null);
+  // THE SPEND TREND'S TWO PAYLOADS ARE FETCHED HERE, not inside the card that draws them: a
+  // view owns its fetching in this app, and a child that reached for a payload of its own
+  // would be the only one that did. The window is its own endpoint rather than a parameter on
+  // the trends call because a windowed key would embed a date that drifts every month, so a
+  // re-captured fixture would write a *different* key and the old one would go dead.
+  //
+  // `{ error: true }` ON FAILURE RATHER THAN A NULL, which is the shape `sum` already uses
+  // above: null is "still in flight" and the card draws nothing, where a failed window has to
+  // be *stated* — a card that vanishes because a request failed reads as a card nobody built.
+  const [spendWindow, setSpendWindow] = useState(null);
+  const [undated, setUndated] = useState(null);
   const phone = usePhone();
   useEffect(() => { get("/api/spending/summary").then(setSum).catch(() => setSum({ error: true })); }, []);
-  useEffect(() => { get("/api/spending/trends").then(setTrend).catch(() => setTrend({ groups: [], series: [] })); }, []);
+  useEffect(() => { get("/api/spending/trends").then(setTrend).catch(() => setTrend({ error: true })); }, []);
+  useEffect(() => { get("/api/spending/window").then(setSpendWindow).catch(() => setSpendWindow({ error: true })); }, []);
+  useEffect(() => { get("/api/spending/undated").then(setUndated).catch(() => setUndated(null)); }, []);
   if (!sum) return <div className="loading">Loading…</div>;
   if (sum.error) return <div className="loading">API not reachable.</div>;
 
@@ -99,20 +112,12 @@ export default function SpendOverview() {
           )}
         </div>
       </div>
-      {/* TRAJECTORY BEFORE DETAIL, AND IT IS A SIBLING CARD RATHER THAN A GRID CELL. The page
-          reads tiles → grid[donut | top line items] → trend → stacked bar, so the coarse-to-fine
-          order survives: where the money went, then where it is going, then what happened in
-          March. Full-width because small multiples want all four panels adjacent in ONE row —
-          that adjacency is the only thing that partly recovers what per-panel scaling gives up,
-          and a half-width cell in the grid above would take it away. It replaces nothing: the
-          stacked bar below still answers the per-month question on the same page.
-
-          `trend` rather than a second fetch — this is a slice of the array the bar chart is
-          already drawing, so the two cannot disagree about a shared month. Rendered
-          unconditionally, unlike the card below: it also needs the window endpoint before it
-          can draw anything, so both of its "not yet" branches are one guard inside it rather
-          than half a guard here and half there. */}
-      <SpendTrend trend={trend} />
+      {/* TRAJECTORY BEFORE THE PER-MONTH DETAIL, and a SIBLING of the grid above rather than a
+          third child of it: coarse-to-fine survives, `.grid2` keeps exactly two children, and
+          the stacked bar below is untouched — it still answers "what did I spend in March" on
+          this same page. `SpendTrend` slices the array already fetched here, so one payload
+          feeds both charts and they cannot disagree about a shared month. */}
+      <SpendTrend trend={trend} spendWindow={spendWindow} undated={undated} />
       {trend && trend.series.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <h3>Monthly Spend by Category</h3>
@@ -121,9 +126,7 @@ export default function SpendOverview() {
               <CartesianGrid strokeDasharray="3 3" stroke="#222a33" vertical={false} />
               <XAxis dataKey="ym" tick={{ fill: "#8b949e", fontSize: 11 }} />
               <YAxis tick={{ fill: "#8b949e", fontSize: 11 }} tickFormatter={(v) => (v >= 1000 ? v / 1000 + "k" : v)} />
-              <Tooltip formatter={(v) => sgd(v)}
-                       contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }}
-                       itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
+              <Tooltip formatter={(v) => sgd(v)} {...TOOLTIP} />
               {trend.groups.map((g) => (
                 <Bar key={g} dataKey={g} stackId="s" fill={categoryColour(g)} />
               ))}

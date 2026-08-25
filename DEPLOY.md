@@ -315,5 +315,5 @@ no-op or, worse, merges without waiting:
 **CI runs more than the local default.** `make test-web` and `pytest -m "not pg"` are the
 fast local loop; CI runs the whole thing — the 33 `pg`-marked tests against a real Postgres
 service container (same image, credentials and port 5544 as `docker-compose.yml`, so no env
-var is needed), plus all 1345 viewport assertions. The Postgres-only SQL and the production
+var is needed), plus all 1,497 Playwright tests. The Postgres-only SQL and the production
 vite build are exactly what a psycopg or vite bump breaks.

@@ -5,6 +5,24 @@ import { usePhone } from "./cards.jsx";
 import { POSITIONAL_COLOURS } from "./palette.js";
 
 /**
+ * The dark tooltip every chart in this app draws, declared once.
+ *
+ * Four charts inlined the same three style objects — `#161b22` is `--panel`, `#2b333d` is
+ * `--line`, `#d7dde4` is `--txt` — and a fifth would have made it five. They are literals
+ * rather than `var(...)` because recharts renders the tooltip as inline styles on a portalled
+ * div, so a custom property resolved against the wrong element resolves to nothing; the
+ * cross-reference to `styles.css`'s `:root` block is this comment.
+ *
+ * Spread into `<Tooltip {...TOOLTIP} />`, so a chart that wants a `formatter` or a
+ * `labelFormatter` adds one beside it rather than restating the three it does not care about.
+ */
+export const TOOLTIP = {
+  contentStyle: { background: "#161b22", border: "1px solid #2b333d" },
+  itemStyle: { color: "#d7dde4" },
+  labelStyle: { color: "#d7dde4" },
+};
+
+/**
  * The one donut in the app.
  *
  * It lives beside `api.js` rather than under a module because both sections draw it:
@@ -60,7 +78,7 @@ export function Donut({ title, data, colourOf }) {
             <Pie data={rows} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2}>
               {rows.map((row, i) => <Cell key={i} fill={colour(row, i)} />)}
             </Pie>
-            <Tooltip formatter={(v) => sgd(v)} contentStyle={{ background: "#161b22", border: "1px solid #2b333d" }} itemStyle={{ color: "#d7dde4" }} labelStyle={{ color: "#d7dde4" }} />
+            <Tooltip formatter={(v) => sgd(v)} {...TOOLTIP} />
           </PieChart>
         </ResponsiveContainer>
       )}
@@ -104,8 +122,15 @@ export function Donut({ title, data, colourOf }) {
  * the case that makes this a defect rather than a preference — it never imported `Legend` at
  * all, so two coloured lines were anonymous at *every* width, desktop included.
  *
- * `items` is `[{ name, colour }]` in series order, and the caller passes the same colour it
- * gave the series: a key with its own palette is a key that goes wrong silently.
+ * `items` is `[{ name, colour, note? }]` in series order, and the caller passes the same
+ * colour it gave the series: a key with its own palette is a key that goes wrong silently.
+ *
+ * `note` IS OPTIONAL AND IS NOT DECORATION. The composition chart passes each band's delta
+ * over the drawn domain, because a band that moves less than a pixel has no other way to say
+ * what it did — "state it in words where the pixels cannot carry the precision" is that
+ * chart's recurring move, and this is one of its three uses. The stacked bar passes nothing
+ * and renders exactly what it rendered before, which is what keeps this one component rather
+ * than two.
  */
 export function ChartKey({ items }) {
   return (
@@ -114,6 +139,7 @@ export function ChartKey({ items }) {
         <span className="ck-item" key={s.name}>
           <span className="chip" style={{ background: s.colour }} />
           {s.name}
+          {s.note ? <span className="ck-note">{s.note}</span> : null}
         </span>
       ))}
     </div>
