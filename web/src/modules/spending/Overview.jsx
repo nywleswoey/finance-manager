@@ -118,7 +118,14 @@ export default function SpendOverview() {
           this same page. `SpendTrend` slices the array already fetched here, so one payload
           feeds both charts and they cannot disagree about a shared month. */}
       <SpendTrend trend={trend} spendWindow={spendWindow} undated={undated} />
-      {trend && trend.series.length > 0 && (
+      {/* `?.` IS LOAD-BEARING AND NOT DEFENSIVE PADDING. The catch above writes
+          `{ error: true }`, which has no `series` — so an unguarded `.length` here throws out
+          of render into the whole-app `ErrorBoundary`, and a failed trends request takes the
+          entire view down instead of one card. That is issue #35's failure mode exactly, and
+          it came back the moment the failure SHAPE changed under a consumer that still
+          assumed the old one. `SpendTrend` above reads the same state and states the failure;
+          this chart has nothing honest to draw without a series, so it renders nothing. */}
+      {trend?.series?.length > 0 && (
         <div className="card" style={{ marginTop: 16 }}>
           <h3>Monthly Spend by Category</h3>
           <ResponsiveContainer width="100%" height={300}>
