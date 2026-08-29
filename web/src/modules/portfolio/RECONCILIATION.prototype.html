@@ -1,0 +1,433 @@
+<title>Reconciliation Block</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+/* ─────────────────────────────────────────────────────────────────────────
+   THROWAWAY PROTOTYPE — wayfinder #132. Not production. Not imported.
+   Three variants of the ticker-detail reconciliation block, switchable from
+   the bottom bar, across seven real ticker states.
+
+   Palette + type are the app's own tokens (web/src/styles.css) verbatim, so
+   density and contrast are judged against the real thing. Single-theme dark
+   on purpose: this page is a stand-in for a screen inside a dark app.
+   ───────────────────────────────────────────────────────────────────────── */
+:root{
+  --bg:#0f1419; --panel:#161b22; --panel2:#1c232c; --line:#2b333d;
+  --txt:#d7dde4; --mut:#8b97a5; --pos:#2ea043; --neg:#f85149; --acc:#388bfd;
+  --hover:#1a212a; --warn:#d29922;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--txt);
+  font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  padding:22px 22px 104px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto}
+h2{margin:0;font-size:22px;font-weight:700;text-wrap:balance}
+h3{margin:0 0 12px;font-size:14px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.pill{font-size:11px;padding:1px 7px;border-radius:9px;background:var(--panel2);color:var(--mut)}
+.pos{color:var(--pos)} .neg{color:var(--neg)} .mut{color:var(--mut)} .warn{color:var(--warn)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.num{font-variant-numeric:tabular-nums}
+
+/* ── page chrome ── */
+.hd-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px}
+.asof{color:var(--mut);font-size:12px;margin:8px 0 18px}
+.asof b{color:var(--txt);font-weight:600}
+
+/* ── tiles (today's row, kept for variant A) ── */
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin:18px 0 0}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.tile .lbl{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.tile .val{font-size:24px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums}
+.tile .val.words{font-size:15px;font-weight:600;color:var(--mut);padding:5px 0 4px}
+
+/* ── hero, shared by all three variants ── */
+.hero-net{font-size:46px;font-weight:800;letter-spacing:-.02em;line-height:1.05;
+  font-variant-numeric:tabular-nums}
+.hero-lbl{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.06em}
+.hero-ret{margin-top:8px;font-size:15px;font-weight:600}
+.hero-ret .span{color:var(--mut);font-weight:400}
+.hero-refuse{font-size:19px;font-weight:600;line-height:1.35;max-width:34ch;text-wrap:balance}
+.hero-none{font-size:14px;color:var(--mut);max-width:44ch;margin-top:8px}
+.caveat{margin-top:10px;font-size:12.5px;color:var(--warn);max-width:62ch;
+  border-left:2px solid var(--warn);padding-left:10px}
+.caveat + .caveat{margin-top:8px}
+
+/* ── VARIANT A: ledger ── */
+.vA{display:grid;grid-template-columns:minmax(240px,1fr) minmax(320px,auto);gap:28px;align-items:start}
+.ledger{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.ledger td,.ledger th{padding:7px 0 7px 22px;text-align:right;white-space:nowrap}
+.ledger td.l,.ledger th.l{text-align:left;padding-left:0}
+.ledger th{color:var(--mut);font-size:11px;text-transform:uppercase;letter-spacing:.04em;
+  font-weight:600;border-bottom:1px solid var(--line)}
+.ledger tr.rule td{border-top:1px solid var(--txt);padding-top:9px}
+.ledger tr.net td{font-weight:800;font-size:16px}
+.ledger td.words{font-size:12.5px;color:var(--mut);font-style:normal}
+.ledger tr.sub td{color:var(--mut)}
+
+/* ── VARIANT B: bar ── */
+.bar{display:flex;height:34px;border-radius:5px;overflow:hidden;margin:16px 0 4px;
+  background:var(--panel2);border:1px solid var(--line)}
+.bar i{display:block;height:100%;box-shadow:inset -2px 0 0 var(--panel);min-width:2px}
+.bar i:last-child{box-shadow:none}
+.bar i.mix{background:repeating-linear-gradient(45deg,#5c6672,#5c6672 5px,#39414b 5px,#39414b 10px)}
+.barticks{display:flex;justify-content:space-between;color:var(--mut);font-size:11px}
+.legend{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,300px));gap:2px 28px;margin-top:14px}
+.legend div{display:flex;align-items:baseline;gap:8px;padding:6px 0;
+  border-bottom:1px solid #20262e;font-variant-numeric:tabular-nums}
+.legend .sw{width:9px;height:9px;border-radius:2px;flex:none;position:relative;top:-1px}
+.legend .k{color:var(--mut);flex:1}
+.strip{display:flex;flex-wrap:wrap;gap:0 26px;margin-top:16px;padding-top:14px;
+  border-top:1px solid var(--line);font-variant-numeric:tabular-nums}
+.strip span{display:flex;gap:7px;padding:3px 0}
+.strip b{font-weight:700}
+.bucketbar{margin-top:16px}
+.bucketbar .bb{display:flex;align-items:center;gap:12px;margin-top:9px}
+.bucketbar .bb .nm{width:74px;color:var(--mut);font-size:12px;flex:none}
+.bucketbar .bb .tr{flex:1;height:12px;background:var(--panel2);border-radius:3px;overflow:hidden;display:flex}
+.bucketbar .bb .amt{width:118px;text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+
+/* ── VARIANT C: sentence ── */
+.sentence{font-size:26px;font-weight:600;line-height:1.35;max-width:22ch;text-wrap:balance}
+.sentence .big{font-size:34px;font-weight:800;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;display:block;margin-top:4px}
+.eq{margin-top:20px;font-size:14.5px;line-height:2.1;font-variant-numeric:tabular-nums}
+.eq .t{white-space:nowrap;padding:3px 0}
+.eq .t em{font-style:normal;color:var(--mut);font-size:12px;text-transform:uppercase;
+  letter-spacing:.04em;margin-right:7px}
+.eq .op{color:var(--mut);padding:0 7px}
+.eq .eqs{color:var(--mut);padding:0 9px;font-weight:700}
+.eq .res{font-weight:800}
+.caption{margin-top:18px;padding-top:14px;border-top:1px solid var(--line);
+  color:var(--mut);font-size:12.5px;font-variant-numeric:tabular-nums;line-height:1.9}
+.caption b{color:var(--txt);font-weight:600}
+.cpills{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.cpill{background:var(--panel2);border:1px solid var(--line);border-radius:7px;padding:7px 11px;
+  font-size:12.5px;font-variant-numeric:tabular-nums;display:flex;gap:9px;align-items:baseline}
+.cpill .k{color:var(--mut)}
+
+/* ── notes ── */
+.notes{margin-top:26px;font-size:12.5px;color:var(--mut);line-height:1.7}
+.notes b{color:var(--txt)}
+.notes ul{margin:8px 0 0;padding-left:18px}
+.notes li{margin:4px 0}
+.provenance{margin-top:26px;font-size:11.5px;color:var(--mut);line-height:1.7;
+  border-top:1px solid var(--line);padding-top:14px}
+
+/* ── switcher ── */
+.switch{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:9;
+  display:flex;gap:10px;align-items:center;background:var(--panel);border:1px solid var(--line);
+  border-radius:11px;padding:9px 11px;box-shadow:0 8px 26px rgba(0,0,0,.55);
+  max-width:calc(100vw - 24px);overflow-x:auto}
+.switch .grp{display:flex;gap:4px;align-items:center}
+.switch .cap{color:var(--mut);font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;
+  margin-right:3px;white-space:nowrap}
+.switch button{background:var(--panel2);border:1px solid var(--line);color:var(--mut);
+  padding:5px 10px;border-radius:7px;font:inherit;font-size:12.5px;font-weight:600;
+  cursor:pointer;white-space:nowrap}
+.switch button:hover{border-color:var(--acc);color:var(--txt)}
+.switch button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.switch button:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.switch .div{width:1px;align-self:stretch;background:var(--line);margin:0 3px}
+@media (max-width:720px){
+  .vA{grid-template-columns:1fr;gap:20px}
+  .hero-net{font-size:36px}
+  .sentence{font-size:22px;max-width:none}
+  .sentence .big{font-size:29px}
+}
+</style>
+
+<div class="wrap">
+  <div id="page"></div>
+
+  <div class="notes card" style="margin-top:26px">
+    <h3>What this prototype is for</h3>
+    <div class="notes" style="margin-top:0">
+      Ticket <b>#132</b> — three structurally different reconciliation blocks against real book
+      numbers, so the arithmetic claim can be judged before it is specified.
+      <ul>
+        <li><b>A · Ledger</b> — statement arithmetic. Bucket split as extra columns, so it adds up
+          down <i>and</i> across. Today's tile row survives underneath, untouched.</li>
+        <li><b>B · Bar</b> — proportion first, arithmetic second. Tiles dissolve into a one-line
+          position strip.</li>
+        <li><b>C · Sentence</b> — the Net as a claim, the components as one inline equation.
+          Tiles collapse into a caption.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="provenance" id="prov"></div>
+</div>
+
+<div class="switch" role="group" aria-label="Prototype controls">
+  <div class="grp"><span class="cap">Variant</span><span id="vbtns" class="grp"></span></div>
+  <div class="div"></div>
+  <div class="grp"><span class="cap">State</span><span id="tbtns" class="grp"></span></div>
+</div>
+
+<script>
+// ── real numbers ───────────────────────────────────────────────────────────
+// Components + tiles: web/tests/fixtures/api/{holding-pltr,positions,positions-closed}.json
+// peak capital-at-risk + span: recomputed against the live ledger, #128's CAR definition.
+const AS_OF = "2026-07-25", FX_AS_OF = "2026-08-05";
+
+const T = {
+PLTR: {
+  label:"PLTR · hero", name:"Palantir", ticker:"PLTR", market:"US", ccy:"USD",
+  accounts:"Tiger Prime", net:69839.96, verdict:"hero",
+  units:5, avgCost:"US$35.6785", price:"US$122.92", costBasis:"230.14", mv:"792.90",
+  rows:[{k:"Realised",v:16287.97},{k:"Unrealised",v:562.75},{k:"Options",v:52989.24}],
+  ret:{pct:0.3165, peak:220662, years:5.4, verdict:"ok"},
+  buckets:[{n:"cash",v:69839.96}],
+  note:"73 option trades, 19 transactions, zero dividends. The Options line is <b>75.9%</b> of the Net "+
+       "and Unrealised is <b>0.8%</b> — the proportion every layout here has to survive."
+},
+TSLA: {
+  label:"TSLA · all options", name:"Tesla Motors", ticker:"TSLA", market:"US", ccy:"USD",
+  accounts:"Tiger Prime", net:3662.40, verdict:"hero", closed:true,
+  units:0, avgCost:"US$445.00", price:"—", costBasis:"0.00", mv:"0.00",
+  rows:[{k:"Realised",v:0},{k:"Unrealised",v:0},{k:"Options",v:3662.40}],
+  ret:{pct:0.0388, peak:94473.75, years:3.7, verdict:"ok"},
+  buckets:[{n:"cash",v:3662.40}],
+  note:"#129's degenerate case: the stock legs are a <b>measured zero</b>, not an absence, and the "+
+       "whole Net is premium. Two rows of <code>0.00</code> stacked above the only real number is "+
+       "the shape to judge."
+},
+D05: {
+  label:"D05 · two buckets", name:"DBS Group Holdings Ltd", ticker:"D05", market:"SG", ccy:"SGD",
+  accounts:"FSMOne, CPFIS", net:274777.50, verdict:"hero",
+  units:4290, avgCost:"S$24.7282", price:"S$73.94", costBasis:"106,084.22", mv:"317,202.60",
+  rows:[{k:"Realised",v:9644.02},{k:"Unrealised",v:211118.38},{k:"Dividends",v:54015.10}],
+  ret:{pct:1.6585, peak:165679.32, years:8.5, verdict:"ok"},
+  buckets:[
+    {n:"cash",v:194503.20,rows:[7328.92,147117.08,40057.20]},
+    {n:"cpf", v:80274.30, rows:[2315.10,64001.30,13957.90]}],
+  note:"Two <b>open</b> buckets, never optioned — so the Options row is omitted entirely (#129) and "+
+       "the split has to carry three component rows across two columns."
+},
+F34: {
+  label:"F34 · open + closed", name:"Wilmar", ticker:"F34", market:"SG", ccy:"SGD",
+  accounts:"FSMOne, CPFIS", net:7496.15, verdict:"hero",
+  units:7200, avgCost:"S$3.3391", price:"S$3.89", costBasis:"24,041.85", mv:"28,008.00",
+  rows:[{k:"Realised",v:520.00},{k:"Unrealised",v:3966.15},{k:"Dividends",v:3010.00}],
+  ret:{pct:0.3182, peak:23555.48, years:8.8, verdict:"ok"},
+  buckets:[
+    {n:"cash",v:6556.15,rows:[0,3966.15,2590.00]},
+    {n:"cpf · closed",v:940.00,rows:[520.00,0,420.00]}],
+  note:"#127's second split shape: one open leg and one <b>closed</b> leg that still owns a column. "+
+       "The closed leg's Unrealised is <code>0.00</code> — see the finding below, today's row ships "+
+       "<code>null</code> there."
+},
+Q01: {
+  label:"Q01 · caveat", name:"QAF", ticker:"Q01", market:"SG", ccy:"SGD",
+  accounts:"FSMOne", net:-6190.17, verdict:"caveat",
+  units:17000, avgCost:null, price:"S$0.98", costBasis:null, mv:"16,660.00",
+  rows:[{k:"Stock P/L",v:-11630.17,collapsed:true},{k:"Dividends",v:5440.00}],
+  ret:{pct:-0.1850, peak:33461.35, years:8.8, verdict:"caveat"},
+  buckets:[{n:"cash",v:-6190.17}],
+  partition:{in:68000,costed:51000,free:0,unknown:17000,pct:25},
+  note:"#137's hard caveat. <b>17,000 of 68,000 units have no cost — and they are the units still "+
+       "held.</b> Pooled averaging invents a 16,730.67 cost basis and a −70.67 Unrealised that reads "+
+       "precise; #131 collapses the pair into Stock P/L, which is exact, and sends the two tiles to "+
+       "<code>not known</code>."
+},
+AAPL: {
+  label:"AAPL · no capital", name:"AAPL", ticker:"AAPL", market:"US", ccy:"USD",
+  accounts:"Moomoo", net:430.86, verdict:"hero",
+  units:1, avgCost:"US$0.00", price:"US$333.02", costBasis:"0.00", mv:"429.63",
+  rows:[{k:"Realised",v:0},{k:"Unrealised",v:429.63},{k:"Dividends",v:1.23}],
+  ret:{verdict:"no_capital"},
+  buckets:[{n:"cash",v:430.86}],
+  note:"#136's rule, live. One free unit, four dividends, nothing ever paid and no collateral ever "+
+       "locked — so the return is <b>undefined, not unmeasured</b>, and the percentage's slot carries "+
+       "a sentence instead. The Net still stands."
+},
+REFUSE: {
+  label:"refusal · synthetic", name:"Astrea 6B (synthetic)", ticker:"ASTREA6B", market:"SG", ccy:"SGD",
+  accounts:"CDP", net:null, verdict:"refuse",
+  units:15000, avgCost:null, price:"S$0.895", costBasis:null, mv:"13,425.00",
+  rows:[{k:"Stock P/L",v:null,collapsed:true},{k:"Dividends",v:512.00}],
+  ret:{verdict:"none"},
+  buckets:[{n:"cash",v:null}],
+  partition:{in:15000,costed:0,free:0,unknown:15000,pct:100},
+  note:"<b>Invented, and it has to be.</b> The book's one refusal is ASTREA6B, and #137 confirmed "+
+       "<code>/api/positions</code> drops it while #131 proved <code>fold_ticker</code> drops it too "+
+       "— so this state is unreachable today and exists only because the annotation defaults to "+
+       "<code>unknown</code>, making it the state of the next un-annotated carry-in."
+}};
+
+const ORDER = ["PLTR","TSLA","D05","F34","Q01","AAPL","REFUSE"];
+const REFUSE_LINE = "Cost basis unrecorded — this name's Net cannot be stated.";
+const NOCAP_LINE  = "no capital at risk — nothing was ever paid for these units";
+
+// a lightness ramp per component so a five-segment bar of same-sign values is still
+// readable as five things. Sign still picks the hue — the app's idiom.
+const UP=["#2ea043","#57b96a","#82d194","#a9e5b6"], DN=["#f85149","#ff7d76","#ffa8a3"];
+const shade=(v,i)=> v==null?"var(--mut)" : v<0?DN[i%DN.length] : v>0?UP[i%UP.length] : "var(--line)";
+const n2 = v => v.toLocaleString("en-SG",{minimumFractionDigits:2,maximumFractionDigits:2});
+const sgd  = v => (v<0?"−":"")+n2(Math.abs(v));
+const sgnd = v => (v<0?"−":"+")+n2(Math.abs(v));
+const cl   = v => v==null?"mut":v>0?"pos":v<0?"neg":"mut";
+const pctf = p => (p<0?"−":"+")+(Math.abs(p)*100).toFixed(1)+"%";
+
+// ── shared fragments ───────────────────────────────────────────────────────
+function head(d){
+  return `<div class="hd-row">
+    <h2>${d.name}</h2><span class="pill">${d.ticker}</span><span class="pill">${d.market}</span>
+    ${d.closed?'<span class="pill">closed</span>':''}
+    <span class="mut" style="font-size:12.5px">${d.accounts}</span></div>
+  <div class="asof">Valued <b>${AS_OF}</b> · converted at latest FX, <b>${FX_AS_OF}</b></div>`;
+}
+function retLine(d){
+  const r=d.ret;
+  if(r.verdict==="none") return "";
+  if(r.verdict==="no_capital") return `<div class="hero-none">${NOCAP_LINE}</div>`;
+  return `<div class="hero-ret ${cl(r.pct)}">${pctf(r.pct)}
+    <span class="span">over ${r.years} years on peak capital of ${n2(r.peak).replace(/\.00$/,"")}</span></div>`;
+}
+function caveats(d){
+  let out="";
+  if(d.verdict==="caveat")
+    out+=`<div class="caveat">${d.partition.unknown.toLocaleString()} of
+      ${d.partition.in.toLocaleString()} units (${d.partition.pct}%) rode in with no recorded cost.
+      The Net is an <b>upper bound</b>.</div>`;
+  if(d.ret&&d.ret.verdict==="caveat")
+    out+=`<div class="caveat">The percentage is not comparable to another name: its numerator is an
+      upper bound and its denominator a lower one, because peak capital counts only the costed
+      lots.</div>`;
+  return out;
+}
+function heroBlock(d){
+  if(d.verdict==="refuse")
+    return `<div><div class="hero-lbl">Net P/L</div>
+      <div class="hero-refuse warn" style="margin-top:10px">${REFUSE_LINE}</div>
+      <div class="caveat" style="margin-top:12px">All ${d.partition.in.toLocaleString()} units entered
+      without a recorded cost. Below is what the book does know.</div></div>`;
+  return `<div><div class="hero-lbl">Net P/L · SGD</div>
+    <div class="hero-net ${cl(d.net)}">${sgnd(d.net)}</div>${retLine(d)}${caveats(d)}</div>`;
+}
+function tiles(d){
+  const nk=`<div class="val words">not known</div>`;
+  return `<div class="tiles">
+    <div class="tile"><div class="lbl">Units</div><div class="val">${d.units.toLocaleString()}</div></div>
+    <div class="tile"><div class="lbl">Avg Cost</div>${d.avgCost?`<div class="val">${d.avgCost}</div>`:nk}</div>
+    <div class="tile"><div class="lbl">Price</div><div class="val">${d.price}</div></div>
+    <div class="tile"><div class="lbl">Cost Basis</div>${d.costBasis?`<div class="val">${d.costBasis}</div>`:nk}</div>
+    <div class="tile"><div class="lbl">Market Value</div><div class="val">${d.mv}</div></div></div>`;
+}
+const stripFacts = d => [
+  ["Units",d.units.toLocaleString()],["Avg Cost",d.avgCost||"not known"],["Price",d.price],
+  ["Cost Basis",d.costBasis||"not known"],["Market Value",d.mv]];
+
+// ── VARIANT A — ledger ─────────────────────────────────────────────────────
+function vA(d){
+  const multi=d.buckets.length>1, bs=d.buckets;
+  const th = multi
+    ? `<tr><th class="l">&nbsp;</th><th>Total</th>${bs.map(b=>`<th>${b.n}</th>`).join("")}</tr>`
+    : "";
+  const body = d.rows.map((r,i)=>{
+    const cells = multi ? bs.map(b=>`<td class="${cl(b.rows[i])}">${sgd(b.rows[i])}</td>`).join("") : "";
+    const tot = r.v==null ? `<td class="words">not known</td>` : `<td class="${cl(r.v)}">${sgd(r.v)}</td>`;
+    return `<tr><td class="l">${r.k}</td>${tot}${cells}</tr>`;
+  }).join("");
+  const net = d.net==null
+    ? `<tr class="rule sub"><td class="l">Net</td><td class="words" colspan="${1+bs.length}">
+        cannot be summed — a component is unknown</td></tr>`
+    : `<tr class="rule net"><td class="l">Net</td><td class="${cl(d.net)}">${sgnd(d.net)}</td>${
+        multi?bs.map(b=>`<td class="${cl(b.v)}">${sgnd(b.v)}</td>`).join(""):""}</tr>`;
+  return `${head(d)}
+    <div class="card"><div class="vA">
+      ${heroBlock(d)}
+      <table class="ledger">${th?`<thead>${th}</thead>`:""}<tbody>${body}${net}</tbody></table>
+    </div></div>
+    ${tiles(d)}`;
+}
+
+// ── VARIANT B — bar ────────────────────────────────────────────────────────
+function vB(d){
+  const known = d.rows.filter(r=>r.v!=null&&r.v!==0);
+  const tot = known.reduce((a,r)=>a+Math.abs(r.v),0)||1;
+  const segs = known.map(r=>`<i style="flex:${Math.abs(r.v)};background:${
+      shade(r.v,d.rows.indexOf(r))}" title="${r.k} ${sgd(r.v)}"></i>`).join("");
+  const unknown = d.rows.some(r=>r.v==null)
+    ? `<i class="mix" style="flex:${tot*0.35}" title="not known"></i>` : "";
+  const legend = d.rows.map((r,i)=>`<div><span class="sw" style="background:${shade(r.v,i)}"></span>
+    <span class="k">${r.k}</span><span class="${cl(r.v)}">${r.v==null?"not known":sgd(r.v)}</span>
+    <span class="mut" style="font-size:11.5px">${r.v==null||r.v===0?"":
+      (Math.abs(r.v)/tot*100).toFixed(1)+"%"}</span></div>`).join("");
+  const bb = d.buckets.length>1 ? `<div class="bucketbar">
+      <div class="hero-lbl">By funding bucket</div>
+      ${d.buckets.map(b=>`<div class="bb"><span class="nm">${b.n}</span>
+        <span class="tr"><i style="flex:${Math.abs(b.v)};background:${b.v<0?'var(--neg)':'var(--pos)'}"></i>
+        <i style="flex:${Math.max(0,Math.abs(d.net)-Math.abs(b.v))}"></i></span>
+        <span class="amt ${cl(b.v)}">${sgnd(b.v)}</span></div>`).join("")}</div>` : "";
+  return `${head(d)}
+    <div class="card">
+      ${heroBlock(d)}
+      <div class="bar">${segs}${unknown}</div>
+      <div class="barticks"><span>components at ${d.verdict==="refuse"?"partial":"full"} weight</span>
+        <span>${d.net==null?"no total":"total "+n2(tot)}</span></div>
+      <div class="legend">${legend}</div>
+      ${bb}
+      <div class="strip">${stripFacts(d).map(([k,v])=>
+        `<span><span class="mut">${k}</span><b>${v}</b></span>`).join("")}</div>
+    </div>`;
+}
+
+// ── VARIANT C — sentence ───────────────────────────────────────────────────
+function vC(d){
+  const verb = d.net==null?"":d.net>=0?"made you":"cost you";
+  const claim = d.net==null
+    ? `<div class="sentence warn">${REFUSE_LINE}</div>
+       <div class="caveat" style="margin-top:12px">All ${d.partition.in.toLocaleString()} units
+       entered without a recorded cost. Below is what the book does know.</div>`
+    : `<div class="sentence">${d.ticker} ${verb}
+        <span class="big ${cl(d.net)}">${sgd(d.net)}</span></div>${retLine(d)}`;
+  const terms = d.rows.map((r,i)=>
+    `${i?'<span class="op">+</span>':''}<span class="t"><em>${r.k}</em>${
+      r.v==null?'<span class="mut">not known</span>':`<span class="${cl(r.v)}">${sgd(r.v)}</span>`}</span>`
+    ).join("");
+  const tail = d.net==null
+    ? `<span class="eqs">=</span><span class="mut">?</span>`
+    : `<span class="eqs">=</span><span class="res ${cl(d.net)}">${sgd(d.net)}</span>`;
+  const bp = d.buckets.length>1 ? `<div class="cpills">${d.buckets.map(b=>
+      `<div class="cpill"><span class="k">${b.n}</span><span class="${cl(b.v)}">${sgnd(b.v)}</span></div>`
+    ).join("")}</div>` : "";
+  return `${head(d)}
+    <div class="card">
+      ${claim}${caveats(d)}
+      <div class="eq">${terms}${tail}</div>
+      ${bp}
+      <div class="caption">${stripFacts(d).map(([k,v])=>`${k} <b>${v}</b>`).join(" &nbsp;·&nbsp; ")}</div>
+    </div>`;
+}
+
+// ── switcher ───────────────────────────────────────────────────────────────
+const V={A:vA,B:vB,C:vC}, VN={A:"A · Ledger",B:"B · Bar",C:"C · Sentence"};
+let v="A", t="PLTR";
+function render(){
+  const d=T[t];
+  document.getElementById("page").innerHTML = V[v](d);
+  document.getElementById("prov").innerHTML =
+    `<b style="color:var(--txt)">${d.label}</b> — ${d.note}<br><br>
+     Components and tiles from the captured fixtures; peak capital-at-risk and span recomputed
+     against the live ledger using #128's definition (running pooled stock cost basis + open
+     short-put collateral, calls excluded, latest FX).`;
+  for(const b of document.querySelectorAll("[data-v]")) b.classList.toggle("on",b.dataset.v===v);
+  for(const b of document.querySelectorAll("[data-t]")) b.classList.toggle("on",b.dataset.t===t);
+  const u=new URL(location); u.searchParams.set("variant",v); u.searchParams.set("state",t);
+  history.replaceState(null,"",u);
+}
+const vb=document.getElementById("vbtns"), tb=document.getElementById("tbtns");
+for(const k of Object.keys(V)){
+  const b=document.createElement("button"); b.dataset.v=k; b.textContent=VN[k];
+  b.onclick=()=>{v=k;render()}; vb.appendChild(b);
+}
+for(const k of ORDER){
+  const b=document.createElement("button"); b.dataset.t=k; b.textContent=T[k].label.split(" · ")[0];
+  b.title=T[k].label; b.onclick=()=>{t=k;render()}; tb.appendChild(b);
+}
+const q=new URL(location).searchParams;
+if(V[q.get("variant")]) v=q.get("variant");
+if(T[q.get("state")]) t=q.get("state");
+render();
+</script>
