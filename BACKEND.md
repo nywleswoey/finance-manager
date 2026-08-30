@@ -60,7 +60,39 @@ from `data/cdp-stocks/transactions.csv` via `portfolio/performance.cdp_cost()` a
 into the cash-bucket position. Positions still come from the authoritative
 CDP statements; `alloc_by_account()` gives the per-account MV split for charts.
 
-Result: **31/37** bucket-positions have a known cost basis (XIRR + P/L) — incl. the
-FSM-transferred D05 / O5RU / UD1U. The remaining 6 are the Amundi fund (Endowus units, no
-unit price stored) and Moomoo 9CI/C38U/HMN (free shares from the 2021 CapitaLand
-restructuring — no purchase price).
+CDP cost is matched at **position** level, not per row — a CDP `txn` row is a month-end
+statement diff that routinely aggregates several trade-dated cost lots, and matching per row
+invents shortfalls that do not exist. `performance.cost_partition` carries the detail.
+
+## Cost truth is a partition of units
+
+A boolean cannot say the thing that is actually true of Q01: *17,000 of its 68,000 units
+entered with no recorded cost*. So every entering unit lands in exactly one of three
+conditions, computed after the corporate-action carry and the switch rebasing run and shipped
+as a nested `cost_partition` on every position row:
+
+```json
+"cost_partition": { "units_in": 68000, "costed": 51000, "free": 0,
+                    "unknown": 17000, "unknown_pct": 0.25 }
+```
+
+The three **sum to gross units in** on every position — 73 of 73 in the live book, which totals
+1,574,652 units in: 1,521,274 costed, 545 free, 52,833 unknown. Nested so the counts cannot
+drift apart among ~25 flat siblings and the self-check is visible in one place.
+`tests/test_performance_live.py` holds those figures to the ledger they were measured against.
+
+- **A carried unit is `costed`** — its cost is known, it just came from a predecessor (9CI's
+  2,700 from C31). Likewise a transfer in whose paired transfer out sits in the same position:
+  the cost never left.
+- **`free` units carry a price, not only a count** — `cost_basis = 0.0`, never `null`. They
+  enter `buy_qty` at zero cost, which is what makes AAPL's basis a *measured* zero (and stops
+  D05's 280 bonus shares inflating its cost basis past what was ever invested).
+- **The action string cannot decide free from transferred.** Every unpriced carry-in is
+  `open/transfer_in` on one account, covering a landed corporate-action carry, a real in-specie
+  distribution and two windfalls. That distinction lives in a per-transaction annotation
+  (`portfolio/cost_annotations.py`) defaulting to `unknown` — refuse rather than invent a free
+  lot. `gifted stock in` and `bonus issuance` are mechanical and need no annotation.
+- **`cost_known` is the partition read as a boolean**: false only when *every* entering unit is
+  unknown. Not `unknown == 0`, which would flip C38U to false and delete its 7,756.75 Net.
+  Live, the refusal set is ASTREA6B alone; the caveat set is S51 40.0%, SET 27.9%, Q01 25.0%,
+  C38U 7.5%.

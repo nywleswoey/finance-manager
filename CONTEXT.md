@@ -48,7 +48,9 @@ The Holdings table's fold of every position sharing one canonical ticker into a 
 only place the app answers "how much of this name do I own, across every bucket". Units, cost,
 market value, P/L, dividends and option premiums sum; price and currency pass through (one
 security, one lookup); average cost pools as `Σcost_basis ÷ Σunits`, which is *exact* rather than
-approximate because cost basis is average cost × units. **Derived at render, never stored and
+approximate because cost basis is average cost × units. The cost partition folds by addition —
+each leg's entering units are its own — with `unknown_pct` recomputed over the merged counts
+rather than averaged. **Derived at render, never stored and
 never served** — no endpoint returns one — so it is a presentation of several positions and never
 itself a Position. XIRR is deliberately not folded: an IRR over merged cashflows cannot be
 averaged from its parts, so a consolidated row of two positions shows no return rather than a
@@ -70,10 +72,35 @@ A unit change that is part of the *return*, not an external contribution: units 
 Units redeemed to pay a fee (Endowus). No cash leaves the investor, so the market-value drop
 already carries the cost — booking a cash outflow too would charge the fee twice.
 
-**Uncosted units**:
-Units that landed in a position via a transaction whose price the source never recorded. They
-count toward market value, but their presence makes a money-weighted return meaningless (there
-is no cost to weight against), so it is suppressed.
+**Cost partition**:
+The split of a position's **entering units** — gross units in, so a sale subtracts nothing —
+into exactly three **conditions**, summing to that total. A boolean cannot say the thing that is
+actually true of Q01: 17,000 of its 68,000 units entered with no recorded cost. Shipped nested
+(`cost_partition`) so the counts cannot drift apart among ~25 flat siblings, with `unknown_pct`
+pre-computed. The three:
+
+- **Costed** — real money is recorded against these units: a priced trade, a CDP cost lot, a
+  predecessor's cost carried by a corporate action, or a transfer in whose paired transfer out
+  sits in the same position (the cost never left).
+- **Free** — they cost nothing, and that is measured, not assumed. Free units carry a *price*,
+  not only a count: their cost basis is `0.0`, never null.
+- **Unknown** — the book does not know. The polarity is to refuse rather than invent a free lot.
+
+`cost_known` is this partition read as a boolean: false only when *every* entering unit is
+unknown. Not "no unknown units" — a name with some cost still answers "did I make money on
+this"; only a name with none has to refuse.
+_Avoid_: uncosted units (the retired boolean-era term; it named only the unpriced-trade slice of
+`unknown` and has left the wire), cost-unknown position (a position is rarely all-or-nothing)
+
+**Cost annotation**:
+The free/transferred distinction, per transaction, defaulting to `unknown`. Every unpriced
+carry-in in the book shares one action string, which covers a corporate-action carry, a real
+in-specie distribution and two windfalls at once — so neither the action nor the account can
+decide it, and the knowledge lives beside the code (`portfolio/cost_annotations.py`) rather than
+in the ledger, which has nowhere to put it. Scope is `open/transfer_in` and zero-priced
+`corp action`; `gifted stock in` and `bonus issuance` are mechanical and need none.
+_Avoid_: per-security override (rejected — it breaks the day one ticker holds both a gift lot
+and a real transfer-in)
 
 ### Returns
 

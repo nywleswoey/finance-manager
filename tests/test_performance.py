@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from portfolio import cost_annotations as ca
 from portfolio import performance as perf
 from portfolio.models import Base, CdpCostLot
 
@@ -59,6 +60,54 @@ class TestClassify(unittest.TestCase):
         """A new action string must shout, not silently mint free units."""
         self.assertEqual(perf.classify("spin-off", 1.0), "unknown")
         self.assertEqual(perf.classify("", None), "unknown")
+
+
+class TestCostAnnotations(unittest.TestCase):
+    """The curated free/transferred list — see portfolio/cost_annotations.py."""
+
+    def _row(self, **over):
+        r = dict(account="Moomoo", canonical_ticker="AAPL", trade_date=D(2022, 12, 28),
+                 action="open/transfer_in", qty_signed=1)
+        r.update(over)
+        return r
+
+    def test_every_curated_row_is_in_scope_and_asserts_a_real_condition(self):
+        """An annotation written against, say, a `buy` would never be consulted — it would sit
+        in the list looking authoritative and doing nothing."""
+        for a in ca.ANNOTATIONS:
+            self.assertIn(a[3], ca.ANNOTATABLE_ACTIONS, a)
+            self.assertIn(a[5], ca.ANNOTATION_CONDITIONS, a)
+
+    def test_the_list_is_the_three_rows_the_spec_names(self):
+        self.assertEqual([(a[1], a[4], a[5]) for a in ca.ANNOTATIONS],
+                         [("AAPL", 1, "free"), ("HMN", 153, "free"), ("D05", 280, "free")])
+
+    def test_an_annotated_row_resolves_to_its_condition(self):
+        self.assertEqual(ca.condition_for(self._row(), ca.annotation_map()), "free")
+
+    def test_an_unannotated_row_of_the_same_shape_resolves_to_nothing(self):
+        """The default is `unknown`, expressed as "no annotation covers this" — the fold, not
+        the list, decides what an uncovered row means."""
+        m = ca.annotation_map()
+        self.assertIsNone(ca.condition_for(self._row(qty_signed=2), m))
+        self.assertIsNone(ca.condition_for(self._row(trade_date=D(2022, 12, 29)), m))
+        self.assertIsNone(ca.condition_for(self._row(canonical_ticker="MSFT"), m))
+        self.assertIsNone(ca.condition_for(self._row(account="FSM"), m))
+
+    def test_unmatched_reports_a_stale_annotation_and_a_twin(self):
+        """Both failures are silent otherwise: a stale key quietly turns a measured free lot
+        back into an unknown one, and a twin annotates a lot nobody looked at."""
+        m = ca.annotation_map()
+        self.assertEqual(ca.unmatched([self._row()], m).get(
+            ("Moomoo", "HMN", D(2023, 5, 28), "open/transfer_in", 153.0)), 0)
+        twins = ca.unmatched([self._row(), self._row()], m)
+        self.assertEqual(twins[("Moomoo", "AAPL", D(2022, 12, 28), "open/transfer_in", 1.0)], 2)
+
+    def test_out_of_scope_actions_are_never_consulted(self):
+        """Scope is `open/transfer_in` and zero-priced `corp action`. A priced corp action is a
+        rights subscription and classifies as cash long before it reaches the list."""
+        ann = {("Moomoo", "AAPL", D(2022, 12, 28), "buy", 1.0): "free"}
+        self.assertIsNone(ca.condition_for(self._row(action="buy"), ann))
 
 
 class TestCdpCost(unittest.TestCase):
