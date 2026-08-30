@@ -33,10 +33,15 @@ build = "npm --prefix web ci && npm --prefix web run build"
 dev = ["ruff>=0.16.3", "pytest>=8"]
 
 [tool.pytest.ini_options]
-# `pg` marks the tests that need a real Postgres (tests/*_pg.py, via tests/pgtest.py) because
-# the SQL they cover is Postgres-only — `to_char` month bucketing has no SQLite equivalent.
-# They skip themselves when no server answers, so the default run is unaffected whether or not
-# `make db-up` has been run; `-m "not pg"` deselects them outright.
+# `pg` marks the tests that need a real Postgres. Two kinds, both skipping themselves when no
+# server answers, so the default run is unaffected whether or not `make db-up` has been run;
+# `-m "not pg"` deselects them outright.
+#   tests/*_pg.py           — via tests/pgtest.py, on a THROWAWAY database, because the SQL they
+#                             cover is Postgres-only (`to_char` month bucketing has no SQLite
+#                             equivalent).
+#   test_performance_live.py — reads the APP database, because what it checks is the ledger
+#                             itself: the cost partition must sum on every real position, and
+#                             #148's measured book totals are a regression guard or nothing.
 markers = ["pg: needs a reachable Postgres (make db-up); skips when there is none"]
 
 [tool.ruff]

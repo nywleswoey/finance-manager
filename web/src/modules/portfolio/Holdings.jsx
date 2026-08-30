@@ -81,7 +81,7 @@ const netOf = (r) => {
  *
  * Avg cost is the interesting one: it folds **exactly**, not approximately. `cost_basis` is
  * `avg_cost × units`, so pooled cost basis over pooled units *is* the true weighted average
- * (D05 → 24.7283 from 26.1747 and 21.0464). It wants no caveat in the UI.
+ * (D05 → 22.4802 from 23.7952 and 19.1331). It wants no caveat in the UI.
  */
 const sumOf = (rs, f) => rs.reduce((a, r) => a + (f(r) || 0), 0);
 
@@ -89,6 +89,13 @@ const sumOf = (rs, f) => rs.reduce((a, r) => a + (f(r) || 0), 0);
 // holds nothing — contributes 0 rather than erasing the open side's real figure.
 const sumOrNull = (rs, f) =>
   rs.every((r) => f(r) == null) ? null : sumOf(rs, f);
+
+// Sum the legs' cost partitions into the merged row's own — see the note at its call site.
+const foldPartition = (rs) => {
+  const p = { units_in: 0, costed: 0, free: 0, unknown: 0 };
+  for (const r of rs) for (const k of Object.keys(p)) p[k] += r.cost_partition?.[k] || 0;
+  return { ...p, unknown_pct: p.units_in > 0 ? p.unknown / p.units_in : 0 };
+};
 
 function mergeTicker(rows) {
   if (rows.length === 1) return rows[0];
@@ -130,7 +137,11 @@ function mergeTicker(rows) {
     cost_known: costKnown,
     net_folded: netFolded,                                   // folded Net for netOf to consume
     net_partial: netPartial,                                 // whether any leg is partial
-    uncosted_units: sumOf(rs, (r) => r.uncosted_units),
+    // The partition folds by addition — every leg's entering units are that leg's own, so no
+    // unit is counted twice and the three conditions stay a partition of the merged total.
+    // `unknown_pct` is recomputed rather than averaged: a mean of two percentages is not the
+    // percentage of the merged counts.
+    cost_partition: foldPartition(rs),
     mv_native: sumOf(rs, (r) => r.mv_native),
     mv_sgd: sumOf(rs, (r) => r.mv_sgd),
     income_native: sumOf(rs, (r) => r.income_native),

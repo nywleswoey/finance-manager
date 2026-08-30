@@ -14,6 +14,7 @@ from typing import NamedTuple
 
 from sqlalchemy import text
 
+from .cost_annotations import annotation_map, condition_for, unmatched
 from .db import fx_map, latest_close, session_scope
 from .money import rate_to_sgd
 
@@ -114,6 +115,15 @@ ZERO_CASH = {"transfer_in", "transfer_out", "gift_in", "gifted stock in", "gifte
              "corp action", "corp_action", "open", "open/transfer_in", "transfer in",
              "sell/transfer_out", "sell/transfer", "stock dividend",
              "switch_in"}      # fund-switch IN leg: units only; cost carries from predecessor
+# The zero-cash actions whose free-ness is not in doubt: the broker's own word for a gift or a
+# bonus issue. `open/transfer_in` and zero-priced `corp action` are deliberately NOT here — one
+# string covers a landed corporate-action carry, a real in-specie distribution and a windfall, so
+# those rows take their condition from portfolio.cost_annotations, defaulting to `unknown`.
+# No scrip spelling is here on purpose: zero `scrip` / `scrip dividend` / `script dividend`
+# rows exist in `txn` (the four live in `cdp_cost_lot` with a negative amount and are already
+# invested), so listing them would be writing a rule the book has no use for — and if one ever
+# did appear, `unknown` is the polarity to meet it with.
+FREE_ACTION = {"gift_in", "gifted stock in", "bonus", "bonus issuance"}
 # 'corp action' is a catch-all in the FSM ledger. A PRICED row is an entitlement the holder paid
 # cash for — the ESR-LOGOS (UD1U) rights issues at 0.49 / 0.595 / 0.408, C38U, O5RU, S51. A
 # zero-priced row is a bonus or consolidation (D05's 280 bonus shares). Only the first costs money.
@@ -240,6 +250,9 @@ def _carry_corporate_actions(corp_actions, pos, meta):
                 pos[kt]["cost_events"].extend(pos[kf]["cost_events"])
             else:
                 continue
+            # the successor's entering units are backed by the predecessor's cost now — a
+            # carried unit is `costed`, it just came from somewhere else (see cost_partition).
+            pos[kt]["cost_carried"] = True
             for fld in ("invested", "buy_cost", "buy_qty", "proceeds"):
                 pos[kf][fld] = 0.0
             pos[kf]["flows"] = []
@@ -273,28 +286,126 @@ def _rebase_cost_events(p):
                                   p["buy_qty"] * e.cost / tot) for e in p["cost_events"]]
 
 
-def _apply_txn(p, r, today):
-    """Fold one non-CDP txn row into its position accumulator `p`. Returns the action
+def _condition(r, kind, annotations):
+    """Which of the three conditions one ENTERING row's units land in — or "pending" when the
+    row only moved units and the fold has yet to see what backed them.
+
+    `costed`  — real money is recorded against these units (a priced trade, a CDP cost lot).
+    `free`    — they cost nothing and that is a measured fact, not an assumption.
+    `unknown` — the book does not know, and refusing beats inventing a free lot.
+    `pending` — a transfer/open-family entry: costed if the position's own transfer out paid
+                for it or a corporate action carries cost onto it, otherwise `unknown`.
+    """
+    if kind == "cash":
+        return "costed"        # priced: real money moved, whatever the action string says.
+                               # Checked BEFORE the annotation, which is what makes the list's
+                               # scope "zero-priced `corp action`" structural rather than a
+                               # promise — a rights subscription can never be annotated free.
+    ann = condition_for(r, annotations)
+    if ann is not None:
+        return ann
+    if kind == "zero":
+        return "free" if r["action"] in FREE_ACTION else "pending"
+    # `classify`'s "unknown" and this one are different words that happen to coincide: there it
+    # means "nobody has classified this action string", here it means "the book does not know
+    # what these units cost". An unclassified action lands in the second BECAUSE of the first.
+    return "unknown"                       # uncosted / cost_in_kind / unclassified
+
+
+def _apply_units(p, r, kind, today, annotations):
+    """Book one txn row's UNITS into the partition counters — every row, CDP included.
+
+    Separate from `_apply_txn` because it runs on rows that one skips: a CDP row carries no
+    cost of its own (that arrives from `cdp_cost_lot`), but its units are as real as any
+    other's, and the CDP->FSM migration's transfer OUT leg is a CDP row while the matching
+    transfer in is an FSM one. Reading only the FSM side saw 205,090 units enter a second time
+    with nothing behind them and called eight positions cost-doubtful that are not."""
+    qty = float(r["qty_signed"])
+    if qty > 0:
+        p["units_in"] += qty                       # GROSS units in; a sale subtracts nothing
+        if r["account"] == "CDP":
+            p["cdp_units_in"] += qty               # matched against the cost pool, not per row
+            return
+        cond = _condition(r, kind, annotations)
+        p[f"{cond}_units"] += qty
+        if cond == "free":
+            # free units carry a PRICE, not only a count. avg_cost = buy_cost / buy_qty, so
+            # entering them at zero cost is what makes cost_basis a measured 0.0 rather than
+            # null — and on a mixed name it dilutes the average exactly as a bonus issue should.
+            # Through _book_buy, not a bare `buy_qty +=`: #147's dated cost series mirrors that
+            # scalar, and a series that agrees with its scalars on one path and not the other is
+            # worse than no series at all. The event is real and its cost is really zero.
+            _book_buy(p, r["trade_date"] or today, 0.0, qty)
+    elif r["action"] in STOCK_MOVING_LEG:
+        # units left without being sold. The cost stayed in the position, so this is the cover a
+        # later transfer in draws on — see cost_partition. Keyed on #147's STOCK_MOVING_LEG
+        # rather than a second list of the same spellings: "moved stock rather than traded it" is
+        # this rule's premise too, and a sixth spelling should land in one place. It is also the
+        # sharper set — it catches `transfer out` (a standing gap in ZERO_CASH) and declines a
+        # negative `corp action`, which removes units in a consolidation and backs nothing.
+        p["transfer_out_units"] += -qty
+
+
+def _apply_txn(p, r, kind, today):
+    """Fold one non-CDP txn row's COST into its position accumulator `p`. Returns the action
     string if it couldn't be classified (caller should warn), else None."""
-    act = r["action"]
     px = _f(r["price"])
+    qty = float(r["qty_signed"])
     fee = abs(float(r["fees"])) if r["fees"] is not None else 0.0   # native ccy, same as px*qty
-    kind = classify(act, px)
     if kind == "cash":
         # fees are a real cost: bigger outflow on a buy, smaller net inflow on a sell
-        cash = -float(r["qty_signed"]) * px - fee
+        cash = -qty * px - fee
         p["fees"] += fee
         p["flows"].append((r["trade_date"] or today, cash))
         if cash < 0:
-            _book_buy(p, r["trade_date"] or today, -cash, float(r["qty_signed"]))
+            _book_buy(p, r["trade_date"] or today, -cash, qty)
         else:
             p["proceeds"] += cash
-    elif kind == "uncosted":
-        if float(r["qty_signed"]) > 0:
-            p["uncosted_units"] += float(r["qty_signed"])
     elif kind == "unknown":
-        return act                                     # don't silently hand out free units
+        return r["action"]                             # don't silently hand out free units
     return None
+
+
+def cost_partition(p):
+    """The three conditions every entering unit lands in, as the nested wire object.
+
+    Nested rather than three more flat siblings among ~25: the counts cannot drift apart when
+    they travel together, and the self-check — costed + free + unknown == units_in — is visible
+    in one place. `unknown_pct` is pre-computed so the frontend does no arithmetic.
+
+    Three resolutions happen here rather than row by row, because none is knowable row by row:
+
+      - **Transfer cover.** A transfer in whose paired transfer out sits in the same position is
+        an internal move; the cost never left, so those units are costed. Anything beyond the
+        cover entered from outside with nothing behind it, and is unknown. Paired by SIZE, not by
+        identity — the ledger carries nothing linking the two legs.
+      - **CDP cost is matched at POSITION level.** A CDP txn row is a month-end statement diff
+        and routinely aggregates several trade-dated `cdp_cost_lot` rows (LIW's 24,600 is three
+        lots; Z74's 8,500 is 4,000 + 4,500). Matching per row invents shortfalls on LIW, S7OU,
+        D05, J2T and Z74 that do not exist.
+      - **A corporate-action carry costs the units it arrived on** — the transfer/switch shape a
+        carry travels in, not every doubtful unit on the name. An unpriced *buy* into a carried
+        holding is still `unknown`; only the carry-shaped arrivals are promoted.
+
+    That last bound is by SHAPE, not by date, and shape is the tighter of the two only until a
+    carried name takes a second unpriced transfer in — which would be promoted too, on cost that
+    never covered it. Bounding by date needs the accumulators to carry one, which is the
+    prefactor in #147; until then this is the honest limit of the rule.
+    """
+    covered = min(p["pending_units"], p["transfer_out_units"])
+    cdp_costed = min(p["cdp_buy_qty"], p["cdp_units_in"])
+    carried = (p["pending_units"] - covered) if p["cost_carried"] else 0.0
+    costed = p["costed_units"] + covered + cdp_costed + carried
+    free = p["free_units"]
+    unknown = (p["unknown_units"] + (p["pending_units"] - covered - carried)
+               + (p["cdp_units_in"] - cdp_costed))
+    units_in = round(p["units_in"], 4)
+    costed, free, unknown = round(costed, 4), round(free, 4), round(unknown, 4)
+    if round(costed + free + unknown, 4) != units_in:
+        log.warning("cost partition does not sum to units in: %s vs %s+%s+%s",
+                    units_in, costed, free, unknown)
+    return {"units_in": units_in, "costed": costed, "free": free, "unknown": unknown,
+            "unknown_pct": round(unknown / units_in, 4) if units_in > 1e-9 else 0.0}
 
 
 def _rn(x, n, mult=1.0):
@@ -312,17 +423,26 @@ def _build_row(k, p, m, fx, price, today):
     flows = list(p["flows"])
     if p["units"] > 1e-6 and px:
         flows.append((today, mv))
-    cost_known = p["invested"] > 1e-6
+    part = cost_partition(p)
+    # `cost_known` is the partition read as a boolean: false only when EVERY entering unit is
+    # unknown. Not `unknown == 0` — that would flip C38U (417 of 6,700 unpriced) to false and
+    # delete its 7,756.75 Net from Holdings, Performance and Overview. A name with SOME cost
+    # still answers "did I make money on this"; only a name with none has to refuse.
+    cost_known = part["units_in"] > 1e-6 and part["unknown"] < part["units_in"] - 1e-6
     # XIRR is only meaningful when every unit that entered has a known cost and the flows
     # span long enough for annualisation to mean something.
     span = (max(d for d, _ in flows) - min(d for d, _ in flows)).days if flows else 0
-    xirr_ok = cost_known and p["uncosted_units"] < 1e-6 and span >= MIN_XIRR_DAYS
+    xirr_ok = cost_known and part["unknown"] < 1e-6 and span >= MIN_XIRR_DAYS
     xirr = _xirr(flows) if xirr_ok else None
     total_pl = (mv + p["proceeds"] + p["income"] - p["invested"]) if cost_known else None
-    simple = (total_pl / p["invested"]) if cost_known else None
-    # cost basis of CURRENT holding (avg cost × held units) + unrealised P/L
+    # a free lot has a cost of zero, so it has no denominator — a percentage return on nothing
+    # is not a smaller number, it is not a number.
+    simple = (total_pl / p["invested"]) if (cost_known and p["invested"] > 1e-6) else None
+    # cost basis of CURRENT holding (avg cost × held units) + unrealised P/L. `is not None`,
+    # not truthiness: a free lot's avg cost is 0.0, which is a measured price and must not be
+    # read as "no answer" (AAPL's basis is zero because the unit was a gift).
     avg_cost = (p["buy_cost"] / p["buy_qty"]) if p["buy_qty"] > 1e-6 else None
-    cost_basis = (avg_cost * p["units"]) if (avg_cost and p["units"] > 1e-6) else None
+    cost_basis = (avg_cost * p["units"]) if (avg_cost is not None and p["units"] > 1e-6) else None
     unreal = (mv - cost_basis) if cost_basis is not None else None
     # realised stock P/L = sell proceeds − cost of the shares sold (buy_cost minus the
     # cost still tied up in the current holding). Closed positions: cost_basis None -> all sold.
@@ -331,37 +451,46 @@ def _build_row(k, p, m, fx, price, today):
         "bucket": k[0], "accounts": sorted(p["accounts"]), "ticker": m["canonical_ticker"],
         "name": m["name"], "market": m["market"], "asset_type": m["asset_type"], "currency": ccy,
         "units": round(p["units"], 4), "price": px, "mv_native": round(mv, 2),
-        "avg_cost": round(avg_cost, 4) if avg_cost else None,
+        "avg_cost": _rn(avg_cost, 4),
         "cost_basis_native": _rn(cost_basis, 2),
         "cost_basis_sgd": _rn(cost_basis, 2, rate),
         "unrealised_pl_sgd": _rn(unreal, 2, rate),
         "realised_pl_sgd": _rn(realised, 2, rate),
         "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
         "fees_sgd": round(p["fees"] * rate, 2), "cost_known": cost_known,
-        "uncosted_units": round(p["uncosted_units"], 4),
+        "cost_partition": part,
         "total_pl_native": round(total_pl, 2) if cost_known else None,
-        "invested_sgd": round(p["invested"] * rate, 2) if cost_known else 0.0,
+        "invested_sgd": round(p["invested"] * rate, 2) if cost_known else None,
         "mv_sgd": round(mv * rate, 2), "income_sgd": round(p["income"] * rate, 2),
         "pl_sgd": round(total_pl * rate, 2) if cost_known else None,
         "xirr": _rn(xirr, 4),
-        "simple_return": round(simple, 4) if cost_known else None,
+        "simple_return": _rn(simple, 4),
     }
 
 
-def _accumulate_positions(txns, divs, cdp, corp_actions, today):
+def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
     """Accumulate per-(funding_bucket, security) positions from the fold's inputs. Returns
     `(pos, meta)` — the raw accumulators and the last-seen metadata row per position.
 
     Split out of fold_positions() so the accumulators are reachable without going through
     _build_row(): each one carries a dated `unit_events` / `cost_events` series beside the
     undated running totals, and peak capital-at-risk (#143 §9) and the dated corporate-action
-    carry (§12) both need to replay those in date order. Nothing reads them yet."""
+    carry (§12) both need to replay those in date order. Nothing reads them yet.
+
+    `annotations` is the curated free/transferred map (portfolio.cost_annotations) the cost
+    partition consults; it arrives as plain data like the corporate actions do."""
     # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
     # together, so a position transferred into FSM still carries its original CDP purchase cost.
+    # the partition counters ride alongside the cost accumulators: every entering unit is added
+    # to `units_in` exactly once and to exactly one condition, so the two can only disagree if
+    # this loop does — which is what cost_partition's self-check watches for.
     pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
                                 "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
-                                "uncosted_units": 0.0, "accounts": set(),
-                                "unit_events": [], "cost_events": []})
+                                "accounts": set(), "unit_events": [], "cost_events": [],
+                                "units_in": 0.0, "costed_units": 0.0, "free_units": 0.0,
+                                "unknown_units": 0.0, "pending_units": 0.0,
+                                "transfer_out_units": 0.0, "cdp_units_in": 0.0,
+                                "cdp_buy_qty": 0.0, "cost_carried": False})
     meta = {}
     _unknown_actions = set()
     for r in txns:
@@ -375,9 +504,11 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today):
         p["unit_events"].append(UnitEvent(r["trade_date"] or today, qty, r["action"],
                                           r["action"] in STOCK_MOVING_LEG))
         p["accounts"].add(r["account"])
+        kind = classify(r["action"], _f(r["price"]))   # classified once; both folds read it
+        _apply_units(p, r, kind, today, annotations)
         if r["account"] == "CDP":
             continue                                   # CDP cost comes from cdp-stocks below
-        unk = _apply_txn(p, r, today)
+        unk = _apply_txn(p, r, kind, today)
         if unk is not None:
             _unknown_actions.add(unk)
 
@@ -397,6 +528,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today):
         pos[k]["buy_cost"] += c["buy_cost"]
         pos[k]["buy_qty"] += c["buy_qty"]
         pos[k]["cost_events"].extend(c["cost_events"])
+        pos[k]["cdp_buy_qty"] += c["buy_qty"]
         pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
 
     bucket_by_acct_id = {r["account_id"]: r["funding_bucket"] for r in txns}
@@ -418,7 +550,8 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today):
     return pos, meta
 
 
-def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None):
+def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None,
+                   annotations=None):
     """Pure fold: accumulate per-(funding_bucket, security) positions from already-fetched
     inputs and emit one output row each. No DB or session — every input is plain data, so the
     cost-basis rules (transfer double-count, CDP cost attach, dividend income, corporate-action
@@ -431,9 +564,13 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
       corp_actions — iterable of (from_ticker, to_ticker, type) (carry types only).
       options — {ticker: {pl_sgd, ...}} realized options income per underlying.
       fx / price — latest FX map and latest close per security_id. today defaults to today.
+      annotations — {natural key: condition} from portfolio.cost_annotations; the curated list
+              when omitted. The free/transferred distinction is not in the ledger and cannot be
+              put there, so it arrives as data like the corporate actions do.
     """
     today = today or dt.date.today()
-    pos, meta = _accumulate_positions(txns, divs, cdp, corp_actions, today)
+    annotations = annotation_map() if annotations is None else annotations
+    pos, meta = _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations)
     out = []
     for k, p in pos.items():
         m = meta.get(k)
@@ -469,6 +606,12 @@ def compute(session=None):
         corp_actions = s.execute(text(
             "SELECT from_ticker, to_ticker, type FROM corporate_action "
             "WHERE type IN ('rename','split','consolidation','merger','switch')")).all()
+    # the annotation list is curated against THIS ledger, so its audit belongs here rather than
+    # in the fold, which is a pure function over whatever rows it is handed (a fabricated
+    # two-row book is not missing AAPL's gift; it simply never had one).
+    for k, n in unmatched(txns, annotation_map()).items():
+        log.warning("cost annotation %s matched %d txn rows, expected 1 — a stale annotation "
+                    "silently un-frees a lot; a duplicate annotates one nobody looked at", k, n)
     # options open their own session (see realized_by_ticker); fetched outside the DB block above.
     from .options import realized_by_ticker
     options = realized_by_ticker()
