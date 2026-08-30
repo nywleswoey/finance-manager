@@ -99,17 +99,20 @@ drift apart among ~25 flat siblings and the self-check is visible in one place.
 
 ## The four cell states
 
-A missing number on a position row means one of four things, and the fold says which so the page
-can render each differently. The rule is *has this stream ever existed*, not *is the number zero*.
+A missing number on a position row means one of four things. The **fold names which** so a page
+can render each differently; the rendering itself is not here — the detail page still says `n/a`
+where it now means *not known*, and #158 / #159 land the words. The rule is *has this stream ever
+existed*, not *is the number zero*.
 
-| state | meaning | renders |
+| state | meaning | intended rendering |
 |---|---|---|
 | omitted | the stream has never existed for this ticker | row absent |
 | `0` | the stream exists and measured zero | `0` |
 | `—` | structurally impossible | `—` |
 | not known | the stream exists but is unmeasurable | words |
 
-So `null` means **exactly one thing per field**:
+So `null` means **exactly one thing per field**. `income_sgd` is named on the first line by
+#143 §6 and is **not** done: it still ships `0.0` on a name that never paid a dividend.
 
 - **`options_pl_sgd` null means the stream never existed** — a never-optioned ticker omits the
   row rather than carrying a permanent `Options 0` line (61 of 73 legs live). An optioned name
@@ -126,7 +129,12 @@ So `null` means **exactly one thing per field**:
   always entered.
 - **`stock_pl_sgd` joins every row.** `realised + unrealised` is identically
   `proceeds − buy_cost + mv`, so the **pair's sum is sound while neither member is** — which is
-  what lets a doubted name show an arithmetically exact Net. `rollup()` accumulates it and
-  `/api/performance` builds `net_pl_sgd` from it, so the four caveat legs' stock P/L stays in the
-  group total instead of vanishing with the split. On every leg that knows both members it is
-  identically their sum, so no group figure moves.
+  what lets a doubted name show an arithmetically exact Net. Where both members exist it is
+  rounded *from* them, so §14's measured cent stays where it already is rather than opening a
+  second gap between a sum and its parts.
+- **The group says what its two columns do not reach.** `rollup()` accumulates `stock_pl_sgd` and
+  `/api/performance` builds `net_pl_sgd` from it, so the four doubted legs' stock P/L stays in the
+  group total instead of vanishing with the split — every group net is unchanged to the cent.
+  Beside it, `unsplit_pl_sgd` is the part of that total no leg could attribute to either member,
+  so `realised + unrealised + unsplit == stock_pl` on every group and the Performance table marks
+  those two cells `~` instead of printing a short column beside a whole Net.

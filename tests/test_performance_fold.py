@@ -609,15 +609,20 @@ def test_an_f34_shaped_name_keeps_both_bucket_columns_adding_up():
         assert r["realised_pl_sgd"] + r["unrealised_pl_sgd"] == r["stock_pl_sgd"]
 
 
+# C38U's shape, which three of the tests below need: 6,283 units bought at a price and 417 that
+# arrived unpriced and unannotated. Its stock P/L is 6700*2.5 − 6283*2.0 = 16,750 − 12,566.
+CAVEAT_TXNS = [_txn(canonical_ticker="C38U", qty_signed=6283, price=2.0),
+               _txn(canonical_ticker="C38U", account="Moomoo", action="open/transfer_in",
+                    qty_signed=417, price=None)]
+CAVEAT_PRICE = {10: 2.5}
+CAVEAT_STOCK_PL = 4184.0
+
+
 def test_a_partition_holding_unknown_units_cannot_price_what_it_holds():
-    """C38U's shape — some units priced, some not. The average of a partly-priced lot is not a
-    price, so avg cost, both cost-basis fields and BOTH members of the pair go null. `Net` is
-    unaffected: `cost_known` stays true, because a name with some cost still answers the
-    question the page asks."""
-    r = _only(_fold([_txn(canonical_ticker="C38U", qty_signed=6283, price=2.0),
-                     _txn(canonical_ticker="C38U", account="Moomoo",
-                          action="open/transfer_in", qty_signed=417, price=None)],
-                    price={10: 2.5}))
+    """The average of a partly-priced lot is not a price, so avg cost, both cost-basis fields
+    and BOTH members of the pair go null. `Net` is unaffected: `cost_known` stays true, because
+    a name with some cost still answers the question the page asks."""
+    r = _only(_fold(CAVEAT_TXNS, price=CAVEAT_PRICE))
     assert r["cost_partition"]["unknown"] == 417.0
     assert r["cost_known"] is True
     assert r["avg_cost"] is None
@@ -629,12 +634,8 @@ def test_a_partition_holding_unknown_units_cannot_price_what_it_holds():
 def test_the_pair_sums_even_where_neither_member_is_known():
     """realised + unrealised is identically proceeds − buy_cost + mv, so the PAIR is sound
     while each member is not — which is what lets a caveat show an arithmetically exact Net."""
-    r = _only(_fold([_txn(canonical_ticker="C38U", qty_signed=6283, price=2.0),
-                     _txn(canonical_ticker="C38U", account="Moomoo",
-                          action="open/transfer_in", qty_signed=417, price=None)],
-                    price={10: 2.5}))
-    # 6700 * 2.5 − 6283 * 2.0 = 16750 − 12566
-    assert r["stock_pl_sgd"] == 4184.0
+    r = _only(_fold(CAVEAT_TXNS, price=CAVEAT_PRICE))
+    assert r["stock_pl_sgd"] == CAVEAT_STOCK_PL
     assert r["realised_pl_sgd"] is None and r["unrealised_pl_sgd"] is None
 
 
@@ -671,13 +672,28 @@ def test_free_units_ship_a_measured_zero_basis_not_null():
     assert r["stock_pl_sgd"] == 426.60
 
 
-def test_the_rollup_keeps_a_caveat_legs_stock_pl():
+def test_the_rollup_keeps_a_caveat_legs_stock_pl_and_says_it_could_not_split_it():
     """The pair going null must not delete money from /api/performance: the group carries the
-    sum the caveat leg still knows, so `Σ group net` is what it was."""
-    rows = _fold([_txn(canonical_ticker="C38U", qty_signed=6283, price=2.0),
-                  _txn(canonical_ticker="C38U", account="Moomoo",
-                       action="open/transfer_in", qty_signed=417, price=None)],
-                 price={10: 2.5})
-    g = perf.rollup(rows, "bucket")["cash"]
+    sum the caveat leg still knows, and names the part of it neither member reached, so the
+    columns a page prints beside Net can say they are short rather than read as whole."""
+    g = perf.rollup(_fold(CAVEAT_TXNS, price=CAVEAT_PRICE), "bucket")["cash"]
     assert g["realised_pl_sgd"] == 0.0 and g["unrealised_pl_sgd"] == 0.0
-    assert g["stock_pl_sgd"] == 4184.0
+    assert g["stock_pl_sgd"] == CAVEAT_STOCK_PL
+    assert g["unsplit_pl_sgd"] == CAVEAT_STOCK_PL
+
+
+def test_the_rollup_ties_realised_plus_unrealised_plus_unsplit_to_stock_pl():
+    """The identity that makes `unsplit_pl_sgd` checkable rather than a second opinion."""
+    rows = _fold([_txn(qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
+                  _txn(qty_signed=-40, price=15.0, trade_date=D(2021, 1, 1))],
+                 price={10: 12.0}) + _fold(CAVEAT_TXNS, price=CAVEAT_PRICE)
+    for g in perf.rollup(rows, "bucket").values():
+        assert round(g["realised_pl_sgd"] + g["unrealised_pl_sgd"]
+                     + g["unsplit_pl_sgd"], 2) == round(g["stock_pl_sgd"], 2)
+
+
+def test_a_group_with_nothing_unsplit_says_so_with_a_zero():
+    """`unsplit` is an amount, not a flag: a group whose every leg split its pair reaches its
+    stock P/L exactly, and a page keys its marker off that zero."""
+    g = perf.rollup(_fold([_txn(qty_signed=100, price=10.0)], price={10: 12.0}), "bucket")["cash"]
+    assert g["unsplit_pl_sgd"] == 0.0
