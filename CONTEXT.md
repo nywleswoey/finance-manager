@@ -134,9 +134,47 @@ _Avoid_: total P/L (that is stock P/L *plus* dividends and premiums — the Net)
 
 ### Returns
 
+**Peak capital-at-risk (CAR)**:
+The most a name ever had exposed at once: the **costed stock basis** at a moment plus the
+collateral locked behind short **puts** open at that moment, converted at latest FX, maximised
+over the position's span. Covered calls contribute nothing — their collateral *is* the shares,
+already in the stock term. Every term is read at the date it applies, including the costed
+share, so a lot that arrives uncosted years later cannot shrink capital that was genuinely at
+risk before it. Where nothing was ever paid for and no collateral was ever locked it is a
+**measured zero**, not a null.
+_Avoid_: cost basis (a peak is a maximum over a span, not a current holding), invested (total
+money ever deployed, which double-counts capital that was recycled)
+
+**Peak-CAR return**:
+`Net ÷ peak capital-at-risk`, a **lifetime total** and never annualised. Annualising a ratio
+whose denominator is a *peak* asserts the capital sat at peak for the whole span, when it may
+have touched that on a single day — so the figure is a lifetime total return on worst-case
+exposure and is always rendered with its span beside it. Whole-ticker only. There is no minimum
+span and no materiality floor.
+_Avoid_: return (unqualified), annualised return (it is deliberately neither)
+
+**Span**:
+The window a peak-CAR return is measured over: the first event, to **today if the position is
+still held** — units remaining or a contract still open — and otherwise to the date the last
+unit left or the last contract resolved. "Always today" overcharges closed names; "always last
+activity" undercharges open ones.
+
+**Return verdict**:
+What the percentage can claim, on its own axis rather than the Net's: `ok`, `caveat` (some
+entering units are unknown, so the numerator is an upper bound and the denominator a lower one
+— the error compounds), or `no_capital` (peak CAR is zero, so the return does not exist —
+undefined, not unmeasured). The **verdict**, not a null, is what decides how the figure renders.
+_Avoid_: net verdict (a different axis — one name can be hero-on-Net and no-capital-on-return
+at once)
+
 **Money-weighted return (XIRR)**:
 The internal rate of return over a position's dated cashflows plus its current market value as a
 terminal inflow. Sensitive to contribution timing. Computed per position and portfolio-wide.
+**Not on the ticker detail page** — an annualised rate and a lifetime return are different
+claims and no label reconciles them: across the 58 non-optioned legs carrying one, the two
+differ by a median 20 points and up to 367, and two names read a negative rate beside a
+five-figure positive Net. Holdings keeps its column, because it pairs XIRR with a Net column
+rather than with a lifetime hero percentage.
 _Avoid_: IRR, return (unqualified)
 
 **Time-weighted return (TWR)**:

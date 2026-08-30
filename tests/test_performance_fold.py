@@ -289,7 +289,10 @@ def test_non_cash_carry_replays_cost_and_quantity_at_the_original_dates():
 
 
 # /api/positions splats the fold's row wholesale (`{**r, "status": ...}`), so a field added to
-# the row is a field added to the endpoint. This is the whole key set as it shipped before #147.
+# the row is a field added to the endpoint. This is the whole key set: #147's dated series is
+# deliberately NOT in it, #148 traded `uncosted_units` for `cost_partition`, and #152 added the
+# four return fields — and `peak_car_date` is deliberately not among them (#143 Further Notes:
+# nothing on the page renders it, and absent beats null for a field with no consumer).
 ROW_FIELDS = {
     "bucket", "accounts", "ticker", "name", "market", "asset_type", "currency", "units", "price",
     "mv_native", "avg_cost", "cost_basis_native", "cost_basis_sgd", "unrealised_pl_sgd",
@@ -297,6 +300,7 @@ ROW_FIELDS = {
     "cost_known",
     "cost_partition", "total_pl_native", "invested_sgd", "mv_sgd", "income_sgd", "pl_sgd",
     "xirr", "simple_return", "options_pl_sgd",
+    "peak_car_sgd", "return_span_days", "return_pct", "return_verdict",
 }
 
 

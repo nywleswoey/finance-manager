@@ -151,6 +151,34 @@ def realized_by_ticker():
             for k, v in out.items()}
 
 
+def contracts_by_ticker():
+    """Every option contract keyed by underlying, in the shape peak capital-at-risk folds.
+
+    Distinct from `realized_by_ticker()` and deliberately not derived from it: that one is a
+    realized-P/L rollup over CLOSED trades, and a denominator needs the strike, the size, the
+    multiplier and both dates of every contract — the open ones most of all, since their
+    collateral is locked right now.
+
+    `open` is `_is_open()`'s answer, carried as data. The fold decides release from
+    `close_date or expiry_date` itself (that rule is its own gate), but it must not re-derive
+    resolved-vs-open: `SecurityDetail.jsx` re-deriving exactly that from `close_date` is the
+    defect this whole page is being rebuilt around.
+    """
+    s = SessionLocal()
+    try:
+        out = {}
+        for t in s.scalars(select(OptionTrade)).all():
+            out.setdefault(t.underlying, []).append({
+                "type": t.option_type, "contracts": float(t.contracts or 0),
+                "strike": _f(t.strike), "multiplier": int(t.multiplier or 100),
+                "currency": t.currency, "open_date": t.open_date,
+                "expiry_date": t.expiry_date, "close_date": t.close_date,
+                "open": _is_open(t)})
+        return out
+    finally:
+        s.close()
+
+
 def realized_by(dim):
     """Closed-trade realized P/L (SGD) grouped by dimension: 'market' | 'bucket' | 'account'.
     Options trade on the Tiger Prime cash account, so bucket='cash', account='Tiger Prime'."""

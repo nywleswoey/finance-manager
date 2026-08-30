@@ -138,3 +138,62 @@ So `null` means **exactly one thing per field**. `income_sgd` is named on the fi
   Beside it, `unsplit_pl_sgd` is the part of that total no leg could attribute to either member,
   so `realised + unrealised + unsplit == stock_pl` on every group and the Performance table marks
   those two cells `~` instead of printing a short column beside a whole Net.
+
+## Peak capital-at-risk, and the one percentage
+
+One return figure per name, and the denominator that earns it. Shipped server-computed on every
+position row as `peak_car_sgd`, `return_span_days`, `return_pct` and `return_verdict`.
+
+```
+CAR(t)       = costed stock basis at t
+             + Σ strike × contracts × multiplier over short PUTS open at t,   at latest FX
+peak_car_sgd = max CAR(t) over the span
+span         = first event → today if still held, else → last resolution
+return_pct   = Net ÷ peak_car_sgd          — a LIFETIME total, never annualised
+```
+
+Six rules, each with its own gate in `tests/test_peak_car.py`:
+
+1. **Collateral is released when the contract resolves — `close_date or expiry_date`.** A put
+   that expired worthless carries `close_date: null`; reading it naively leaves the collateral
+   locked forever and puts one name at +348.9%. The release lands *on* the resolution date, so
+   an assigned put's shares (which arrive the day after) meet a one-day trough, never a
+   one-day double count.
+2. **Covered calls contribute nothing; open contracts do.** A call's collateral *is* the
+   shares, already in the stock term. An unresolved contract runs `[open_date, today]`.
+3. **The stock term is the transaction fold + the `cdp_cost_lot` attach + the corporate-action
+   carry, replayed in date order.** CDP qty counts toward `buy_qty` — omitting it inflates one
+   peak 3.5×. A sell fee never touches `buy_cost`.
+4. **An equal-and-opposite pair of stock-moving legs is one internal move** and contributes no
+   net units on any date, so *both* legs drop — from the unit count *and* from the costed
+   share's entering units, since the same units were held once and paid for once. Matching is
+   **leg-level, not ticker-level**: one name holds an internal round-trip *and* an external
+   leg, and netting swallows the exit. Legs pair by size, and every unpaired leg is untouched.
+   `cost_partition` deliberately still counts them: it answers "every unit that ever came
+   through a door", which is what makes it sum to gross units in.
+5. **The span ends today only if the position is still held** — units remaining or a contract
+   open, the same test `options._is_open()` makes.
+6. **Units nobody paid for contribute nothing** — the term carries the costed share,
+   `costed(t) / units_in(t)`. Dated like every other term: an undated ratio lets a lot arriving
+   uncosted in 2021 shrink capital that was at risk in 2020, which reads 25,096 on one name
+   against a measured 33,461.
+
+`return_verdict` is a second axis, independent of the Net's: `no_capital` where peak CAR is
+zero (the return does not *exist* — undefined, not unmeasured), `caveat` where some entering
+units are unknown (the numerator is an upper bound and the denominator a lower one, so the
+error compounds) **or where there is no Net to divide at all**, else `ok`. Never `ok` beside a
+null percentage — that is the one pairing a renderer branching on the verdict cannot survive. **`peak_car_sgd` is always a number**, a measured zero where
+nothing was at risk; the verdict, not a null, is what a renderer branches on.
+
+`peak_car_date` is deliberately **not** on the wire — nothing renders it, and a field with no
+consumer is how a rule gets re-derived wrongly. `performance.ticker_car()` returns it for the
+ledger audit.
+
+**Not annualised, and no XIRR on the ticker detail page.** Across the 58 non-optioned legs
+carrying an XIRR, lifetime and annualised return differ by a median 20 points and up to 367,
+and two names read a negative rate beside a five-figure positive Net. Holdings keeps its XIRR
+column (it pairs XIRR with a Net column, not a lifetime hero percentage) and `/api/return`'s
+portfolio-wide `xirr_annualised` is untouched.
+
+`tests/test_performance_live.py` holds the settled peaks to the ledger they were measured
+against, and records the one name where this build and the spec's settled table disagree.
