@@ -230,6 +230,14 @@ def _carry_corporate_actions(corp_actions, pos, meta):
                 continue
             if not (pos[kf]["invested"] > 1e-6 and abs(pos[kf]["units"]) < 1e-6):
                 continue                   # predecessor must be a closed position carrying cost
+            # Only pending arrivals present when the predecessor closed can be backed by this
+            # carry. A later unpriced open/transfer is unrelated, even though it has the same
+            # shape. Keep the bounded amount for cost_partition rather than a sticky boolean.
+            close_dates = [e.date for e in pos[kf]["unit_events"] if e.qty < -1e-9]
+            carried = (sum(qty for day, qty in pos[kt]["pending_events"]
+                           if day <= max(close_dates)) if close_dates else 0.0)
+            if carried <= 1e-9:
+                continue
             if typ == "switch":
                 # cash switch (e.g. CPF fund switch): the redemption proceeds were reinvested
                 # into the successor, not withdrawn. Carry the cost basis + the BUY legs only;
@@ -250,9 +258,7 @@ def _carry_corporate_actions(corp_actions, pos, meta):
                 pos[kt]["cost_events"].extend(pos[kf]["cost_events"])
             else:
                 continue
-            # the successor's entering units are backed by the predecessor's cost now — a
-            # carried unit is `costed`, it just came from somewhere else (see cost_partition).
-            pos[kt]["cost_carried"] = True
+            pos[kt]["carried_units"] = max(pos[kt]["carried_units"], carried)
             for fld in ("invested", "buy_cost", "buy_qty", "proceeds"):
                 pos[kf][fld] = 0.0
             pos[kf]["flows"] = []
@@ -328,6 +334,8 @@ def _apply_units(p, r, kind, today, annotations):
             return
         cond = _condition(r, kind, annotations)
         p[f"{cond}_units"] += qty
+        if cond == "pending":
+            p["pending_events"].append((r["trade_date"] or today, qty))
         if cond == "free":
             # free units carry a PRICE, not only a count. avg_cost = buy_cost / buy_qty, so
             # entering them at zero cost is what makes cost_basis a measured 0.0 rather than
@@ -383,18 +391,13 @@ def cost_partition(p):
         and routinely aggregates several trade-dated `cdp_cost_lot` rows (LIW's 24,600 is three
         lots; Z74's 8,500 is 4,000 + 4,500). Matching per row invents shortfalls on LIW, S7OU,
         D05, J2T and Z74 that do not exist.
-      - **A corporate-action carry costs the units it arrived on** — the transfer/switch shape a
-        carry travels in, not every doubtful unit on the name. An unpriced *buy* into a carried
-        holding is still `unknown`; only the carry-shaped arrivals are promoted.
-
-    That last bound is by SHAPE, not by date, and shape is the tighter of the two only until a
-    carried name takes a second unpriced transfer in — which would be promoted too, on cost that
-    never covered it. Bounding by date needs the accumulators to carry one, which is the
-    prefactor in #147; until then this is the honest limit of the rule.
+      - **A corporate-action carry costs the units it arrived on** — pending arrivals through
+        the predecessor's closing event, not every doubtful unit later added to the name. An
+        unpriced buy or later transfer into a carried holding is still `unknown`.
     """
     covered = min(p["pending_units"], p["transfer_out_units"])
     cdp_costed = min(p["cdp_buy_qty"], p["cdp_units_in"])
-    carried = (p["pending_units"] - covered) if p["cost_carried"] else 0.0
+    carried = min(p["pending_units"] - covered, p["carried_units"])
     costed = p["costed_units"] + covered + cdp_costed + carried
     free = p["free_units"]
     unknown = (p["unknown_units"] + (p["pending_units"] - covered - carried)
@@ -489,8 +492,9 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
                                 "accounts": set(), "unit_events": [], "cost_events": [],
                                 "units_in": 0.0, "costed_units": 0.0, "free_units": 0.0,
                                 "unknown_units": 0.0, "pending_units": 0.0,
+                                "pending_events": [], "carried_units": 0.0,
                                 "transfer_out_units": 0.0, "cdp_units_in": 0.0,
-                                "cdp_buy_qty": 0.0, "cost_carried": False})
+                                "cdp_buy_qty": 0.0})
     meta = {}
     _unknown_actions = set()
     for r in txns:

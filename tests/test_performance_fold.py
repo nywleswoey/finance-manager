@@ -11,7 +11,6 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_performance_fold.py -q
 import datetime as dt
 
 from portfolio import performance as perf
-from portfolio.cost_annotations import annotation_map
 
 D = dt.date
 TODAY = D(2024, 1, 1)
@@ -139,7 +138,7 @@ def test_foreign_currency_converts_at_fx():
 def _acc(txns, *, divs=None, cdp=None, corp=None, annotations=None):
     """The fold's accumulators, before _build_row flattens them into output rows."""
     return perf._accumulate_positions(txns, divs or [], cdp or {}, corp or [], TODAY,
-                                      annotations or annotation_map())[0]
+                                      {} if annotations is None else annotations)[0]
 
 
 def _cdp(*legs):
@@ -510,9 +509,7 @@ def test_a_priced_corp_action_cannot_be_annotated_free():
 
 
 def test_the_carry_costs_the_units_it_arrived_on_not_every_doubtful_one():
-    """A carry is bounded by SHAPE: it promotes the transfer/switch arrivals it travels in, not
-    an unpriced buy that happens to sit on the same name. Without the bound, 9CI's split would
-    silently cost a 500-unit price-less purchase nobody has a receipt for."""
+    """A carry is bounded by its event: a later transfer with the same shape stays unknown."""
     txns = [_txn(security_id=1, canonical_ticker="C31", action="buy", qty_signed=2700,
                  price=3.5, trade_date=D(2020, 1, 1)),
             _txn(security_id=1, canonical_ticker="C31", action="sell/transfer",
@@ -520,7 +517,33 @@ def test_the_carry_costs_the_units_it_arrived_on_not_every_doubtful_one():
             _txn(security_id=2, canonical_ticker="9CI", account="Moomoo",
                  action="open/transfer_in", qty_signed=2700, price=None,
                  trade_date=D(2021, 9, 1)),
-            _txn(security_id=2, canonical_ticker="9CI", account="Moomoo", action="buy",
+            _txn(security_id=2, canonical_ticker="9CI", account="Moomoo",
+                 action="open/transfer_in",
                  qty_signed=500, price=None, trade_date=D(2023, 1, 1))]
-    p = _sums(_part(_fold(txns, corp=[("C31", "9CI", "split")], price={2: 4.0}), "9CI"))
+    row = next(r for r in _fold(txns, corp=[("C31", "9CI", "split")], price={2: 4.0})
+               if r["ticker"] == "9CI")
+    p = _sums(row["cost_partition"])
     assert (p["units_in"], p["costed"], p["unknown"]) == (3200.0, 2700.0, 500.0)
+    assert p["unknown_pct"] == round(500 / 3200, 4)
+    assert row["cost_known"] is True
+    assert row["pl_sgd"] == 3350.0
+
+
+def test_a_carry_does_not_cost_only_later_unrelated_units():
+    """With no successor arrival at the conversion, later opens have no cost coverage or P/L."""
+    for action in ("open", "transfer_in"):
+        txns = [_txn(security_id=1, canonical_ticker="OLD", action="buy", qty_signed=100,
+                     price=10.0, trade_date=D(2020, 1, 1)),
+                _txn(security_id=1, canonical_ticker="OLD", action="sell/transfer",
+                     qty_signed=-100, price=None, trade_date=D(2021, 1, 1)),
+                _txn(security_id=2, canonical_ticker="NEW", action=action, qty_signed=50,
+                     price=None, trade_date=D(2023, 1, 1))]
+        row = next(r for r in _fold(txns, corp=[("OLD", "NEW", "split")], price={2: 12.0})
+                   if r["ticker"] == "NEW")
+        assert row["cost_partition"] == {
+            "units_in": 50.0, "costed": 0.0, "free": 0.0, "unknown": 50.0,
+            "unknown_pct": 1.0,
+        }
+        assert row["cost_known"] is False
+        assert row["unrealised_pl_sgd"] is None
+        assert row["pl_sgd"] is None
