@@ -26,6 +26,23 @@ The running state of one (funding bucket, security) pair: units held, cost, cash
 Building it up by replaying transactions in order is the **position fold**.
 _Avoid_: holding (reserve for the current non-zero units specifically), lot
 
+**Dated accumulator**:
+A position's own record of what changed and *when*, kept beside the undated running totals it
+mirrors: a **unit event** per unit change (signed quantity, plus whether the leg moved stock
+rather than trading it) and a **cost event** per cost-basis addition (money paid; units bought on
+normal buys, or the re-split cost-basis quantity after a switch rebase). A running
+total answers only "where did this end"; reading an *intermediate* state of the fold — which peak
+capital-at-risk and the corporate-action carry both need — requires a date to hang each change
+on. Every series ends exactly where the scalar it mirrors ends.
+_Avoid_: lot (a lot is a purchase the book identifies and sells against; these are the fold's own
+arithmetic, dated), history (the ledger is the history — this is the fold's reading of it)
+
+**Stock-moving leg**:
+A unit change that moved stock rather than trading it — a custody transfer, a fund-switch
+arrival, a gift. An equal-and-opposite *pair* of them is one internal move and contributes no net
+units on any date, which is why a dated replay has to tell one from a trade.
+_Avoid_: transfer (only some stock-moving legs are transfers, and only some transfers pair)
+
 **Consolidated ticker row**:
 The Holdings table's fold of every position sharing one canonical ticker into a single row — the
 only place the app answers "how much of this name do I own, across every bucket". Units, cost,

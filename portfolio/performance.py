@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 from collections import defaultdict
+from typing import NamedTuple
 
 from sqlalchemy import text
 
@@ -22,6 +23,37 @@ log = logging.getLogger(__name__)
 def _f(x):
     """float(x), passing None through unchanged — for nullable numeric fields."""
     return float(x) if x is not None else None
+
+
+class UnitEvent(NamedTuple):
+    """One dated change to a position's unit count. `qty` is signed; `moves_stock` says whether
+    the leg moved stock rather than trading it (STOCK_MOVING_LEG), which is what tells a
+    stock-moving leg from a trade. `action` is the raw ledger string it was decided from — kept
+    beside the decision because the fold retains no other copy of it (`meta` holds only the last
+    row per position), so dropping it would throw the evidence away."""
+    date: dt.date
+    qty: float
+    action: str
+    moves_stock: bool
+
+
+class CostEvent(NamedTuple):
+    """One dated addition to a position's cost basis: `cost` is the money paid, `qty` the
+    units it bought. The dated mirror of the `buy_cost` / `buy_qty` running totals."""
+    date: dt.date
+    cost: float
+    qty: float
+
+
+def _book_buy(acc, day, cost, qty):
+    """Book one purchase into an accumulator: the three running totals and the dated cost event
+    that mirrors them. The same buy arrives from two ledgers (`_apply_txn` for the broker CSVs,
+    `cdp_cost` for cdp-stocks), so it is booked in one place — a dated series that agrees with
+    its scalars on one path and not the other is worse than no series at all."""
+    acc["invested"] += cost
+    acc["buy_cost"] += cost
+    acc["buy_qty"] += qty
+    acc["cost_events"].append(CostEvent(day, cost, qty))
 
 
 def cdp_transactions(session=None):
@@ -65,12 +97,12 @@ def cdp_cost(session=None):
         cash = float(amount or 0)                # buys negative (cash out), sells positive
         if abs(cash) < 1e-9:
             continue
-        g = out.setdefault(ticker, {"flows": [], "invested": 0.0, "buy_cost": 0.0, "buy_qty": 0.0})
-        g["flows"].append((d or dt.date.today(), cash))
+        g = out.setdefault(ticker, {"flows": [], "invested": 0.0, "buy_cost": 0.0,
+                                    "buy_qty": 0.0, "cost_events": []})
+        day = d or dt.date.today()
+        g["flows"].append((day, cash))
         if cash < 0:
-            g["invested"] += -cash
-            g["buy_cost"] += -cash
-            g["buy_qty"] += float(qty or 0)      # bought qty for avg-cost
+            _book_buy(g, day, -cash, float(qty or 0))    # qty bought, for avg-cost
     return out
 
 # actions where qty*price is real cash paid/received (CPF/SRS CSVs use 'open market' etc.)
@@ -86,6 +118,17 @@ ZERO_CASH = {"transfer_in", "transfer_out", "gift_in", "gifted stock in", "gifte
 # cash for — the ESR-LOGOS (UD1U) rights issues at 0.49 / 0.595 / 0.408, C38U, O5RU, S51. A
 # zero-priced row is a bonus or consolidation (D05's 280 bonus shares). Only the first costs money.
 PRICED_CORP_ACTION = {"corp action", "corp_action"}
+# The subset of the above that moves stock rather than trading it: the four CDP transfer
+# spellings, the FSM compound legs, fund-switch arrivals and gifts. #143 §9 rule 4 matches an
+# equal-and-opposite PAIR of these as one internal move contributing no net units at any date, so
+# a dated replay has to be able to pick one out of the series. Built from CDP_TRANSFER rather than
+# re-listing its spellings: a fifth spelling should land in one place, not two. Resolved here,
+# once, rather than left for every reader to re-derive — re-deriving a rule that already exists is
+# how the options P/L went wrong. Every member but `transfer out` is also in ZERO_CASH; that one
+# is a standing gap in ZERO_CASH (classify() calls it `unknown`), not a disagreement introduced
+# here — the leg moves stock either way.
+STOCK_MOVING_LEG = CDP_TRANSFER | {"open/transfer_in", "sell/transfer_out", "sell/transfer",
+                                   "gift_in", "gifted stock in", "gifted stock out", "switch_in"}
 # a fund fee paid by redeeming units (Endowus). No cash leaves the investor's pocket, so the
 # unit drop already carries the whole cost through market value — booking a cash outflow too
 # would charge the fee twice.
@@ -185,16 +228,22 @@ def _carry_corporate_actions(corp_actions, pos, meta):
                 pos[kt]["flows"].extend([fl for fl in pos[kf]["flows"] if fl[1] < 0])
                 for fld in ("invested", "buy_cost"):
                     pos[kt][fld] += pos[kf][fld]
+                # the carried cost replays at the dates it was actually paid; qty carries as
+                # zero because buy_qty does not, and the rebase below re-splits it anyway.
+                pos[kt]["cost_events"].extend(
+                    CostEvent(e.date, e.cost, 0.0) for e in pos[kf]["cost_events"])
                 switched.add(kt)
             elif pos[kt]["invested"] < 1e-6:        # non-cash conversion: successor starts empty
                 pos[kt]["flows"].extend(pos[kf]["flows"])
                 for fld in ("invested", "buy_cost", "buy_qty", "proceeds"):
                     pos[kt][fld] += pos[kf][fld]
+                pos[kt]["cost_events"].extend(pos[kf]["cost_events"])
             else:
                 continue
             for fld in ("invested", "buy_cost", "buy_qty", "proceeds"):
                 pos[kf][fld] = 0.0
             pos[kf]["flows"] = []
+            pos[kf]["cost_events"] = []
     # a switched holding rebased its units (predecessor units != successor units), so its carried
     # buy_qty is meaningless. The position was never sold for cash (only fee nibbles), so treat the
     # whole current holding as carrying the full invested cost: cost_basis = invested, realised = 0.
@@ -202,6 +251,26 @@ def _carry_corporate_actions(corp_actions, pos, meta):
         if pos[k]["units"] > 1e-6:
             pos[k]["buy_cost"] = pos[k]["invested"]
             pos[k]["buy_qty"] = pos[k]["units"]
+            _rebase_cost_events(pos[k])
+
+
+def _rebase_cost_events(p):
+    """Re-split a position's dated cost series across the scalars it mirrors, keeping every
+    original date and weighting by each event's own cost.
+
+    The switch rebase above rewrites `buy_cost` / `buy_qty` wholesale rather than incrementing
+    them, so the series has to be rewritten with it or the two stop agreeing. Weighting by cost
+    is what the rebase asserts anyway: the whole holding carries the full invested cost at one
+    average, so every dated slice of it does too.
+
+    Stated for whoever replays this: the quantities that come out are a re-split, not units
+    anybody observed on those dates — the predecessor's units were a different instrument. They
+    are true at the terminus and an even smear before it."""
+    tot = sum(e.cost for e in p["cost_events"])
+    if tot <= 1e-9:
+        return
+    p["cost_events"] = [CostEvent(e.date, p["buy_cost"] * e.cost / tot,
+                                  p["buy_qty"] * e.cost / tot) for e in p["cost_events"]]
 
 
 def _apply_txn(p, r, today):
@@ -217,9 +286,7 @@ def _apply_txn(p, r, today):
         p["fees"] += fee
         p["flows"].append((r["trade_date"] or today, cash))
         if cash < 0:
-            p["invested"] += -cash
-            p["buy_cost"] += -cash
-            p["buy_qty"] += float(r["qty_signed"])
+            _book_buy(p, r["trade_date"] or today, -cash, float(r["qty_signed"]))
         else:
             p["proceeds"] += cash
     elif kind == "uncosted":
@@ -281,33 +348,32 @@ def _build_row(k, p, m, fx, price, today):
     }
 
 
-def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None):
-    """Pure fold: accumulate per-(funding_bucket, security) positions from already-fetched
-    inputs and emit one output row each. No DB or session — every input is plain data, so the
-    cost-basis rules (transfer double-count, CDP cost attach, dividend income, corporate-action
-    carry, switch rebasing, options income) are all testable with fabricated rows.
+def _accumulate_positions(txns, divs, cdp, corp_actions, today):
+    """Accumulate per-(funding_bucket, security) positions from the fold's inputs. Returns
+    `(pos, meta)` — the raw accumulators and the last-seen metadata row per position.
 
-      txns  — mapping rows: account_id, account, funding_bucket, security_id, canonical_ticker,
-              name, market, asset_type, currency, trade_date, action, qty_signed, price, fees.
-      divs  — mapping rows: account_id, security_id, pay_date, gross.
-      cdp   — {ticker: {flows, invested, buy_cost, buy_qty}} from cdp_cost().
-      corp_actions — iterable of (from_ticker, to_ticker, type) (carry types only).
-      options — {ticker: {pl_sgd, ...}} realized options income per underlying.
-      fx / price — latest FX map and latest close per security_id. today defaults to today.
-    """
-    today = today or dt.date.today()
+    Split out of fold_positions() so the accumulators are reachable without going through
+    _build_row(): each one carries a dated `unit_events` / `cost_events` series beside the
+    undated running totals, and peak capital-at-risk (#143 §9) and the dated corporate-action
+    carry (§12) both need to replay those in date order. Nothing reads them yet."""
     # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
     # together, so a position transferred into FSM still carries its original CDP purchase cost.
     pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
                                 "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
-                                "uncosted_units": 0.0, "accounts": set()})
+                                "uncosted_units": 0.0, "accounts": set(),
+                                "unit_events": [], "cost_events": []})
     meta = {}
     _unknown_actions = set()
     for r in txns:
         k = (r["funding_bucket"], r["security_id"])
         meta[k] = r
         p = pos[k]
-        p["units"] += float(r["qty_signed"])
+        qty = float(r["qty_signed"])
+        p["units"] += qty
+        # every row that moves units gets an event, CDP included: CDP units come from the txn
+        # ledger even though their cost arrives from cdp_cost_lot below.
+        p["unit_events"].append(UnitEvent(r["trade_date"] or today, qty, r["action"],
+                                          r["action"] in STOCK_MOVING_LEG))
         p["accounts"].add(r["account"])
         if r["account"] == "CDP":
             continue                                   # CDP cost comes from cdp-stocks below
@@ -330,6 +396,7 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
         pos[k]["invested"] += c["invested"]
         pos[k]["buy_cost"] += c["buy_cost"]
         pos[k]["buy_qty"] += c["buy_qty"]
+        pos[k]["cost_events"].extend(c["cost_events"])
         pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
 
     bucket_by_acct_id = {r["account_id"]: r["funding_bucket"] for r in txns}
@@ -343,6 +410,30 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
 
     _carry_corporate_actions(corp_actions, pos, meta)
 
+    # a series named for its dates should arrive in them: the carry splices a predecessor's
+    # events in at their original dates, mid-series. Stable, so same-day order is arrival order.
+    for p in pos.values():
+        p["unit_events"].sort(key=lambda e: e.date)
+        p["cost_events"].sort(key=lambda e: e.date)
+    return pos, meta
+
+
+def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None):
+    """Pure fold: accumulate per-(funding_bucket, security) positions from already-fetched
+    inputs and emit one output row each. No DB or session — every input is plain data, so the
+    cost-basis rules (transfer double-count, CDP cost attach, dividend income, corporate-action
+    carry, switch rebasing, options income) are all testable with fabricated rows.
+
+      txns  — mapping rows: account_id, account, funding_bucket, security_id, canonical_ticker,
+              name, market, asset_type, currency, trade_date, action, qty_signed, price, fees.
+      divs  — mapping rows: account_id, security_id, pay_date, gross.
+      cdp   — {ticker: {flows, invested, buy_cost, buy_qty, cost_events}} from cdp_cost().
+      corp_actions — iterable of (from_ticker, to_ticker, type) (carry types only).
+      options — {ticker: {pl_sgd, ...}} realized options income per underlying.
+      fx / price — latest FX map and latest close per security_id. today defaults to today.
+    """
+    today = today or dt.date.today()
+    pos, meta = _accumulate_positions(txns, divs, cdp, corp_actions, today)
     out = []
     for k, p in pos.items():
         m = meta.get(k)

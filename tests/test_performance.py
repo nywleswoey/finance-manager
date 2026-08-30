@@ -108,6 +108,20 @@ class TestCdpCost(unittest.TestCase):
         self.s.commit()
         self.assertEqual(perf.cdp_cost(self.s), {})
 
+    def test_buy_legs_are_carried_dated_as_well_as_summed(self):
+        """The dated mirror of invested/buy_qty (#147): #143 replays these in date order, and
+        a scalar running total has no date to hang itself on. A sale moves neither."""
+        self._add("D05", D(2018, 2, 12), 400, -10764.16, "open market")
+        self._add("D05", D(2020, 3, 19), -400, 12000.0, "open market")
+        self.s.commit()
+        c = perf.cdp_cost(self.s)["D05"]
+        # str() on the date because these rows come back through raw SQL, so SQLite hands back
+        # the ISO text where Postgres hands back a date — the same seam c["flows"] sits on.
+        self.assertEqual([(str(e.date), e.cost, e.qty) for e in c["cost_events"]],
+                         [("2018-02-12", 10764.16, 400.0)])
+        self.assertAlmostEqual(sum(e.cost for e in c["cost_events"]), c["buy_cost"], places=6)
+        self.assertAlmostEqual(sum(e.qty for e in c["cost_events"]), c["buy_qty"], places=6)
+
     def test_zero_amount_rows_are_skipped(self):
         self._add("XXX", D(2020, 1, 1), 0, 0.0, "open market")
         self.s.commit()
