@@ -441,15 +441,30 @@ def _build_row(k, p, m, fx, price, today):
     # a free lot has a cost of zero, so it has no denominator — a percentage return on nothing
     # is not a smaller number, it is not a number.
     simple = (total_pl / p["invested"]) if (cost_known and p["invested"] > 1e-6) else None
-    # cost basis of CURRENT holding (avg cost × held units) + unrealised P/L. `is not None`,
-    # not truthiness: a free lot's avg cost is 0.0, which is a measured price and must not be
-    # read as "no answer" (AAPL's basis is zero because the unit was a gift).
-    avg_cost = (p["buy_cost"] / p["buy_qty"]) if p["buy_qty"] > 1e-6 else None
-    cost_basis = (avg_cost * p["units"]) if (avg_cost is not None and p["units"] > 1e-6) else None
+    # §6: `null` on the cost-basis family means one thing — *not known*. So it is the PARTITION
+    # that decides it, never the unit count. A leg holding unknown units cannot price the shares
+    # it still has, and everything derived from that price goes null; a leg whose every unit
+    # entered priced CAN price them, even when it holds none left, and ships the measured zero.
+    # Nulling on `units ≈ 0` instead would say `not known` of TSLA and of F34's closed cpf leg —
+    # whose Net is exact and whose unrealised is a genuine zero — and stop the bucket column
+    # adding up.
+    priceable = cost_known and part["unknown"] < 1e-6
+    # cost basis of CURRENT holding (avg cost × held units). `is not None`, not truthiness: a
+    # free lot's avg cost is 0.0, which is a measured price and must not be read as "no answer"
+    # (AAPL's basis is zero because the unit was a gift).
+    avg_cost = (p["buy_cost"] / p["buy_qty"]) if (priceable and p["buy_qty"] > 1e-6) else None
+    # avg_cost is None on a priceable leg only when nothing ever entered `buy_qty` — the emptied
+    # predecessor of a carry, whose scalars the carry zeroed. Its basis is zero, not unknown.
+    cost_basis = (avg_cost * p["units"]) if avg_cost is not None else (0.0 if priceable else None)
     unreal = (mv - cost_basis) if cost_basis is not None else None
     # realised stock P/L = sell proceeds − cost of the shares sold (buy_cost minus the
-    # cost still tied up in the current holding). Closed positions: cost_basis None -> all sold.
-    realised = (p["proceeds"] - p["buy_cost"] + (cost_basis or 0.0)) if cost_known else None
+    # cost still tied up in the current holding).
+    realised = (p["proceeds"] - p["buy_cost"] + cost_basis) if cost_basis is not None else None
+    # the pair's SUM is sound while neither member is: realised + unrealised is identically
+    # proceeds − buy_cost + mv, and that needs no split of the cost between sold and held units.
+    # It joins EVERY row, not only the caveats — it is what lets a caveat show a Net that is
+    # arithmetically exact, and a row that carries it only sometimes is a row nobody can add up.
+    stock_pl = (p["proceeds"] - p["buy_cost"] + mv) if cost_known else None
     return {
         "bucket": k[0], "accounts": sorted(p["accounts"]), "ticker": m["canonical_ticker"],
         "name": m["name"], "market": m["market"], "asset_type": m["asset_type"], "currency": ccy,
@@ -459,6 +474,7 @@ def _build_row(k, p, m, fx, price, today):
         "cost_basis_sgd": _rn(cost_basis, 2, rate),
         "unrealised_pl_sgd": _rn(unreal, 2, rate),
         "realised_pl_sgd": _rn(realised, 2, rate),
+        "stock_pl_sgd": _rn(stock_pl, 2, rate),
         "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
         "fees_sgd": round(p["fees"] * rate, 2), "cost_known": cost_known,
         "cost_partition": part,
@@ -586,7 +602,11 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
     # (no stock position) are still counted in the Performance rollup via options.realized_by().
     for r in out:
         o = options.get(r["ticker"]) if r["bucket"] == "cash" else None
-        r["options_pl_sgd"] = o["pl_sgd"] if o else 0.0
+        # §6: null means the stream NEVER EXISTED, so the row is omitted — 51 of 63 names stop
+        # carrying a permanent `Options 0` line. An optioned name still ships a number when that
+        # number is zero: "the stream measured zero" and "there is no stream" are different facts
+        # and the page renders them differently.
+        r["options_pl_sgd"] = o["pl_sgd"] if o else None
     return out
 
 
@@ -641,7 +661,7 @@ def empty_group():
     synthesises for orphan option underlyings match rollup()'s schema exactly."""
     return {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0,
             "capital_sgd": 0.0, "invested_sgd": 0.0,
-            "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0}
+            "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0, "stock_pl_sgd": 0.0}
 
 
 def rollup(rows, by):
@@ -663,6 +683,10 @@ def rollup(rows, by):
             g["invested_sgd"] += r["invested_sgd"] or 0
             g["realised_pl_sgd"] += r["realised_pl_sgd"] or 0
             g["unrealised_pl_sgd"] += r["unrealised_pl_sgd"] or 0
+            # a caveat leg knows the pair's sum and neither member (#149 §6), so summing the
+            # members alone would silently drop its stock P/L out of the group. `stock_pl_sgd`
+            # is the accumulator /api/performance builds its Net from, for that reason.
+            g["stock_pl_sgd"] += r["stock_pl_sgd"] or 0
     return {k: {kk: round(vv, 2) for kk, vv in v.items()} for k, v in agg.items()}
 
 

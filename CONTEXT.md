@@ -102,6 +102,33 @@ in the ledger, which has nowhere to put it. Scope is `open/transfer_in` and zero
 _Avoid_: per-security override (rejected — it breaks the day one ticker holds both a gift lot
 and a real transfer-in)
 
+**Cell state**:
+Which of **four** things a missing number means. The rule is *has this stream ever existed*, not
+*is the number zero* — a closed position keeps its `Realised 0` while a name that never paid a
+dividend loses the row outright.
+
+- **Omitted** — the stream has never existed for this ticker; the row is absent.
+- **Zero** — the stream exists and measured zero.
+- **Impossible** — structurally cannot exist for this leg; renders `—`.
+- **Not known** — the stream exists but is unmeasurable; renders in words.
+
+`null` therefore means **exactly one** of these per field, and the contract says which:
+`options_pl_sgd` null means *omitted* (cash received is always known, so an options stream can
+be absent but never unmeasurable); `realised_pl_sgd`, `unrealised_pl_sgd`, `stock_pl_sgd`,
+`avg_cost` and both cost-basis fields null mean *not known* (units always entered, so those can
+be unmeasurable but never absent).
+_Avoid_: "n/a" (it reads as *not applicable*, i.e. impossible, on cells that mean *not known*),
+empty (says which pixels are blank, not which of the four facts is being stated)
+
+**Stock P/L**:
+`realised + unrealised` — the whole result on the shares themselves, dividends and option
+premiums excluded. Identically `proceeds − buy_cost + mv`, which needs no split of the cost
+between the units sold and the units held: the **pair's sum is sound while neither member is**,
+which is what lets a name the partition doubts still show a Net that is arithmetically exact.
+Ships on every row (`stock_pl_sgd`), not only the doubtful ones — a field that appears only
+where the split fails is a field nobody can add up.
+_Avoid_: total P/L (that is stock P/L *plus* dividends and premiums — the Net)
+
 ### Returns
 
 **Money-weighted return (XIRR)**:

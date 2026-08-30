@@ -96,3 +96,37 @@ drift apart among ~25 flat siblings and the self-check is visible in one place.
   unknown. Not `unknown == 0`, which would flip C38U to false and delete its 7,756.75 Net.
   Live, the refusal set is ASTREA6B alone; the caveat set is S51 40.0%, SET 27.9%, Q01 25.0%,
   C38U 7.5%.
+
+## The four cell states
+
+A missing number on a position row means one of four things, and the fold says which so the page
+can render each differently. The rule is *has this stream ever existed*, not *is the number zero*.
+
+| state | meaning | renders |
+|---|---|---|
+| omitted | the stream has never existed for this ticker | row absent |
+| `0` | the stream exists and measured zero | `0` |
+| `—` | structurally impossible | `—` |
+| not known | the stream exists but is unmeasurable | words |
+
+So `null` means **exactly one thing per field**:
+
+- **`options_pl_sgd` null means the stream never existed** — a never-optioned ticker omits the
+  row rather than carrying a permanent `Options 0` line (61 of 73 legs live). An optioned name
+  still ships a number when that number is zero. Dividends and options can be *absent* but never
+  *unmeasurable*: cash received is always known. The `—` state is leg-level — a non-cash leg of
+  an optioned name — and is reconstructed where the ticker's own option book is in view, not here.
+- **`avg_cost`, both cost-basis fields and the realised/unrealised pair null mean *not known***,
+  and it is the **partition** that decides it, never the unit count. A leg holding `unknown`
+  units cannot price the shares it still has, so all five go null together. A leg whose every
+  unit entered priced *can* price them — even when it holds none left — and ships the measured
+  zero: nulling on `units ≈ 0` would say *not known* of TSLA and of F34's closed cpf leg, whose
+  Net (940.00) is exact and whose unrealised is a genuine zero, and F34's second bucket column
+  would stop adding up. Realised and unrealised can be *unmeasurable* but never *absent*: units
+  always entered.
+- **`stock_pl_sgd` joins every row.** `realised + unrealised` is identically
+  `proceeds − buy_cost + mv`, so the **pair's sum is sound while neither member is** — which is
+  what lets a doubted name show an arithmetically exact Net. `rollup()` accumulates it and
+  `/api/performance` builds `net_pl_sgd` from it, so the four caveat legs' stock P/L stays in the
+  group total instead of vanishing with the split. On every leg that knows both members it is
+  identically their sum, so no group figure moves.
