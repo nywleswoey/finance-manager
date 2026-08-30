@@ -62,9 +62,13 @@ def test_partial_sell_books_realised_pl():
 def test_transfer_legs_do_not_book_proceeds_or_pl():
     """CDP->FSM style move: transfer_out at market value + its paired transfer_in net to a still
     fully-held position. The transfer must not read as a sale (no proceeds, no realised P/L)."""
+    # the ledger's own spellings, which matter now that the partition reads them (#148): the
+    # out leg is the cover the in leg draws on, so the re-entering units are costed rather than
+    # a second unpriced lot — and the components stay knowable (#149). `transfer out`, with a
+    # space, is a standing gap in ZERO_CASH and lives only in `cdp_cost_lot`.
     txns = [_txn(action="buy", qty_signed=100, price=10.0),
-            _txn(action="transfer out", qty_signed=-100, price=15.0),   # positive-value move
-            _txn(action="transfer in", qty_signed=100, price=15.0)]
+            _txn(action="sell/transfer_out", qty_signed=-100, price=15.0),  # positive-value move
+            _txn(action="transfer_in", qty_signed=100, price=15.0)]
     r = _only(_fold(txns, price={10: 12.0}))
     assert r["units"] == 100.0
     assert r["realised_pl_sgd"] == 0.0              # nothing was actually sold
@@ -86,7 +90,10 @@ def test_options_income_attaches_to_cash_bucket_only():
     # a non-cash bucket position for the same ticker must NOT pick up the cash-account options P/L
     cpf = _fold([_txn(funding_bucket="cpf", account="CPF", qty_signed=100, price=10.0)],
                 options={"D05": {"pl_sgd": 123.45}}, price={10: 10.0})
-    assert _only(cpf)["options_pl_sgd"] == 0.0
+    # null, not 0.0: at leg level "no options stream here" is all this row knows. The `—`
+    # state §6 draws for a non-cash leg of an OPTIONED name is reconstructed one level up,
+    # where the ticker's own option book is in view; a leg cannot tell the two apart alone.
+    assert _only(cpf)["options_pl_sgd"] is None
 
 
 def test_switch_carries_cost_and_rebases_qty():
@@ -115,7 +122,10 @@ def test_switch_carries_cost_and_rebases_qty():
     # are `costed` and always were. What the carry moved is the money, not the knowledge.
     old = next(r for r in rows if r["ticker"] == "OLD")
     assert old["invested_native"] == 0.0
-    assert old["cost_basis_native"] is None
+    # 0.0, not None: the carry took OLD's money, not the knowledge that its 100 units were
+    # bought at a price. It holds nothing, so its basis is a measured zero (#149 §6) — `null`
+    # here would say `not known` of a leg whose every unit entered priced.
+    assert old["cost_basis_native"] == 0.0
     assert old["simple_return"] is None             # no denominator left to divide by
     assert old["cost_partition"]["costed"] == 100.0
 
@@ -283,7 +293,8 @@ def test_non_cash_carry_replays_cost_and_quantity_at_the_original_dates():
 ROW_FIELDS = {
     "bucket", "accounts", "ticker", "name", "market", "asset_type", "currency", "units", "price",
     "mv_native", "avg_cost", "cost_basis_native", "cost_basis_sgd", "unrealised_pl_sgd",
-    "realised_pl_sgd", "invested_native", "income_native", "fees_sgd", "cost_known",
+    "realised_pl_sgd", "stock_pl_sgd", "invested_native", "income_native", "fees_sgd",
+    "cost_known",
     "cost_partition", "total_pl_native", "invested_sgd", "mv_sgd", "income_sgd", "pl_sgd",
     "xirr", "simple_return", "options_pl_sgd",
 }
@@ -547,3 +558,142 @@ def test_a_carry_does_not_cost_only_later_unrelated_units():
         assert row["cost_known"] is False
         assert row["unrealised_pl_sgd"] is None
         assert row["pl_sgd"] is None
+
+
+# --------------------------------------------------------------------------------------
+# The four cell states (#149). `null` means exactly one thing per field: on `options_pl_sgd`
+# it means the stream never existed (the row is omitted), on the cost-basis family and the
+# realised/unrealised pair it means *not known*. Which is why the rule is "has this stream
+# ever existed", not "is the number zero" — a closed leg's Unrealised is a measured 0.0.
+# --------------------------------------------------------------------------------------
+
+def test_a_never_optioned_ticker_omits_the_options_stream():
+    """51 of 63 names carry a permanent `Options 0` line today. `null` is the row's absence."""
+    assert _only(_fold([_txn(qty_signed=100, price=10.0)], price={10: 12.0}))[
+        "options_pl_sgd"] is None
+
+
+def test_an_optioned_ticker_ships_a_number_even_when_it_is_zero():
+    """The stream exists and measured zero — which is a different fact from never existing."""
+    rows = _fold([_txn(qty_signed=100, price=10.0)], price={10: 12.0},
+                 options={"D05": {"pl_sgd": 0.0}})
+    assert _only(rows)["options_pl_sgd"] == 0.0
+
+
+def test_a_closed_leg_ships_a_measured_zero_basis_not_null():
+    """TSLA's shape: bought, sold out, holds nothing. Its cost basis is not *unknown* — it is
+    zero, and every unit that entered was priced. Nulling it would say `not known` under §6 and
+    stop the bucket column adding up."""
+    r = _only(_fold([_txn(qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
+                     _txn(qty_signed=-100, price=15.0, trade_date=D(2021, 1, 1))]))
+    assert r["units"] == 0.0
+    assert (r["cost_basis_native"], r["cost_basis_sgd"]) == (0.0, 0.0)
+    assert r["unrealised_pl_sgd"] == 0.0             # measured zero, not "not known"
+    assert r["realised_pl_sgd"] == 500.0             # 1500 proceeds − 1000 cost
+    assert r["avg_cost"] == 10.0
+
+
+def test_an_f34_shaped_name_keeps_both_bucket_columns_adding_up():
+    """F34's shape: one open leg, one closed, in different buckets. Each leg's components must
+    sum to its own Net, which is what makes the second bucket column reconcile."""
+    rows = _fold([_txn(funding_bucket="cash", qty_signed=100, price=10.0,
+                       trade_date=D(2020, 1, 1)),
+                  _txn(funding_bucket="cpf", account="CPF", qty_signed=40, price=10.0,
+                       trade_date=D(2020, 1, 1)),
+                  _txn(funding_bucket="cpf", account="CPF", qty_signed=-40, price=13.5,
+                       trade_date=D(2021, 1, 1))], price={10: 12.0})
+    closed = next(r for r in rows if r["bucket"] == "cpf")
+    assert (closed["cost_basis_sgd"], closed["unrealised_pl_sgd"]) == (0.0, 0.0)
+    assert closed["realised_pl_sgd"] == 140.0        # 540 − 400
+    for r in rows:
+        assert r["realised_pl_sgd"] + r["unrealised_pl_sgd"] == r["stock_pl_sgd"]
+
+
+# C38U's shape, which three of the tests below need: 6,283 units bought at a price and 417 that
+# arrived unpriced and unannotated. Its stock P/L is 6700*2.5 − 6283*2.0 = 16,750 − 12,566.
+CAVEAT_TXNS = [_txn(canonical_ticker="C38U", qty_signed=6283, price=2.0),
+               _txn(canonical_ticker="C38U", account="Moomoo", action="open/transfer_in",
+                    qty_signed=417, price=None)]
+CAVEAT_PRICE = {10: 2.5}
+CAVEAT_STOCK_PL = 4184.0
+
+
+def test_a_partition_holding_unknown_units_cannot_price_what_it_holds():
+    """The average of a partly-priced lot is not a price, so avg cost, both cost-basis fields
+    and BOTH members of the pair go null. `Net` is unaffected: `cost_known` stays true, because
+    a name with some cost still answers the question the page asks."""
+    r = _only(_fold(CAVEAT_TXNS, price=CAVEAT_PRICE))
+    assert r["cost_partition"]["unknown"] == 417.0
+    assert r["cost_known"] is True
+    assert r["avg_cost"] is None
+    assert r["cost_basis_native"] is None and r["cost_basis_sgd"] is None
+    assert r["realised_pl_sgd"] is None and r["unrealised_pl_sgd"] is None
+    assert r["pl_sgd"] is not None                   # the Net is still exact
+
+
+def test_the_pair_sums_even_where_neither_member_is_known():
+    """realised + unrealised is identically proceeds − buy_cost + mv, so the PAIR is sound
+    while each member is not — which is what lets a caveat show an arithmetically exact Net."""
+    r = _only(_fold(CAVEAT_TXNS, price=CAVEAT_PRICE))
+    assert r["stock_pl_sgd"] == CAVEAT_STOCK_PL
+    assert r["realised_pl_sgd"] is None and r["unrealised_pl_sgd"] is None
+
+
+def test_stock_pl_joins_every_row_and_equals_the_pair_where_both_are_known():
+    for txns, price in (([_txn(qty_signed=100, price=10.0)], {10: 12.0}),
+                        ([_txn(qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
+                          _txn(qty_signed=-100, price=15.0, trade_date=D(2021, 1, 1))], {}),
+                        ([_txn(action="open/transfer_in", qty_signed=100, price=None)],
+                         {10: 12.0})):
+        r = _only(_fold(txns, price=price))
+        assert "stock_pl_sgd" in r
+        if r["realised_pl_sgd"] is not None and r["unrealised_pl_sgd"] is not None:
+            assert r["realised_pl_sgd"] + r["unrealised_pl_sgd"] == r["stock_pl_sgd"]
+
+
+def test_a_name_with_no_cost_at_all_knows_none_of_it():
+    """Every entering unit unknown: the pair, the basis and the sum are all `not known`."""
+    r = _only(_fold([_txn(account="CDP", action="open", qty_signed=15000, price=None)],
+                    price={10: 1.0}))
+    assert r["cost_known"] is False
+    assert (r["avg_cost"], r["cost_basis_native"], r["cost_basis_sgd"]) == (None, None, None)
+    assert (r["realised_pl_sgd"], r["unrealised_pl_sgd"], r["stock_pl_sgd"]) == (None, None, None)
+
+
+def test_free_units_ship_a_measured_zero_basis_not_null():
+    """AAPL's welcome gift. `free → 0.0` and `unknown → null` are the two halves the partition
+    was drawn to separate, and this is the half that must not read as `not known`."""
+    txns = [_txn(canonical_ticker="AAPL", account="Moomoo", action="open/transfer_in",
+                 qty_signed=1, price=None, trade_date=D(2022, 12, 28))]
+    r = _only(_fold(txns, price={10: 426.60}))
+    assert (r["avg_cost"], r["cost_basis_native"], r["cost_basis_sgd"]) == (0.0, 0.0, 0.0)
+    assert r["unrealised_pl_sgd"] == 426.60
+    assert r["realised_pl_sgd"] == 0.0
+    assert r["stock_pl_sgd"] == 426.60
+
+
+def test_the_rollup_keeps_a_caveat_legs_stock_pl_and_says_it_could_not_split_it():
+    """The pair going null must not delete money from /api/performance: the group carries the
+    sum the caveat leg still knows, and names the part of it neither member reached, so the
+    columns a page prints beside Net can say they are short rather than read as whole."""
+    g = perf.rollup(_fold(CAVEAT_TXNS, price=CAVEAT_PRICE), "bucket")["cash"]
+    assert g["realised_pl_sgd"] == 0.0 and g["unrealised_pl_sgd"] == 0.0
+    assert g["stock_pl_sgd"] == CAVEAT_STOCK_PL
+    assert g["unsplit_pl_sgd"] == CAVEAT_STOCK_PL
+
+
+def test_the_rollup_ties_realised_plus_unrealised_plus_unsplit_to_stock_pl():
+    """The identity that makes `unsplit_pl_sgd` checkable rather than a second opinion."""
+    rows = _fold([_txn(qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
+                  _txn(qty_signed=-40, price=15.0, trade_date=D(2021, 1, 1))],
+                 price={10: 12.0}) + _fold(CAVEAT_TXNS, price=CAVEAT_PRICE)
+    for g in perf.rollup(rows, "bucket").values():
+        assert round(g["realised_pl_sgd"] + g["unrealised_pl_sgd"]
+                     + g["unsplit_pl_sgd"], 2) == round(g["stock_pl_sgd"], 2)
+
+
+def test_a_group_with_nothing_unsplit_says_so_with_a_zero():
+    """`unsplit` is an amount, not a flag: a group whose every leg split its pair reaches its
+    stock P/L exactly, and a page keys its marker off that zero."""
+    g = perf.rollup(_fold([_txn(qty_signed=100, price=10.0)], price={10: 12.0}), "bucket")["cash"]
+    assert g["unsplit_pl_sgd"] == 0.0

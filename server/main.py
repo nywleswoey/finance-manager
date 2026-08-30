@@ -277,9 +277,11 @@ def performance(by: str = Query("market", enum=["market", "bucket", "account"]))
         r[k]["options_pl_sgd"] = v
     for g in r.values():
         g.setdefault("options_pl_sgd", 0.0)
-        # net = unrealised + realised stock P/L + dividends + option premiums
-        g["net_pl_sgd"] = round(g["unrealised_pl_sgd"] + g["realised_pl_sgd"]
-                                + g["income_sgd"] + g["options_pl_sgd"], 2)
+        # net = stock P/L + dividends + option premiums. `stock_pl_sgd`, not the pair, because
+        # a leg whose partition holds unknown units knows the SUM and neither member (#149 §6):
+        # adding the members would drop C38U's and S51's stock P/L out of the group total. On
+        # every leg that knows both, stock_pl_sgd is identically their sum, so nothing moves.
+        g["net_pl_sgd"] = round(g["stock_pl_sgd"] + g["income_sgd"] + g["options_pl_sgd"], 2)
         # ROI on total money ever deployed (incl. since-sold positions)
         g["return_pct"] = round(g["net_pl_sgd"] / g["invested_sgd"], 4) if g.get("invested_sgd") else None
     return r
