@@ -29,7 +29,8 @@ _Avoid_: holding (reserve for the current non-zero units specifically), lot
 **Dated accumulator**:
 A position's own record of what changed and *when*, kept beside the undated running totals it
 mirrors: a **unit event** per unit change (signed quantity, plus whether the leg moved stock
-rather than trading it) and a **cost event** per purchase (money paid, units bought). A running
+rather than trading it) and a **cost event** per cost-basis addition (money paid; units bought on
+normal buys, or the re-split cost-basis quantity after a switch rebase). A running
 total answers only "where did this end"; reading an *intermediate* state of the fold — which peak
 capital-at-risk and the corporate-action carry both need — requires a date to hang each change
 on. Every series ends exactly where the scalar it mirrors ends.
