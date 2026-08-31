@@ -161,8 +161,8 @@ activity" undercharges open ones.
 
 **Return verdict**:
 What the percentage can claim, on its own axis rather than the Net's: `ok`, `caveat` (some
-entering units are unknown, so the numerator is an upper bound and the denominator a lower one
-— the error compounds), or `no_capital` (peak CAR is zero, so the return does not exist —
+entering units are unknown, or no Net exists for the division, so the numerator is an upper bound
+and the denominator a lower one — the error compounds), or `no_capital` (peak CAR is zero, so the return does not exist —
 undefined, not unmeasured). The **verdict**, not a null, is what decides how the figure renders.
 _Avoid_: net verdict (a different axis — one name can be hero-on-Net and no-capital-on-return
 at once)

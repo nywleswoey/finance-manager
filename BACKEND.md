@@ -144,7 +144,7 @@ So `null` means **exactly one thing per field**. `income_sgd` is named on the fi
 One return figure per name, and the denominator that earns it. Shipped server-computed on every
 position row as `peak_car_sgd`, `return_span_days`, `return_pct` and `return_verdict`.
 
-```
+```text
 CAR(t)       = costed stock basis at t
              + Σ strike × contracts × multiplier over short PUTS open at t,   at latest FX
 peak_car_sgd = max CAR(t) over the span
