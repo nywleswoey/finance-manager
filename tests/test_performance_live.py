@@ -16,6 +16,7 @@ Skips cleanly when no Postgres answers — the normal state of a checkout that h
 
     PYTHONPATH=. .venv/bin/python -m pytest tests/test_performance_live.py -q
 """
+import datetime as dt
 import os
 import sys
 import unittest
@@ -25,8 +26,11 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from portfolio.cost_annotations import annotation_map
 from portfolio.db import session_scope
-from portfolio.performance import compute, rollup
+from portfolio.options import contracts_by_ticker
+from portfolio.performance import (_accumulate_positions, _fx_and_price, cdp_cost, compute,
+                                   legs_by_ticker, rollup, ticker_car)
 
 # The ledger #148 was measured against: 548 txn rows / 73 positions. The totals below are
 # readings of THAT book and nothing else.
@@ -34,6 +38,36 @@ MEASURED_TXN_ROWS = 548
 MEASURED = {"units_in": 1_574_652, "costed": 1_521_274, "free": 545, "unknown": 52_833}
 MEASURED_CAVEAT = [("S51", 0.4), ("SET", 0.2786), ("Q01", 0.25), ("C38U", 0.0746)]
 MEASURED_REFUSAL = ["ASTREA6B"]
+
+# #143 §9's settled peak capital-at-risk, one row per name the spec pinned. The DATE a peak
+# falls on is a pure function of the ledger — every leg of these names is single-currency, so
+# latest FX scales the whole series and cannot re-rank it — which makes the date the durable
+# half of the reading, and it is asserted whatever the FX table says. The AMOUNT is a reading
+# of a rate as well as of a book, so the two USD names are gated on MEASURED_FX below the way
+# every other figure here is gated on the row count: pinned while the rate is the one they
+# were read at, skipped rather than loosened once it moves.
+#
+# O5RU is the one name whose settled AMOUNT this build does not reproduce, and it is recorded
+# rather than normalised. §9 rule 4 states the transfer-phantom correction takes it
+# "79,972.84 -> 55,137.42" and says the peak "moves off the artifact onto a real plateau";
+# 55,137.42 is what a dated replay produces, on 2023-07-03, where the cash leg holds 37,800
+# units costing 49,335.42 beside an SRS leg of 5,802.00. The settled table's 39,986.42 is the
+# series' value on 2019-12-28 — exactly the CDP cost pool, before a 5,000-unit buy in 2020 and
+# a 3,710-unit rights issue in 2023 — and is also exactly half the withdrawn phantom, which is
+# what halving the artifact gives rather than what recomputing the peak gives. The two
+# statements in §9 disagree; this follows rule 4's own paragraph.
+MEASURED_FX = {"USD": 1.281, "HKD": 0.1633}     # fx_rate's newest row when these were read
+MEASURED_PEAK_CAR = {
+    "PLTR": (218_495.04, dt.date(2024, 1, 2)),
+    "D05": (96_440.20, dt.date(2020, 3, 16)),
+    "TSLA": (94_473.75, dt.date(2026, 6, 11)),
+    "Q01": (33_461.35, dt.date(2020, 2, 27)),
+    "O5RU": (55_137.42, dt.date(2023, 7, 3)),
+    "S51": (1_767.92, dt.date(2021, 9, 22)),
+    "AAPL": (0.0, None),
+}
+MEASURED_IN_SGD = {"D05", "Q01", "O5RU", "S51", "AAPL"}      # rate-independent either way
+MEASURED_NO_CAPITAL = ["AAPL", "HMN"]
 
 
 def _rows_or_skip():
@@ -238,6 +272,105 @@ class TestLiveBook(unittest.TestCase):
                    if r["cost_known"] and r["cost_partition"]["unknown"] > 0)
         got = sum(v["unsplit_pl_sgd"] for v in rollup(self.rows, "bucket").values())
         self.assertAlmostEqual(got, want, delta=0.01)
+
+    def test_peak_capital_at_risk_reproduces_the_settled_figures(self):
+        """The question the spec says a build session needs to be able to ask: does the peak
+        come out where it was measured? All seven dates and six of the seven amounts reproduce
+        to the cent; the seventh is O5RU, recorded above."""
+        self._measured_book_or_skip()
+        at_measured_fx = _fx_or_none() == MEASURED_FX
+        car = _live_ticker_car()
+        for ticker, (peak, on) in MEASURED_PEAK_CAR.items():
+            got = car[ticker]
+            self.assertEqual(got["peak_car_date"], on, ticker)
+            if peak is not None and (at_measured_fx or ticker in MEASURED_IN_SGD):
+                self.assertAlmostEqual(got["peak_car_sgd"], peak, 2, ticker)
+        if not at_measured_fx:
+            raise unittest.SkipTest("fx_rate has moved since these amounts were read — the "
+                                    "dates and the SGD names were still asserted")
+
+    def test_peak_car_ships_as_a_measured_zero_and_the_verdict_gates_the_render(self):
+        """True of any book: the field is never null, so nothing downstream can mistake "no
+        capital was ever at risk" for "nobody computed it"."""
+        for r in self.rows:
+            self.assertIsNotNone(r["peak_car_sgd"], r["ticker"])
+            self.assertIn(r["return_verdict"], ("ok", "caveat", "no_capital"), r["ticker"])
+            if r["return_verdict"] == "no_capital":
+                self.assertEqual(r["peak_car_sgd"], 0.0, r["ticker"])
+                self.assertIsNone(r["return_pct"], r["ticker"])
+
+    def test_no_capital_fires_on_the_windfalls_and_not_on_the_gift_that_wrote_puts(self):
+        """The live counterexample proving the rule is peak CAR and not `cost_known`: AMZN's
+        entering units are 100% free and it still reads a real positive percentage, because
+        41,000 USD of put collateral was genuinely at risk behind them."""
+        self._measured_book_or_skip()
+        held = {r["ticker"]: r for r in self.rows}
+        fired = sorted(r["ticker"] for r in self.rows
+                       if r["return_verdict"] == "no_capital" and r["cost_partition"]["free"])
+        self.assertEqual(fired, MEASURED_NO_CAPITAL)
+        amzn = held["AMZN"]
+        self.assertEqual(amzn["cost_partition"]["free"], amzn["cost_partition"]["units_in"])
+        self.assertEqual(amzn["return_verdict"], "ok")
+        self.assertGreater(amzn["return_pct"], 0)
+
+    def test_the_percentage_is_net_over_peak_car_on_every_ticker(self):
+        """True of any book, and the one arithmetic claim the hero makes. Summed across a
+        ticker's legs, because the figure is whole-ticker: on the one name held in three
+        buckets a per-leg reading is a different number entirely (3.9% against 31.2%)."""
+        by_ticker = {}
+        for r in self.rows:
+            g = by_ticker.setdefault(r["ticker"], {"net": 0.0, "row": r})
+            # both nulls read as nothing-to-add, for different reasons: `options_pl_sgd` is
+            # absent on a never-optioned name (#149), `pl_sgd` refuses on a doubted leg.
+            g["net"] += (r["pl_sgd"] or 0.0) + (r["options_pl_sgd"] or 0.0)
+        for ticker, g in by_ticker.items():
+            r = g["row"]
+            if r["return_pct"] is None:
+                continue
+            self.assertAlmostEqual(r["return_pct"], round(g["net"] / r["peak_car_sgd"], 4), 4,
+                                   ticker)
+
+    def test_the_return_fields_agree_across_every_leg_of_a_ticker(self):
+        """They are whole-ticker figures riding on per-leg rows, so a consumer holding any one
+        leg has the whole-ticker answer — and the four must never disagree between legs."""
+        seen = {}
+        for r in self.rows:
+            got = {k: r[k] for k in ("peak_car_sgd", "return_span_days", "return_pct",
+                                     "return_verdict")}
+            self.assertEqual(seen.setdefault(r["ticker"], got), got, r["ticker"])
+
+
+def _fx_or_none():
+    """The newest fx_rate row as `{currency: rate}` — what "at latest FX" resolved to."""
+    with session_scope() as s:
+        return {c: float(r) for c, r in s.execute(text(
+            "SELECT currency, rate_to_sgd FROM fx_rate "
+            "WHERE date = (SELECT max(date) FROM fx_rate)")).all()}
+
+
+def _live_ticker_car():
+    """`ticker_car` over the live book, keyed by ticker — the peak DATE never reaches the wire
+    (#143 Further Notes), so reading it means going through the accumulators."""
+    today = dt.date.today()
+    with session_scope() as s:
+        fx, _ = _fx_and_price(s)
+        txns = [dict(r) for r in s.execute(text("""
+            SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
+                   sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
+                   t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount, t.fees
+            FROM txn t JOIN account a ON a.id=t.account_id
+            JOIN security sec ON sec.id=t.security_id""")).mappings().all()]
+        divs = [dict(r) for r in s.execute(text(
+            "SELECT account_id, security_id, pay_date, gross, currency FROM dividend"
+        )).mappings().all()]
+        cdp = cdp_cost(s)
+        corp = s.execute(text(
+            "SELECT from_ticker, to_ticker, type FROM corporate_action "
+            "WHERE type IN ('rename','split','consolidation','merger','switch')")).all()
+    pos, meta = _accumulate_positions(txns, divs, cdp, corp, today, annotation_map())
+    contracts = contracts_by_ticker()
+    return {tk: ticker_car(ls, contracts.get(tk, ()), fx, today)
+            for tk, ls in legs_by_ticker(pos, meta).items()}
 
 
 if __name__ == "__main__":

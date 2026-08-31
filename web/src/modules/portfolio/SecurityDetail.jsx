@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { get, fmt, sgd, money, pct, cls } from "../../api.js";
+import { get, fmt, sgd, money, cls } from "../../api.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 import { ContractCell } from "./contract.jsx";
 
@@ -47,7 +47,19 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
         <Tile lbl="Unrealised P/L" val={s.unrealised_pl_sgd == null ? "n/a" : sgd(s.unrealised_pl_sgd)} cls={cls(s.unrealised_pl_sgd)} />
         <Tile lbl="Dividends" val={sgd(divTotalSgd)} cls="pos" />
         {opts.length > 0 && <Tile lbl="Options P/L" val={sgd(optPlSgd)} cls={cls(optPlSgd)} />}
-        <Tile lbl="XIRR" val={s.xirr == null ? "—" : pct(s.xirr)} cls={cls(s.xirr)} />
+        {/* No XIRR tile, and nothing backfills its slot — no filler, no rebalanced grid (#143
+            §10). An annualised rate is not the same claim as a lifetime return and no label
+            reconciles them: across the 58 non-optioned legs carrying one, the two differ by a
+            median 20 points and up to 367, and on two names the tile read a NEGATIVE rate
+            beside a five-figure positive Net. The server now ships `return_pct` — a lifetime
+            total on peak capital-at-risk, with its span and its peak — which the hero states
+            instead, one tier up from here.
+
+            Page-local. `Holdings.jsx` keeps its XIRR column, because it pairs XIRR with a Net
+            column rather than with a lifetime hero percentage, and `Overview.jsx`'s
+            portfolio-wide annualised return is a different computation entirely (twr.py).
+            Trigger: if Holdings ever gains the hero percentage, its column falls under this
+            same argument. */}
       </div>
 
       <div className="card" style={{ marginBottom: 18 }}>

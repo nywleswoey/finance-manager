@@ -46,6 +46,16 @@ class CostEvent(NamedTuple):
     qty: float
 
 
+class EntryLot(NamedTuple):
+    """One dated arrival of units, with the cost condition they entered under. The dated mirror
+    of the partition's counters — `condition` is the provisional answer `_condition` gave the
+    row; `pending` and `cdp` are resolved against the position's budgets by `_resolved_entries`.
+    """
+    date: dt.date
+    qty: float
+    condition: str
+
+
 def _book_buy(acc, day, cost, qty):
     """Book one purchase into an accumulator: the three running totals and the dated cost event
     that mirrors them. The same buy arrives from two ledgers (`_apply_txn` for the broker CSVs,
@@ -327,15 +337,18 @@ def _apply_units(p, r, kind, today, annotations):
     transfer in is an FSM one. Reading only the FSM side saw 205,090 units enter a second time
     with nothing behind them and called eight positions cost-doubtful that are not."""
     qty = float(r["qty_signed"])
+    day = r["trade_date"] or today
     if qty > 0:
         p["units_in"] += qty                       # GROSS units in; a sale subtracts nothing
         if r["account"] == "CDP":
             p["cdp_units_in"] += qty               # matched against the cost pool, not per row
+            p["entries"].append(EntryLot(day, qty, "cdp"))
             return
         cond = _condition(r, kind, annotations)
         p[f"{cond}_units"] += qty
         if cond == "pending":
-            p["pending_events"].append((r["trade_date"] or today, qty))
+            p["pending_events"].append((day, qty))
+        p["entries"].append(EntryLot(day, qty, cond))
         if cond == "free":
             # free units carry a PRICE, not only a count. avg_cost = buy_cost / buy_qty, so
             # entering them at zero cost is what makes cost_basis a measured 0.0 rather than
@@ -343,7 +356,7 @@ def _apply_units(p, r, kind, today, annotations):
             # Through _book_buy, not a bare `buy_qty +=`: #147's dated cost series mirrors that
             # scalar, and a series that agrees with its scalars on one path and not the other is
             # worse than no series at all. The event is real and its cost is really zero.
-            _book_buy(p, r["trade_date"] or today, 0.0, qty)
+            _book_buy(p, day, 0.0, qty)
     elif r["action"] in STOCK_MOVING_LEG:
         # units left without being sold. The cost stayed in the position, so this is the cover a
         # later transfer in draws on — see cost_partition. Keyed on #147's STOCK_MOVING_LEG
@@ -374,12 +387,8 @@ def _apply_txn(p, r, kind, today):
     return None
 
 
-def cost_partition(p):
-    """The three conditions every entering unit lands in, as the nested wire object.
-
-    Nested rather than three more flat siblings among ~25: the counts cannot drift apart when
-    they travel together, and the self-check — costed + free + unknown == units_in — is visible
-    in one place. `unknown_pct` is pre-computed so the frontend does no arithmetic.
+def _resolved_entries(p, exclude=frozenset()):
+    """Every entering lot, dated, with its cost condition finally resolved.
 
     Three resolutions happen here rather than row by row, because none is knowable row by row:
 
@@ -394,21 +403,370 @@ def cost_partition(p):
       - **A corporate-action carry costs the units it arrived on** — pending arrivals through
         the predecessor's closing event, not every doubtful unit later added to the name. An
         unpriced buy or later transfer into a carried holding is still `unknown`.
+
+    Each of the three is a **budget over the whole position**, not a fact about a row, so
+    spending them is what gives a resolved unit a DATE as well as a condition. They are spent
+    **earliest-first**, because a budget is evidence and evidence attaches to the oldest claim
+    on it: the CDP cost pool's lots *are* the early rows, and a transfer out covers the arrival
+    it paired with, which is the one nearest it in time. The order changes nothing about the
+    totals — it only matters where a budget runs out mid-position, and every ordering sums the
+    same — so `cost_partition` reads this list rather than keeping its own arithmetic, and the
+    dated share peak capital-at-risk needs (#143 §9 rule 6) reads the same one.
+
+    `exclude` — indices into `p["entries"]` that rule 4 has ruled an internal move's ARRIVAL,
+    which peak capital-at-risk passes and `cost_partition` does not. The two are asking
+    different questions and the difference is deliberate: the partition counts every unit that
+    ever came through a door, which is what makes it sum to gross units in; the peak's costed
+    SHARE asks what fraction of the units a position actually held were paid for, and units
+    that re-entered by an internal move were held once and paid for once. Counting them twice
+    pulls the share toward 1 on exactly the mixed shape rule 4 was written for. An excluded
+    arrival also gives back the budget it would otherwise have spent covering itself — its own
+    paired departure — so nothing else in the position resolves differently.
     """
-    covered = min(p["pending_units"], p["transfer_out_units"])
-    cdp_costed = min(p["cdp_buy_qty"], p["cdp_units_in"])
-    carried = min(p["pending_units"] - covered, p["carried_units"])
-    costed = p["costed_units"] + covered + cdp_costed + carried
-    free = p["free_units"]
-    unknown = (p["unknown_units"] + (p["pending_units"] - covered - carried)
-               + (p["cdp_units_in"] - cdp_costed))
+    pending, transfer_out, cdp_in = (p["pending_units"], p["transfer_out_units"],
+                                     p["cdp_units_in"])
+    entries = []
+    for i, e in enumerate(p["entries"]):
+        if i in exclude:
+            transfer_out -= e.qty                      # the departure leaves with the arrival
+            if e.condition == "pending":
+                pending -= e.qty
+            elif e.condition == "cdp":
+                cdp_in -= e.qty
+        else:
+            entries.append(e)
+    cover = min(pending, transfer_out)
+    carried = min(pending - cover, p["carried_units"])
+    budget = {"pending": cover + carried, "cdp": min(p["cdp_buy_qty"], cdp_in)}
+    out = []
+    for e in entries:
+        if e.condition not in budget:
+            out.append(e)
+            continue
+        take = min(e.qty, budget[e.condition])
+        budget[e.condition] -= take
+        if take > 1e-9:
+            out.append(EntryLot(e.date, take, "costed"))
+        if e.qty - take > 1e-9:
+            out.append(EntryLot(e.date, e.qty - take, "unknown"))
+    return out
+
+
+def cost_partition(p):
+    """The three conditions every entering unit lands in, as the nested wire object.
+
+    Nested rather than three more flat siblings among ~25: the counts cannot drift apart when
+    they travel together, and the self-check — costed + free + unknown == units_in — is visible
+    in one place. `unknown_pct` is pre-computed so the frontend does no arithmetic.
+
+    A sum over `_resolved_entries`, which is where the three position-level resolutions live."""
+    lots = _resolved_entries(p)
     units_in = round(p["units_in"], 4)
-    costed, free, unknown = round(costed, 4), round(free, 4), round(unknown, 4)
+    costed, free, unknown = (round(sum(e.qty for e in lots if e.condition == c), 4)
+                             for c in ("costed", "free", "unknown"))
     if round(costed + free + unknown, 4) != units_in:
         log.warning("cost partition does not sum to units in: %s vs %s+%s+%s",
                     units_in, costed, free, unknown)
     return {"units_in": units_in, "costed": costed, "free": free, "unknown": unknown,
             "unknown_pct": round(unknown / units_in, 4) if units_in > 1e-9 else 0.0}
+
+
+# ---------------------------------------------------------------- peak capital-at-risk (§9)
+# CAR(t) = costed stock basis at t + the collateral locked behind short puts open at t, at
+# latest FX; peak_car_sgd is its maximum over the span. Six rules, each one written here
+# because prose is how two candidate peaks came apart (#143 §9, pinned by #139).
+
+
+def _matched_transfer_pairs(unit_events):
+    """Indices of the stock-moving legs that pair off equal-and-opposite (rule 4).
+
+    One ledger holds the same 2,800 shares twice for nine days: an FSM `transfer in` lands
+    2020-03-19 and the matching CDP `sell/transfer_out` does not fire until 2020-03-28. The
+    pair is ONE internal move and contributes no net units at any date, so BOTH legs drop —
+    dropping only the arrival would leave the departure taking units the position never had.
+
+    Matching is **leg-level, not ticker-level**: one name holds an internal 10,000 round-trip
+    *and* an external -7,100, and netting the three would swallow the exit. Legs pair by SIZE
+    because the ledger carries nothing linking them, so a leg only pairs with one of exactly
+    its own magnitude and every unpaired leg is untouched — all 21 of them, which is what
+    keeps a gift, a distribution and a carry landing.
+    """
+    by_size = defaultdict(lambda: ([], []))
+    for i, e in enumerate(unit_events):
+        if not e.moves_stock or abs(e.qty) < 1e-9:
+            continue
+        arrivals, departures = by_size[round(abs(e.qty), 6)]
+        (arrivals if e.qty > 0 else departures).append(i)
+    drop, arrived = set(), []
+    for arrivals, departures in by_size.values():
+        n = min(len(arrivals), len(departures))         # the surplus side keeps its extras
+        drop.update(arrivals[:n])
+        drop.update(departures[:n])
+        arrived += [unit_events[i] for i in arrivals[:n]]
+    return drop, arrived
+
+
+def _internal_arrival_entries(entries, arrived):
+    """The `entries` indices that are the matched arrivals in `arrived` — the same rows, seen
+    from the partition's list instead of the unit series.
+
+    Matched on `(date, qty)` and claimed once each, because the two lists cannot carry an index
+    for one another: both are appended row by row but then sorted by date, and `entries` skips
+    every row that removed units. Same-date arrivals of the same size are interchangeable for
+    every purpose downstream, so which of them is claimed cannot matter."""
+    want = defaultdict(int)
+    for e in arrived:
+        want[(e.date, round(e.qty, 6))] += 1
+    out = set()
+    for i, e in enumerate(entries):
+        k = (e.date, round(e.qty, 6))
+        if want.get(k):
+            want[k] -= 1
+            out.add(i)
+    return out
+
+
+class _CarDelta:
+    """The five running totals `_leg_car_series` replays, as one thing that moves together.
+
+    Named rather than a five-slot list because they are read as a formula — `cost/qty x units
+    x costed_in/units_in` — and a positional `moves[d][3]` gives the reader nothing to check
+    that against. Mutable, so it can be both a per-date delta and the running total the walk
+    accumulates into."""
+    __slots__ = ("units", "cost", "qty", "units_in", "costed_in")
+
+    def __init__(self):
+        self.units = self.cost = self.qty = self.units_in = self.costed_in = 0.0
+
+    def add(self, other):
+        for f in self.__slots__:
+            setattr(self, f, getattr(self, f) + getattr(other, f))
+
+
+def _leg_car_series(p):
+    """One leg's costed stock basis as dated breakpoints, native currency (rules 3, 4, 6).
+
+    `buy_cost(t)/buy_qty(t) x units(t) x (costed units in at t / gross units in at t)` — every
+    term, the multiplier included, read from the accumulators' own dated series (#147) and
+    replayed in date order. Three rules live in that one line:
+
+      - **rule 3** — the series IS `_apply_txn` + the `cdp_cost_lot` attach + the
+        corporate-action carry, so CDP qty counts toward `buy_qty` (omitting it inflates one
+        peak 3.5x) and a sell fee does not touch `buy_cost` (and could not move a peak anyway,
+        which is set by a buy).
+      - **rule 4** — the matched transfer pairs above are already gone from `units(t)`.
+      - **rule 6** — units nobody paid for contribute nothing, so the term carries the costed
+        share. A free lot moves both factors: it enters `buy_qty` at zero cost, diluting the
+        average, and sits outside `costed`, shrinking the multiplier.
+
+    **The share is dated like everything else**, and that is load-bearing rather than tidy: an
+    undated ratio lets a lot that arrives uncosted in 2021 retroactively shrink capital that
+    was genuinely at risk in 2020. One name's 17,000-unit unpriced re-entry in 2021 is the live
+    case — it reads 25,096 against a measured 33,461 if the share is taken whole-history, and
+    the peak it shrinks was set fourteen months before those units existed.
+
+    Where nothing has been sold and the costed lots are the ones that booked the cost, the
+    three factors cancel to `buy_cost` — the term is simply the money actually paid and still
+    in the position, which is what makes it a capital-at-risk rather than a valuation.
+
+    Breakpoints only. The function is piecewise constant between events, so sampling at every
+    date something happened is exact — and it is also what neutralises the six same-day
+    transfer pairs, which never separate at date granularity.
+    """
+    drop, arrived = _matched_transfer_pairs(p["unit_events"])
+    moves = defaultdict(_CarDelta)
+    for i, e in enumerate(p["unit_events"]):
+        if i not in drop:
+            moves[e.date].units += e.qty
+    for e in p["cost_events"]:
+        moves[e.date].cost += e.cost
+        moves[e.date].qty += e.qty
+    for e in _resolved_entries(p, _internal_arrival_entries(p["entries"], arrived)):
+        moves[e.date].units_in += e.qty
+        if e.condition == "costed":
+            moves[e.date].costed_in += e.qty
+    run, out = _CarDelta(), []
+    for d in sorted(moves):
+        run.add(moves[d])
+        avg = (run.cost / run.qty) if run.qty > 1e-9 else 0.0
+        share = (run.costed_in / run.units_in) if run.units_in > 1e-9 else 0.0
+        out.append((d, avg * max(run.units, 0.0) * share))
+    return out
+
+
+def _put_collateral_steps(contracts, fx, today):
+    """Short-put collateral as dated (date, delta SGD) steps (rules 1, 2).
+
+    **Rule 1 — collateral is released when the contract RESOLVES: `close_date or
+    expiry_date`.** A put bought back early releases on the close date; one that expired
+    worthless releases at expiry and carries `close_date: null`. Reading the naive
+    `close_date` leaves that one locked forever, which is this map's founding defect in a new
+    place and catastrophic on a denominator (+348.9% on one name). The release step lands ON
+    the resolution date, so an assigned put's shares — which arrive the day after — meet a
+    one-day trough rather than a one-day double count, and a max is insensitive to a trough.
+
+    **Rule 2 — covered calls contribute nothing; open contracts do.** A covered call's
+    collateral IS the shares, already in the stock term, and there are 116 calls in this book,
+    so this is not a rounding error. A contract still open has no release date, so it runs
+    `[open_date, today]`.
+
+    `open` is `options._is_open()`'s answer, carried in rather than re-derived: re-deriving
+    the resolved/open rule from `close_date` is exactly the defect rule 1 exists to undo.
+    """
+    steps = []
+    for c in contracts:
+        if (c.get("type") or "").lower() != "put":
+            continue
+        start = c.get("open_date")
+        if start is None:
+            continue
+        end = (today + dt.timedelta(days=1)) if c.get("open") else \
+            (c.get("close_date") or c.get("expiry_date"))
+        if end is None or end <= start:
+            continue
+        amt = (float(c.get("strike") or 0) * float(c.get("contracts") or 0)
+               * float(c.get("multiplier") or 100)
+               * rate_to_sgd(c.get("currency"), fx))
+        if abs(amt) < 1e-9:
+            continue
+        steps.append((start, amt))
+        steps.append((end, -amt))
+    steps.sort()
+    return steps
+
+
+def legs_by_ticker(pos, meta):
+    """`_accumulate_positions`' output regrouped as `{ticker: [(accumulator, meta), ...]}`,
+    which is the unit peak capital-at-risk works in — a name's exposure is the sum of its
+    funding-pool legs. Exported because the ledger audit regroups exactly the same way, and
+    two spellings of one grouping is how two readings of one figure start."""
+    out = {}
+    for k, p in pos.items():
+        if k in meta:
+            out.setdefault(meta[k]["canonical_ticker"], []).append((p, meta[k]))
+    return out
+
+
+def ticker_car(legs, contracts, fx, today):
+    """Peak capital-at-risk and its span for ONE ticker, across every funding bucket.
+
+    `legs` are `(accumulator, meta)` pairs from `_accumulate_positions`; `contracts` are the
+    underlying's option contracts in `options.contracts_by_ticker()`'s shape.
+
+    **Whole-ticker, and the max is taken after the sum.** A max over summed legs is not the
+    sum of the legs' maxima, so the merged series is what gets sampled. No per-bucket figure
+    exists: no optioned ticker is multi-bucket, so a per-bucket peak would render only where
+    it collapses to peak stock cost basis — a differently-defined number wearing the same
+    label as the hero, appearing exclusively where the difference is invisible.
+
+    **Rule 5 — the span ends today only if the position is still held**: `units > 0` or a
+    contract is open, the same open/closed test `_is_open()` already makes. Otherwise it ends
+    the day the last unit left or the last contract resolved. "Always today" overcharges 27 of
+    31 closed names; "always last activity" undercharges 17 open ones.
+
+    Returns `peak_car_sgd` (a measured **zero**, never null, when nothing was ever at risk),
+    `peak_car_date` and `return_span_days`. Only the first and last reach the wire —
+    `peak_car_date` has no consumer on the page (the hero prints the amount, not the date) and
+    #143 §2's discipline is absent, not null. It is returned here because the ledger audit
+    reads it, and for nothing else.
+    """
+    series = [[(d, v * rate_to_sgd(m["currency"] or "SGD", fx)) for d, v in _leg_car_series(p)]
+              for p, m in legs]
+    steps = _put_collateral_steps(contracts, fx, today)
+    dates = sorted({d for s in series for d, _ in s} | {d for d, _ in steps})
+    held = (any(p["units"] > 1e-6 for p, _ in legs)
+            or any(c.get("open") for c in contracts))
+    opened = [c["open_date"] for c in contracts if c.get("open_date")]
+    starts = [s[0][0] for s in series if s] + opened
+    start = min(starts) if starts else today
+    if held:
+        end = today
+    else:
+        resolved = [c.get("close_date") or c.get("expiry_date") for c in contracts
+                    if (c.get("close_date") or c.get("expiry_date"))]
+        ends = [s[-1][0] for s in series if s] + resolved
+        end = max(ends) if ends else start
+    # one forward walk over the merged breakpoints: each leg holds its latest value and the
+    # collateral its running total, so CAR(t) is read rather than recomputed at every date.
+    peak, peak_date, collateral = 0.0, None, 0.0
+    leg_car, leg_next, step_next = [0.0] * len(series), [0] * len(series), 0
+    for d in dates:
+        for i, leg in enumerate(series):
+            while leg_next[i] < len(leg) and leg[leg_next[i]][0] <= d:
+                leg_car[i] = leg[leg_next[i]][1]
+                leg_next[i] += 1
+        while step_next < len(steps) and steps[step_next][0] <= d:
+            collateral += steps[step_next][1]
+            step_next += 1
+        car = sum(leg_car) + collateral
+        if car > peak + 1e-9:
+            peak, peak_date = car, d
+    return {"peak_car_sgd": round(peak, 2), "peak_car_date": peak_date,
+            "return_span_days": max((end - start).days, 0)}
+
+
+def _return_figures(car, rows):
+    """The four fields the page's one percentage needs, from a ticker's peak CAR and its rows.
+
+    **`Net / peak CAR`, a lifetime total and never annualised.** Annualising a ratio whose
+    denominator is a *peak* asserts the capital sat at peak for the whole span, when it
+    touched that on a single day; the figure is honestly a lifetime total return on worst-case
+    exposure and the page says so by printing the span beside it. There is no minimum span and
+    no materiality floor: nothing here annualises, so nothing explodes at a short span, and
+    `+104.5% on peak capital of 1.54` is reported rather than suppressed by an unargued
+    threshold. A negative Net gives a negative percentage and needs no rule either.
+
+    **`no_capital`** where no unit was ever paid for and no collateral was ever locked: peak
+    CAR is zero and the return does not exist — undefined, not unmeasured. The percentage, the
+    span and the peak all die together on the page; here the peak still ships as a measured
+    `0`, because that is the true answer to "how much was at risk", and **the verdict, not a
+    null, is what gates the render**.
+
+    **`caveat`** where some entering units are unknown: the error compounds, because the
+    numerator is an upper bound (unknown units assumed free) while the denominator is a lower
+    bound (costed lots only). It carries its own verdict rather than reusing the Net's, which
+    would leave it reading as merely optimistic instead of not comparable to any other name.
+    """
+    peak = car["peak_car_sgd"]
+    unknown = sum(r["cost_partition"]["unknown"] for r in rows)
+    # Net summed over the ticker's legs. `pl_sgd` is already `stock P/L + income`
+    # (`mv + proceeds + income - invested`), so Net is it plus the options stream — the same
+    # four components the reconciliation block totals. Null on every leg means there is no
+    # numerator at all, which is a refusal rather than a zero.
+    #
+    # The two nulls here mean opposite things and are treated as such. `options_pl_sgd` is null
+    # on a never-optioned name (#143 §6, 61 of 73 legs) — a stream that does not exist
+    # contributes nothing, so it reads as 0 and the name still gets a percentage. `pl_sgd` null
+    # is the stock stream REFUSING on a leg that has one; only when every leg refuses is there
+    # no numerator. Net is still assembled from `pl_sgd` rather than #149's `stock_pl_sgd +
+    # income_sgd`, which is the same sum wherever both exist but keeps its value on a refusing
+    # leg — adopting it would move the four caveat names' percentages, and that unification
+    # belongs to #150, which puts one `net_pl_sgd` on the wire for everyone.
+    pl = [r["pl_sgd"] for r in rows]
+    net = (round(sum(x or 0.0 for x in pl) + sum(r["options_pl_sgd"] or 0.0 for r in rows), 2)
+           if any(x is not None for x in pl) else None)
+    if peak <= 1e-9:
+        verdict = "no_capital"
+    elif unknown > 1e-6 or net is None:
+        # `net is None` is the numerator refusing, not the denominator: capital WAS at risk and
+        # the book cannot say what it earned. The ordinary route there is a Net refusal, whose
+        # hero replaces the number with prose and takes the percentage with it — so this is the
+        # verdict for a name that refuses on Net while still having written puts. `caveat` and
+        # not `ok`, because the one thing that must never happen is a renderer branching on the
+        # verdict, reading `ok`, and printing a null as a percentage.
+        verdict = "caveat"
+    else:
+        verdict = "ok"
+    return {"peak_car_sgd": peak, "return_span_days": car["return_span_days"],
+            "return_pct": None if verdict == "no_capital" else _rn(net, 4, 1.0 / peak),
+            "return_verdict": verdict}
+
+
+# `return_pct` is the third field of that name in this codebase — `/api/positions` divides P/L
+# by cost and `/api/performance` divides Net by ever-invested — and it is the name #143 §2 pins
+# for this page, so the collision is inherited rather than introduced. The three denominators
+# are genuinely different questions and the one P/L definition across the whole app is the map's
+# named out-of-scope; recorded here so the next reader does not assume they agree.
 
 
 def _rn(x, n, mult=1.0):
@@ -517,6 +875,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
     pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
                                 "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
                                 "accounts": set(), "unit_events": [], "cost_events": [],
+                                "entries": [],
                                 "units_in": 0.0, "costed_units": 0.0, "free_units": 0.0,
                                 "unknown_units": 0.0, "pending_units": 0.0,
                                 "pending_events": [], "carried_units": 0.0,
@@ -578,11 +937,12 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
     for p in pos.values():
         p["unit_events"].sort(key=lambda e: e.date)
         p["cost_events"].sort(key=lambda e: e.date)
+        p["entries"].sort(key=lambda e: e.date)
     return pos, meta
 
 
 def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None,
-                   annotations=None):
+                   annotations=None, contracts=None):
     """Pure fold: accumulate per-(funding_bucket, security) positions from already-fetched
     inputs and emit one output row each. No DB or session — every input is plain data, so the
     cost-basis rules (transfer double-count, CDP cost attach, dividend income, corporate-action
@@ -598,9 +958,13 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
       annotations — {natural key: condition} from portfolio.cost_annotations; the curated list
               when omitted. The free/transferred distinction is not in the ledger and cannot be
               put there, so it arrives as data like the corporate actions do.
+      contracts — {ticker: [contract dicts]} from options.contracts_by_ticker(). The realized
+              rollup in `options` cannot serve peak capital-at-risk: a denominator needs the
+              strike, the size and the two dates of every contract, resolved or not.
     """
     today = today or dt.date.today()
     annotations = annotation_map() if annotations is None else annotations
+    contracts = contracts or {}
     pos, meta = _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations)
     out = []
     for k, p in pos.items():
@@ -618,6 +982,23 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
         # a number when that number is zero: "the stream measured zero" and "there is no stream"
         # are different facts, and the states they belong to render differently.
         r["options_pl_sgd"] = o["pl_sgd"] if o else None
+    # peak capital-at-risk and the one percentage (#143 §9). Whole-ticker: the peak is a max
+    # over the SUM of a name's legs, which is not the sum of their maxima, and the percentage
+    # answers "did I make money on this name" rather than on one funding pool of it. The four
+    # fields therefore repeat identically on every leg of a ticker — the same way `ticker`,
+    # `name` and `currency` already do — so a consumer holding any one leg has the whole-ticker
+    # answer without re-deriving it. They are read off a leg and lifted into the summary; the
+    # per-bucket columns never carry them.
+    legs = legs_by_ticker(pos, meta)
+    rows = defaultdict(list)
+    for r in out:
+        rows[r["ticker"]].append(r)
+    for tk, rs in rows.items():
+        # `legs[tk]`, not `.get` — every output row came from an accumulator, so a miss is a
+        # broken fold and should raise rather than quietly answer `no_capital`.
+        figures = _return_figures(ticker_car(legs[tk], contracts.get(tk, ()), fx, today), rs)
+        for r in rs:
+            r.update(figures)
     return out
 
 
@@ -648,9 +1029,10 @@ def compute(session=None):
         log.warning("cost annotation %s matched %d txn rows, expected 1 — a stale annotation "
                     "silently un-frees a lot; a duplicate annotates one nobody looked at", k, n)
     # options open their own session (see realized_by_ticker); fetched outside the DB block above.
-    from .options import realized_by_ticker
+    from .options import contracts_by_ticker, realized_by_ticker
     options = realized_by_ticker()
-    return fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today)
+    return fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today,
+                          contracts=contracts_by_ticker())
 
 
 def alloc_by_account(session=None):
