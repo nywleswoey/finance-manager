@@ -2,11 +2,11 @@
 # Runtime only: no alembic/uvicorn (migrations + local server run outside the function).
 fastapi==0.141.1
 sqlalchemy==2.0.52
-psycopg[binary]==3.3.4
+psycopg[binary]==3.3.5
 pydantic==2.13.4
 pydantic-settings==2.15.0
 python-dotenv==1.2.3
-google-auth==2.56.3
+google-auth==2.58.0
 requests==2.34.2
 PyJWT==2.13.0
-anthropic==1.0.0
+anthropic==1.4.0
