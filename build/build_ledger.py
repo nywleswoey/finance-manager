@@ -91,7 +91,11 @@ def load_tiger():
         for f in sorted(glob.glob(os.path.join(DATA, pat))):
             rel = os.path.relpath(f, DATA)
             hdr = None
-            for row in csv.reader(open(f, encoding="utf-8-sig")):
+            rows = list(csv.reader(open(f, encoding="utf-8-sig")))
+            # code -> display name; Transfer rows may carry only the bare code ("AMZN")
+            names = {r[4]: r[6] for r in rows if len(r) > 6 and r[0] == "Financial Instrument Information"
+                     and r[1] == "Stock" and r[3] == "DATA" and r[6]}
+            for row in rows:
                 if not row: continue
                 sec = row[0]
                 if sec == "Trades":
@@ -139,7 +143,7 @@ def load_tiger():
                         ticker=canon(norm_ticker(sym, mkt)), asset_type="stock",
                         action=method.lower(), qty_signed=q,
                         price=row[12], amount=num(row[13]), currency=row[14],
-                        source=rel, raw=method)
+                        source=rel, raw=f"{names[code]} ({code})" if code in names else sym)
                 elif sec == "Deposits & Withdrawals" and len(row) > 7 and row[3] == "DATA":
                     add(date=parse_date(row[4]), account=acct, asset_type="cash",
                         action=row[5].lower(), qty_signed=0, amount=num(row[6]),
