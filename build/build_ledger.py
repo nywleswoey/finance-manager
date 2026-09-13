@@ -131,7 +131,9 @@ def load_tiger():
                 elif sec == "Transfer" and len(row) > 14 and row[3] == "DATA" and row[4] == "Stock":
                     # gifted / transferred-in shares (e.g. BABA, AMZN gifts)
                     method = row[7].strip()
-                    sym = row[5]; mkt = "US" if re.fullmatch(r"[A-Z.]+", sym) else ("HK" if sym.isdigit() else "SG")
+                    # symbol may be bare ("BABA") or display form ("SpaceX (SPCX)") -> classify on the code
+                    sym = row[5]; code = norm_ticker(sym, "")
+                    mkt = "US" if re.fullmatch(r"[A-Z.]+", code) else ("HK" if code.isdigit() else "SG")
                     q = num(row[10]) * (-1 if "OUT" in method.upper() else 1)
                     add(date=parse_date(row[6]), account=acct, market=mkt,
                         ticker=canon(norm_ticker(sym, mkt)), asset_type="stock",
