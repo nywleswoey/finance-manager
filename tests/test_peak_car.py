@@ -350,8 +350,7 @@ def test_the_percentage_is_net_over_peak_car():
     txns = [_txn(action="buy", qty_signed=100, price=10.0, trade_date=D(2020, 1, 1))]
     r = _row(_fold(txns, price={10: 13.0}, options={"D05": {"pl_sgd": 200.0}}))
     assert r["peak_car_sgd"] == 1000.0
-    net = r["pl_sgd"] + r["options_pl_sgd"]            # 300 unrealised + 200 options
-    assert net == 500.0
+    assert r["net_pl_sgd"] == 500.0                    # 300 unrealised + 200 options
     assert r["return_pct"] == 0.5
     assert r["return_verdict"] == "ok"
 
@@ -491,7 +490,7 @@ def test_a_missing_numerator_never_reads_ok():
     rows = _fold(txns, contracts={"ASTREA6B": [_put(open_date=D(2021, 6, 1),
                                                     expiry_date=D(2021, 12, 1))]})
     r = _row(rows, "ASTREA6B")
-    assert r["pl_sgd"] is None                         # no Net to divide
+    assert r["net_pl_sgd"] is None                     # no Net to divide
     assert r["peak_car_sgd"] == 10000.0                # but real collateral was locked
     assert r["return_pct"] is None
     assert r["return_verdict"] == "caveat"
