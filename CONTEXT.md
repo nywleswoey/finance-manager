@@ -43,6 +43,36 @@ arrival, a gift. An equal-and-opposite *pair* of them is one internal move and c
 units on any date, which is why a dated replay has to tell one from a trade.
 _Avoid_: transfer (only some stock-moving legs are transfers, and only some transfers pair)
 
+**Carry**:
+A corporate action moving a closed position's cost onto its successor (C31 → 9CI, 0P00006FYT
+→ 0P0001OOJG), as **dated** cost events at the dates the money was actually paid. It costs the
+successor's **leg** — the pending arrivals in by the predecessor's close or, where none landed in
+time, the first `switch_in` after it (a switch settles days later) — and nothing that arrives
+after the leg. `rename`, `split`, `consolidation`, `merger` and `switch` carry; a `distribution`
+does not.
+_Avoid_: transfer (a transfer keeps one position; a carry joins two)
+
+**Split carry**:
+A carry from a predecessor with **more than one** `corporate_action` row, detected by that count
+and nothing else. The whole cost lands on one successor and none on the others, so every unit on
+both pages can be priced while the *total* is mis-attributed — an event-level doubt the cost
+partition cannot express. Its **bound** is asserted, never computed: `lower` on the name the cost
+went to (too much cost, so its Net and percentage are floors), `upper` on a sibling that took
+units and no cost.
+_Avoid_: caveat (a caveat is units with no cost; a split carry has cost in the wrong place)
+
+**Emptied predecessor** (husk):
+The position a carry emptied — units 0, cost carried away. Every rule reads it as a `hero` with a
+Net of zero, so nothing may serve one: Holdings never lists it and `/api/holding` answers 404. Its
+history is disclosed on the successor's page, through **provenance**.
+_Avoid_: closed position (a closed position still has its own result; a husk's moved)
+
+**Provenance**:
+The disclosure a carried successor ships beside its verdict: predecessor ticker and name, action
+type, carry date, carried amount in SGD, the **reachable** siblings it was split with, and the
+bound. Owed on the exact 1:1 carry too — an exact number is not an accounted-for one when most of
+the denominator has no visible origin on the page. Null on every name no carry reached.
+
 **Consolidated ticker row**:
 The Holdings table's fold of every position sharing one canonical ticker into a single row — the
 only place the app answers "how much of this name do I own, across every bucket". Units, cost,
@@ -161,8 +191,10 @@ _Avoid_: `pl_sgd` (the older, independently rounded spelling other endpoints sti
 What the Net can claim, read from a ticker's **summed** cost-partition counts: `refuse` (nothing
 costed, something unknown), `caveat` (some costed, some unknown — the Net is an upper bound, unknown
 units read as free) or `hero` (nothing unknown). Summed, not per-leg: a costed-only leg beside an
-unknown-only leg is a caveat, not a refusal. **Not `cost_known`** — that flag is false on a
-caveat's all-unknown leg and on a refusal alike.
+unknown-only leg is a caveat, not a refusal. One input is not a count: a **split carry** makes it
+`bounded`, overriding `hero` and `caveat` but never `refuse` — `bounded` keeps the cost-basis tiles
+a caveat nulls, and its direction is the provenance's bound. **Not `cost_known`** — that flag is
+false on a caveat's all-unknown leg and on a refusal alike.
 _Avoid_: return verdict (a different axis — AAPL is hero-on-Net and no-capital-on-return at once)
 
 ### Returns

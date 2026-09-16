@@ -46,6 +46,15 @@ class CostEvent(NamedTuple):
     qty: float
 
 
+class PendingArrival(NamedTuple):
+    """One arrival whose backing the fold has yet to see (`_condition`'s `pending`) — what a
+    transfer cover or a corporate-action carry may later cost. `action` is kept because the
+    carry matches its own leg by shape: a `switch_in` settling after the close (#164)."""
+    date: dt.date
+    qty: float
+    action: str
+
+
 class EntryLot(NamedTuple):
     """One dated arrival of units, with the cost condition they entered under. The dated mirror
     of the partition's counters — `condition` is the provisional answer `_condition` gave the
@@ -242,34 +251,77 @@ def _carry_leg(pred, succ):
     if not (closes and pending):
         return None, 0.0
     close = max(closes)
-    landed = [day for day, _, _ in pending if day <= close]
-    switched = [day for day, _, action in pending if day > close and action == "switch_in"]
+    landed = [a.date for a in pending if a.date <= close]
+    switched = [a.date for a in pending if a.date > close and a.action == "switch_in"]
     if not (landed or switched):
         return None, 0.0
     leg = max(landed) if landed else min(switched)
-    return leg, sum(qty for day, qty, _ in pending if day <= leg)
+    return leg, sum(a.qty for a in pending if a.date <= leg)
+
+
+# The `corporate_action` types a carry moves cost along. `distribution` is deliberately not one:
+# an in-specie distribution hands units to a name that already has a cost history of its own, and
+# nothing in the book says what share of the predecessor's cost they took with them.
+CARRY_TYPES = frozenset({"rename", "split", "consolidation", "merger", "switch"})
+
+
+def split_predecessors(corp_actions):
+    """The predecessors with more than one successor — #143 §12's detection, over data:
+
+        SELECT from_ticker FROM corporate_action GROUP BY from_ticker HAVING count(*) > 1
+
+    Counted over EVERY row, carry type or not: C31's second successor is a `distribution`,
+    which moves no cost, and that is precisely why its total lands on one name. One row today;
+    a second one is the named trigger for directions that might conflict on a single name."""
+    n = defaultdict(int)
+    for frm, _, _ in corp_actions:
+        n[frm] += 1
+    return {frm for frm, c in n.items() if c > 1}
+
+
+def is_emptied_predecessor(r, rows):
+    """Whether leg `r` is a husk: a predecessor some successor's provenance says the cost
+    carried away from, and which Holdings no longer lists (#143 §13). Both halves, because
+    either alone is wrong: an unlisted leg may be a real position the listing rule merely hides
+    (ASTREA6B, the one refusal), and a predecessor may keep
+    a listed leg in another bucket the carry never touched."""
+    carried_from = {x["provenance"]["from_ticker"] for x in rows
+                    if x["provenance"] and x["provenance"]["carried_sgd"] > 0}
+    return r["ticker"] in carried_from and not is_leg(r)
 
 
 def _carry_corporate_actions(corp_actions, pos, meta):
-    """Carry a closed predecessor's cost onto the surviving security (e.g. C31 -> 9CI on the
+    """Carry an emptied predecessor's cost onto the surviving security (e.g. C31 -> 9CI on the
     2021 CapitaLand restructuring; rename/split/consolidation/merger/switch). Mutates pos.
 
-    `corp_actions`: iterable of (from_ticker, to_ticker, type) — already filtered to the carry
-    types; passed in as data (not queried here) so the fold stays session-free."""
+    `corp_actions`: iterable of (from_ticker, to_ticker, type) — EVERY `corporate_action` row;
+    only CARRY_TYPES move cost, but all of them count toward a split. Passed in as data (not
+    queried here) so the fold stays session-free.
+
+    Each successor the event reached also gets a `carry` record — what `provenance` is built
+    from: the predecessor, the type, the date of the successor's own leg, the cost that landed
+    and the units that arrived. The successor the cost went to records the amount; a sibling of
+    a split records `0.0`, because nothing carried there — which is the disclosure (§12)."""
     # match predecessor/successor within the SAME funding bucket (corp actions are bucket-agnostic)
     tk_k = {(b, m["canonical_ticker"]): (b, sid) for (b, sid), m in meta.items()}
     buckets = {b for (b, _) in pos}
+    corp_actions = list(corp_actions)
+    split = split_predecessors(corp_actions)
     switched = set()                       # successor keys whose cost carried through a cash switch
+    fired = set()                          # (bucket, predecessor) pairs whose cost carried
     for frm, to, typ in corp_actions:
+        if typ not in CARRY_TYPES:
+            continue
         for b in buckets:
             kf, kt = tk_k.get((b, frm)), tk_k.get((b, to))
             if not (kf and kt):
                 continue
             if not (pos[kf]["invested"] > 1e-6 and abs(pos[kf]["units"]) < 1e-6):
                 continue                   # predecessor must be a closed position carrying cost
-            _, carried = _carry_leg(pos[kf], pos[kt])
+            leg, carried = _carry_leg(pos[kf], pos[kt])
             if carried <= 1e-9:
                 continue
+            moved = pos[kf]["invested"]
             if typ == "switch":
                 # cash switch (e.g. CPF fund switch): the redemption proceeds were reinvested
                 # into the successor, not withdrawn. Carry the cost basis + the BUY legs only;
@@ -291,10 +343,24 @@ def _carry_corporate_actions(corp_actions, pos, meta):
             else:
                 continue
             pos[kt]["carried_units"] = max(pos[kt]["carried_units"], carried)
+            pos[kt]["carry"] = _carry_record(frm, meta[kf], typ, leg, moved, carried,
+                                             frm in split)
+            fired.add((b, frm))
             for fld in ("invested", "buy_cost", "buy_qty", "proceeds"):
                 pos[kf][fld] = 0.0
             pos[kf]["flows"] = []
             pos[kf]["cost_events"] = []
+    # the other successors of a split: their units arrived on the same event with none of its
+    # cost. Recorded after every carry has fired, so which row the table lists first cannot
+    # decide which name is told what.
+    for frm, to, typ in corp_actions:
+        for b in buckets:
+            kf, kt = tk_k.get((b, frm)), tk_k.get((b, to))
+            if frm not in split or (b, frm) not in fired or not kt or pos[kt]["carry"]:
+                continue
+            leg, arrived = _carry_leg(pos[kf], pos[kt])
+            if arrived > 1e-9:
+                pos[kt]["carry"] = _carry_record(frm, meta[kf], typ, leg, 0.0, arrived, True)
     # a switched holding rebased its units (predecessor units != successor units), so its carried
     # buy_qty is meaningless. The position was never sold for cash (only fee nibbles), so treat the
     # whole current holding as carrying the full invested cost: cost_basis = invested, realised = 0.
@@ -303,6 +369,37 @@ def _carry_corporate_actions(corp_actions, pos, meta):
             pos[k]["buy_cost"] = pos[k]["invested"]
             pos[k]["buy_qty"] = pos[k]["units"]
             _rebase_cost_events(pos[k])
+
+
+def _carry_record(frm, pred_meta, typ, leg, cost, units, split):
+    """One successor's side of a corporate action, in the predecessor's native currency."""
+    return {"from_ticker": frm, "from_name": pred_meta["name"], "type": typ, "carried_on": leg,
+            "carried_native": cost, "currency": pred_meta["currency"] or "SGD",
+            "units": units, "split": split}
+
+
+def _provenance(k, c, carries, listed, fx):
+    """The wire object for one carried successor — #143 §12.
+
+    `split_with` names only the **reachable** siblings: a sibling Holdings never lists points
+    at a page that does not exist. `bound` is the one direction both of the page's figures
+    take, **asserted, not computed** — nothing in the book bounds the magnitude:
+
+        lower  — the name the whole cost went to: its cost is too high, so its Net and its
+                 percentage are floors ("at least")
+        upper  — a sibling that took units and no cost: its Net is a ceiling ("at most")
+        null   — a single-successor carry, exact; disclosed anyway, because an exact number is
+                 not an accounted-for one when the denominator has no visible origin on the page
+    """
+    siblings = sorted(({"ticker": o["ticker"], "units": round(o["units"], 4)}
+                       for k2, o in carries.items()
+                       if k2 != k and k2[0] == k[0] and o["from_ticker"] == c["from_ticker"]
+                       and (k2[0], o["ticker"]) in listed), key=lambda x: x["ticker"])
+    bound = (("lower" if c["carried_native"] > 1e-9 else "upper") if c["split"] else None)
+    return {"from_ticker": c["from_ticker"], "from_name": c["from_name"], "type": c["type"],
+            "carried_on": c["carried_on"],
+            "carried_sgd": round(c["carried_native"] * rate_to_sgd(c["currency"], fx), 2),
+            "split_with": siblings, "bound": bound}
 
 
 def _rebase_cost_events(p):
@@ -369,7 +466,7 @@ def _apply_units(p, r, kind, today, annotations):
         cond = _condition(r, kind, annotations)
         p[f"{cond}_units"] += qty
         if cond == "pending":
-            p["pending_events"].append((day, qty, r["action"]))
+            p["pending_events"].append(PendingArrival(day, qty, r["action"]))
         p["entries"].append(EntryLot(day, qty, cond))
         if cond == "free":
             # free units carry a PRICE, not only a count. avg_cost = buy_cost / buy_qty, so
@@ -727,12 +824,13 @@ def ticker_car(legs, contracts, fx, today):
             "return_span_days": max((end - start).days, 0)}
 
 
-def net_verdict(parts):
+def net_verdict(parts, bounded=False):
     """What a ticker's Net can claim, from its legs' cost partitions — #143 §8's first axis.
 
         refuse   <=>  costed == 0 and unknown > 0
         caveat   <=>  costed > 0  and unknown > 0
         hero     <=>  unknown == 0
+        bounded  <=   a split carry applies (`bounded`) — overrides hero AND caveat, not refuse
 
     **The counts are SUMMED across the ticker's legs before the rule reads them.** #130's
     per-leg `every()` rule is superseded, and the two genuinely disagree: leg A costed-only
@@ -747,12 +845,22 @@ def net_verdict(parts):
     are not costed units: they cost nothing, measurably, but no money stands against the
     unknown ones beside them.
 
-    A fourth value, `bounded`, lands with the split carry (#151)."""
+    **`bounded` is the one input that is not a count** (#143 §12, #138). A split carry puts a
+    whole event's cost on one successor and none on its sibling, so every unit on both pages
+    can be priced while the TOTAL is mis-attributed — an event-level doubt the partition cannot
+    express. It overrides a counts-derived `hero` (9CI: zero unknown units, over-costed by an
+    unknown common amount), and it overrides `caveat` on the one name that carries both (C38U),
+    where the partition's caveat lives on in the partition itself, the nulled cost-basis family
+    and the return axis — the two point the same way there, which is luck and not design. It
+    does NOT override `refuse`: a refusal has no Net, and `bounded` promises a Net with a
+    direction on it."""
     costed = sum(p["costed"] for p in parts)
     unknown = sum(p["unknown"] for p in parts)
     if unknown <= 1e-6:
-        return "hero"
-    return "caveat" if costed > 1e-6 else "refuse"
+        verdict = "hero"
+    else:
+        verdict = "caveat" if costed > 1e-6 else "refuse"
+    return "bounded" if bounded and verdict != "refuse" else verdict
 
 
 def _net_pl(r):
@@ -956,7 +1064,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
                                 "entries": [],
                                 "units_in": 0.0, "costed_units": 0.0, "free_units": 0.0,
                                 "unknown_units": 0.0, "pending_units": 0.0,
-                                "pending_events": [], "carried_units": 0.0,
+                                "pending_events": [], "carried_units": 0.0, "carry": None,
                                 "transfer_out_units": 0.0, "cdp_units_in": 0.0,
                                 "cdp_buy_qty": 0.0})
     meta = {}
@@ -1030,7 +1138,8 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
               name, market, asset_type, currency, trade_date, action, qty_signed, price, fees.
       divs  — mapping rows: account_id, security_id, pay_date, gross.
       cdp   — {ticker: {flows, invested, buy_cost, buy_qty, cost_events}} from cdp_cost().
-      corp_actions — iterable of (from_ticker, to_ticker, type) (carry types only).
+      corp_actions — iterable of (from_ticker, to_ticker, type), every `corporate_action` row;
+              the fold moves cost along CARRY_TYPES and counts a split over all of them.
       options — {ticker: {pl_sgd, ...}} realized options income per underlying.
       fx / price — latest FX map and latest close per security_id. today defaults to today.
       annotations — {natural key: condition} from portfolio.cost_annotations; the curated list
@@ -1052,7 +1161,10 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
     by_ticker = defaultdict(list)
     for k, part in parts.items():
         by_ticker[meta[k]["canonical_ticker"]].append(part)
-    verdicts = {tk: net_verdict(ps) for tk, ps in by_ticker.items()}
+    carries = {k: {**p["carry"], "ticker": meta[k]["canonical_ticker"]}
+               for k, p in pos.items() if p["carry"] and k in meta}
+    bounded = {c["ticker"] for c in carries.values() if c["split"]}
+    verdicts = {tk: net_verdict(ps, tk in bounded) for tk, ps in by_ticker.items()}
     out = []
     for k, p in pos.items():
         m = meta.get(k)
@@ -1063,7 +1175,13 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
     # fold in the options income stream per underlying (realized, SGD). Options trade on the
     # cash account, so attach to the cash-bucket row for that security; orphan underlyings
     # (no stock position) are still counted in the Performance rollup via options.realized_by().
+    # provenance is whole-ticker like the verdict it explains, and rides every leg. It is built
+    # after the rows because naming a sibling needs to know whether Holdings lists it.
+    listed = {(r["bucket"], r["ticker"]) for r in out if is_leg(r)}
+    provenance = {c["ticker"]: _provenance(k, c, carries, listed, fx)
+                  for k, c in sorted(carries.items(), key=lambda kc: str(kc[0]))}
     for r in out:
+        r["provenance"] = provenance.get(r["ticker"])
         o = options.get(r["ticker"]) if r["bucket"] == "cash" else None
         # #143 §6: null means the stream NEVER EXISTED, so the row is omitted — 61 of the live
         # book's 73 legs stop carrying a permanent `Options 0` line. An optioned name still ships
@@ -1213,9 +1331,9 @@ def compute(session=None):
             SELECT account_id, security_id, pay_date, gross, currency FROM dividend
         """)).mappings().all()]
         cdp = cdp_cost(s)
+        # every row, not only the carry types: a split is counted over all of them (§12)
         corp_actions = s.execute(text(
-            "SELECT from_ticker, to_ticker, type FROM corporate_action "
-            "WHERE type IN ('rename','split','consolidation','merger','switch')")).all()
+            "SELECT from_ticker, to_ticker, type FROM corporate_action")).all()
     # the annotation list is curated against THIS ledger, so its audit belongs here rather than
     # in the fold, which is a pure function over whatever rows it is handed (a fabricated
     # two-row book is not missing AAPL's gift; it simply never had one).

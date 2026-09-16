@@ -204,7 +204,7 @@ The server ships the Net and what it can claim, so a page renders them rather th
 from `cost_known === false` plus a fan of nulls. Both land on every position row:
 
 ```text
-net_verdict:    "hero | caveat | refuse"      whole-ticker, rides every leg
+net_verdict:    "hero | caveat | refuse | bounded"   whole-ticker, rides every leg (bounded: below)
 return_verdict: "ok | caveat | no_capital"    whole-ticker, rides every leg (above)
 net_pl_sgd:     per leg — a bucket column adds up on its own, and the columns add up to the name
 ```
@@ -295,8 +295,7 @@ no longer silently missing from the page.
   `/api/positions`' drop rule). **No leg kept → 404**, which is also the emptied predecessor's
   (C31, 0P00006FYT) answer: a sum over nothing would ship `net_pl_sgd: 0, net_verdict: "hero"`.
   `/api/positions?closed=true` drops by the same `is_leg`, so a 404 is never a ticker Holdings lists.
-  **0P00006FYT still answers 200**: its switch carry does not fire (#164), so it is not emptied —
-  it becomes a 404 when that lands, with no change here.
+  0P00006FYT, emptied since its switch carry fires (#164), 404s the same way.
 - **Tables.** Transactions and dividends carry `bucket` on every row, single-bucket names included;
   CDP rows from `cdp_cost_lot` take theirs from the account table by name. The running balance runs
   across buckets. `options` is fetched unconditionally, carries **no** bucket, and each trade ships
@@ -311,3 +310,71 @@ no longer silently missing from the page.
 Gated in `tests/test_fold_ticker.py` (pure), `tests/test_holding_endpoint.py` (TestClient, stubbed)
 and `tests/test_holding_pg.py` (the ledger SQL and `fx_as_of`). Frontend: the only caller and the
 fixture key lose `&bucket=`; the fixture itself is recaptured by #155.
+
+## The dated carry, `bounded`, and provenance
+
+`_carry_corporate_actions` moves a closed position's cost onto its successor — emptying the
+predecessor — as **dated** cost
+events, so a successor's capital counts as at-risk from when it was actually paid. `compute()`
+hands the fold **every** `corporate_action` row; the fold carries along `CARRY_TYPES` (`rename`,
+`split`, `consolidation`, `merger`, `switch`) and counts a split over all of them.
+
+**The carry's leg (#164).** A carry costs the successor's pending arrivals in by the predecessor's
+close — or, where none landed in time, the first `switch_in` after it, however many settlement
+days later (0P00006FYT redeemed 2023-04-24; 0P0001OOJG's switch-in landed 2023-04-27). Anything
+pending after the leg stays `unknown`. No tolerance window, so no unargued N.
+
+**`bounded` — a split carry (#143 §12).** A predecessor with more than one `corporate_action` row
+(`split_predecessors`, the `HAVING count(*) > 1` query over data — exactly one live: C31, split to
+9CI and distributed in specie to C38U) puts its whole cost on one successor and none on the other.
+
+```text
+refuse   ⟺  costed == 0 ∧ unknown > 0
+bounded  ⟸  a split carry reached the name — overrides caveat and hero, never refuse
+caveat   ⟺  costed > 0  ∧ unknown > 0
+hero     ⟺  unknown == 0
+```
+
+| | cause | tiles | direction |
+|---|---|---|---|
+| `caveat` | some units have **no** cost | **null** | always upper |
+| `bounded` | every unit costed; the **total is mis-attributed** | **kept** | lower *or* upper |
+
+- **Tiles follow the partition, not the verdict**, so 9CI keeps `avg_cost: 3.73` while C38U — the
+  one name carrying both doubts — still nulls its cost-basis family and reads `return_verdict:
+  caveat` on its unknown 500.
+- **`bound` is one claim over both axes**, not a third axis: the return axis keeps its own three
+  values.
+
+**`provenance`** ships on every row — null unless a carry reached the name, and whole-ticker like
+the verdict, so it rides every leg:
+
+```json
+"provenance": {
+  "from_ticker": "C31", "from_name": "CapitaLand Ltd", "type": "split",
+  "carried_on": "2021-09-28", "carried_sgd": 10071.0,
+  "split_with": [{ "ticker": "C38U", "units": 417.0 }],
+  "bound": "lower"
+}
+```
+
+- `carried_on` is the successor's own leg date; `carried_sgd` is `0.0` on a sibling that took
+  units and no cost, at latest FX otherwise.
+- `split_with` names only siblings Holdings **lists** — never a page that does not exist.
+- `bound`: `lower` on the name the cost went to, `upper` on a sibling, `null` on a single-successor
+  carry. **Asserted, not computed** — nothing in the book bounds the magnitude.
+- Ships on the exact 1:1 carry too (0P0001OOJG): an exact number is not an accounted-for one.
+
+Live: 9CI `bounded`/lower, C38U `bounded`/upper, 0P0001OOJG `hero` with `bound: null`. No numeric
+field on any row moved.
+
+**The emptied predecessor (#143 §13).** A husk fails `is_leg` — `/api/positions`' listing rule —
+so Holdings never lists one, and `/api/holding` answers **404** by the same rule (`fold_ticker`
+keeps no leg) rather than a summary that would read `hero` with a Net of zero. ASTREA6B fails it
+too and also 404s (#153). `is_emptied_predecessor` names the husks among those misses
+(`tests/test_holding_husk.py`, `tests/test_performance_live.py`). No verdict value, no successor
+link. **Trigger:** if the detail page gains a URL, a bookmark or a search box, a husk becomes
+reachable and a redirect to the successor is the obvious answer.
+
+`tests/test_performance_live.py` asserts the one-row `HAVING count(*) > 1` result as an
+**invariant**, and that the fold's bounded names are exactly that row's successors.

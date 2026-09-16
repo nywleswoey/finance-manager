@@ -355,7 +355,8 @@ def test_a_leg_that_landed_by_the_close_is_the_leg_and_a_later_arrival_is_not():
 # deliberately NOT in it, #148 traded `uncosted_units` for `cost_partition`, and #152 added the
 # four return fields — and `peak_car_date` is deliberately not among them (#143 Further Notes:
 # nothing on the page renders it, and absent beats null for a field with no consumer). #150
-# added the Net and its verdict, so the frontend renders them rather than composing them.
+# added the Net and its verdict, so the frontend renders them rather than composing them. #151
+# added `provenance` — null unless a corporate action carried onto the name.
 ROW_FIELDS = {
     "bucket", "accounts", "ticker", "name", "market", "asset_type", "currency", "units", "price",
     "mv_native", "avg_cost", "cost_basis_native", "cost_basis_sgd", "unrealised_pl_sgd",
@@ -364,7 +365,7 @@ ROW_FIELDS = {
     "cost_partition", "total_pl_native", "invested_sgd", "mv_sgd", "income_sgd", "pl_sgd",
     "xirr", "simple_return", "options_pl_sgd",
     "peak_car_sgd", "return_span_days", "return_pct", "return_verdict",
-    "net_pl_sgd", "net_verdict",
+    "net_pl_sgd", "net_verdict", "provenance",
 }
 
 
