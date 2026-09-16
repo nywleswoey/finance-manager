@@ -223,6 +223,33 @@ def _fx_and_price(s):
     return fx, price
 
 
+def _carry_leg(pred, succ):
+    """`(date, units)` of the successor's arrivals a carry from `pred` can back — the carry's
+    own leg and anything pending before it — or `(None, 0.0)` where there is none.
+
+    **The leg is matched by shape, and the date bounds only what follows it** (#164). The
+    pending arrivals in by the predecessor's close are backed, as they always were. Where none
+    landed in time, the first `switch_in` after the close is the leg, however many settlement
+    days later: a switch's two legs are never same-day (0P00006FYT redeemed 2023-04-24 and
+    0P0001OOJG's switch-in landed 2023-04-27), so a bare `day <= close` bound excludes exactly
+    the arrival the carry exists to cover. `switch_in` and not any pending arrival, because
+    that string means nothing but "the arriving leg of a switch" — an `open` or `transfer_in`
+    two years after a conversion has the pending shape and none of the meaning — and matching
+    the string needs no tolerance window with an unargued N. Anything pending AFTER the leg is
+    unrelated, even with the same shape (0P0001OOJG's 2025 top-up), and stays `unknown`."""
+    closes = [e.date for e in pred["unit_events"] if e.qty < -1e-9]
+    pending = succ["pending_events"]
+    if not (closes and pending):
+        return None, 0.0
+    close = max(closes)
+    landed = [day for day, _, _ in pending if day <= close]
+    switched = [day for day, _, action in pending if day > close and action == "switch_in"]
+    if not (landed or switched):
+        return None, 0.0
+    leg = max(landed) if landed else min(switched)
+    return leg, sum(qty for day, qty, _ in pending if day <= leg)
+
+
 def _carry_corporate_actions(corp_actions, pos, meta):
     """Carry a closed predecessor's cost onto the surviving security (e.g. C31 -> 9CI on the
     2021 CapitaLand restructuring; rename/split/consolidation/merger/switch). Mutates pos.
@@ -240,12 +267,7 @@ def _carry_corporate_actions(corp_actions, pos, meta):
                 continue
             if not (pos[kf]["invested"] > 1e-6 and abs(pos[kf]["units"]) < 1e-6):
                 continue                   # predecessor must be a closed position carrying cost
-            # Only pending arrivals present when the predecessor closed can be backed by this
-            # carry. A later unpriced open/transfer is unrelated, even though it has the same
-            # shape. Keep the bounded amount for cost_partition rather than a sticky boolean.
-            close_dates = [e.date for e in pos[kf]["unit_events"] if e.qty < -1e-9]
-            carried = (sum(qty for day, qty in pos[kt]["pending_events"]
-                           if day <= max(close_dates)) if close_dates else 0.0)
+            _, carried = _carry_leg(pos[kf], pos[kt])
             if carried <= 1e-9:
                 continue
             if typ == "switch":
@@ -347,7 +369,7 @@ def _apply_units(p, r, kind, today, annotations):
         cond = _condition(r, kind, annotations)
         p[f"{cond}_units"] += qty
         if cond == "pending":
-            p["pending_events"].append((day, qty))
+            p["pending_events"].append((day, qty, r["action"]))
         p["entries"].append(EntryLot(day, qty, cond))
         if cond == "free":
             # free units carry a PRICE, not only a count. avg_cost = buy_cost / buy_qty, so
@@ -401,7 +423,7 @@ def _resolved_entries(p, exclude=frozenset()):
         lots; Z74's 8,500 is 4,000 + 4,500). Matching per row invents shortfalls on LIW, S7OU,
         D05, J2T and Z74 that do not exist.
       - **A corporate-action carry costs the units it arrived on** — pending arrivals through
-        the predecessor's closing event, not every doubtful unit later added to the name. An
+        the carry's own leg (`_carry_leg`), not every doubtful unit later added to the name. An
         unpriced buy or later transfer into a carried holding is still `unknown`.
 
     Each of the three is a **budget over the whole position**, not a fact about a row, so
