@@ -64,7 +64,7 @@ class _Reached(Exception):
 @pytest.fixture(autouse=True)
 def _stub(monkeypatch):
     main._cache.clear()
-    settings.dev_auth_bypass = True
+    monkeypatch.setattr(settings, "dev_auth_bypass", True)
     rows = _rows()
     monkeypatch.setattr(main, "perf_all", lambda: rows)
 
