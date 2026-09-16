@@ -705,6 +705,61 @@ def ticker_car(legs, contracts, fx, today):
             "return_span_days": max((end - start).days, 0)}
 
 
+def net_verdict(parts):
+    """What a ticker's Net can claim, from its legs' cost partitions — #143 §8's first axis.
+
+        refuse   <=>  costed == 0 and unknown > 0
+        caveat   <=>  costed > 0  and unknown > 0
+        hero     <=>  unknown == 0
+
+    **The counts are SUMMED across the ticker's legs before the rule reads them.** #130's
+    per-leg `every()` rule is superseded, and the two genuinely disagree: leg A costed-only
+    beside leg B unknown-only is `caveat` by summed counts and `refuse` by `every()`. One bucket
+    with real cost is a Net that should stand, so refusing it would suppress exactly the number
+    C38U's reasoning keeps. Zero-instance today — every cost-unknown leg is cash-only and
+    single-bucket — which is why the rule is written down rather than left to fall out.
+
+    **`cost_known` is not this signal** and nothing here reads it. It is false on a leg B that
+    carries `caveat` and on a refusal alike, and an emptied predecessor (whose cost
+    carried to a successor) has a clean `costed` partition and nothing to refuse. Free units
+    are not costed units: they cost nothing, measurably, but no money stands against the
+    unknown ones beside them.
+
+    A fourth value, `bounded`, lands with the split carry (#151)."""
+    costed = sum(p["costed"] for p in parts)
+    unknown = sum(p["unknown"] for p in parts)
+    if unknown <= 1e-6:
+        return "hero"
+    return "caveat" if costed > 1e-6 else "refuse"
+
+
+def _net_pl(r):
+    """A leg's Net, **as the sum of its components as shipped**, with zero tolerance (#143 §14):
+
+        net_pl_sgd  ==  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_sgd
+
+    and `stock_pl_sgd + income_sgd + options_pl_sgd` where a caveat collapsed the pair —
+    identical to the cent, because `stock_pl_sgd` is rounded FROM its members wherever they
+    exist. An absent options stream contributes nothing; it is not a zero somebody has to explain.
+
+    **Rounding policy** (#129 §5): every component is computed at full precision and rounded
+    ONCE, where it is shipped — `_build_row` for the stock and income streams, `options.
+    realized_by_ticker()` for the premiums. Net then adds those shipped figures and rounds only
+    to clear float noise; it is never rounded independently from the full-precision quantities
+    beside them. That independent rounding is `pl_sgd`, and it is the real 1¢ §14 measured on
+    five tickers — a cent that exists only against `pl_sgd + options_pl_sgd`, a pairing this
+    field replaces rather than reproduces.
+
+    **`refuse` ships null** — there is no partial Net on the wire under any name, including a
+    leg of a refusing ticker whose own components happen to be known (`netOf`'s partial Net by
+    another route). Under any other verdict every leg nets: `_build_row` keeps `stock_pl_sgd`
+    on a leg whose units are all unknown when the ticker does not refuse, so a `None` reaching
+    the sum here is a broken fold and raises rather than quietly totalling fewer legs."""
+    if r["net_verdict"] == "refuse":
+        return None
+    return round(r["stock_pl_sgd"] + r["income_sgd"] + (r["options_pl_sgd"] or 0.0), 2)
+
+
 def _return_figures(car, rows):
     """The four fields the page's one percentage needs, from a ticker's peak CAR and its rows.
 
@@ -715,6 +770,10 @@ def _return_figures(car, rows):
     no materiality floor: nothing here annualises, so nothing explodes at a short span, and
     `+104.5% on peak capital of 1.54` is reported rather than suppressed by an unargued
     threshold. A negative Net gives a negative percentage and needs no rule either.
+
+    **The numerator is the Net that ships** — `Σ net_pl_sgd` over the ticker's legs — and never
+    a second sum of components assembled beside it. One numerator, one definition: the page's
+    hero and the percentage under it cannot disagree about what was earned.
 
     **`no_capital`** where no unit was ever paid for and no collateral was ever locked: peak
     CAR is zero and the return does not exist — undefined, not unmeasured. The percentage, the
@@ -729,31 +788,19 @@ def _return_figures(car, rows):
     """
     peak = car["peak_car_sgd"]
     unknown = sum(r["cost_partition"]["unknown"] for r in rows)
-    # Net summed over the ticker's legs. `pl_sgd` is already `stock P/L + income`
-    # (`mv + proceeds + income - invested`), so Net is it plus the options stream — the same
-    # four components the reconciliation block totals. Null on every leg means there is no
-    # numerator at all, which is a refusal rather than a zero.
-    #
-    # The two nulls here mean opposite things and are treated as such. `options_pl_sgd` is null
-    # on a never-optioned name (#143 §6, 61 of 73 legs) — a stream that does not exist
-    # contributes nothing, so it reads as 0 and the name still gets a percentage. `pl_sgd` null
-    # is the stock stream REFUSING on a leg that has one; only when every leg refuses is there
-    # no numerator. Net is still assembled from `pl_sgd` rather than #149's `stock_pl_sgd +
-    # income_sgd`, which is the same sum wherever both exist but keeps its value on a refusing
-    # leg — adopting it would move the four caveat names' percentages, and that unification
-    # belongs to #150, which puts one `net_pl_sgd` on the wire for everyone.
-    pl = [r["pl_sgd"] for r in rows]
-    net = (round(sum(x or 0.0 for x in pl) + sum(r["options_pl_sgd"] or 0.0 for r in rows), 2)
-           if any(x is not None for x in pl) else None)
+    # a refusing ticker ships no Net on any leg, so there is nothing to divide: a refusal, not a
+    # zero. Every other verdict nets every leg.
+    net = (None if rows[0]["net_verdict"] == "refuse"
+           else round(sum(r["net_pl_sgd"] for r in rows), 2))
     if peak <= 1e-9:
         verdict = "no_capital"
-    elif unknown > 1e-6 or net is None:
-        # `net is None` is the numerator refusing, not the denominator: capital WAS at risk and
-        # the book cannot say what it earned. The ordinary route there is a Net refusal, whose
-        # hero replaces the number with prose and takes the percentage with it — so this is the
-        # verdict for a name that refuses on Net while still having written puts. `caveat` and
-        # not `ok`, because the one thing that must never happen is a renderer branching on the
-        # verdict, reading `ok`, and printing a null as a percentage.
+    elif unknown > 1e-6:
+        # this also covers the numerator refusing while the denominator stands — a Net refusal on
+        # a name that still wrote puts, whose hero replaces the number with prose and takes the
+        # percentage with it. No separate `net is None` test is needed: refusing needs unknown
+        # units, so every refusal lands here or on `no_capital`. `caveat` and not `ok`, because
+        # the one thing that must never happen is a renderer branching on the verdict, reading
+        # `ok`, and printing a null as a percentage.
         verdict = "caveat"
     else:
         verdict = "ok"
@@ -775,8 +822,11 @@ def _rn(x, n, mult=1.0):
     return round(x * mult, n) if x is not None else None
 
 
-def _build_row(k, p, m, fx, price, today):
-    """Assemble one position's output dict (native ccy + SGD) from its accumulated flows/units."""
+def _build_row(k, p, m, fx, price, today, part, verdict):
+    """Assemble one position's output dict (native ccy + SGD) from its accumulated flows/units.
+    `part` is the leg's own cost partition and `verdict` its whole ticker's `net_verdict` —
+    computed once, before any row is built, because a leg alone cannot know whether its name
+    refuses."""
     ccy = m["currency"] or "SGD"
     rate = rate_to_sgd(ccy, fx)
     px = price.get(k[1])
@@ -784,7 +834,6 @@ def _build_row(k, p, m, fx, price, today):
     flows = list(p["flows"])
     if p["units"] > 1e-6 and px:
         flows.append((today, mv))
-    part = cost_partition(p)
     # `cost_known` is the partition read as a boolean: false only when EVERY entering unit is
     # unknown. Not `unknown == 0` — that would flip C38U (417 of 6,700 unpriced) to false and
     # delete its 7,756.75 Net from Holdings, Performance and Overview. A name with SOME cost
@@ -826,7 +875,14 @@ def _build_row(k, p, m, fx, price, today):
     # It joins EVERY row, not only the doubted ones — it is what lets a doubted name show a Net
     # that is arithmetically exact, and a row that carries it only sometimes is a row nobody can
     # add up.
-    stock_pl = (p["proceeds"] - p["buy_cost"] + mv) if cost_known else None
+    #
+    # Null only where the whole TICKER refuses (#143 §8). A leg whose every unit is unknown,
+    # beside a leg with real cost, belongs to a caveat, and a caveat's Net stands — so that leg
+    # reads its unknown units as free, which is the upper bound the caveat already declares and
+    # exactly what a partly-unknown leg (Q01) does with its own unknown units. Nulling it on
+    # `cost_known` instead would leave the name's Net short by a whole bucket.
+    stock_pl = ((p["proceeds"] - p["buy_cost"] + mv)
+                if cost_known or verdict != "refuse" else None)
     return {
         "bucket": k[0], "accounts": sorted(p["accounts"]), "ticker": m["canonical_ticker"],
         "name": m["name"], "market": m["market"], "asset_type": m["asset_type"], "currency": ccy,
@@ -966,12 +1022,22 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
     annotations = annotation_map() if annotations is None else annotations
     contracts = contracts or {}
     pos, meta = _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations)
+    legs = legs_by_ticker(pos, meta)
+    parts = {k: cost_partition(p) for k, p in pos.items() if k in meta}
+    # the Net's verdict is a whole-ticker reading of SUMMED counts (#143 §8), and a leg's own
+    # row depends on it (whether an all-unknown leg still carries its stock P/L), so it is
+    # decided before any row is built.
+    by_ticker = defaultdict(list)
+    for k, part in parts.items():
+        by_ticker[meta[k]["canonical_ticker"]].append(part)
+    verdicts = {tk: net_verdict(ps) for tk, ps in by_ticker.items()}
     out = []
     for k, p in pos.items():
         m = meta.get(k)
         if not m:
             continue
-        out.append(_build_row(k, p, m, fx, price, today))
+        out.append(_build_row(k, p, m, fx, price, today, parts[k],
+                              verdicts[m["canonical_ticker"]]))
     # fold in the options income stream per underlying (realized, SGD). Options trade on the
     # cash account, so attach to the cash-bucket row for that security; orphan underlyings
     # (no stock position) are still counted in the Performance rollup via options.realized_by().
@@ -982,6 +1048,12 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
         # a number when that number is zero: "the stream measured zero" and "there is no stream"
         # are different facts, and the states they belong to render differently.
         r["options_pl_sgd"] = o["pl_sgd"] if o else None
+        # Net and its verdict land here and not in `_build_row`, because the options stream is
+        # one of Net's components and is attached only just above (#143 §15). The verdict is
+        # whole-ticker and rides every leg; the Net is per leg, so a bucket column adds up on
+        # its own and the columns add up to the name.
+        r["net_verdict"] = verdicts[r["ticker"]]
+        r["net_pl_sgd"] = _net_pl(r)
     # peak capital-at-risk and the one percentage (#143 §9). Whole-ticker: the peak is a max
     # over the SUM of a name's legs, which is not the sum of their maxima, and the percentage
     # answers "did I make money on this name" rather than on one funding pool of it. The four
@@ -989,7 +1061,6 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
     # `name` and `currency` already do — so a consumer holding any one leg has the whole-ticker
     # answer without re-deriving it. They are read off a leg and lifted into the summary; the
     # per-bucket columns never carry them.
-    legs = legs_by_ticker(pos, meta)
     rows = defaultdict(list)
     for r in out:
         rows[r["ticker"]].append(r)

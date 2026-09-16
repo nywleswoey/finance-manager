@@ -197,3 +197,63 @@ portfolio-wide `xirr_annualised` is untouched.
 
 `tests/test_performance_live.py` holds the settled peaks to the ledger they were measured
 against, and records the one name where this build and the spec's settled table disagree.
+
+## Two verdicts on two axes, and Net on the wire
+
+The server ships the Net and what it can claim, so a page renders them rather than composing them
+from `cost_known === false` plus a fan of nulls. Both land on every position row:
+
+```text
+net_verdict:    "hero | caveat | refuse"      whole-ticker, rides every leg
+return_verdict: "ok | caveat | no_capital"    whole-ticker, rides every leg (above)
+net_pl_sgd:     per leg — a bucket column adds up on its own, and the columns add up to the name
+```
+
+**Two enums, because the axes are independent.** AAPL is hero on Net *and* `no_capital` on return
+(`unknown == 0` grants the hero, peak CAR 0 kills the percentage); ASTREA6B fires `refuse` and
+`no_capital` together. A combined enum has no value for either.
+
+`net_verdict` reads the ticker's **summed** partition counts:
+
+```text
+refuse   ⟺  costed == 0 ∧ unknown > 0
+caveat   ⟺  costed > 0  ∧ unknown > 0
+hero     ⟺  unknown == 0
+```
+
+- **Summed, not per-leg.** #130's `every()` rule is superseded: leg A costed-only beside leg B
+  unknown-only is `refuse` by `every()` and `caveat` by summed counts, and one bucket with real cost
+  is a Net that should stand. Zero-instance today; gated in `tests/test_net_verdict.py`.
+- **`cost_known` is not the signal.** It is false on the divergence case's leg B (a caveat) and on
+  a refusal alike. Of the six positions #143 §8 measured it false on — ASTREA6B, AAPL, HMN, AMZN
+  and the emptied predecessors C31 and 0P00006FYT — only ASTREA6B refuses.
+- **Free units are not costed units.** A gift beside an unannotated carry-in refuses.
+
+`net_pl_sgd` is the **sum of the components as shipped, with zero tolerance**:
+
+```text
+net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_sgd
+            ≡  stock_pl_sgd + income_sgd + options_pl_sgd     (where a caveat collapsed the pair)
+```
+
+- **Rounding policy.** Every component is computed at full precision and rounded **once**, where it
+  ships; Net adds the shipped figures. It is never rounded independently beside them — that is
+  `pl_sgd`, and it is §14's real cent, which exists only against `pl_sgd + options_pl_sgd`, a
+  pairing no page displays. (§14 named UD1U, 00468, 01310, 01523 and 00101, reading `pl_sgd`
+  against its own components; against Net — options included — today's book drifts on 00010,
+  BABA, PLTR, RIVN and 00788.)
+- **`refuse` ships `null`** on every leg — including a leg of a refusing ticker whose own components
+  are known. There is no partial Net on the wire under any name.
+- **A caveat nets every leg.** A leg whose every unit is unknown, inside a ticker that does not
+  refuse, keeps `stock_pl_sgd` (its unknown units read as free — the upper bound the caveat already
+  declares, exactly as Q01's partly-unknown leg does). `stock_pl_sgd` is therefore null only where
+  the leg is all-unknown *and* the name refuses.
+- **Known gap, zero-instance: `/api/performance`'s group `net_pl_sgd` is not this field.**
+  `rollup()` is untouched and still adds a leg's `stock_pl_sgd` only where `cost_known` is true,
+  so in the divergence case the group Net drops leg B while the row Nets include it. No live
+  ticker has that shape; the group-vs-ticker identity belongs to #155, which should close it.
+
+**`return_pct` divides the Net that ships** — `Σ net_pl_sgd` over the ticker — and #152's inline
+`Σ pl_sgd + Σ options_pl_sgd` is gone: one numerator, one definition. A refused Net beside real put
+collateral reads `return_verdict: "caveat"` with `return_pct: null`, never `ok`. Against the live
+book no existing field on any row moved.

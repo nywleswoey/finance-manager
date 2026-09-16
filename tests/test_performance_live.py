@@ -216,7 +216,10 @@ class TestLiveBook(unittest.TestCase):
         sum survives a split nobody can make — which is what lets a caveat show an exact Net."""
         for r in self.rows:
             self.assertIn("stock_pl_sgd", r)
-            self.assertEqual(r["stock_pl_sgd"] is None, not r["cost_known"], r["ticker"])
+            # null only on a leg whose every unit is unknown AND whose name refuses: a leg like
+            # that beside real cost elsewhere is a caveat's, and a caveat's Net stands (#150).
+            self.assertEqual(r["stock_pl_sgd"] is None,
+                             not r["cost_known"] and r["net_verdict"] == "refuse", r["ticker"])
             if r["realised_pl_sgd"] is not None and r["unrealised_pl_sgd"] is not None:
                 # exactly, with no tolerance: the field is rounded FROM the members, so §14's
                 # measured cent (UD1U, 00468, 01310, 01523, 00101 — `_build_row` rounding each
@@ -319,16 +322,15 @@ class TestLiveBook(unittest.TestCase):
         buckets a per-leg reading is a different number entirely (3.9% against 31.2%)."""
         by_ticker = {}
         for r in self.rows:
-            g = by_ticker.setdefault(r["ticker"], {"net": 0.0, "row": r})
-            # both nulls read as nothing-to-add, for different reasons: `options_pl_sgd` is
-            # absent on a never-optioned name (#149), `pl_sgd` refuses on a doubted leg.
-            g["net"] += (r["pl_sgd"] or 0.0) + (r["options_pl_sgd"] or 0.0)
-        for ticker, g in by_ticker.items():
-            r = g["row"]
+            by_ticker.setdefault(r["ticker"], []).append(r)
+        for ticker, rs in by_ticker.items():
+            r = rs[0]
             if r["return_pct"] is None:
                 continue
-            self.assertAlmostEqual(r["return_pct"], round(g["net"] / r["peak_car_sgd"], 4), 4,
-                                   ticker)
+            # the Net that ships, and no second sum of components beside it (#150): exactly,
+            # because the numerator IS this sum.
+            net = round(sum(x["net_pl_sgd"] for x in rs), 2)
+            self.assertEqual(r["return_pct"], round(net / r["peak_car_sgd"], 4), ticker)
 
     def test_the_return_fields_agree_across_every_leg_of_a_ticker(self):
         """They are whole-ticker figures riding on per-leg rows, so a consumer holding any one
@@ -338,6 +340,59 @@ class TestLiveBook(unittest.TestCase):
             got = {k: r[k] for k in ("peak_car_sgd", "return_span_days", "return_pct",
                                      "return_verdict")}
             self.assertEqual(seen.setdefault(r["ticker"], got), got, r["ticker"])
+
+    # -- two verdicts on two axes, and Net on the wire (#150) -----------------------------
+
+    def test_both_verdicts_ship_on_every_row_and_agree_across_a_tickers_legs(self):
+        """True of any book. Two enums, never one: a name can be hero-on-Net and no-capital-
+        on-return at once, and both are whole-ticker readings riding every leg."""
+        seen = {}
+        for r in self.rows:
+            self.assertIn(r["net_verdict"], ("hero", "caveat", "refuse"), r["ticker"])
+            self.assertIn(r["return_verdict"], ("ok", "caveat", "no_capital"), r["ticker"])
+            self.assertEqual(seen.setdefault(r["ticker"], r["net_verdict"]), r["net_verdict"],
+                             r["ticker"])
+
+    def test_net_verdict_reads_the_tickers_summed_counts(self):
+        """True of any book — the rule restated over the live partitions, not over `cost_known`."""
+        counts = {}
+        for r in self.rows:
+            c = counts.setdefault(r["ticker"], [0.0, 0.0, r["net_verdict"]])
+            c[0] += r["cost_partition"]["costed"]
+            c[1] += r["cost_partition"]["unknown"]
+        for ticker, (costed, unknown, verdict) in counts.items():
+            want = "hero" if unknown <= 1e-6 else "caveat" if costed > 1e-6 else "refuse"
+            self.assertEqual(verdict, want, ticker)
+
+    def test_net_is_the_sum_of_the_components_as_shipped_with_zero_tolerance(self):
+        """True of any book, on every position: to the cent, not within one. The measured cent
+        §14 found lives between `pl_sgd` and the components, and `net_pl_sgd` follows the
+        components — so on this definition it stops existing between pages."""
+        for r in self.rows:
+            where = f"{r['bucket']}/{r['ticker']}"
+            if r["net_verdict"] == "refuse":
+                self.assertIsNone(r["net_pl_sgd"], where)
+                continue
+            if r["realised_pl_sgd"] is not None and r["unrealised_pl_sgd"] is not None:
+                stock = r["realised_pl_sgd"] + r["unrealised_pl_sgd"]
+            else:
+                stock = r["stock_pl_sgd"]
+            self.assertEqual(r["net_pl_sgd"],
+                             round(stock + r["income_sgd"] + (r["options_pl_sgd"] or 0.0), 2),
+                             where)
+
+    def test_the_six_cost_unknown_positions_do_not_share_a_verdict(self):
+        """#143 §8 names the six positions its `cost_known` read false on: the refusal, the
+        three free names and the two emptied predecessors. If `cost_known` were the verdict
+        signal they would all carry one verdict; a husk has a clean costed partition and nothing
+        to refuse, and a free lot has no unknown units, so only ASTREA6B refuses."""
+        want = {"ASTREA6B": "refuse", "AAPL": "hero", "HMN": "hero", "AMZN": "hero",
+                "C31": "hero", "0P00006FYT": "hero"}
+        got = {r["ticker"]: r["net_verdict"] for r in self.rows if r["ticker"] in want}
+        if set(got) != set(want):
+            raise unittest.SkipTest(f"this book lacks {sorted(set(want) - set(got))}")
+        self.assertEqual(got, want)
+        self.assertGreater(len(set(got.values())), 1)
 
 
 def _fx_or_none():

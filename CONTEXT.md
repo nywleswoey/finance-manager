@@ -84,7 +84,9 @@ pre-computed. The three:
   sits in the same position (the cost never left).
 - **Free** — they cost nothing, and that is measured, not assumed. Free units carry a *price*,
   not only a count: their cost basis is `0.0`, never null.
-- **Unknown** — the book does not know. The polarity is to refuse rather than invent a free lot.
+- **Unknown** — the book does not know. The polarity is to refuse rather than invent a free lot:
+  the partition never counts one as free. Only a Net under a `caveat` verdict *reads* them as
+  free, and says so — that is what makes it an upper bound.
 
 `cost_known` is this partition read as a boolean: false only when *every* entering unit is
 unknown. Not "no unknown units" — a name with some cost still answers "did I make money on
@@ -129,8 +131,26 @@ premiums excluded. Identically `proceeds − buy_cost + mv`, which needs no spli
 between the units sold and the units held: the **pair's sum is sound while neither member is**,
 which is what lets a name the partition doubts still show a Net that is arithmetically exact.
 Ships on every row (`stock_pl_sgd`), not only the doubtful ones — a field that appears only
-where the split fails is a field nobody can add up.
+where the split fails is a field nobody can add up. Null only on a leg whose every unit is
+unknown *and* whose name refuses; under a caveat such a leg reads its unknown units as free, so
+there `stock_pl_sgd` is an upper bound, like the Net it feeds.
 _Avoid_: total P/L (that is stock P/L *plus* dividends and premiums — the Net)
+
+**Net**:
+`realised + unrealised + income + options` — or `stock P/L + income + options` where a caveat
+collapsed the pair — summed from the components **as shipped**, with zero tolerance. Each component
+is rounded once, where it ships; Net never rounds independently beside them, which is how `pl_sgd`
+drifts a cent. Per leg on the wire (`net_pl_sgd`), so bucket columns add up to the name; null on
+every leg of a name whose Net verdict is `refuse`, because there is no partial Net under any name.
+_Avoid_: `pl_sgd` (the older, independently rounded spelling other endpoints still read), total P/L
+
+**Net verdict**:
+What the Net can claim, read from a ticker's **summed** cost-partition counts: `refuse` (nothing
+costed, something unknown), `caveat` (some costed, some unknown — the Net is an upper bound, unknown
+units read as free) or `hero` (nothing unknown). Summed, not per-leg: a costed-only leg beside an
+unknown-only leg is a caveat, not a refusal. **Not `cost_known`** — that flag is false on a
+caveat's all-unknown leg and on a refusal alike.
+_Avoid_: return verdict (a different axis — AAPL is hero-on-Net and no-capital-on-return at once)
 
 ### Returns
 
