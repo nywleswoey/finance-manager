@@ -116,7 +116,7 @@ ENDPOINTS: list[tuple[str, str]] = [
     ("transactions", "/api/transactions?"),
     # SecurityDetail's only entry point. PLTR is deliberate: 73 option trades, the
     # longest options history in the database (see PATHOLOGICAL).
-    ("holding-pltr", "/api/holding?ticker=PLTR&bucket=cash"),
+    ("holding-pltr", "/api/holding?ticker=PLTR"),
     # --- net worth ---
     ("networth-items", "/api/networth/items"),
     ("networth-snapshots", "/api/networth/snapshots"),

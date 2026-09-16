@@ -55,7 +55,7 @@
   "file": "transactions.json",
   "status": 200
  },
- "/api/holding?ticker=PLTR&bucket=cash": {
+ "/api/holding?ticker=PLTR": {
   "file": "holding-pltr.json",
   "status": 200
  },

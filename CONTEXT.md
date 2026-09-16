@@ -51,11 +51,24 @@ security, one lookup); average cost pools as `Σcost_basis ÷ Σunits`, which is
 approximate because cost basis is average cost × units. The cost partition folds by addition —
 each leg's entering units are its own — with `unknown_pct` recomputed over the merged counts
 rather than averaged. **Derived at render, never stored and
-never served** — no endpoint returns one — so it is a presentation of several positions and never
-itself a Position. XIRR is deliberately not folded: an IRR over merged cashflows cannot be
+never served** — Holdings folds it client-side — so it is a presentation of several positions and
+never itself a Position. Not the **ticker fold** below, which is the server's, narrower, and the
+one the detail page reads; the two stay separate folds on purpose (#143 §3). XIRR is deliberately not folded: an IRR over merged cashflows cannot be
 averaged from its parts, so a consolidated row of two positions shows no return rather than a
 plausible one.
 _Avoid_: position (the fold's *input* is positions, and the whole point is that this is not one)
+
+**Leg**:
+One funding bucket's position inside a ticker — one column of the bucket split. Only a position
+that holds units, had money go in, or had income come out is a leg; the rest is noise, or an
+emptied predecessor whose cost carried to its successor.
+_Avoid_: bucket (the pool, not this ticker's position in it); not a **stock-moving leg**, which is
+a unit change, nor an option leg
+
+**Ticker fold**:
+A ticker's legs folded server-side into one whole-ticker summary plus its legs, for the detail
+page. A ticker with no legs has no ticker fold at all.
+_Avoid_: consolidated ticker row (Holdings' client-side fold, wider and with different fields)
 
 ### Cashflows & their classification
 
