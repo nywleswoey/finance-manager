@@ -9,6 +9,8 @@ literal** — the settled table the readings compare against is passed in, not i
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_audit_ledger.py -q
 """
 import datetime as dt
+import logging
+from contextlib import contextmanager
 
 from scripts import audit_ledger as al
 
@@ -256,3 +258,69 @@ def test_the_performance_identity_names_its_residual():
                               "bucket": {"cash": {"net_pl_sgd": 157.0}}})
     got = al.performance_identity(book)
     assert got == {"market": (157.01, 150.0, 7.0, 0.01), "bucket": (157.0, 150.0, 7.0, 0.0)}
+
+
+def test_fetch_collects_performance_warnings_and_refreshes_only_the_all_cache(monkeypatch):
+    """The audit reads fresh API totals and includes their fold warnings in its book."""
+    from portfolio import cost_annotations, db, options, performance
+    from server import main
+
+    class Result:
+        def all(self):
+            return []
+
+        def mappings(self):
+            return self
+
+        def scalar(self):
+            return 0
+
+    class Session:
+        def execute(self, _):
+            return Result()
+
+    @contextmanager
+    def session_scope():
+        yield Session()
+
+    def compute():
+        logging.getLogger("portfolio.performance").warning("compute warning")
+        return []
+
+    performance_calls = []
+
+    def api_performance(*, by):
+        if not performance_calls:
+            assert main._cache == {"rows": "still cached"}
+        performance_calls.append(by)
+        logging.getLogger("portfolio.performance").warning("%s warning", by)
+        main._cache["all"] = "fresh"
+        return {by: {}}
+
+    monkeypatch.setattr(cost_annotations, "annotation_map", lambda: {})
+    monkeypatch.setattr(db, "session_scope", session_scope)
+    monkeypatch.setattr(db, "valuation_as_of", lambda _: None)
+    monkeypatch.setattr(db, "fx_as_of", lambda _: None)
+    monkeypatch.setattr(options, "contracts_by_ticker", lambda: {})
+    monkeypatch.setattr(options, "realized_by_ticker", lambda: {})
+    monkeypatch.setattr(performance, "compute", compute)
+    monkeypatch.setattr(performance, "cdp_cost", lambda _: {})
+    monkeypatch.setattr(performance, "_fx_and_price", lambda _: ({}, {}))
+    monkeypatch.setattr(performance, "_accumulate_positions", lambda *args: ({}, {}))
+    monkeypatch.setattr(performance, "legs_by_ticker", lambda *args: {})
+    monkeypatch.setattr(main, "performance", api_performance)
+    main._cache.clear()
+    main._cache.update({"all": "stale", "rows": "still cached"})
+
+    book = al.fetch()
+
+    assert book.performance == {"market": {"market": {}}, "bucket": {"bucket": {}},
+                                "account": {"account": {}}}
+    assert book.fold_warnings == ["portfolio.performance: compute warning",
+                                  "portfolio.performance: market warning",
+                                  "portfolio.performance: bucket warning",
+                                  "portfolio.performance: account warning"]
+    assert performance_calls == ["market", "bucket", "account"]
+    assert main._cache == {"rows": "still cached", "all": "fresh"}
+    assert not any(isinstance(h, al._WarningCollector)
+                   for h in logging.getLogger("portfolio").handlers)

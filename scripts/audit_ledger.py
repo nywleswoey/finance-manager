@@ -77,7 +77,7 @@ class Book:
       corporate_actions — every `corporate_action` row as (from_ticker, to_ticker, type)
       actions           — {table: [action string per row]} for the tables carrying an action
       stock_dividends   — txn rows whose action is `stock dividend`: {ticker, trade_date, qty_signed}
-      fold_warnings     — every WARNING the fold logged while `compute()` ran
+      fold_warnings     — every WARNING logged while the performance readings were assembled
       cost_lot_tickers  — tickers with a `cdp_cost_lot` row `cdp_cost()` books (non-transfer, non-zero)
       cdp_txn_tickers   — tickers with at least one `txn` row on the CDP account
       car               — {ticker: ticker_car(...) plus `held`, `currency` and today's `rate`}
@@ -452,75 +452,76 @@ def fetch():
     from portfolio.options import contracts_by_ticker, realized_by_ticker
     from portfolio.performance import (_accumulate_positions, _fx_and_price, cdp_cost, compute,
                                        legs_by_ticker, ticker_car)
-    from server.main import performance
+    from server import main as server_main
 
     collect = _WarningCollector()
     root = logging.getLogger("portfolio")
     root.addHandler(collect)
     try:
         rows = compute()
+        today = dt.date.today()
+        with session_scope() as s:
+            def column(sql):
+                return [r[0] for r in s.execute(text(sql)).all()]
+
+            corporate_actions = [tuple(r) for r in s.execute(text(
+                "SELECT from_ticker, to_ticker, type FROM corporate_action ORDER BY id")).all()]
+            actions = {"txn": column("SELECT action FROM txn"),
+                       "cdp_cost_lot": column("SELECT action FROM cdp_cost_lot")}
+            stock_dividends = [dict(r) for r in s.execute(text(
+                "SELECT sec.canonical_ticker ticker, t.trade_date, t.qty_signed FROM txn t "
+                "JOIN security sec ON sec.id = t.security_id "
+                "WHERE lower(trim(t.action)) = 'stock dividend'")).mappings().all()]
+            # the lots `cdp_cost()` actually books — a transfer or a zero amount attaches nothing,
+            # and asking it rather than re-spelling its skip rules keeps the two from drifting
+            cdp = cdp_cost(s)
+            cost_lot_tickers = set(cdp)
+            cdp_txn_tickers = set(column(
+                "SELECT DISTINCT sec.canonical_ticker FROM txn t JOIN account a ON a.id = t.account_id "
+                "JOIN security sec ON sec.id = t.security_id WHERE a.name = 'CDP'"))
+            counts = {t: s.execute(text(f"SELECT count(*) FROM {t}")).scalar()
+                      for t in ("txn", "cdp_cost_lot", "dividend", "option_trade", "corporate_action")}
+            counts["positions"] = len(rows)
+            counts["prices as of"] = valuation_as_of(s)
+            counts["fx as of"] = fx_as_of(s)
+            fx, _ = _fx_and_price(s)
+            counts["fx"] = ", ".join(f"{c} {r:g}" for c, r in sorted(fx.items()) if c != "SGD")
+
+            # Peak capital-at-risk's DATE never reaches the wire (#143 Further Notes), so it is read
+            # off the accumulators. The same inputs `compute()` fetches, through the same fold.
+            txns = [dict(r) for r in s.execute(text("""
+                SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
+                       sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
+                       t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount, t.fees
+                FROM txn t JOIN account a ON a.id=t.account_id
+                JOIN security sec ON sec.id=t.security_id""")).mappings().all()]
+            divs = [dict(r) for r in s.execute(text(
+                "SELECT account_id, security_id, pay_date, gross, currency FROM dividend"
+            )).mappings().all()]
+        # `compute()`'s carry filter, over the rows already read
+        corp = [c for c in corporate_actions
+                if c[2] in ("rename", "split", "consolidation", "merger", "switch")]
+        pos, meta = _accumulate_positions(txns, divs, cdp, corp, today, annotation_map())
+        contracts = contracts_by_ticker()
+        car = {}
+        for tk, legs in legs_by_ticker(pos, meta).items():
+            cs = contracts.get(tk, ())
+            ccy = legs[0][1]["currency"] or "SGD"
+            car[tk] = {**ticker_car(legs, cs, fx, today), "currency": ccy, "rate": fx.get(ccy),
+                       "held": any(p["units"] > EPS for p, _ in legs) or any(c["open"] for c in cs)}
+
+        held_tickers = {r["ticker"] for r in rows}
+        orphan_options = {tk: v["pl_sgd"] for tk, v in realized_by_ticker().items()
+                          if tk not in held_tickers}
+        server_main._cache.pop("all", None)
+        return Book(rows=rows, corporate_actions=corporate_actions, actions=actions,
+                    stock_dividends=stock_dividends, fold_warnings=collect.messages,
+                    cost_lot_tickers=cost_lot_tickers, cdp_txn_tickers=cdp_txn_tickers, car=car,
+                    performance={by: server_main.performance(by=by)
+                                 for by in ("market", "bucket", "account")},
+                    orphan_options=orphan_options, counts=counts)
     finally:
         root.removeHandler(collect)
-
-    today = dt.date.today()
-    with session_scope() as s:
-        def column(sql):
-            return [r[0] for r in s.execute(text(sql)).all()]
-
-        corporate_actions = [tuple(r) for r in s.execute(text(
-            "SELECT from_ticker, to_ticker, type FROM corporate_action ORDER BY id")).all()]
-        actions = {"txn": column("SELECT action FROM txn"),
-                   "cdp_cost_lot": column("SELECT action FROM cdp_cost_lot")}
-        stock_dividends = [dict(r) for r in s.execute(text(
-            "SELECT sec.canonical_ticker ticker, t.trade_date, t.qty_signed FROM txn t "
-            "JOIN security sec ON sec.id = t.security_id "
-            "WHERE lower(trim(t.action)) = 'stock dividend'")).mappings().all()]
-        # the lots `cdp_cost()` actually books — a transfer or a zero amount attaches nothing,
-        # and asking it rather than re-spelling its skip rules keeps the two from drifting
-        cdp = cdp_cost(s)
-        cost_lot_tickers = set(cdp)
-        cdp_txn_tickers = set(column(
-            "SELECT DISTINCT sec.canonical_ticker FROM txn t JOIN account a ON a.id = t.account_id "
-            "JOIN security sec ON sec.id = t.security_id WHERE a.name = 'CDP'"))
-        counts = {t: s.execute(text(f"SELECT count(*) FROM {t}")).scalar()
-                  for t in ("txn", "cdp_cost_lot", "dividend", "option_trade", "corporate_action")}
-        counts["positions"] = len(rows)
-        counts["prices as of"] = valuation_as_of(s)
-        counts["fx as of"] = fx_as_of(s)
-        fx, _ = _fx_and_price(s)
-        counts["fx"] = ", ".join(f"{c} {r:g}" for c, r in sorted(fx.items()) if c != "SGD")
-
-        # Peak capital-at-risk's DATE never reaches the wire (#143 Further Notes), so it is read
-        # off the accumulators. The same inputs `compute()` fetches, through the same fold.
-        txns = [dict(r) for r in s.execute(text("""
-            SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
-                   sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
-                   t.trade_date, t.action, t.qty_signed, t.price, t.gross_amount, t.fees
-            FROM txn t JOIN account a ON a.id=t.account_id
-            JOIN security sec ON sec.id=t.security_id""")).mappings().all()]
-        divs = [dict(r) for r in s.execute(text(
-            "SELECT account_id, security_id, pay_date, gross, currency FROM dividend"
-        )).mappings().all()]
-    # `compute()`'s carry filter, over the rows already read
-    corp = [c for c in corporate_actions
-            if c[2] in ("rename", "split", "consolidation", "merger", "switch")]
-    pos, meta = _accumulate_positions(txns, divs, cdp, corp, today, annotation_map())
-    contracts = contracts_by_ticker()
-    car = {}
-    for tk, legs in legs_by_ticker(pos, meta).items():
-        cs = contracts.get(tk, ())
-        ccy = legs[0][1]["currency"] or "SGD"
-        car[tk] = {**ticker_car(legs, cs, fx, today), "currency": ccy, "rate": fx.get(ccy),
-                   "held": any(p["units"] > EPS for p, _ in legs) or any(c["open"] for c in cs)}
-
-    held_tickers = {r["ticker"] for r in rows}
-    orphan_options = {tk: v["pl_sgd"] for tk, v in realized_by_ticker().items()
-                      if tk not in held_tickers}
-    return Book(rows=rows, corporate_actions=corporate_actions, actions=actions,
-                stock_dividends=stock_dividends, fold_warnings=collect.messages,
-                cost_lot_tickers=cost_lot_tickers, cdp_txn_tickers=cdp_txn_tickers, car=car,
-                performance={by: performance(by=by) for by in ("market", "bucket", "account")},
-                orphan_options=orphan_options, counts=counts)
 
 
 def main():
