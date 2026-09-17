@@ -23,9 +23,11 @@ from starlette.concurrency import run_in_threadpool
 from portfolio.config import settings
 
 from server import auth
-from portfolio.db import SessionLocal, fx_map, session_scope, valuation_as_of
+from portfolio.db import SessionLocal, fx_as_of, fx_map, session_scope, valuation_as_of
 from portfolio.money import to_sgd
-from portfolio.performance import alloc_by_account, compute, empty_group, rollup
+from portfolio.options import trades_for
+from portfolio.performance import (alloc_by_account, cdp_transactions, compute, empty_group,
+                                   fold_ticker, is_leg, rollup)
 from portfolio import spending
 from portfolio import dividends
 
@@ -150,6 +152,13 @@ def _f(x):
     return float(x) if x is not None else None
 
 
+def _iso(read):
+    """`read(session)`'s date as an ISO string, or None — for the cached as-of dates."""
+    with session_scope() as s:
+        d = read(s)
+    return str(d) if d else None
+
+
 def _as_of():
     """ISO date the DB-priced views are as of, or None — see portfolio.db.valuation_as_of.
 
@@ -159,9 +168,7 @@ def _as_of():
     clears no cache here. So a date filled after such a write can sit above a fold filled
     before it. Narrow, self-healing on the next /refresh, and strictly smaller than the
     staleness the memo already carries."""
-    with session_scope() as s:
-        d = valuation_as_of(s)
-    return str(d) if d else None
+    return _iso(valuation_as_of)
 
 
 def perf_all():
@@ -254,11 +261,8 @@ def positions(closed: bool = False):
     out = []
     for r in perf_all():
         is_open = r["units"] > 1e-6
-        if not is_open:
-            if not closed:
-                continue
-            if not (r["invested_native"] or r["income_native"]):
-                continue                                # drop noise: never really held
+        if not is_open and not (closed and is_leg(r)):   # is_leg drops noise: never really held
+            continue
         out.append({**r, "status": "open" if is_open else "closed"})
     # open first (by market value desc), then closed (by realised P/L desc)
     out.sort(key=lambda r: (r["status"] != "open", -(r["mv_sgd"] if r["status"] == "open"
@@ -287,38 +291,58 @@ def performance(by: str = Query("market", enum=["market", "bucket", "account"]))
     return r
 
 
-BUCKET_ACCTS = {"cash": ["Tiger Prime", "Tiger Cash Boost", "Moomoo", "FSM", "CDP"],
-                "cpf": ["CPF"], "srs": ["SRS"]}
+def ticker_ledger(s, ticker):
+    """One ticker's transactions and dividends across EVERY funding bucket, each row carrying
+    its `bucket`, plus the latest FX map. Unsorted and unenriched — `holding` does that.
+
+    Bucket attribution is the join onto `account.funding_bucket`. It replaced a hardcoded
+    bucket->accounts literal that duplicated that column and silently dropped any account the
+    literal did not list. The `cdp_transactions()` rows carry an account name and no bucket, so
+    they take theirs from the same table, by name.
+
+    `a.name <> 'CDP'` stays: CDP's statement rows are month-end unit diffs, and its priced
+    trades arrive from `cdp_cost_lot` instead. Cash dividends booked as 0-qty `stock dividend`
+    txns belong in the dividend history, not the ledger — they do not change the position."""
+    txns = _dicts(s,
+        "SELECT t.trade_date, a.name account, a.funding_bucket bucket, t.action, t.qty_signed, "
+        "t.price, t.gross_amount, t.currency, t.source_file FROM txn t "
+        "JOIN account a ON a.id=t.account_id JOIN security sec ON sec.id=t.security_id "
+        "WHERE sec.canonical_ticker=:tk AND a.name <> 'CDP' "
+        "AND NOT (t.action ILIKE '%dividend%' AND t.qty_signed = 0)",
+        {"tk": ticker})
+    divs = _dicts(s,
+        "SELECT d.pay_date, a.name account, a.funding_bucket bucket, d.gross, d.currency, d.kind, "
+        "d.units, d.amount_per_unit FROM dividend d "
+        "JOIN account a ON a.id=d.account_id JOIN security sec ON sec.id=d.security_id "
+        "WHERE sec.canonical_ticker=:tk ORDER BY d.pay_date",
+        {"tk": ticker})
+    bucket_of = dict(s.execute(text("SELECT name, funding_bucket FROM account")).all())
+    txns += [{**r, "bucket": bucket_of.get(r["account"])}
+             for r in cdp_transactions(s) if r["ticker"] == ticker]
+    return txns, divs, fx_map(s)
+
+
+def _fx_as_of():
+    """ISO date of the newest FX row, or None — cached and cleared beside `_as_of`."""
+    return _iso(fx_as_of)
 
 
 @app.get("/api/holding")
-def holding(ticker: str, bucket: str = "cash"):
-    """full history for one holding: summary + transactions (running balance) + dividends."""
-    # perf_all (not perf) so CLOSED positions (units≈0) still resolve a summary — else the
-    # detail view shows "No data" despite having transaction/dividend history.
-    summary = next((r for r in perf_all() if r["ticker"] == ticker and r["bucket"] == bucket), None)
-    accts = BUCKET_ACCTS.get(bucket, [])
-    s = SessionLocal()
-    txns = _dicts(s,
-        "SELECT t.trade_date, a.name account, t.action, t.qty_signed, t.price, t.gross_amount, "
-        "t.currency, t.source_file FROM txn t JOIN account a ON a.id=t.account_id "
-        "JOIN security sec ON sec.id=t.security_id "
-        "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) AND a.name <> 'CDP' "
-        # cash dividends are recorded as 0-qty 'stock dividend' txns — they belong in the
-        # dividend history, not the transaction ledger (they don't change the position)
-        "AND NOT (t.action ILIKE '%dividend%' AND t.qty_signed = 0)",
-        {"tk": ticker, "accts": accts})
-    divs = _dicts(s,
-        "SELECT d.pay_date, a.name account, d.gross, d.currency, d.kind, "
-        "d.units, d.amount_per_unit FROM dividend d "
-        "JOIN account a ON a.id=d.account_id JOIN security sec ON sec.id=d.security_id "
-        "WHERE sec.canonical_ticker=:tk AND a.name = ANY(:accts) ORDER BY d.pay_date",
-        {"tk": ticker, "accts": accts})
-    fx = fx_map(s)
-    s.close()
-    if bucket == "cash":                               # CDP trades from cdp-stocks (priced)
-        from portfolio.performance import cdp_transactions
-        txns += [r for r in cdp_transactions() if r["ticker"] == ticker]
+def holding(ticker: str):
+    """The whole ticker across every funding bucket: `{as_of, fx_as_of, summary, buckets,
+    transactions, dividends, options}` (#143 §2). There is no `bucket` parameter — one caller
+    renders one shape.
+
+    `summary` and `buckets` are `performance.fold_ticker`'s, and its `None` is the 404; this
+    handler only fetches. `as_of` is `/api/positions`' valuation date verbatim; `fx_as_of` is what
+    "at latest FX" is as of. The options table carries no bucket — see BACKEND.md for the stated
+    assumption and its trigger."""
+    # perf_all (not perf) so a fully CLOSED ticker still has legs to fold
+    folded = fold_ticker([r for r in perf_all() if r["ticker"] == ticker])
+    if folded is None:
+        return JSONResponse({"detail": "not found"}, status_code=404)
+    with session_scope() as s:
+        txns, divs, fx = ticker_ledger(s, ticker)
     txns.sort(key=_date_key("trade_date"))
     bal = 0.0
     for t in txns:
@@ -341,12 +365,9 @@ def holding(ticker: str, bucket: str = "cash"):
         x["units"] = units
         x["rate"] = rate
         x["gross_sgd"] = round(to_sgd(_f(x["gross"]) or 0, x["currency"], fx), 2)
-    # option trades on this underlying (wheel income), only for the cash bucket
-    options = []
-    if bucket == "cash":
-        from portfolio.options import trades_for
-        options = trades_for(ticker)
-    return {"summary": summary, "transactions": txns, "dividends": divs, "options": options}
+    return {"as_of": _cached("as_of", _as_of), "fx_as_of": _cached("fx_as_of", _fx_as_of),
+            **folded, "transactions": txns, "dividends": divs,
+            "options": trades_for(ticker)}
 
 
 @app.get("/api/dividends")
@@ -382,7 +403,6 @@ def transactions(account: str | None = None, ticker: str | None = None, limit: i
         rows = _dicts(s, q + " LIMIT 2000", p)
     s.close()
     if account in (None, "CDP"):                       # add CDP from cdp-stocks
-        from portfolio.performance import cdp_transactions
         cdp = cdp_transactions()
         if ticker:
             cdp = [r for r in cdp if r["ticker"] == ticker]

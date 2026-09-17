@@ -222,6 +222,10 @@ def _trade_dict(t, fx):
         "realized_native": _f(t.realized_pl),
         "realized_sgd": round(_sgd(t.realized_pl, t.currency, fx), 2),
         "currency": t.currency, "outcome": t.outcome,
+        # `_is_open()`'s ANSWER, not its inputs. `outcome` and `close_date` stay on the wire and
+        # stay reconstructible, and re-deriving realised-vs-open from `close_date` is how every
+        # expired-worthless leg fell out of the detail page's options P/L (#144).
+        "realised": not _is_open(t),
     }
 
 

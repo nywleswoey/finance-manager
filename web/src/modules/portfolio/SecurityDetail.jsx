@@ -3,14 +3,15 @@ import { get, fmt, sgd, money, cls } from "../../api.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 import { ContractCell } from "./contract.jsx";
 
-export default function SecurityDetail({ ticker, bucket, onBack }) {
+export default function SecurityDetail({ ticker, onBack }) {
   const [d, setD] = useState(null);
   const phone = usePhone();
   useEffect(() => {
     setD(null);
-    get(`/api/holding?ticker=${encodeURIComponent(ticker)}&bucket=${bucket}`)
+    // The whole ticker across every funding bucket — there is no `bucket` parameter (#153).
+    get(`/api/holding?ticker=${encodeURIComponent(ticker)}`)
       .then(setD).catch(() => setD({ error: true }));
-  }, [ticker, bucket]);
+  }, [ticker]);
 
   if (!d) return <div className="loading">Loading {ticker}…</div>;
   if (d.error || !d.summary) return <div className="loading">No data for {ticker}. <a className="backlink" onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)" }}>← back</a></div>;
@@ -33,7 +34,7 @@ export default function SecurityDetail({ ticker, bucket, onBack }) {
       </div>
       <div className="hd-row" style={{ display: "flex", alignItems: "baseline", gap: 10, marginBottom: 4 }}>
         <h2 style={{ margin: 0 }}>{s.name}</h2>
-        <span className="pill">{s.ticker}</span><span className="pill">{s.bucket}</span>
+        <span className="pill">{s.ticker}</span>
         <span className="pill">{s.market}</span>
         <span className="mut">{(s.accounts || []).join(", ")}</span>
       </div>

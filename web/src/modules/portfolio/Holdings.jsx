@@ -119,8 +119,8 @@ function mergeTicker(rows) {
   const netPartial = rs.some((r) => !r.cost_known);
   return {
     ...first,
-    // `bucket` stays a single value: it is the drill target, and `/api/holding` takes one bucket.
-    // `rs` is largest-MV-first, so clicking D05 lands on the side holding 227.7k of its 317.2k.
+    // `bucket` stays a single value: the largest leg, which the drill's analytics event reports.
+    // It is no longer the drill target — `/api/holding` covers the whole ticker (#153).
     bucket: first.bucket,
     buckets: [...new Set(rs.map((r) => r.bucket))],          // what the Bucket cell renders
     accounts: [...new Set(rs.flatMap((r) => r.accounts || []))].sort(),
@@ -298,12 +298,12 @@ export default function Holdings() {
   const maxNet = useMemo(
     () => (display ? display.reduce((m, r) => Math.max(m, Math.abs(netOf(r).net)), 0) : 0), [display]);
 
-  if (sel) return <SecurityDetail ticker={sel.ticker} bucket={sel.bucket} onBack={() => setSel(null)} />;
+  if (sel) return <SecurityDetail ticker={sel.ticker} onBack={() => setSel(null)} />;
   if (!rows) return <div className="loading">Loading…</div>;
 
   const toggle = (k) => setCollapsed((c) => ({ ...c, [k]: !c[k] }));
   const open = (r) => {
-    setSel({ ticker: r.ticker, bucket: r.bucket });
+    setSel({ ticker: r.ticker });
     posthog.capture("security_detail_viewed", { bucket: r.bucket });
   };
 

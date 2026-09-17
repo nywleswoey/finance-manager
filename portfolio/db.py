@@ -89,8 +89,17 @@ def valuation_as_of(s):
     different sources, so neither response is meaningful without saying when. ADR 0001 keeps the
     split; issue #56 is about making the moment visible."""
     px = s.execute(text("SELECT max(date) FROM price")).scalar()
-    fx = s.execute(text("SELECT max(date) FROM fx_rate")).scalar()
+    fx = fx_as_of(s)
     return min(px, fx) if px and fx else None
+
+
+def fx_as_of(s):
+    """The newest `fx_rate` date anywhere, or None — what "at latest FX" is as of.
+
+    Its own date rather than `valuation_as_of`, which is the older of this and the newest price
+    and so reads as FX's date beside the words "latest FX" when it is not (#143 §2). Same
+    upper-bound caveat: newest row in the table, not every currency's own newest."""
+    return s.execute(text("SELECT max(date) FROM fx_rate")).scalar()
 
 
 @contextmanager

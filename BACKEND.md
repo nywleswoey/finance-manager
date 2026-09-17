@@ -257,3 +257,57 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
 `Σ pl_sgd + Σ options_pl_sgd` is gone: one numerator, one definition. A refused Net beside real put
 collateral reads `return_verdict: "caveat"` with `return_pct: null`, never `ok`. Against the live
 book no existing field on any row moved.
+
+## `GET /api/holding?ticker=X` — the whole-ticker contract
+
+The detail page's one read, covering the ticker across **every** funding bucket (#153, spec #143
+§2–§3, §16–§17). **There is no `bucket` parameter** — dropped, not made optional; a stale
+`&bucket=` is ignored, not honoured. The hardcoded bucket→accounts literal is deleted: bucket
+attribution is the join onto `account.funding_bucket`, so an account the literal never listed is
+no longer silently missing from the page.
+
+```text
+{ as_of, fx_as_of, summary, buckets: [leg, …], transactions: [...], dividends: [...], options: [...] }
+```
+
+- **Two dates.** `as_of` is `valuation_as_of()` verbatim — `/api/positions`' date, so both pages
+  state the same freshness for the same market value. `fx_as_of` is `max(fx_rate.date)`
+  (`portfolio.db.fx_as_of`), what "at latest FX" is actually as of.
+- **Computation is `performance.fold_ticker`**, pure; the handler fetches (`ticker_ledger`) and
+  enriches the tables. The three folds (`fold_positions`, `rollup()`, Holdings' `mergeTicker`) stay
+  three.
+- **`summary`** carries identity, position, the components, `net_pl_sgd` / `net_verdict`, the four
+  return fields, `cost_partition` (counts summed, `unknown_pct` recomputed), `invested_*`,
+  `fees_sgd` and `cost_known` (AND). **Absent, not null:** `xirr`, `simple_return`, `pl_sgd`, and the
+  singular `bucket` / `status`.
+- **`buckets`** is a list, largest MV first, of `{bucket, status, units, avg_cost, realised_pl_sgd,
+  unrealised_pl_sgd, stock_pl_sgd, income_sgd, options_pl_sgd, net_pl_sgd}`. Every key but the two
+  labels is a summary key. A single-bucket ticker ships one element.
+- **Fold rules.** Figures sum. `realised` / `unrealised` / `stock_pl` / `cost_basis_*` /
+  `invested_sgd` are null if **any** leg's is — the spec's "null only when every leg is null" was
+  written when a closed leg shipped null; since #149 a leg's null means only *not known*, and a
+  partial sum would ship a Realised + Unrealised short of the Stock P/L beside it. `options_pl_sgd`
+  sums the legs that have the stream and is null where none does. `avg_cost` is `Σ cost_basis_native
+  ÷ Σ units` (D05 → the exact weighted average); a single leg passes its own through, which is also
+  the only answer a closed one has. Several legs holding zero units between them ship null — zero
+  instances today.
+- **Legs.** Kept if `units > 1e-6 or invested_native or income_native` (`performance.is_leg`,
+  `/api/positions`' drop rule). **No leg kept → 404**, which is also the emptied predecessor's
+  (C31, 0P00006FYT) answer: a sum over nothing would ship `net_pl_sgd: 0, net_verdict: "hero"`.
+  `/api/positions?closed=true` drops by the same `is_leg`, so a 404 is never a ticker Holdings lists.
+  **0P00006FYT still answers 200**: its switch carry does not fire (#164), so it is not emptied —
+  it becomes a 404 when that lands, with no change here.
+- **Tables.** Transactions and dividends carry `bucket` on every row, single-bucket names included;
+  CDP rows from `cdp_cost_lot` take theirs from the account table by name. The running balance runs
+  across buckets. `options` is fetched unconditionally, carries **no** bucket, and each trade ships
+  `realised` — `options._is_open()`'s answer, not its inputs (also on `/api/options-trades`).
+  **Stated assumption, named trigger:** options are cash-bucket by construction (Tiger Prime); if one
+  is ever booked elsewhere, the table needs a bucket column and `realized_by()`'s hardcoded `cash` is
+  a bug.
+- **Premiums sit inside the split** — a cash-column `Options` line — so bucket Nets add up to the
+  hero. The distortion (cash Net not reconciling to its own stock cost) needs a ticker both optioned
+  and multi-bucket; there are none.
+
+Gated in `tests/test_fold_ticker.py` (pure), `tests/test_holding_endpoint.py` (TestClient, stubbed)
+and `tests/test_holding_pg.py` (the ledger SQL and `fx_as_of`). Frontend: the only caller and the
+fixture key lose `&bucket=`; the fixture itself is recaptured by #155.
