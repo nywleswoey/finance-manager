@@ -288,12 +288,75 @@ def test_non_cash_carry_replays_cost_and_quantity_at_the_original_dates():
     _assert_terminal_equal(pos)
 
 
+def _settling_switch(*extra):
+    """0P00006FYT -> 0P0001OOJG's shape (#164): a switch's two legs are never same-day. The
+    redemption closes the predecessor on 2021-01-01 and the switch-in it funds lands three
+    days later — the arrival the carry exists to cover."""
+    return [
+        _txn(security_id=1, canonical_ticker="OLD", asset_type="fund", action="open market",
+             qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
+        _txn(security_id=1, canonical_ticker="OLD", asset_type="fund", action="open market",
+             qty_signed=-100, price=11.0, trade_date=D(2021, 1, 1)),
+        _txn(security_id=2, canonical_ticker="NEW", asset_type="fund", action="switch_in",
+             qty_signed=90, price=None, trade_date=D(2021, 1, 4)),
+        *extra,
+    ]
+
+
+def test_a_switch_in_settling_after_the_redemption_is_the_carrys_own_leg():
+    """The window's near edge admits the settlement gap without a constant: the carry's own
+    leg is matched by shape — the first `switch_in` after the close — rather than by a
+    `day <= close` bound that excludes exactly the arrival it exists for. Before the fix NEW
+    read 90 of 90 units `unknown`, and OLD's cost stayed on a husk nobody can reach."""
+    txns = _settling_switch()
+    pos = _acc(txns, corp=[("OLD", "NEW", "switch")])
+    new, old = pos[("cash", 2)], pos[("cash", 1)]
+    assert new["invested"] == 1000.0 and old["invested"] == 0.0
+    # the predecessor's costed event replays into the successor at its ORIGINAL date
+    assert [(e.date, e.cost) for e in new["cost_events"]] == [(D(2020, 1, 1), 1000.0)]
+    rows = _fold(txns, corp=[("OLD", "NEW", "switch")], price={2: 13.0})
+    p = _sums(_part(rows, "NEW"))
+    assert (p["costed"], p["unknown"]) == (90.0, 0.0)
+    # capital at risk from when it was paid: the whole 1,000, not the zero an uncarried
+    # switch-in leaves behind
+    assert next(r for r in rows if r["ticker"] == "NEW")["peak_car_sgd"] == 1000.0
+
+
+def test_the_date_still_bounds_what_follows_the_carrys_leg():
+    """The intent of the bound survives: a LATER unpriced arrival into a carried holding is
+    unrelated, even with the same shape (0P0001OOJG's own 2025 top-up is the live case)."""
+    txns = _settling_switch(
+        _txn(security_id=2, canonical_ticker="NEW", asset_type="fund", action="switch_in",
+             qty_signed=10, price=None, trade_date=D(2022, 1, 1)))
+    rows = _fold(txns, corp=[("OLD", "NEW", "switch")], price={2: 13.0})
+    p = _sums(_part(rows, "NEW"))
+    assert (p["costed"], p["unknown"]) == (90.0, 10.0)
+
+
+def test_a_leg_that_landed_by_the_close_is_the_leg_and_a_later_arrival_is_not():
+    """Where the carry's arrival is already in by the predecessor's close (9CI's same-day
+    `open/transfer_in`), nothing after the close is looked for, and a later arrival with the
+    pending shape is not the leg either way (see the `open` two years on, below)."""
+    txns = [_txn(security_id=1, canonical_ticker="C31", action="buy", qty_signed=100,
+                 price=10.0, trade_date=D(2020, 1, 1)),
+            _txn(security_id=1, canonical_ticker="C31", action="sell/transfer",
+                 qty_signed=-100, price=None, trade_date=D(2021, 1, 1)),
+            _txn(security_id=2, canonical_ticker="9CI", action="open/transfer_in",
+                 qty_signed=50, price=None, trade_date=D(2021, 1, 1)),
+            _txn(security_id=2, canonical_ticker="9CI", action="open/transfer_in",
+                 qty_signed=30, price=None, trade_date=D(2021, 2, 1))]
+    rows = _fold(txns, corp=[("C31", "9CI", "split")], price={2: 25.0})
+    p = _sums(_part(rows, "9CI"))
+    assert (p["costed"], p["unknown"]) == (50.0, 30.0)
+
+
 # /api/positions splats the fold's row wholesale (`{**r, "status": ...}`), so a field added to
 # the row is a field added to the endpoint. This is the whole key set: #147's dated series is
 # deliberately NOT in it, #148 traded `uncosted_units` for `cost_partition`, and #152 added the
 # four return fields — and `peak_car_date` is deliberately not among them (#143 Further Notes:
 # nothing on the page renders it, and absent beats null for a field with no consumer). #150
-# added the Net and its verdict, so the frontend renders them rather than composing them.
+# added the Net and its verdict, so the frontend renders them rather than composing them. #151
+# added `provenance` — null unless a corporate action carried onto the name.
 ROW_FIELDS = {
     "bucket", "accounts", "ticker", "name", "market", "asset_type", "currency", "units", "price",
     "mv_native", "avg_cost", "cost_basis_native", "cost_basis_sgd", "unrealised_pl_sgd",
@@ -302,7 +365,7 @@ ROW_FIELDS = {
     "cost_partition", "total_pl_native", "invested_sgd", "mv_sgd", "income_sgd", "pl_sgd",
     "xirr", "simple_return", "options_pl_sgd",
     "peak_car_sgd", "return_span_days", "return_pct", "return_verdict",
-    "net_pl_sgd", "net_verdict",
+    "net_pl_sgd", "net_verdict", "provenance",
 }
 
 

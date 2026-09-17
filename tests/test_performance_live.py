@@ -30,7 +30,8 @@ from portfolio.cost_annotations import annotation_map
 from portfolio.db import session_scope
 from portfolio.options import contracts_by_ticker
 from portfolio.performance import (_accumulate_positions, _fx_and_price, cdp_cost, compute,
-                                   legs_by_ticker, rollup, ticker_car)
+                                   is_emptied_predecessor, is_leg, legs_by_ticker,
+                                   rollup, ticker_car)
 
 # The ledger #148 was measured against: 548 txn rows / 73 positions. The totals below are
 # readings of THAT book and nothing else.
@@ -348,20 +349,25 @@ class TestLiveBook(unittest.TestCase):
         on-return at once, and both are whole-ticker readings riding every leg."""
         seen = {}
         for r in self.rows:
-            self.assertIn(r["net_verdict"], ("hero", "caveat", "refuse"), r["ticker"])
+            self.assertIn(r["net_verdict"], ("hero", "caveat", "refuse", "bounded"),
+                          r["ticker"])
             self.assertIn(r["return_verdict"], ("ok", "caveat", "no_capital"), r["ticker"])
             self.assertEqual(seen.setdefault(r["ticker"], r["net_verdict"]), r["net_verdict"],
                              r["ticker"])
 
     def test_net_verdict_reads_the_tickers_summed_counts(self):
-        """True of any book — the rule restated over the live partitions, not over `cost_known`."""
+        """True of any book — the rule restated over the live partitions, not over `cost_known`,
+        with the one input that is not a count: a split carry's bound overrides anything but a
+        refusal (#151)."""
         counts = {}
         for r in self.rows:
-            c = counts.setdefault(r["ticker"], [0.0, 0.0, r["net_verdict"]])
+            c = counts.setdefault(r["ticker"], [0.0, 0.0, r["net_verdict"], r["provenance"]])
             c[0] += r["cost_partition"]["costed"]
             c[1] += r["cost_partition"]["unknown"]
-        for ticker, (costed, unknown, verdict) in counts.items():
+        for ticker, (costed, unknown, verdict, prov) in counts.items():
             want = "hero" if unknown <= 1e-6 else "caveat" if costed > 1e-6 else "refuse"
+            if prov and prov["bound"] and want != "refuse":
+                want = "bounded"
             self.assertEqual(verdict, want, ticker)
 
     def test_net_is_the_sum_of_the_components_as_shipped_with_zero_tolerance(self):
@@ -395,6 +401,70 @@ class TestLiveBook(unittest.TestCase):
         self.assertGreater(len(set(got.values())), 1)
 
 
+    # -- the dated carry, `bounded`, and provenance (#151) ---------------------------------
+
+    def test_exactly_one_predecessor_has_more_than_one_successor(self):
+        """An INVARIANT, not a reading: the query returns one row, and the fold's split set is
+        whatever that row says — never a literal. A second row is the named trigger for bound
+        directions that might conflict on one name (#143 Further Notes), so it fails loudly."""
+        with session_scope() as s:
+            found = [r[0] for r in s.execute(text(
+                "SELECT from_ticker FROM corporate_action GROUP BY from_ticker "
+                "HAVING count(*) > 1")).all()]
+            succ = {r[0] for r in s.execute(text(
+                "SELECT to_ticker FROM corporate_action WHERE from_ticker = ANY(:f)"),
+                {"f": found}).all()}
+        self.assertEqual(len(found), 1, found)
+        bounded = {r["ticker"] for r in self.rows if r["provenance"] and r["provenance"]["bound"]}
+        self.assertEqual(bounded, succ & {r["ticker"] for r in self.rows})
+        self.assertTrue(all(r["provenance"]["from_ticker"] == found[0] for r in self.rows
+                            if r["ticker"] in bounded))
+
+    def test_a_split_carry_is_one_lower_bound_and_its_siblings_upper(self):
+        """True of any book: the cost of one event went to exactly one of its successors, and
+        every successor names the reachable others."""
+        by_event = {}
+        for r in self.rows:
+            p = r["provenance"]
+            if p and p["bound"]:
+                by_event.setdefault(p["from_ticker"], {})[r["ticker"]] = p
+        for frm, succ in by_event.items():
+            self.assertEqual(sorted(p["bound"] for p in succ.values()).count("lower"), 1, frm)
+            for tk, p in succ.items():
+                self.assertEqual({s["ticker"] for s in p["split_with"]}, set(succ) - {tk}, tk)
+                self.assertEqual(p["carried_sgd"] > 0, p["bound"] == "lower", tk)
+
+    def test_the_three_carried_pages_disclose(self):
+        """#143 §12's three pages, the exact 1:1 carry included. A reading of this book's
+        corporate actions, so it skips where one is missing rather than failing."""
+        want = {"9CI": ("C31", "lower"), "C38U": ("C31", "upper"),
+                "0P0001OOJG": ("0P00006FYT", None)}
+        got = {r["ticker"]: r for r in self.rows if r["ticker"] in want}
+        if set(got) != set(want):
+            raise unittest.SkipTest(f"this book lacks {sorted(set(want) - set(got))}")
+        for tk, (frm, bound) in want.items():
+            p = got[tk]["provenance"]
+            self.assertEqual((p["from_ticker"], p["bound"]), (frm, bound), tk)
+        self.assertEqual(got["9CI"]["net_verdict"], "bounded")
+        self.assertEqual(got["C38U"]["net_verdict"], "bounded")
+        self.assertEqual(got["0P0001OOJG"]["net_verdict"], "hero")
+        self.assertIsNotNone(got["9CI"]["avg_cost"])            # bounded keeps its tiles
+
+    def test_no_emptied_predecessor_is_leg(self):
+        """True of any book: every predecessor a carry emptied fails the listing rule, which is
+        what Holdings' absence rests on (#143 §13) — and `/api/holding` agrees it is a husk."""
+        preds = {r["provenance"]["from_ticker"] for r in self.rows
+                 if r["provenance"] and r["provenance"]["carried_sgd"] > 0}
+        if not preds:
+            raise unittest.SkipTest("no carry fired in this book — nothing to assert")
+        for r in self.rows:
+            if r["ticker"] in preds:
+                self.assertFalse(is_leg(r), f"{r['bucket']}/{r['ticker']}")
+                self.assertTrue(is_emptied_predecessor(r, self.rows), r["ticker"])
+            elif not is_leg(r):
+                self.assertFalse(is_emptied_predecessor(r, self.rows), r["ticker"])
+
+
 def _fx_or_none():
     """The newest fx_rate row as `{currency: rate}` — what "at latest FX" resolved to."""
     with session_scope() as s:
@@ -420,8 +490,7 @@ def _live_ticker_car():
         )).mappings().all()]
         cdp = cdp_cost(s)
         corp = s.execute(text(
-            "SELECT from_ticker, to_ticker, type FROM corporate_action "
-            "WHERE type IN ('rename','split','consolidation','merger','switch')")).all()
+            "SELECT from_ticker, to_ticker, type FROM corporate_action")).all()
     pos, meta = _accumulate_positions(txns, divs, cdp, corp, today, annotation_map())
     contracts = contracts_by_ticker()
     return {tk: ticker_car(ls, contracts.get(tk, ()), fx, today)
