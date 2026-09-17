@@ -133,7 +133,7 @@ def test_transfer_out_with_a_space_outside_the_cost_lot_table_fails():
 
 def test_any_warning_from_the_fold_fails():
     book = _book(fold_warnings=["unclassified txn action(s) ['spinoff'] — treated as zero-cash"])
-    assert _failures(book, "the fold emits no unclassified action") == [
+    assert _failures(book, "the fold emits no warning (no unclassified action)") == [
         "unclassified txn action(s) ['spinoff'] — treated as zero-cash"]
 
 
@@ -183,6 +183,44 @@ def test_peak_car_reading_prints_the_figure_its_date_and_span_beside_the_spec():
     moved = _line(book, al.Settled(peak_car=[("AAA", 1234.51, D(2021, 6, 1), 2.0, "closed")]),
                   " AAA ")
     assert moved.startswith("≠")
+
+
+def test_a_foreign_peak_is_compared_at_the_rate_the_spec_read_it_at():
+    """Its amount moves with latest FX and its date does not, so a rate change alone is `=`."""
+    car = {"USDX": {"peak_car_sgd": 900.0, "peak_car_date": D(2022, 1, 1),
+                    "return_span_days": 400, "held": True, "currency": "USD", "rate": 1.2}}
+    settled = al.Settled(peak_car=[("USDX", 1000.0, D(2022, 1, 1), 1.1, "open")],
+                         fx={"USD": 1.2 * 1000 / 900})
+    assert _line(_book(car=car), settled, " USDX ").startswith("=")
+    assert "1,000.00  at USD" in _text(_book(car=car), settled)
+    moved = al.Settled(peak_car=[("USDX", 1000.0, D(2022, 1, 2), 1.1, "open")],
+                       fx={"USD": 1.2 * 1000 / 900})
+    assert _line(_book(car=car), moved, " USDX ").startswith("≠")
+
+
+def test_a_peak_that_agrees_on_the_amount_but_not_the_state_is_not_equal():
+    book = _book(car={"AAA": {"peak_car_sgd": 5.0, "peak_car_date": D(2021, 6, 1),
+                              "return_span_days": 730, "held": True}})
+    settled = al.Settled(peak_car=[("AAA", 5.0, D(2021, 6, 1), 2.0, "closed")])
+    assert _line(book, settled, " AAA ").startswith("≠")
+
+
+def test_a_closed_span_is_compared_and_an_open_one_is_not():
+    closed = _book(car={"AAA": {"peak_car_sgd": 5.0, "peak_car_date": D(2021, 6, 1),
+                                "return_span_days": 730, "held": False}})
+    assert _line(closed, al.Settled(peak_car=[("AAA", 5.0, D(2021, 6, 1), 1.9, "closed")]),
+                 " AAA ").startswith("≠")
+    held = _book(car={"AAA": {"peak_car_sgd": 5.0, "peak_car_date": D(2021, 6, 1),
+                              "return_span_days": 730, "held": True}})
+    assert _line(held, al.Settled(peak_car=[("AAA", 5.0, D(2021, 6, 1), 1.9, "open")]),
+                 " AAA ").startswith("=")
+
+
+def test_a_note_on_record_is_printed_under_its_reading():
+    book = _book()
+    settled = al.Settled(peak_car=[("AAA", 10.0, D(2020, 1, 1), 1.0, "open")],
+                         notes={"AAA": "known to disagree, see elsewhere"})
+    assert "note: known to disagree, see elsewhere" in _text(book, settled)
 
 
 def test_a_settled_ticker_missing_from_the_book_is_printed_not_raised():

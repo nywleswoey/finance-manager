@@ -80,7 +80,7 @@ class Book:
       fold_warnings     — every WARNING the fold logged while `compute()` ran
       cost_lot_tickers  — tickers with a `cdp_cost_lot` row `cdp_cost()` books (non-transfer, non-zero)
       cdp_txn_tickers   — tickers with at least one `txn` row on the CDP account
-      car               — {ticker: ticker_car(...) plus `held`} for every ticker in the book
+      car               — {ticker: ticker_car(...) plus `held`, `currency` and today's `rate`}
       performance       — {by: /api/performance's response for that dimension}
       orphan_options    — {underlying: realised SGD} for option underlyings with no stock row
       counts            — table sizes, dates and rates, printed so a reader knows which book
@@ -105,7 +105,7 @@ class Invariant(NamedTuple):
     check: Callable[[Book], list]      # failures, one message each; empty means it holds
 
 
-def _n(x):
+def _count(x):
     """A count as the spec prints one: integral where it is, trimmed float where it is not."""
     return f"{x:g}"
 
@@ -116,9 +116,9 @@ def _partition_sums(book):
         p = r["cost_partition"]
         got = p["costed"] + p["free"] + p["unknown"]
         if abs(got - p["units_in"]) > 1e-4:
-            out.append(f"{r['bucket']}/{r['ticker']}: costed {_n(p['costed'])} + free "
-                       f"{_n(p['free'])} + unknown {_n(p['unknown'])} = {_n(round(got, 4))} "
-                       f"≠ units_in {_n(p['units_in'])}")
+            out.append(f"{r['bucket']}/{r['ticker']}: costed {_count(p['costed'])} + free "
+                       f"{_count(p['free'])} + unknown {_count(p['unknown'])} = {_count(round(got, 4))} "
+                       f"≠ units_in {_count(p['units_in'])}")
     return out
 
 
@@ -183,7 +183,7 @@ INVARIANTS = [
     Invariant("partition sums to units in", _partition_sums),
     Invariant("exactly one multi-successor corporate action", _one_multi_successor),
     Invariant("`transfer out` only in cdp_cost_lot", _transfer_out_only_in_cost_lots),
-    Invariant("the fold emits no unclassified action", _no_fold_warnings),
+    Invariant("the fold emits no warning (no unclassified action)", _no_fold_warnings),
     Invariant("every stock dividend carries zero quantity", _stock_dividends_deliver_no_units),
     Invariant("cost lots only on tickers CDP holds", _cost_lots_backed_by_cdp_rows),
 ]
@@ -191,19 +191,37 @@ INVARIANTS = [
 
 # ---------------------------------------------------------------------------- readings
 
+class SettledPeak(NamedTuple):
+    ticker: str
+    peak_car_sgd: float
+    on: dt.date | None
+    span_years: float
+    state: str                      # open | closed
+
+
+class SettledResidual(NamedTuple):
+    orphans: float                  # Σ realised SGD of option underlyings never held as stock
+    rounding: float
+
+
 @dataclasses.dataclass
 class Settled:
     """What #143 settled, for the readings to be printed beside. A record, never a gate."""
-    # (ticker, peak CAR, peak date, span years, state) — #143 §9, as settled by #139 §8
+    # #143 §9, as settled by #139 §8
     peak_car: list = dataclasses.field(default_factory=lambda: [
-        ("PLTR", 218_495.04, dt.date(2024, 1, 2), 5.4, "open"),
-        ("D05", 96_440.20, dt.date(2020, 3, 16), 8.5, "open"),
-        ("TSLA", 94_473.75, dt.date(2026, 6, 11), 3.6, "closed"),
-        ("Q01", 33_461.35, dt.date(2020, 2, 27), 8.8, "open"),
-        ("O5RU", 39_986.42, dt.date(2019, 12, 28), 8.8, "open"),
-        ("S51", 1_767.92, dt.date(2021, 9, 22), 3.7, "closed"),
-        ("AAPL", 0.0, None, 3.7, "open"),
+        SettledPeak("PLTR", 218_495.04, dt.date(2024, 1, 2), 5.4, "open"),
+        SettledPeak("D05", 96_440.20, dt.date(2020, 3, 16), 8.5, "open"),
+        SettledPeak("TSLA", 94_473.75, dt.date(2026, 6, 11), 3.6, "closed"),
+        SettledPeak("Q01", 33_461.35, dt.date(2020, 2, 27), 8.8, "open"),
+        SettledPeak("O5RU", 39_986.42, dt.date(2019, 12, 28), 8.8, "open"),
+        SettledPeak("S51", 1_767.92, dt.date(2021, 9, 22), 3.7, "closed"),
+        SettledPeak("AAPL", 0.0, None, 3.7, "open"),
     ])
+    # the rates the settled peaks were read at. A foreign name's peak is converted at latest FX,
+    # so its AMOUNT moves with the rate while its DATE does not (every leg is single-currency);
+    # the reading rescales to these before comparing, which is what makes "does PLTR come out
+    # 218,495.04?" answerable on a later rate.
+    fx: dict = dataclasses.field(default_factory=lambda: {"USD": 1.281, "HKD": 0.1633})
     # (ticker, unknown share of entering units) — #143 §11
     caveat: list = dataclasses.field(default_factory=lambda: [
         ("S51", 0.400), ("SET", 0.279), ("Q01", 0.250), ("C38U", 0.075)])
@@ -213,8 +231,18 @@ class Settled:
     # #143 §8 — read under the definition in force when #137 measured it
     cost_known_false: list = dataclasses.field(default_factory=lambda: [
         "0P00006FYT", "AAPL", "AMZN", "ASTREA6B", "C31", "HMN"])
-    # (orphan option underlyings, rounding) — #143 §15
-    residual: tuple = (5_130.64, 0.03)
+    # #143 §15
+    residual: SettledResidual = SettledResidual(5_130.64, 0.03)
+    # where the spec's own figure cannot reproduce for a reason already on record — printed
+    # under the reading so a `≠` there is not re-investigated from scratch
+    notes: dict = dataclasses.field(default_factory=lambda: {
+        "O5RU": "#143 §9 disagrees with itself: rule 4's own paragraph takes O5RU to 55,137.42, "
+                "the table's 39,986.42 is the series on 2019-12-28 (see "
+                "tests/test_performance_live.py)",
+        "cost_known": "the six predate §7's redefinition of cost_known (false only when EVERY "
+                      "entering unit is unknown), under which free lots and emptied "
+                      "predecessors read true",
+    })
 
 
 def _money(x):
@@ -252,13 +280,13 @@ def partition_totals(rows):
 
 def cost_known_false(rows, corporate_actions):
     """`(ticker, is_emptied_predecessor)` for every ticker with a leg whose `cost_known` is false.
-    A husk is a carry's `from_ticker` holding nothing — its cost moved to the successor."""
+    An emptied predecessor is a carry's `from_ticker` holding nothing — its cost moved on."""
     predecessors = {frm for frm, _, _ in corporate_actions}
     out = {}
     for r in rows:
         if not r["cost_known"]:
-            husk = r["ticker"] in predecessors and r["units"] <= EPS
-            out[r["ticker"]] = out.get(r["ticker"], True) and husk
+            emptied = r["ticker"] in predecessors and r["units"] <= EPS
+            out[r["ticker"]] = out.get(r["ticker"], True) and emptied
     return sorted(out.items())
 
 
@@ -285,7 +313,18 @@ def performance_identity(book):
     return out
 
 
+def at_settled_fx(car, settled):
+    """`(amount, currency, rate)` — a foreign name's peak rescaled from today's rate to the one the
+    spec read it at — or None for an SGD name, a measured zero, or when either rate is missing."""
+    ccy, rate = car.get("currency"), car.get("rate")
+    if ccy in (None, "SGD") or not rate or ccy not in settled.fx or not car["peak_car_sgd"]:
+        return None
+    return car["peak_car_sgd"] * settled.fx[ccy] / rate, ccy, settled.fx[ccy]
+
+
 def _peak_car_lines(book, settled):
+    """`=` needs the amount (at the spec's rate), the date and the state to agree, and a closed
+    name's span too. An open name's span runs to today, so it is printed and not compared."""
     lines = [f"    {'ticker':<8}{'peak CAR':>14}  {'on':<10}  {'span':>5}  {'state':<6}   "
              f"#143 settled"]
     for tk, peak, on, span, state in settled.peak_car:
@@ -294,11 +333,23 @@ def _peak_car_lines(book, settled):
         if got is None:
             lines.append(f"  ≠ {tk:<8}{'not in this book':>14}{'':>30}   {want}")
             continue
-        same = round(got["peak_car_sgd"], 2) == round(peak, 2) and got["peak_car_date"] == on
+        rescaled = at_settled_fx(got, settled)
+        # a rescale of a figure rounded to the cent can land a cent either side
+        same_amount = (abs(rescaled[0] - peak) <= 0.02 if rescaled
+                       else round(got["peak_car_sgd"], 2) == round(peak, 2))
         years = round(got["return_span_days"] / 365.25, 1)
+        got_state = "open" if got["held"] else "closed"
+        same = (same_amount and got["peak_car_date"] == on and got_state == state
+                and (state == "open" or years == span))
         lines.append(f"  {_mark(same)} {tk:<8}{_money(got['peak_car_sgd']):>14}  "
-                     f"{str(got['peak_car_date'] or '—'):<10}  {years:>4}y  "
-                     f"{'open' if got['held'] else 'closed':<6}   {want}")
+                     f"{str(got['peak_car_date'] or '—'):<10}  {years:>4}y  {got_state:<6}   "
+                     f"{want}")
+        if rescaled:
+            amount, ccy, rate = rescaled
+            lines.append(f"    {'':<8}{_money(amount):>14}  at {ccy} {rate:g}, the rate "
+                         f"#143 read it at (today {got['rate']:g})")
+        if tk in settled.notes:
+            lines.append(f"    note: {settled.notes[tk]}")
     return lines
 
 
@@ -309,7 +360,7 @@ def _caveat_lines(book, settled):
     for tk, pct, unknown, units_in in got:
         same = tk in want and round(pct, 3) == round(want[tk], 3)
         spec = f"{want[tk]:.1%}" if tk in want else "not in the settled set"
-        lines.append(f"  {_mark(same)} {tk:<12}{pct:>8.1%}  {_n(round(unknown, 4)) + ' of ' + _n(round(units_in, 4)):<24} {spec}")
+        lines.append(f"  {_mark(same)} {tk:<12}{pct:>8.1%}  {_count(round(unknown, 4)) + ' of ' + _count(round(units_in, 4)):<24} {spec}")
     for tk in sorted(set(want) - {t[0] for t in got}):
         lines.append(f"  ≠ {tk:<12}{'—':>8}  {'not a caveat in this book':<24} {want[tk]:.1%}")
     return lines
@@ -330,6 +381,8 @@ def _cost_known_lines(book, settled):
                 or "none"),
              f"    #143 settled: {len(settled.cost_known_false)} — "
              + ", ".join(settled.cost_known_false)]
+    if "cost_known" in settled.notes:
+        lines.append(f"    note: {settled.notes['cost_known']}")
     return lines
 
 
@@ -381,7 +434,7 @@ def audit(book, settled=None):
 
 # ---------------------------------------------------------------------------- the live book
 
-class _Collect(logging.Handler):
+class _WarningCollector(logging.Handler):
     def __init__(self):
         super().__init__(logging.WARNING)
         self.messages = []
@@ -401,7 +454,7 @@ def fetch():
                                        legs_by_ticker, ticker_car)
     from server.main import performance
 
-    collect = _Collect()
+    collect = _WarningCollector()
     root = logging.getLogger("portfolio")
     root.addHandler(collect)
     try:
@@ -411,23 +464,22 @@ def fetch():
 
     today = dt.date.today()
     with session_scope() as s:
-        def col(sql):
+        def column(sql):
             return [r[0] for r in s.execute(text(sql)).all()]
 
         corporate_actions = [tuple(r) for r in s.execute(text(
             "SELECT from_ticker, to_ticker, type FROM corporate_action ORDER BY id")).all()]
-        actions = {"txn": col("SELECT action FROM txn"),
-                   "cdp_cost_lot": col("SELECT action FROM cdp_cost_lot")}
+        actions = {"txn": column("SELECT action FROM txn"),
+                   "cdp_cost_lot": column("SELECT action FROM cdp_cost_lot")}
         stock_dividends = [dict(r) for r in s.execute(text(
             "SELECT sec.canonical_ticker ticker, t.trade_date, t.qty_signed FROM txn t "
             "JOIN security sec ON sec.id = t.security_id "
             "WHERE lower(trim(t.action)) = 'stock dividend'")).mappings().all()]
-        # the lots `cdp_cost()` books: a transfer or a zero amount attaches nothing
-        cost_lot_tickers = set(col(
-            "SELECT DISTINCT ticker FROM cdp_cost_lot WHERE amount <> 0 AND lower(trim("
-            "coalesce(action, ''))) NOT IN ('transfer out', 'transfer in', 'transfer_out', "
-            "'transfer_in')"))
-        cdp_txn_tickers = set(col(
+        # the lots `cdp_cost()` actually books — a transfer or a zero amount attaches nothing,
+        # and asking it rather than re-spelling its skip rules keeps the two from drifting
+        cdp = cdp_cost(s)
+        cost_lot_tickers = set(cdp)
+        cdp_txn_tickers = set(column(
             "SELECT DISTINCT sec.canonical_ticker FROM txn t JOIN account a ON a.id = t.account_id "
             "JOIN security sec ON sec.id = t.security_id WHERE a.name = 'CDP'"))
         counts = {t: s.execute(text(f"SELECT count(*) FROM {t}")).scalar()
@@ -435,14 +487,11 @@ def fetch():
         counts["positions"] = len(rows)
         counts["prices as of"] = valuation_as_of(s)
         counts["fx as of"] = fx_as_of(s)
-        # a foreign name's peak CAR is converted at latest FX, so its AMOUNT moves with the rate
-        # while its DATE does not (every leg is single-currency). Printed so a `≠` can be read.
-        fx_now, _ = _fx_and_price(s)
-        counts["fx"] = ", ".join(f"{c} {r:g}" for c, r in sorted(fx_now.items()) if c != "SGD")
+        fx, _ = _fx_and_price(s)
+        counts["fx"] = ", ".join(f"{c} {r:g}" for c, r in sorted(fx.items()) if c != "SGD")
 
         # Peak capital-at-risk's DATE never reaches the wire (#143 Further Notes), so it is read
         # off the accumulators. The same inputs `compute()` fetches, through the same fold.
-        fx, _ = _fx_and_price(s)
         txns = [dict(r) for r in s.execute(text("""
             SELECT t.account_id, a.name account, a.funding_bucket, t.security_id,
                    sec.canonical_ticker, sec.name, sec.market, sec.asset_type, sec.currency,
@@ -452,16 +501,16 @@ def fetch():
         divs = [dict(r) for r in s.execute(text(
             "SELECT account_id, security_id, pay_date, gross, currency FROM dividend"
         )).mappings().all()]
-        cdp = cdp_cost(s)
-        corp = s.execute(text(
-            "SELECT from_ticker, to_ticker, type FROM corporate_action "
-            "WHERE type IN ('rename','split','consolidation','merger','switch')")).all()
+    # `compute()`'s carry filter, over the rows already read
+    corp = [c for c in corporate_actions
+            if c[2] in ("rename", "split", "consolidation", "merger", "switch")]
     pos, meta = _accumulate_positions(txns, divs, cdp, corp, today, annotation_map())
     contracts = contracts_by_ticker()
     car = {}
     for tk, legs in legs_by_ticker(pos, meta).items():
         cs = contracts.get(tk, ())
-        car[tk] = {**ticker_car(legs, cs, fx, today),
+        ccy = legs[0][1]["currency"] or "SGD"
+        car[tk] = {**ticker_car(legs, cs, fx, today), "currency": ccy, "rate": fx.get(ccy),
                    "held": any(p["units"] > EPS for p, _ in legs) or any(c["open"] for c in cs)}
 
     held_tickers = {r["ticker"] for r in rows}
