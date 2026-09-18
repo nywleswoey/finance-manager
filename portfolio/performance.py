@@ -1183,10 +1183,13 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
     for r in out:
         r["provenance"] = provenance.get(r["ticker"])
         o = options.get(r["ticker"]) if r["bucket"] == "cash" else None
-        # #143 §6: null means the stream NEVER EXISTED, so the row is omitted — 61 of the live
-        # book's 73 legs stop carrying a permanent `Options 0` line. An optioned name still ships
-        # a number when that number is zero: "the stream measured zero" and "there is no stream"
-        # are different facts, and the states they belong to render differently.
+        # #143 §6: null omits the row instead of carrying a permanent `Options 0` line — 61 of the
+        # live book's 73 legs. It reaches one state short of §6's NEVER EXISTED, though:
+        # `realized_by_ticker()` keys on `_closed_trades()`, so an optioned name whose every leg is
+        # still open has no key and lands here too. A name with one resolved leg ships its number
+        # even when that number is zero. "measured zero" and "no stream" are different facts and
+        # render differently, so readers must not take null for never-optioned — see BACKEND.md,
+        # "The four cell states".
         r["options_pl_sgd"] = o["pl_sgd"] if o else None
         # Net and its verdict land here and not in `_build_row`, because the options stream is
         # one of Net's components and is attached only just above (#143 §15). The verdict is

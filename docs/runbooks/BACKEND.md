@@ -119,11 +119,19 @@ existed*, not *is the number zero*.
 So `null` means **exactly one thing per field**. `income_sgd` is named on the first line by
 #143 §6 and is **not** done: it still ships `0.0` on a name that never paid a dividend.
 
-- **`options_pl_sgd` null means the stream never existed** — a never-optioned ticker omits the
-  row rather than carrying a permanent `Options 0` line (61 of 73 legs live). An optioned name
-  still ships a number when that number is zero. Dividends and options can be *absent* but never
-  *unmeasurable*: cash received is always known. The `—` state is leg-level — a non-cash leg of
-  an optioned name — and is reconstructed where the ticker's own option book is in view, not here.
+- **`options_pl_sgd` null means no leg of this ticker has resolved yet** — a never-optioned ticker
+  omits the row rather than carrying a permanent `Options 0` line (61 of 73 legs live). That is
+  one state short of §6's *never existed*, and knowingly so: the field is attached from
+  `options.realized_by_ticker()`, which keys only on `_closed_trades()`, so an optioned name whose
+  every leg is still open has no key and ships null too. A name with at least one resolved leg
+  ships its number even when that number is zero. Until a zero is emitted for the
+  optioned-but-unresolved case, **do not read null as *never optioned***, and the field's two
+  readers differ on purpose: `Holdings.jsx` renders `—`, because a holdings row cannot tell the
+  two apart, while `SecurityDetail.jsx` zero-fills to `S$0`, because the legs are listed on the
+  same page (`web/tests/security-detail-options.spec.js` pins that). Dividends and options can be
+  *absent* but never *unmeasurable*: cash received is always known. The `—` state is leg-level —
+  a non-cash leg of an optioned name — and is reconstructed where the ticker's own option book is
+  in view, not here.
 - **`avg_cost`, both cost-basis fields and the realised/unrealised pair null mean *not known***,
   and it is the **partition** that decides it, never the unit count. A leg holding `unknown`
   units cannot price the shares it still has, so all five go null together. A leg whose every

@@ -159,10 +159,12 @@ option loses the row outright.
 
 `null` therefore means **exactly one** of these per field, and the contract says which:
 `options_pl_sgd` null means *omitted* (cash received is always known, so an options stream can
-be absent but never unmeasurable); `realised_pl_sgd`, `unrealised_pl_sgd`, `stock_pl_sgd`,
-`avg_cost` and both cost-basis fields null mean *not known* (units always entered, so those can
-be unmeasurable but never absent). `income_sgd` belongs on the first line by #143 §6 and does
-**not** ship that way yet — it is still `0.0` on a name that never paid, so nothing can tell
+be absent but never unmeasurable) — as shipped it also covers an optioned name whose every leg
+is still open, which the runbook's "four cell states" records as the one state still short;
+`realised_pl_sgd`, `unrealised_pl_sgd`, `stock_pl_sgd`, `avg_cost` and both cost-basis fields
+null mean *not known* (units always entered, so those can be unmeasurable but never absent).
+`income_sgd` belongs on the first line by #143 §6 and does **not** ship that way yet — it is
+still `0.0` on a name that never paid, so nothing can tell
 *never paid* from *paid zero*.
 _Avoid_: "n/a" (it reads as *not applicable*, i.e. impossible, on cells that mean *not known* —
 the wording the detail page still uses, which #158 replaces with words), empty (says which pixels
