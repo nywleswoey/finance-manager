@@ -2,7 +2,7 @@
 
 Personal investment-portfolio system: ingests broker statements → Postgres → performance
 analytics (incl. dividends) → a modular web app. Portfolio is the first module of a larger
-personal app. Built per [PLAN.md](PLAN.md).
+personal app. Built per [docs/archive/PLAN.md](docs/archive/PLAN.md) (historical).
 
 ```
 statements (data/) ──▶ parsers (build/, ingestion/) ──▶ Postgres ──▶ FastAPI ──▶ React app
@@ -61,9 +61,10 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
   total in SGD: market value, dividend income, P/L (where cost is known), per-position XIRR,
   and a portfolio **money-weighted return** (historical-FX XIRR).
 - **Options** — realized return from the sold-option (wheel) book: `option_trade` table loaded
-  from `data/.archive/tiger-options/options.csv` by `ingestion/parse_options.py`; analytics in
-  `portfolio/options.py` (realized P/L, premium collected, win-rate, by year/ticker/type, SGD at
-  latest FX). API `/api/options`, `/api/options-trades`.
+  by `ingestion/parse_options.py` from Tiger flex Activity Statements (`data/tiger-prime/*.csv`,
+  `data/tiger-cash-boost/*.csv`) and the reconciled IBKR export (`data/ibkr-options/options.csv`);
+  analytics in `portfolio/options.py` (realized P/L, premium collected, win-rate, by
+  year/ticker/type, SGD at latest FX). API `/api/options`, `/api/options-trades`.
 - **Net-worth snapshots** — dated manual assets/liabilities + frozen live portfolio value →
   net worth (and excl-housing / excl-housing-&-CPF) via `portfolio/networth.py`. Built from
   broker/bank statements by `scripts/snapshot_from_statements.py` (Tiger Prime CSV cash +
@@ -81,19 +82,19 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
 |---|---|
 | `data/` | raw statements (immutable) |
 | `build/` | statement parsers → `ledger.csv`, `dividends.csv`, `symbols.csv` |
-| `ingestion/` | DB loaders (`load.py`) + market data (`prices.py`) |
-| `portfolio/` | models, db, `performance.py`, `twr.py` |
+| `ingestion/` | DB loaders (`load.py`) + market data (`prices.py`) + options (`parse_options.py`) |
+| `portfolio/` | models, db, config, money (shared kernel); `performance.py`, `twr.py`, `dividends.py`, `options.py` (portfolio); `networth.py` (net worth); `spending.py`, `classify.py`, `recurring.py`, `spend_categories.py` (spending) |
 | `migrations/` | Alembic schema |
 | `scripts/seed.py` | reference-data seed |
 | `scripts/snapshot_from_statements.py` | net-worth snapshot from statements (`--all-new` delta) |
-| `server/` | FastAPI app (`main.py`) — serves `/api/*` and the built SPA |
+| `server/` | FastAPI app (`main.py`) — serves `/api/*` and the built SPA; `auth.py` — Google OAuth router |
 | `api/index.py` | Vercel entrypoint — re-exports `server.main:app` |
-| `web/` | React (Vite) app |
+| `web/` | React (Vite) app; `web/src/modules/{portfolio,networth,spending}/` — the three product modules |
 
 ## Status
 
-Phases 0–6 of PLAN.md implemented and verified end-to-end (DB, ingestion, prices/FX,
-performance, API, frontend). See [BACKEND.md](BACKEND.md). Known limitations: CDP-origin
+Phases 0–6 of [PLAN.md](docs/archive/PLAN.md) implemented and verified end-to-end (DB, ingestion, prices/FX,
+performance, API, frontend). See [docs/runbooks/BACKEND.md](docs/runbooks/BACKEND.md). Known limitations: CDP-origin
 positions carry no transaction cost (statements lack amounts) so their P/L/XIRR is shown as
 n/a; true time-weighted return (TWR) needs a daily price-history backfill (money-weighted
 XIRR is implemented). Next: direct-to-DB parsers + `import_batch` per file, historical

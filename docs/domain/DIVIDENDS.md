@@ -157,5 +157,5 @@ replayable ledger qty), **no date** (old CDP layout), **unmapped ticker**. The D
 has a "flagged only" filter. ~34 of 466 rows currently need input (mostly dateless 2017-18 CDP).
 Resolve by adding the missing rate/date/units to the source tracker row and re-ingesting.
 
-This is **Phase 2 (dividends) of [PLAN.md](PLAN.md) front-loaded** — `dividends.csv` maps
+This is **Phase 2 (dividends) of [PLAN.md](../archive/PLAN.md) front-loaded** — `dividends.csv` maps
 directly onto the `dividend` table and makes total-return computable.

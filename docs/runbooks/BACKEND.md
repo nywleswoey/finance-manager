@@ -1,6 +1,11 @@
 # Backend — Phase 0/1 (DB foundation + load)
 
-Implements [PLAN.md](PLAN.md) Phase 0 (Postgres + schema + seed) and the first half of
+> **Live vs historical**: this file is a Phase 0/1 build write-up from early in the project.
+> The stack description and cost-partition notes below are still accurate; the "Quick start"
+> command has been corrected to match the current `Makefile`. For current setup/ingest
+> instructions, see the root [README.md](../../README.md).
+
+Implements [PLAN.md](../archive/PLAN.md) Phase 0 (Postgres + schema + seed) and the first half of
 Phase 1 (load the existing `build/*.csv` into the DB, idempotently).
 
 ## Stack in place
@@ -16,7 +21,7 @@ Phase 1 (load the existing `build/*.csv` into the DB, idempotently).
 uv venv .venv && uv pip install --python .venv/bin/python \
     sqlalchemy alembic "psycopg[binary]" pydantic-settings python-dotenv
 cp .env.example .env
-make refresh        # db-up + migrate + seed + load   (idempotent)
+make setup          # db-up + migrate + seed + ingest + prices  (idempotent; see `make ingest` for load-only)
 make psql           # poke around
 ```
 
