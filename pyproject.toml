@@ -1,7 +1,7 @@
 [project]
-name = "portfolio-platform"
+name = "finance-manager"
 version = "0.1.0"
-description = "Personal portfolio platform — DB-backed ledger, performance, ingestion"
+description = "Personal finance-manager platform — DB-backed ledger, performance, ingestion"
 requires-python = ">=3.11"
 dependencies = [
     "sqlalchemy>=2.0.52",
