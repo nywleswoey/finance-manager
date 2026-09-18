@@ -2,7 +2,7 @@
  * The phone tier's two rules about every fully-responsive screen: 16px form controls and a
  * 44px square tap floor.
  *
- * Decided in `.wayfinder/tickets/015-touch-targets-type-scale.md` and, until this file
+ * Decided in `archive/.wayfinder/tickets/015-touch-targets-type-scale.md` and, until this file
  * landed, built only for the navigation shell — `--tap` reached `.navitem`, `.logout-btn`,
  * `.bar-btn`, `.tabsel` and `.tablenote > summary` and stopped. The sweep that found the gap
  * (#34) found it by *measuring* rather than by reading, which is the whole argument for this

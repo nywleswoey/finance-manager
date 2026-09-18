@@ -312,7 +312,7 @@ onto the floor" under a shared axis too.
 ## Where the reasoning lives
 
 `RESPONSIVE.md` checks the decisions; it does not restate them. The argued detail — every
-measurement, every rejected alternative — is in `.wayfinder/map-mobile-responsive.md` and its
+measurement, every rejected alternative — is in `archive/.wayfinder/map-mobile-responsive.md` and its
 tickets. Three prototypes live in `web/prototypes/`.
 
 ## Two things to know before you touch the suite

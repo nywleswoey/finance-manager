@@ -109,7 +109,7 @@ export default function NetWorth() {
   /* `editor`, and it is the only thing this class does: it marks one of the two
      desktop-optimised views so the phone tier's 44px square floor can exempt them by
      ancestor rather than by listing their selectors. Their floor is WCAG 2.5.8's 24px at
-     every width — see `styles.css`'s square-floor block and `.wayfinder/tickets/017`. */
+     every width — see `styles.css`'s square-floor block and `archive/.wayfinder/tickets/017`. */
   return (
     <div className="editor">
       <SummaryCards m={detail} />

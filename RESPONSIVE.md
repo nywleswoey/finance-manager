@@ -14,7 +14,7 @@ to run is inside that suite now, so nothing here is a check you have to remember
 
 **So this file holds what is left for a human, and only that.** Every gate the suite asserts has been
 **deleted** from here rather than struck through — a checklist carrying its own history stops being a
-checklist, and the history is in git and in `.wayfinder/map-mobile-responsive.md`. What remains is
+checklist, and the history is in git and in `archive/.wayfinder/map-mobile-responsive.md`. What remains is
 three genuinely different kinds of thing, and folding them into one pass/fail list is how checklists
 stop being trusted:
 
@@ -312,7 +312,7 @@ no owner is precisely how four tables went unassigned through the whole map.
 which is the only thing an unbuilt-rule list is really for.
 
 The 44px tap floor and 16px form controls — decided in
-`.wayfinder/tickets/015-touch-targets-type-scale.md`, absent from `styles.css` for five tickets —
+`archive/.wayfinder/tickets/015-touch-targets-type-scale.md`, absent from `styles.css` for five tickets —
 **landed as #47** and are gated by `tap.spec.js`, which is a sweep of everything the page renders
 rather than a list of selectors, because a named-selector gate is exactly what could not notice
 them. What each view carried before it landed is in that issue; the numbers are not repeated here,
