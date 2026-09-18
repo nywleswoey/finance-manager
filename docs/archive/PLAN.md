@@ -164,7 +164,7 @@ The existing `portfolio.html` is the throwaway prototype this module replaces; i
 
 | Phase | Deliverable | Builds on |
 |---|---|---|
-| **0 — DB foundation** ✅ DONE | Docker Compose (postgres:16 @5544), SQLAlchemy models + Alembic schema, seed accounts/securities/aliases/corporate-actions. See [BACKEND.md](BACKEND.md). | symbols.csv |
+| **0 — DB foundation** ✅ DONE | Docker Compose (postgres:16 @5544), SQLAlchemy models + Alembic schema, seed accounts/securities/aliases/corporate-actions. See [BACKEND.md](../runbooks/BACKEND.md). | symbols.csv |
 | **1 — Ingestion** 🟡 in progress | ✅ `ingestion/load.py` loads `ledger.csv`+`dividends.csv` into `txn`/`dividend` idempotently (525 txns, 485 divs, occurrence-scoped dedup). ⬜ rewrite parsers to write direct + `import_batch` per file + reconciliation gate vs `position_snapshot` | all parsers |
 | **2 — Dividends + corp actions** ✅ | `build/parse_dividends.py` (485 rows) loaded; corporate_action seeded | Tiger/CDP/FSM sections |
 | **3 — Market data** 🟡 | ✅ `ingestion/prices.py` — latest price (Yahoo) + Endowus NAV + FX → DB. ⬜ daily history for TWR | securities table |
