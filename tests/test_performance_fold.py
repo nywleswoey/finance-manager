@@ -234,6 +234,20 @@ def test_cdp_cost_attaches_its_legs_dated():
     _assert_terminal_equal(pos)
 
 
+def test_cdp_cost_is_not_attached_to_a_position_with_no_cdp_rows():
+    """#146: H78 is held only at FSM, but a stray `cdp_cost_lot` row exists for its ticker.
+    Attaching by ticker alone double-counted FSM's own priced buy on top of the CDP lot. The
+    position has no CDP txn row (`accounts` never sees "CDP"), so the attach must be skipped
+    and the FSM-priced cost must stand alone."""
+    pos = _acc([_txn(canonical_ticker="H78", account="FSM", action="buy", qty_signed=100,
+                     price=10.0, trade_date=D(2020, 1, 1))],
+               cdp={"H78": _cdp((D(2020, 1, 1), -1000.0, 100.0))})
+    p = pos[("cash", 10)]
+    assert [tuple(e) for e in p["cost_events"]] == [(D(2020, 1, 1), 1000.0, 100.0)]
+    assert p["buy_cost"] == 1000.0 and p["buy_qty"] == 100.0
+    _assert_terminal_equal(pos)
+
+
 def test_switch_carry_replays_the_predecessors_dates():
     """§12: the carried cost must land at the date it was actually paid, not at the switch —
     an undated scalar has no date to hang itself on, which is what puts 0P0001OOJG at

@@ -148,17 +148,18 @@ def test_a_stock_dividend_that_delivers_units_fails():
 
 
 def test_cost_lots_on_a_ticker_with_no_cdp_rows_fail():
-    """#146: a cost lot attaches to the cash leg by ticker, so one with no CDP txn rows behind
-    it is counted a second time beside the broker's own record of the same buy."""
+    """#146: a cost lot only attaches to a cash leg that holds CDP txn rows, so one with no CDP
+    txn rows behind it has its cost silently dropped from a position the book still reports."""
     book = _book(rows=[_row("AAA"), _row("H78X")], cost_lot_tickers={"AAA", "H78X"},
                  cdp_txn_tickers={"AAA"})
     assert _failures(book, "cost lots only on tickers CDP holds") == [
-        "H78X has cdp_cost_lot rows and no CDP txn rows — its cost is attached twice (#146)"]
+        "H78X has cdp_cost_lot rows and no CDP txn rows — its cost is dropped, not "
+        "attached (#146)"]
 
 
 def test_cost_lots_with_no_cash_leg_to_attach_to_are_not_counted_at_all():
-    """`cdp_cost()`'s result lands only on an existing cash leg, so a lot for a ticker the book
-    holds no cash leg of — or a blank row with no ticker — double-counts nothing."""
+    """`cdp_cost()`'s result is aimed at an existing cash leg, so a lot for a ticker the book
+    holds no cash leg of — or a blank row with no ticker — describes no reported position."""
     book = _book(rows=[_row("AAA"), _row("CPFONLY", bucket="cpf")],
                  cost_lot_tickers={"AAA", "CPFONLY", "SOLDBEFORE", ""}, cdp_txn_tickers={"AAA"})
     assert _failures(book, "cost lots only on tickers CDP holds") == []

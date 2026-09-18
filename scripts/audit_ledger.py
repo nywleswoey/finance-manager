@@ -13,7 +13,7 @@ non-zero:
   - `transfer out` — with a space — appears only in `cdp_cost_lot`
   - the fold emits no warning while it computes (no unclassified action, no stale annotation)
   - every `stock dividend` row carries zero quantity
-  - every cost lot that attaches to a cash leg has CDP `txn` rows behind it (#146)
+  - every cost lot aimed at a cash leg has CDP `txn` rows behind it (#146)
 
 **Readings — print, never assert.** Pinned to THIS book, which gains trades and re-prices daily;
 asserting them would make every new trade a red build. Each is printed beside the figure #143
@@ -167,15 +167,17 @@ def _stock_dividends_deliver_no_units(book):
 
 
 def _cost_lots_backed_by_cdp_rows(book):
-    """`cdp_cost()` attaches by ticker to the cash leg without asking whether that leg holds CDP
-    rows, so a lot on a ticker CDP never held counts the broker's buy a second time. #146 files
-    the one instance (H78); this is the query #146 asks tier 3 to carry so a second cannot arrive
+    """`cdp_cost()` attaches a lot only to a cash-bucket position that itself holds a CDP txn row
+    (#146), so a lot on a ticker CDP never held lands nowhere: its cost and proceeds are dropped
+    rather than counted on top of the broker's own record of the same buy. #146 files the one
+    instance (H78); this is the query #146 asks tier 3 to carry so a second cannot arrive
     unnoticed.
 
-    Only lots that attach are counted: a ticker with no cash leg (or the blank rows a CSV's
-    trailing lines leave behind) has nothing for the lot to land on, so nothing is doubled."""
+    Only lots aimed at a live cash leg are named: a ticker with no cash leg (or the blank rows a
+    CSV's trailing lines leave behind) describes no position the book still reports."""
     cash_legs = {r["ticker"] for r in book.rows if r["bucket"] == "cash"}
-    return [f"{t} has cdp_cost_lot rows and no CDP txn rows — its cost is attached twice (#146)"
+    return [f"{t} has cdp_cost_lot rows and no CDP txn rows — its cost is dropped, not "
+            f"attached (#146)"
             for t in sorted((book.cost_lot_tickers & cash_legs) - book.cdp_txn_tickers)]
 
 

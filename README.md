@@ -95,9 +95,10 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
 ## Status
 
 Phases 0–6 of [PLAN.md](docs/archive/PLAN.md) implemented and verified end-to-end (DB, ingestion, prices/FX,
-performance, API, frontend). See [docs/runbooks/BACKEND.md](docs/runbooks/BACKEND.md). Known limitations: CDP-origin
-positions carry no transaction cost (statements lack amounts) so their P/L/XIRR is shown as
-n/a; true time-weighted return (TWR) needs a daily price-history backfill (money-weighted
-XIRR is implemented). Next: direct-to-DB parsers + `import_batch` per file, historical
-prices for TWR, scheduled ingest.
-```
+performance, API, frontend). Both returns are implemented: money-weighted XIRR and
+time-weighted return (`portfolio/twr.py`, served by `/api/return`). Known limitation: some
+units entered the book without a recorded cost, so P/L and XIRR speak only for the units whose
+cost is known — every position carries a `cost_partition` (costed / free / unknown) saying how
+much of it that is. [docs/runbooks/BACKEND.md](docs/runbooks/BACKEND.md) owns the cost-basis
+rules, including where CDP cost comes from and when it attaches. Next: direct-to-DB parsers +
+`import_batch` per file, scheduled ingest.
