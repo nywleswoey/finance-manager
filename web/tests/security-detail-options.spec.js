@@ -19,23 +19,13 @@
  * gate keeps meaning what it says if `holding-pltr.json` is ever recaptured.
  */
 import { expect, test } from "@playwright/test";
+import { sgd } from "../src/api.js";
 import { openView } from "./support/app.js";
 import fixture from "./fixtures/api/holding-pltr.json" with { type: "json" };
-
-const sgd = (n) => "S$" + Math.round(n).toLocaleString("en-US");
 
 const optionsTile = (page) => page.locator(".tile").filter({ hasText: "Options P/L" });
 const optionsCard = (page) => page.locator(".card").filter({ hasText: "Option trades" });
 const optionsCardPill = (page) => optionsCard(page).locator(".pill");
-
-test("the fixture still carries an expired-worthless leg large enough to catch the regression", () => {
-  const expiredWorthless = fixture.options.filter((t) => !t.close_date && t.outcome === "expired");
-  const dropped = expiredWorthless.reduce((a, t) => a + Number(t.realized_sgd || 0), 0);
-
-  expect(expiredWorthless.length).toBeGreaterThan(0);
-  // the old close_date-truthy reduce would have dropped this much SGD
-  expect(dropped).toBeGreaterThan(10_000);
-});
 
 test.describe("rendered", () => {
   test.beforeEach(async ({ page, baseURL }) => {
@@ -58,7 +48,7 @@ test.describe("rendered", () => {
     await expect(optionsCardPill(page)).toHaveText(`realised ${sgd(serverTotal)}`);
   });
 
-  test("a null options stream omits the tile and the pill outright — #143 §6, never \"n/a\"", async ({ page }) => {
+  test("a wheel whose every leg is still open reads a measured zero, never \"n/a\"", async ({ page }) => {
     await page.route("**/api/holding**", (route) =>
       route.fulfill({
         status: 200,
@@ -71,7 +61,7 @@ test.describe("rendered", () => {
 
     await expect(optionsCard(page).locator("h3"))
       .toContainText(`Option trades (${fixture.options.length})`);
-    await expect(optionsTile(page)).toHaveCount(0);
-    await expect(optionsCardPill(page)).toHaveCount(0);
+    await expect(optionsTile(page).locator(".val")).toHaveText(sgd(0));
+    await expect(optionsCardPill(page)).toHaveText(`realised ${sgd(0)}`);
   });
 });

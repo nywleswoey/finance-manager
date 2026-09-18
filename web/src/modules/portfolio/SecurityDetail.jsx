@@ -16,14 +16,11 @@ export default function SecurityDetail({ ticker, onBack }) {
   if (!d) return <div className="loading">Loading {ticker}…</div>;
   if (d.error || !d.summary) return <div className="loading">No data for {ticker}. <a className="backlink" onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)" }}>← back</a></div>;
   const s = d.summary;
-  // SGD, like every other tile — a native sum would be wrong anyway for a security paid in
-  // more than one currency (e.g. an EUR REIT with SGD-settled lots).
-  const divTotalSgd = d.dividends.reduce((a, x) => a + Number(x.gross_sgd || 0), 0);
   const opts = d.options || [];
   // Server-authoritative (`options._is_open()`/`_trade_dict`'s `realised`): a client-side
   // close_date-truthy reduce silently dropped every expired-worthless leg (close_date=None
   // but realised) from this page's Options P/L (#144).
-  const optPlSgd = s.options_pl_sgd;
+  const optPlSgd = Number(s.options_pl_sgd ?? 0);
 
   return (
     <div>
@@ -49,8 +46,8 @@ export default function SecurityDetail({ ticker, onBack }) {
         <Tile lbl="Cost Basis" val={s.cost_basis_sgd == null ? "n/a" : sgd(s.cost_basis_sgd)} />
         <Tile lbl="Market Value" val={sgd(s.mv_sgd)} />
         <Tile lbl="Unrealised P/L" val={s.unrealised_pl_sgd == null ? "n/a" : sgd(s.unrealised_pl_sgd)} cls={cls(s.unrealised_pl_sgd)} />
-        <Tile lbl="Dividends" val={sgd(divTotalSgd)} cls="pos" />
-        {optPlSgd != null && <Tile lbl="Options P/L" val={sgd(optPlSgd)} cls={cls(optPlSgd)} />}
+        <Tile lbl="Dividends" val={sgd(s.income_sgd)} cls="pos" />
+        {opts.length > 0 && <Tile lbl="Options P/L" val={sgd(optPlSgd)} cls={cls(optPlSgd)} />}
         {/* No XIRR tile, and nothing backfills its slot — no filler, no rebalanced grid (#143
             §10). An annualised rate is not the same claim as a lifetime return and no label
             reconciles them: across the 58 non-optioned legs carrying one, the two differ by a
@@ -125,7 +122,7 @@ export default function SecurityDetail({ ticker, onBack }) {
 
       <div className="card">
         <h3>Dividend history ({d.dividends.length})
-          <span className="pill" style={{ marginLeft: 8 }}>{sgd(divTotalSgd)} · latest FX</span></h3>
+          <span className="pill" style={{ marginLeft: 8 }}>{sgd(s.income_sgd)} · latest FX</span></h3>
         {d.dividends.length === 0 ? <p className="mut">No dividends recorded.</p> : phone ? (
           /* Pattern B: six fields, one amount. Same identity choice as the ledger above —
              the payment date with its kind beside it, because every row is this security. */
@@ -184,8 +181,7 @@ export default function SecurityDetail({ ticker, onBack }) {
       {opts.length > 0 && (
         <div className="card" style={{ marginTop: 18 }}>
           <h3>Option trades ({opts.length}) · {s.ticker} wheel
-            {optPlSgd != null &&
-              <span className="pill" style={{ marginLeft: 8 }}>realised {sgd(optPlSgd)}</span>}</h3>
+            <span className="pill" style={{ marginLeft: 8 }}>realised {sgd(optPlSgd)}</span></h3>
           {/* The one pinned table on this page — three tables, two patterns, deliberately.
               What you do with one security's wheel log is scan P/L and Outcome *down* the
               column, and the ledger is uncapped (73 trades on the longest). The pin is the
