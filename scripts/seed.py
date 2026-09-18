@@ -30,9 +30,12 @@ ACCOUNTS = [
 ]
 
 # curated display names + asset types (rest inferred)
+# AMZN's only ledger rows are gifted-stock-in transfers, so names_from_ledger() had nothing
+# real to derive a name from -- curated here rather than left to the transfer-only heuristic
+# (#145; also backfills the already-seeded row the next time `make seed` runs).
 NAME = {
     "SET": "Stoneweg European Reit", "5E2": "Seatrium", "S51": "Seatrium (old S51)",
-    "0P0001OOJG": "Amundi Prime USA Fund",
+    "0P0001OOJG": "Amundi Prime USA Fund", "AMZN": "Amazon.com, Inc.",
 }
 ASSET_TYPE = {"0P0001OOJG": "fund", "0P00006FYT": "fund"}
 REITS = {"O5RU", "C38U", "UD1U", "N2IU", "CRPU", "SET", "CWBU", "BTOU", "S7OU", "P40U",
@@ -82,7 +85,15 @@ def markets_from_options():
 
 
 def names_from_ledger():
-    """derive HK/US display names from raw broker symbols (e.g. 'LINK REIT (00823)')."""
+    """derive HK/US display names from raw broker symbols (e.g. 'LINK REIT (00823)').
+
+    A row's `raw` field is meant to carry the instrument's display name, but a source that
+    has no real name for a transfer/gift row (nothing traded, so nothing to name) sometimes
+    leaves the row's own action description there instead (e.g. 'Gifted Stock In'). Promoting
+    that to a security's name is wrong for any ticker whose only ledger rows are transfers or
+    gifts -- AMZN's SecurityDetail heading literally read "GIFTED STOCK IN" (#145) -- so a
+    candidate that just restates its row's action is never counted as a name.
+    """
     import re
     from collections import Counter, defaultdict
     seen = defaultdict(Counter)
@@ -93,6 +104,9 @@ def names_from_ledger():
         m = re.match(r"(.+?)\s*\(([^)]+)\)\s*$", raw)
         nm = m.group(1) if (m and re.search(r"[A-Za-z]", m.group(1))) else raw
         nm = re.sub(r"\s+(HKD|USD|SGD|CNH)\s*$", "", nm).strip(" ,.")
+        action = (r["action"] or "").strip().lower()
+        if action and nm.strip().lower() == action:
+            continue
         if re.search(r"[A-Za-z]", nm) and not re.fullmatch(r"\d{4}-\d\d", nm):
             seen[r["ticker"]][nm] += 1
     return {t: c.most_common(1)[0][0] for t, c in seen.items()}
