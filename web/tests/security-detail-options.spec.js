@@ -25,12 +25,8 @@ import fixture from "./fixtures/api/holding-pltr.json" with { type: "json" };
 const sgd = (n) => "S$" + Math.round(n).toLocaleString("en-US");
 
 const optionsTile = (page) => page.locator(".tile").filter({ hasText: "Options P/L" });
-const optionsCardPill = (page) =>
-  page.locator(".card").filter({ hasText: "Option trades" }).locator(".pill");
-
-test.beforeEach(async ({ page, baseURL }) => {
-  await openView(page, baseURL, "Portfolio › SecurityDetail");
-});
+const optionsCard = (page) => page.locator(".card").filter({ hasText: "Option trades" });
+const optionsCardPill = (page) => optionsCard(page).locator(".pill");
 
 test("the fixture still carries an expired-worthless leg large enough to catch the regression", () => {
   const expiredWorthless = fixture.options.filter((t) => !t.close_date && t.outcome === "expired");
@@ -41,18 +37,41 @@ test("the fixture still carries an expired-worthless leg large enough to catch t
   expect(dropped).toBeGreaterThan(10_000);
 });
 
-test("Options P/L tile renders the server's summary total, not a client-side re-derivation", async ({ page }) => {
-  const serverTotal = fixture.summary.options_pl_sgd;
-  // the defect this test exists to catch: summing only rows with a close_date
-  const closeDateOnlyTotal = fixture.options.reduce(
-    (a, t) => a + (t.close_date ? Number(t.realized_sgd || 0) : 0), 0);
-  expect(closeDateOnlyTotal).not.toBeCloseTo(serverTotal, 0);
+test.describe("rendered", () => {
+  test.beforeEach(async ({ page, baseURL }) => {
+    await openView(page, baseURL, "Portfolio › SecurityDetail");
+  });
 
-  await expect(optionsTile(page).locator(".val")).toHaveText(sgd(serverTotal));
-});
+  test("Options P/L tile renders the server's summary total, not a client-side re-derivation", async ({ page }) => {
+    const serverTotal = fixture.summary.options_pl_sgd;
+    // the defect this test exists to catch: summing only rows with a close_date
+    const closeDateOnlyTotal = fixture.options.reduce(
+      (a, t) => a + (t.close_date ? Number(t.realized_sgd || 0) : 0), 0);
+    expect(closeDateOnlyTotal).not.toBeCloseTo(serverTotal, 0);
 
-test("the option trades card's realised pill matches the same server total", async ({ page }) => {
-  const serverTotal = fixture.summary.options_pl_sgd;
+    await expect(optionsTile(page).locator(".val")).toHaveText(sgd(serverTotal));
+  });
 
-  await expect(optionsCardPill(page)).toHaveText(`realised ${sgd(serverTotal)}`);
+  test("the option trades card's realised pill matches the same server total", async ({ page }) => {
+    const serverTotal = fixture.summary.options_pl_sgd;
+
+    await expect(optionsCardPill(page)).toHaveText(`realised ${sgd(serverTotal)}`);
+  });
+
+  test("a null options stream omits the tile and the pill outright — #143 §6, never \"n/a\"", async ({ page }) => {
+    await page.route("**/api/holding**", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ...fixture, summary: { ...fixture.summary, options_pl_sgd: null } }),
+      }));
+    await page.getByText("← Holdings").click();
+    await page.locator("tbody tr")
+      .filter({ has: page.locator("span.pill", { hasText: /^PLTR$/ }) }).first().click();
+
+    await expect(optionsCard(page).locator("h3"))
+      .toContainText(`Option trades (${fixture.options.length})`);
+    await expect(optionsTile(page)).toHaveCount(0);
+    await expect(optionsCardPill(page)).toHaveCount(0);
+  });
 });
