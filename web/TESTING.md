@@ -251,6 +251,19 @@ closed leg's realised result. What it deliberately does not check is anything re
 the column count and the row shape stay `pinned.spec.js`'s, because consolidated rows are ordinary
 data rows and inherit those gates already.
 
+`tests/security-detail-options.spec.js` — **SecurityDetail's Options P/L**, the same kind of
+subject as `ticker.spec.js` and there for the same reason: a folded total is the same number at
+every width, so it runs at **one viewport in a project of its own**. The page used to fold that
+total itself with a `close_date` truthy test, but `portfolio/options.py`'s `_is_open()` is the one
+authority on open-vs-realised and an expired-worthless short leg is realised with
+`close_date: null` — so the fold dropped every one of them, ~S$54,818 across 52 legs on the PLTR
+fixture, flipping the tile from a S$52,989 gain to a S$1,828 loss (#144). It now reads the
+server's `summary.options_pl_sgd`, and the spec pins the two edges of that: a null total with legs
+on screen reads a measured **zero** rather than `n/a`, and the Dividends tile beside it stays the
+rows' own `gross_sgd` sum, because `summary.income_sgd` adds native amounts across payment
+currencies. Every expectation is derived from the fixture, including the guard that the fixture
+still carries enough expired-worthless legs to tell the two folds apart.
+
 `tests/composition.spec.js` — the four states of the **net-worth composition chart** the committed
 fixture cannot reach, and the third spec here whose subject is not layout. An empty state is copy, a
 tick crossover is a count, and whether a negative band lands above or below the zero line is

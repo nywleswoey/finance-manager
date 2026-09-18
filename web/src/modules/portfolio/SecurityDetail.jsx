@@ -20,7 +20,13 @@ export default function SecurityDetail({ ticker, onBack }) {
   // more than one currency (e.g. an EUR REIT with SGD-settled lots).
   const divTotalSgd = d.dividends.reduce((a, x) => a + Number(x.gross_sgd || 0), 0);
   const opts = d.options || [];
-  const optPlSgd = opts.reduce((a, t) => a + (t.close_date ? Number(t.realized_sgd || 0) : 0), 0);
+  // Server-authoritative: `options.realized_by_ticker()` → `_closed_trades()` → `_is_open()`,
+  // attached per leg and folded into the summary by `performance.py`. A client-side
+  // close_date-truthy reduce silently dropped every expired-worthless leg (close_date=None but
+  // realised) from this page's Options P/L (#144). Null with legs on screen means no leg has
+  // resolved yet — `realized_by_ticker()` keys only on closed trades — so the realised figure is
+  // a measured zero, not an unknown.
+  const optPlSgd = Number(s.options_pl_sgd ?? 0);
 
   return (
     <div>

@@ -54,6 +54,14 @@ export default defineConfig({
       testMatch: /catalogue\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // SecurityDetail's Options P/L is a folded total, not a layout: the tile is either the
+    // server's number or a wrong one rendered beautifully at ten viewports (#144). Same
+    // reasoning as `ticker`, above.
+    {
+      name: "security-detail-options",
+      testMatch: /security-detail-options\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     // The composition chart's four unreachable states, on the same reasoning again: an empty
     // state is copy, a tick crossover is a count, and where a negative band lands is
     // arithmetic. None of the three is a claim about width, and two of them need a payload the
