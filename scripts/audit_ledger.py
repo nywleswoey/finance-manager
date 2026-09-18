@@ -13,7 +13,7 @@ non-zero:
   - `transfer out` — with a space — appears only in `cdp_cost_lot`
   - the fold emits no warning while it computes (no unclassified action, no stale annotation)
   - every `stock dividend` row carries zero quantity
-  - every cost lot that attaches to a cash leg has CDP `txn` rows behind it (#146)
+  - every cost lot aimed at a cash leg has CDP `txn` rows behind it (#146)
 
 **Readings — print, never assert.** Pinned to THIS book, which gains trades and re-prices daily;
 asserting them would make every new trade a red build. Each is printed beside the figure #143
