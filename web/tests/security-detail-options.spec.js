@@ -26,6 +26,21 @@ import fixture from "./fixtures/api/holding-pltr.json" with { type: "json" };
 const optionsTile = (page) => page.locator(".tile").filter({ hasText: "Options P/L" });
 const optionsCard = (page) => page.locator(".card").filter({ hasText: "Option trades" });
 const optionsCardPill = (page) => optionsCard(page).locator(".pill");
+const dividendsTile = (page) => page.locator(".tile").filter({ hasText: "Dividends" });
+const dividendsCardPill = (page) =>
+  page.locator(".card").filter({ hasText: "Dividend history" }).locator(".pill");
+
+const reopenPLTR = async (page, payload) => {
+  await page.route("**/api/holding**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(payload),
+    }));
+  await page.getByText("← Holdings").click();
+  await page.locator("tbody tr")
+    .filter({ has: page.locator("span.pill", { hasText: /^PLTR$/ }) }).first().click();
+};
 
 test.describe("rendered", () => {
   test.beforeEach(async ({ page, baseURL }) => {
@@ -49,19 +64,31 @@ test.describe("rendered", () => {
   });
 
   test("a wheel whose every leg is still open reads a measured zero, never \"n/a\"", async ({ page }) => {
-    await page.route("**/api/holding**", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ ...fixture, summary: { ...fixture.summary, options_pl_sgd: null } }),
-      }));
-    await page.getByText("← Holdings").click();
-    await page.locator("tbody tr")
-      .filter({ has: page.locator("span.pill", { hasText: /^PLTR$/ }) }).first().click();
+    await reopenPLTR(page, { ...fixture, summary: { ...fixture.summary, options_pl_sgd: null } });
 
     await expect(optionsCard(page).locator("h3"))
       .toContainText(`Option trades (${fixture.options.length})`);
     await expect(optionsTile(page).locator(".val")).toHaveText(sgd(0));
     await expect(optionsCardPill(page)).toHaveText(`realised ${sgd(0)}`);
+  });
+
+  test("the Dividends total sums the rows' own SGD, not the summary's mixed-currency income", async ({ page }) => {
+    const dividends = [
+      { pay_date: "2025-03-27", account: "Tiger Prime", kind: "cash", units: 6000,
+        rate: 0.047, currency: "EUR", gross: 280.96, gross_sgd: 412.06 },
+      { pay_date: "2025-09-26", account: "Tiger Prime", kind: "cash", units: 6000,
+        rate: 0.21, currency: "SGD", gross: 1288.78, gross_sgd: 1288.78 },
+    ];
+    const rowsTotal = dividends.reduce((a, x) => a + x.gross_sgd, 0);
+    const nativeSum = dividends.reduce((a, x) => a + x.gross, 0);
+    expect(rowsTotal).not.toBeCloseTo(nativeSum, 0);
+
+    await reopenPLTR(page, {
+      ...fixture, dividends,
+      summary: { ...fixture.summary, income_sgd: nativeSum },
+    });
+
+    await expect(dividendsTile(page).locator(".val")).toHaveText(sgd(rowsTotal));
+    await expect(dividendsCardPill(page)).toHaveText(`${sgd(rowsTotal)} · latest FX`);
   });
 });
