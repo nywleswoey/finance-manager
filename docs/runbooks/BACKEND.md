@@ -62,12 +62,20 @@ Performance is computed **per funding bucket × security** (not per account): tr
 within the cash bucket (CDP→FSM) don't change ownership, so a position moved into FSM
 keeps its original CDP purchase cost. CDP cost (which the CDP statements omit) is taken
 from `data/cdp-stocks/transactions.csv` via `portfolio/performance.cdp_cost()` and pooled
-into the cash-bucket position. Positions still come from the authoritative
-CDP statements; `alloc_by_account()` gives the per-account MV split for charts.
+into the cash-bucket position **when that position itself holds a CDP `txn` row**. Positions
+still come from the authoritative CDP statements; `alloc_by_account()` gives the per-account MV
+split for charts.
 
 CDP cost is matched at **position** level, not per row — a CDP `txn` row is a month-end
 statement diff that routinely aggregates several trade-dated cost lots, and matching per row
 invents shortfalls that do not exist. `performance.cost_partition` carries the detail.
+
+The CDP-row precondition is what #146 added: a ticker held only at a broker (H78, at FSM) can
+still carry a `cdp_cost_lot` row, and attaching it by ticker alone counted the broker's own
+priced buy a second time. Such a lot is now dropped rather than attached — the cash leg keeps
+only the broker's cost. A dropped lot is a ledger defect, not a steady state, so
+`scripts/audit_ledger.py`'s tier-3 invariant *cost lots only on tickers CDP holds* names every
+ticker in that shape.
 
 ## Cost truth is a partition of units
 
