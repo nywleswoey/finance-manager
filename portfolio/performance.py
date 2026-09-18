@@ -1092,12 +1092,17 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
         log.warning("unclassified txn action(s) %s — treated as zero-cash; units may be uncosted",
                     sorted(_unknown_actions))
 
-    # CDP cost (cdp-stocks) -> the CASH bucket position for that security
+    # CDP cost (cdp-stocks) -> the CASH bucket position for that security, but only when that
+    # position actually holds a CDP txn row (#146): a ticker held only at FSM can still have a
+    # cdp_cost_lot row (H78), and attaching it there double-counts FSM's own priced buys/sells.
+    # Matched at POSITION level via `accounts` (every row's account, CDP included, lands there
+    # before the per-row CDP skip below) rather than per row, so a CDP txn row that aggregates
+    # several trade-dated lots (LIW, S7OU, D05, J2T, Z74) still gets its full cost attached.
     sec_by_ticker = {m["canonical_ticker"]: sid for (_, sid), m in meta.items()}
     for tk, c in cdp.items():
         sid = sec_by_ticker.get(tk)
         k = ("cash", sid)
-        if sid is None or k not in pos:
+        if sid is None or k not in pos or "CDP" not in pos[k]["accounts"]:
             continue
         pos[k]["flows"].extend(c["flows"])
         pos[k]["invested"] += c["invested"]
