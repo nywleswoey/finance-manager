@@ -66,13 +66,6 @@ def test_a_real_name_alongside_a_later_gift_is_not_displaced(tmp_path, monkeypat
     assert seed.names_from_ledger() == {"BABA": "Alibaba Group Holding"}
 
 
-def test_amzn_has_a_curated_display_name_so_it_is_correct_even_without_a_ledger_row():
-    """Backfills the already-seeded row (#145): running `make seed` again overwrites
-    Security.name unconditionally, so this curated entry corrects the live book without a
-    full re-ingest of the original broker statements."""
-    assert seed.NAME["AMZN"] == "Amazon.com, Inc."
-
-
 def test_main_seeds_amzn_with_the_curated_name_not_the_gift_action(tmp_path, monkeypatch):
     root = _write_ledger(tmp_path, [
         _row(ticker="AMZN", action="gifted stock in", qty_signed="10", raw="Gifted Stock In"),
