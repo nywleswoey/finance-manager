@@ -40,6 +40,7 @@ from portfolio import options
 from portfolio.config import settings
 
 from server import main
+from server.routes import portfolio as portfolio_routes
 
 BY = ("market", "bucket", "account")
 
@@ -105,7 +106,7 @@ def _stub(monkeypatch):
     """The fold's output as a literal, and the options book as a dict. No database anywhere."""
     main._cache.clear()
     settings.dev_auth_bypass = True
-    monkeypatch.setattr(main, "perf_all", lambda: [dict(r) for r in ROWS])
+    monkeypatch.setattr(portfolio_routes, "perf_all", lambda: [dict(r) for r in ROWS])
     monkeypatch.setattr(options, "realized_by",
                         lambda by: {OPTION_KEY[by]: round(sum(OPTION_BOOK.values()), 2)})
     yield

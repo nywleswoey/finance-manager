@@ -19,6 +19,7 @@ from fastapi.testclient import TestClient
 from portfolio.config import settings
 
 from server import main
+from server.routes import portfolio as portfolio_routes
 
 D = dt.date
 
@@ -31,8 +32,8 @@ def _stub(monkeypatch):
     """One open position, no database. The cache is process-wide, so clear it either side."""
     main._cache.clear()
     settings.dev_auth_bypass = True
-    monkeypatch.setattr(main, "perf_all", lambda: [dict(ROW)])
-    monkeypatch.setattr(main, "session_scope", lambda *a, **k: _no_session())
+    monkeypatch.setattr(portfolio_routes, "perf_all", lambda: [dict(ROW)])
+    monkeypatch.setattr(portfolio_routes, "session_scope", lambda *a, **k: _no_session())
     yield
     main._cache.clear()
 
@@ -48,7 +49,7 @@ def client():
 
 
 def as_of(monkeypatch, value):
-    monkeypatch.setattr(main, "valuation_as_of", lambda s: value)
+    monkeypatch.setattr(portfolio_routes, "valuation_as_of", lambda s: value)
 
 
 def test_positions_reports_the_valuation_date(client, monkeypatch):
