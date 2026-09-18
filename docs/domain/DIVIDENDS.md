@@ -120,8 +120,8 @@ data/**  (broker statements: tiger-prime, fsm, cdp-stocks, moomoo, cpf/srs …)
   │                  (one row per distinct dividend event: date, ex_date, ticker, rate_per_unit, currency;
   │                   rate = gross / qty-at-ex-date, account-independent, deduped across accounts)
   │
-  └─ server/main.py   /api/dividends · /api/dividend-details · /api/dividends-annual
-                      web/src/modules/portfolio/Dividends.jsx  (annual matrix + per-payment detail table)
+  └─ server/routes/portfolio.py   /api/dividends · /api/dividend-details · /api/dividends-annual
+                                  web/src/modules/portfolio/Dividends.jsx  (annual matrix + per-payment detail table)
 ```
 
 `make ingest` runs `flat` then `load` in one shot. `make ingest-all` also folds in spending,
