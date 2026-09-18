@@ -1,8 +1,9 @@
-# Portfolio Platform
+# finance-manager
 
-Personal investment-portfolio system: ingests broker statements → Postgres → performance
-analytics (incl. dividends) → a modular web app. Portfolio is the first module of a larger
-personal app. Built per [docs/archive/PLAN.md](docs/archive/PLAN.md) (historical).
+Personal investment-portfolio + net-worth + spending platform: ingests broker statements →
+Postgres → performance analytics (incl. dividends) → a modular web app. Portfolio is the first
+module of a larger personal app. Built per [docs/archive/PLAN.md](docs/archive/PLAN.md)
+(historical).
 
 ```
 statements (data/) ──▶ parsers (build/, ingestion/) ──▶ Postgres ──▶ FastAPI ──▶ React app
