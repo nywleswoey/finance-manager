@@ -7,8 +7,12 @@
  * expired-worthless short leg is REALISED with `close_date: null` (never bought back) — so that
  * reduce silently dropped every one of those legs. On the PLTR fixture (73 trades, 52 of them
  * expired worthless) that dropped ~S$54,818 and flipped the tile from a S$52,989 gain to a
- * S$1,828 loss. The fix reads the server's own `summary.options_pl_sgd` (`performance.fold_ticker`,
- * itself built from `options._trade_dict`'s `realised` field) instead of re-deriving it.
+ * S$1,828 loss. The fix reads the server's own `summary.options_pl_sgd` instead of re-deriving
+ * it. That number's chain is `performance.compute()` → `options.realized_by_ticker()` →
+ * `_closed_trades()` → `_is_open()`, attached per leg at `performance.py:1190` and folded by
+ * `_sum_stream` at `performance.py:1301`. NOT `_trade_dict`'s `realised` key: that rides the
+ * per-trade wire rows, nothing under `web/src` reads it, and `holding-pltr.json` does not even
+ * carry it — which is why these assertions pass against a fixture without it.
  *
  * WHY IT IS NOT IN `pinned.spec.js` OR `cards.spec.js`. Those gate this same view's geometry at
  * ten viewports; nothing here is about width — a folded total is the same number everywhere — so
