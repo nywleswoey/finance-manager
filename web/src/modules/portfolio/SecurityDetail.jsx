@@ -20,7 +20,10 @@ export default function SecurityDetail({ ticker, onBack }) {
   // more than one currency (e.g. an EUR REIT with SGD-settled lots).
   const divTotalSgd = d.dividends.reduce((a, x) => a + Number(x.gross_sgd || 0), 0);
   const opts = d.options || [];
-  const optPlSgd = opts.reduce((a, t) => a + (t.close_date ? Number(t.realized_sgd || 0) : 0), 0);
+  // Server-authoritative (`options._is_open()`/`_trade_dict`'s `realised`): a client-side
+  // close_date-truthy reduce silently dropped every expired-worthless leg (close_date=None
+  // but realised) from this page's Options P/L (#144).
+  const optPlSgd = s.options_pl_sgd;
 
   return (
     <div>
@@ -47,7 +50,8 @@ export default function SecurityDetail({ ticker, onBack }) {
         <Tile lbl="Market Value" val={sgd(s.mv_sgd)} />
         <Tile lbl="Unrealised P/L" val={s.unrealised_pl_sgd == null ? "n/a" : sgd(s.unrealised_pl_sgd)} cls={cls(s.unrealised_pl_sgd)} />
         <Tile lbl="Dividends" val={sgd(divTotalSgd)} cls="pos" />
-        {opts.length > 0 && <Tile lbl="Options P/L" val={sgd(optPlSgd)} cls={cls(optPlSgd)} />}
+        {opts.length > 0 &&
+          <Tile lbl="Options P/L" val={optPlSgd == null ? "n/a" : sgd(optPlSgd)} cls={cls(optPlSgd)} />}
         {/* No XIRR tile, and nothing backfills its slot — no filler, no rebalanced grid (#143
             §10). An annualised rate is not the same claim as a lifetime return and no label
             reconciles them: across the 58 non-optioned legs carrying one, the two differ by a
@@ -181,7 +185,8 @@ export default function SecurityDetail({ ticker, onBack }) {
       {opts.length > 0 && (
         <div className="card" style={{ marginTop: 18 }}>
           <h3>Option trades ({opts.length}) · {s.ticker} wheel
-            <span className="pill" style={{ marginLeft: 8 }}>realised {sgd(optPlSgd)}</span></h3>
+            <span className="pill" style={{ marginLeft: 8 }}>
+              realised {optPlSgd == null ? "n/a" : sgd(optPlSgd)}</span></h3>
           {/* The one pinned table on this page — three tables, two patterns, deliberately.
               What you do with one security's wheel log is scan P/L and Outcome *down* the
               column, and the ledger is uncapped (73 trades on the longest). The pin is the
