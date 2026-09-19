@@ -279,8 +279,24 @@ update rather than a second claim.
 runs at every viewport rather than with the arithmetic: opening the multi-bucket ticker leaves
 `.main` nothing to scroll sideways, at every viewport where that criterion applies. It exists
 because `VIEWS`' `Portfolio › SecurityDetail` opens PLTR, which is single-bucket — so the baseline
-sweep measures that page with no split on it, which is how a phone-width overflow got in. #160
-replaces the phone layout; it does not get to reintroduce the scroll.
+sweep measures that page with no split on it, which is how a phone-width overflow got in. What it
+owns is the grid, so it stops at 640: below that the split is #160's stacked blocks and
+`phone-layout.spec.js` measures the same ticker at every phone viewport.
+
+`tests/phone-layout.spec.js` — **the ticker detail page's phone tier** (#160), at the phone
+viewports, over every captured holding (8 tickers x 360 / 390 / 430 / 639 — the "24 layout x state
+combinations" plus the tier's last pixel). Per ticker: `.main` has nothing to scroll sideways; the
+five tiles are five full-width rows at the 44px floor; the truth claims a captured payload reaches
+(the no-capital sentence, the refusal) are visible while the explanations sit behind one 44px
+`N qualifications on this figure` row that opens untruncated. On the multi-bucket name: the total
+block is first, every block sums to its own Net, the written across-sum ties to the hero, and each
+block head carries its own units, avg cost and status — the phone half of the one subheading rule
+`bucket-split.spec.js` gates at 1280. The remaining truth claim, the `≥`/`≤` bound prefix, has one
+gate and only one: the holding captures predate `summary.provenance` on the wire and the bound
+rides that object, so the bounded names are served the captured payload with the name's REAL
+provenance attached, read off `/api/positions?closed=true` by `capturedProvenance()` as
+`unknown-book.spec.js` does. That pair of tests is where both claims the tier splits on are
+proven — the glyph sits outside the disclosure, the carry sentence inside it.
 
 `tests/hero.spec.js` — the **ticker detail page's hero Net, the reconciliation ledger that proves
 it, and the five position tiles** (#156). The page's whole claim is that the figure in the largest
