@@ -321,8 +321,9 @@ doubted units and #148's partition rule correctly nulls a cost basis pooled aver
 invented; trigger is the first ceiling-bounded name whose units are all costed. And a `lower` carry
 meeting unknown-cost units, where the carry's floor and the partition's ceiling would leave the Net
 bounded in neither: no live name is both, so the page carries one rule for direction and no second
-vocabulary; trigger is the first name that is. All three are stated in
-`docs/runbooks/BACKEND.md`.
+vocabulary; trigger is the first name that is. The two that bear on the wire are stated in
+`docs/runbooks/BACKEND.md` as well; the refusal's is copy, so it lives here and in the spec
+header.
 
 `tests/security-detail-options.spec.js` — **SecurityDetail's Options P/L**, the same kind of
 subject as `ticker.spec.js` and there for the same reason: a folded total is the same number at
