@@ -187,7 +187,8 @@ def test_the_summary_omits_what_the_page_does_not_read_rather_than_nulling_it(sh
 def test_the_summary_carries_the_contracts_field_groups():
     assert set(f34()["summary"]) == {
         "ticker", "name", "market", "asset_type", "currency", "accounts",
-        "units", "price", "avg_cost", "cost_basis_native", "cost_basis_sgd", "mv_native", "mv_sgd",
+        "units", "price", "avg_cost", "breakeven_price",
+        "cost_basis_native", "cost_basis_sgd", "mv_native", "mv_sgd",
         "realised_pl_sgd", "unrealised_pl_sgd", "stock_pl_sgd", "income_sgd", "options_pl_sgd",
         "net_pl_sgd", "net_verdict",
         "return_pct", "return_verdict", "peak_car_sgd", "return_span_days",
@@ -199,9 +200,9 @@ def test_legs_are_the_narrowed_set_and_share_the_summarys_keys():
     a bucket column and the Total column are one render path."""
     t = f34()
     for b in t["buckets"]:
-        assert set(b) == {"bucket", "status", "units", "avg_cost", "realised_pl_sgd",
-                          "unrealised_pl_sgd", "stock_pl_sgd", "income_sgd", "options_pl_sgd",
-                          "net_pl_sgd"}
+        assert set(b) == {"bucket", "status", "units", "avg_cost", "breakeven_price",
+                          "realised_pl_sgd", "unrealised_pl_sgd", "stock_pl_sgd", "income_sgd",
+                          "options_pl_sgd", "net_pl_sgd"}
         assert set(b) - {"bucket", "status"} <= set(t["summary"])
 
 
@@ -295,3 +296,80 @@ def test_an_emptied_predecessor_folds_to_nothing():
     husk = _rows(txns, corp=[("C31", "9CI", "split")], price={2: 4.0}, ticker="C31")
     assert len(husk) == 1                              # the fold does emit its row …
     assert perf.fold_ticker(husk) is None              # … and the ticker fold refuses it
+
+
+# ------------------------------------------------------------------- the breakeven price (#143)
+
+def test_the_breakeven_price_zeroes_the_net_it_is_solved_from():
+    """The gate the field exists for: move the price to breakeven and the Net it sits beside
+    becomes zero. Asserted by REVALUING the fold at that price rather than by re-deriving the
+    formula — a test that re-multiplies the same three components proves only that multiplication
+    works twice."""
+    txns = [_txn(qty_signed=100, price=10.0),
+            _txn(qty_signed=-40, price=14.0, action="sell", trade_date=D(2022, 1, 1))]
+    t = _ticker(txns, price={10: 12.0}, divs=[_div(90.0)])
+    be = t["summary"]["breakeven_price"]
+    assert be is not None
+    assert perf.fold_ticker(_rows(txns, price={10: be}, divs=[_div(90.0)]))["summary"][
+        "net_pl_sgd"] == 0.0
+
+
+def test_breakeven_sits_below_avg_cost_by_exactly_what_was_already_banked():
+    """Dividends and realised gains are money the market does not have to pay twice. The gap
+    between the two prices is that money spread over the units still held — which is the whole
+    reason the page cannot quote avg cost as a breakeven."""
+    s = _ticker([_txn(qty_signed=100, price=10.0)],
+                price={10: 12.0}, divs=[_div(150.0)])["summary"]
+    assert s["avg_cost"] == 10.0
+    assert s["breakeven_price"] == 8.5                    # 150 of income over 100 units
+
+
+def test_a_closed_leg_has_no_breakeven_rather_than_an_unknown_one():
+    """No units left is no price, not a doubted price: the cpf leg is sold out, and its money
+    is already realised. The open leg beside it still answers."""
+    t = f34()
+    legs = {b["bucket"]: b for b in t["buckets"]}
+    assert legs["cpf"]["status"] == "closed" and legs["cpf"]["breakeven_price"] is None
+    assert legs["cash"]["breakeven_price"] is not None
+
+
+def test_the_tickers_breakeven_absorbs_a_closed_legs_money_into_the_open_units():
+    """The summary's breakeven zeroes the HERO, so it has to carry the closed leg's realised
+    gains and dividends too — spread over the units that are still there. A weighted mean of
+    the legs' own breakevens would quote the open leg's price and silently drop that money."""
+    t = f34()
+    legs = {b["bucket"]: b for b in t["buckets"]}
+    assert legs["cpf"]["net_pl_sgd"] > 0                  # sold at 23 on a cost of 10
+    # strictly below the only leg that has a breakeven of its own, by the closed leg's Net
+    assert t["summary"]["breakeven_price"] < legs["cash"]["breakeven_price"]
+
+
+def test_a_refusal_nulls_the_breakeven_with_the_net():
+    """No partial breakeven under a second name (#143 §8)."""
+    t = _ticker([_txn(qty_signed=100, price=None)], price={10: 12.0})
+    assert t["summary"]["net_verdict"] == "refuse"
+    assert t["summary"]["breakeven_price"] is None
+    assert all(b["breakeven_price"] is None for b in t["buckets"])
+
+
+def test_a_name_already_ahead_on_income_breaks_even_below_zero():
+    """Income past the cost basis means no price can lose: the negative says by how much, and
+    is not clamped to a reassuring zero."""
+    s = _ticker([_txn(qty_signed=100, price=10.0)],
+                price={10: 12.0}, divs=[_div(1400.0)])["summary"]
+    assert s["breakeven_price"] == -4.0
+
+
+def test_the_breakeven_is_a_native_price_on_a_foreign_name():
+    """It is quoted in the currency `price` and `avg_cost` are, so an SGD Net has to be moved
+    back through FX to get there — a breakeven denominated in SGD beside a USD price would be
+    the one number on the column that is not comparable to the one above it."""
+    usd = dict(currency="USD", canonical_ticker="AAPL", market="US")
+    s = _ticker([_txn(qty_signed=100, price=10.0, **usd)], price={10: 12.0},
+                fx={"USD": 1.30}, divs=[_div(130.0)], ticker="AAPL")["summary"]
+    assert s["currency"] == "USD"
+    # 130 USD of income over 100 units, off a 10.00 USD cost — quoted against `avg_cost`, which
+    # is native too. The same answer carried in SGD would read 11.31 and invite a reader holding
+    # a USD price to conclude the name is already past its breakeven.
+    assert s["avg_cost"] == 10.0 and s["breakeven_price"] == 8.7
+    assert s["income_sgd"] == 169.0                       # the SGD leg of the same dividend

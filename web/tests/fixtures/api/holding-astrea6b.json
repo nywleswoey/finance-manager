@@ -38,7 +38,8 @@
   "invested_sgd": null,
   "invested_native": 0.0,
   "fees_sgd": 0.0,
-  "cost_known": false
+  "cost_known": false,
+  "breakeven_price": null
  },
  "buckets": [
   {
@@ -46,6 +47,7 @@
    "status": "closed",
    "units": 0.0,
    "avg_cost": null,
+   "breakeven_price": null,
    "realised_pl_sgd": null,
    "unrealised_pl_sgd": null,
    "stock_pl_sgd": null,
