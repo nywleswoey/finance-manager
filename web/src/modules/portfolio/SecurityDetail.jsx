@@ -211,8 +211,8 @@ export default function SecurityDetail({ ticker, onBack }) {
   // The bound rides the provenance, whole-ticker; `null` on a 1:1 carry, which is exact.
   const pv = s.provenance || null;
   const bound = s.net_verdict === "bounded" ? pv?.bound ?? null : null;
-  const BOUND_WORDS = { lower: ["at least", "at most"], upper: ["at most", "at least"] };
-  const [figureBound, capitalBound] = BOUND_WORDS[bound] || [null, null];
+  const BOUND_GLYPHS = { lower: ["\u2265", "\u2264"], upper: ["\u2264", "\u2265"] };
+  const [figureBound, capitalBound] = BOUND_GLYPHS[bound] || [null, null];
 
   return (
     <div>
@@ -282,21 +282,25 @@ export default function SecurityDetail({ ticker, onBack }) {
             and the peak TOGETHER, because they are one claim in three clauses and keeping the
             span would leave a sentence half in the vocabulary of a return. The verdict gates it,
             not the null: `peak_car_sgd` ships as a measured `0` there and is not missing at all. */}
-        {!refused && s.return_verdict === "no_capital" && (
+        {/* A REFUSAL TAKES THE PERCENTAGE WITH IT, IN EITHER SHAPE (§11, and
+            `performance.py:_return_figures` says so from the other side). A name that refuses
+            but still wrote puts keeps a peak, so it arrives here `caveat` with a null
+            percentage — a ratio of a Net the hero above has just said is not known. One gate
+            over both branches: the two are one slot, and a refusal empties it. */}
+        {!refused && (s.return_verdict === "no_capital" ? (
           /* One claim, no reason: it says nothing was paid, not why. Nothing in the ledger calls
              a lot a gift, and the transactions table on this page shows the cause. Not offered
              on a refusal — "nothing was paid" would state as known what that hero says is not. */
           <div className="hero-return" data-testid="hero-no-capital">
             no capital at risk — nothing was ever paid for these units
           </div>
-        )}
-        {s.return_verdict !== "no_capital" && (
+        ) : (
           <div className="hero-return" data-testid="hero-return">
             {figureBound && <>{figureBound} </>}{signedPct(s.return_pct, 1)} over{" "}
             {fmt(s.return_span_days / 365.25, 1)} years on peak capital of{" "}
             {capitalBound && <>{capitalBound} </>}{fmt(s.peak_car_sgd, 2)}
           </div>
-        )}
+        ))}
         {/* THE SENTENCES, ADJACENT AND IN A FIXED ORDER (§11): the Net's first, then the
             percentage's incomparability. A carry's disclosure sits in the same block — below the
             percentage, where the reader is looking at the span and the denominator it explains. */}

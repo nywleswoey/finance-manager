@@ -65,6 +65,18 @@ const exact = () => {
   });
 };
 
+/**
+ * A refusal that still locked collateral: every entering unit unknown, so the Net refuses, while
+ * a written put keeps the peak standing — so `_return_figures` ships `caveat` with a null
+ * percentage rather than `no_capital`. Derived like the provenance overlays above, because the
+ * one captured refusal (ASTREA6B) never wrote an option and so never reaches that pairing.
+ */
+const refusedWithPeak = () => {
+  const b = captured("ASTREA6B");
+  return { ...b, summary: { ...b.summary, return_verdict: "caveat", return_pct: null,
+                            peak_car_sgd: 12500, return_span_days: 900 } };
+};
+
 async function open(page, baseURL, ticker, payload) {
   await openView(page, baseURL, "Portfolio › Holdings");
   await page.getByLabel("Show closed positions").check();
@@ -136,6 +148,21 @@ test.describe("refusal — the number is replaced by prose, and the block does n
   });
 });
 
+test("a refusal that still locked collateral prints no percentage beside its prose", async ({ page, baseURL }) => {
+  const p = refusedWithPeak();
+  expect(p.summary.net_verdict).toBe("refuse");
+  // The shape the fold ships for this pairing: a peak that stands, and no ratio to put on it.
+  expect(p.summary.return_verdict).toBe("caveat");
+  expect(p.summary.return_pct).toBeNull();
+  await open(page, baseURL, "ASTREA6B", p);
+
+  await expect(hero(page)).toContainText(NOT_KNOWN);
+  await expect(heroReturn(page)).toHaveCount(0);
+  await expect(page.getByTestId("hero-no-capital")).toHaveCount(0);
+  // Neither a fabricated zero percent nor the denominator it would have been taken over.
+  expect(await page.locator(".hero").innerText()).not.toMatch(/%|peak capital/);
+});
+
 test.describe("caveat — the tiles refuse, the pair collapses, the block keeps its line", () => {
   const body = captured("Q01");
   const s = body.summary;
@@ -205,17 +232,17 @@ test.describe("no capital — the percentage, the span and the peak die together
 });
 
 test.describe("bounded — the bound lands on the numbers", () => {
-  test("a lower bound: at least on the Net, at least on the percentage, at most on the capital", async ({ page, baseURL }) => {
+  test("a lower bound: \u2265 on the Net, \u2265 on the percentage, \u2264 on the capital", async ({ page, baseURL }) => {
     const p = lower();
     const s = p.summary;
     await open(page, baseURL, "9CI", p);
 
     expect(s.net_verdict).toBe("bounded");
-    await expect(page.getByTestId("hero-bound")).toHaveText(/^at least/);
+    await expect(page.getByTestId("hero-bound")).toHaveText(/^\u2265/);
     await expect(page.locator(".hero-net")).toContainText(fmt(Math.abs(s.net_pl_sgd), 2));
-    await expect(heroReturn(page)).toContainText(/^at least /);
-    await expect(heroReturn(page)).toContainText(new RegExp(`on peak capital of at most ${escapeRe(fmt(s.peak_car_sgd, 2))}`));
-    await expect(heroReturn(page)).toContainText(`${fmt(s.return_pct * 100, 1)}%`);
+    await expect(heroReturn(page)).toContainText(/^\u2265 /);
+    await expect(heroReturn(page)).toContainText(new RegExp(`on peak capital of \u2264 ${escapeRe(fmt(s.peak_car_sgd, 2))}`));
+    await expect(heroReturn(page)).toContainText(`${fmt(Math.abs(s.return_pct) * 100, 1)}%`);
 
     // The tiles are kept, not nulled — the exact avg cost is the only proof the cost exists.
     expect(s.avg_cost).not.toBeNull();
@@ -232,15 +259,15 @@ test.describe("bounded — the bound lands on the numbers", () => {
     await expect(note).toContainText(fmt(pv.split_with[0].units, 0));
   });
 
-  test("an upper bound: at most on the Net, at most on the percentage, at least on the capital", async ({ page, baseURL }) => {
+  test("an upper bound: \u2264 on the Net, \u2264 on the percentage, \u2265 on the capital", async ({ page, baseURL }) => {
     const p = upper();
     const s = p.summary;
     await open(page, baseURL, "C38U", p);
 
     expect(s.net_verdict).toBe("bounded");
-    await expect(page.getByTestId("hero-bound")).toHaveText(/^at most/);
-    await expect(heroReturn(page)).toContainText(/^at most /);
-    await expect(heroReturn(page)).toContainText(new RegExp(`on peak capital of at least ${escapeRe(fmt(s.peak_car_sgd, 2))}`));
+    await expect(page.getByTestId("hero-bound")).toHaveText(/^\u2264/);
+    await expect(heroReturn(page)).toContainText(/^\u2264 /);
+    await expect(heroReturn(page)).toContainText(new RegExp(`on peak capital of \u2265 ${escapeRe(fmt(s.peak_car_sgd, 2))}`));
 
     const pv = s.provenance;
     const note = page.getByTestId("carry-note");
@@ -264,7 +291,7 @@ test.describe("bounded — the bound lands on the numbers", () => {
     await open(page, baseURL, "PLTR", p);
 
     await expect(page.getByTestId("hero-bound")).toHaveCount(0);
-    expect(await page.locator(".hero").innerText()).not.toMatch(/at least|at most/);
+    expect(await page.locator(".hero").innerText()).not.toMatch(/[\u2265\u2264]/);
     const note = page.getByTestId("carry-note");
     await expect(note).toContainText(s.provenance.from_ticker);
     await expect(note).toContainText(s.provenance.carried_on);
