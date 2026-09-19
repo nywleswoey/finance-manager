@@ -913,6 +913,45 @@ def _net_pl(r):
     return round(r["stock_pl_sgd"] + r["income_sgd"] + (r["options_pl_sgd"] or 0.0), 2)
 
 
+def _breakeven_price(r, units, rate):
+    """The native-currency price at which the shipped Net reaches zero — `null` where there is
+    no such price (#143 §14):
+
+        breakeven_price  ==  (cost_basis_sgd − realised − income − options) / (rate × units)
+
+    **It is defined against Net, not against avg cost.** Avg cost answers "what price undoes the
+    unrealised column"; this answers "what price undoes the NAME", which is the question the hero
+    asks and the only one this page has a vocabulary for. The two are different money: on UD1U
+    they are 0.4166 and 0.3564, and the six cents between them are dividends and realised gains
+    already banked — a breakeven read off avg cost asks the market to pay for them a second time.
+    Setting this price into the fold reproduces `net_pl_sgd == 0` by construction, because it is
+    that identity solved for price and it undoes the components **as shipped**, so it ties to the
+    Net beside it at the same zero tolerance the components tie to each other.
+
+    It lands here and not in `_build_row` for the reason Net does: the options stream is one of
+    the components it has to undo, and that is attached only just above (#143 §15).
+
+    **Three nulls, one meaning on the wire — there is no such price:**
+      - `refuse` nulls Net, so it nulls this. No partial breakeven under a second name.
+      - A **closed** leg has no units to divide by. Not a large price: not a price. Its money is
+        out and nothing the market does next moves its Net, which is why this takes `units`
+        rather than reading a `status` — the same `1e-6` the rest of the fold holds positions to.
+      - `cost_basis_sgd` carries the third without a test of its own: a leg holding units it
+        cannot price cannot say what price would make it whole, and `realised_pl_sgd` is null
+        exactly when it is, so the arithmetic refuses with it rather than beside it.
+
+    **A negative breakeven is a real answer, not an error to clamp.** Income and realised gains
+    exceeding cost basis means the name is already whole at any price including zero, and the
+    negative number says by how much — clamping it at zero would report `already even` of a
+    position that is ahead, and would be the only figure on this page that lies downward.
+    """
+    if r["net_pl_sgd"] is None or r["cost_basis_sgd"] is None or units <= 1e-6:
+        return None
+    needed = (r["cost_basis_sgd"] - r["realised_pl_sgd"] - r["income_sgd"]
+              - (r["options_pl_sgd"] or 0.0))
+    return round(needed / (rate * units), 4)
+
+
 def _return_figures(car, rows):
     """The four fields the page's one percentage needs, from a ticker's peak CAR and its rows.
 
@@ -1062,6 +1101,16 @@ def _build_row(k, p, m, fx, price, today, part, verdict):
         "pl_sgd": round(total_pl * rate, 2) if cost_known else None,
         "xirr": _rn(xirr, 4),
         "simple_return": _rn(simple, 4),
+        # Plumbing, not a figure: it rides the row because `fold_ticker` is pure over rows and
+        # has no `fx` of its own, and the whole-ticker breakeven has to move an SGD shortfall
+        # back into the native price it is quoted in. Recovering it there instead, by dividing
+        # one of the native/SGD column pairs, would divide two figures already rounded to the
+        # cent and would divide by ZERO on exactly the legs this file is careful about — a
+        # closed leg's mv, a free lot's cost basis (AAPL). It reaches no bucket column, because
+        # `LEG_FIELDS` narrows those and the summary is built by hand; it DOES reach
+        # `/api/positions`, which ships the whole row on purpose and already carries `provenance`
+        # and `cost_partition` the same way. No page reads it, and none should.
+        "fx_rate": rate,
     }
 
 
@@ -1228,6 +1277,8 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
         # its own and the columns add up to the name.
         r["net_verdict"] = verdicts[r["ticker"]]
         r["net_pl_sgd"] = _net_pl(r)
+        # solved from the Net one line above it, and therefore never from quantities beside it.
+        r["breakeven_price"] = _breakeven_price(r, r["units"], r["fx_rate"])
     # peak capital-at-risk and the one percentage (#143 §9). Whole-ticker: the peak is a max
     # over the SUM of a name's legs, which is not the sum of their maxima, and the percentage
     # answers "did I make money on this name" rather than on one funding pool of it. The four
@@ -1274,8 +1325,8 @@ def is_leg(r):
 # What one bucket column of the detail page carries (#143 §2). `bucket` and `status` label the
 # column; every other key is also a summary key, so a bucket column and the Total column are one
 # render path over N+1 objects. No cost basis — the tiles never split — and no return figure.
-LEG_FIELDS = ("bucket", "status", "units", "avg_cost", "realised_pl_sgd", "unrealised_pl_sgd",
-              "stock_pl_sgd", "income_sgd", "options_pl_sgd", "net_pl_sgd")
+LEG_FIELDS = ("bucket", "status", "units", "avg_cost", "breakeven_price", "realised_pl_sgd",
+              "unrealised_pl_sgd", "stock_pl_sgd", "income_sgd", "options_pl_sgd", "net_pl_sgd")
 
 
 def _sum(legs, k, n=2):
@@ -1362,6 +1413,15 @@ def fold_ticker(rows):
     # whole-ticker, so any leg's carries it; absent unless a carry reached the name (§12)
     if first.get("provenance"):
         summary["provenance"] = first["provenance"]
+    # The ticker's breakeven is solved from the SUMMARY's components, not weighted across the
+    # legs' own breakevens — the two are different prices whenever a leg is closed. A closed leg
+    # has no breakeven of its own (no units to divide by) but its realised gains and dividends
+    # are in the hero, so a weighted mean of the open legs would quote a price that zeroes only
+    # part of the number printed above it. Solving the summary spreads the closed legs' money
+    # over the units that are still there, which is the only reading under which the tile and
+    # the hero are about the same position. Every input is the column as shipped, so a null
+    # anywhere — a refusal, an unpriceable leg, or nothing held — refuses here too.
+    summary["breakeven_price"] = _breakeven_price(summary, units, first["fx_rate"])
     buckets = [{k: r[k] for k in LEG_FIELDS} for r in
                ({**r, "status": "open" if r["units"] > 1e-6 else "closed"} for r in legs)]
     return {"summary": summary, "buckets": buckets}

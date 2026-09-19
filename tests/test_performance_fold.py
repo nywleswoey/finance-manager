@@ -379,7 +379,10 @@ ROW_FIELDS = {
     "cost_partition", "total_pl_native", "invested_sgd", "mv_sgd", "income_sgd", "pl_sgd",
     "xirr", "simple_return", "options_pl_sgd",
     "peak_car_sgd", "return_span_days", "return_pct", "return_verdict",
-    "net_pl_sgd", "net_verdict", "provenance",
+    "net_pl_sgd", "net_verdict", "provenance", "breakeven_price",
+    # internal, and deliberately not on LEG_FIELDS: `fold_ticker` is pure over rows and needs
+    # the leg's rate to move an SGD Net back into the native price the breakeven is quoted in.
+    "fx_rate",
 }
 
 

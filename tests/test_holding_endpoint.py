@@ -38,8 +38,15 @@ def _row(**over):
          "total_pl_native": 12981.92, "pl_sgd": 12981.92, "xirr": 0.12, "simple_return": 0.16,
          "options_pl_sgd": None, "net_verdict": "hero", "net_pl_sgd": 12981.92,
          "peak_car_sgd": 80618.08, "return_span_days": 2000, "return_pct": 0.161,
-         "return_verdict": "ok"}
+         "return_verdict": "ok", "fx_rate": 1.0}
     r.update(over)
+    # derived AFTER the overrides, never passed in one: a breakeven hand-written beside the
+    # components it is solved from is a fixture that can disagree with itself, and every
+    # override below moves at least one of those components.
+    r["breakeven_price"] = (
+        None if r["net_pl_sgd"] is None or r["cost_basis_sgd"] is None or r["units"] <= 1e-6
+        else round((r["cost_basis_sgd"] - r["realised_pl_sgd"] - r["income_sgd"]
+                    - (r["options_pl_sgd"] or 0.0)) / (r["fx_rate"] * r["units"]), 4))
     return r
 
 
