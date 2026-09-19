@@ -382,24 +382,36 @@ def _provenance(k, c, carries, listed, fx):
     """The wire object for one carried successor — #143 §12.
 
     `split_with` names only the **reachable** siblings: a sibling Holdings never lists points
-    at a page that does not exist. `bound` is the one direction both of the page's figures
-    take, **asserted, not computed** — nothing in the book bounds the magnitude:
-
-        lower  — the name the whole cost went to: its cost is too high, so its Net and its
-                 percentage are floors ("at least")
-        upper  — a sibling that took units and no cost: its Net is a ceiling ("at most")
-        null   — a single-successor carry, exact; disclosed anyway, because an exact number is
-                 not an accounted-for one when the denominator has no visible origin on the page
+    at a page that does not exist. `bound` is `carry_bound`'s direction — the one direction both
+    of the page's figures take, **asserted, not computed**, because nothing in the book bounds
+    the magnitude — and `null` on a single-successor carry, which is exact and disclosed anyway:
+    an exact number is not an accounted-for one when the denominator has no visible origin on
+    the page. Whether that direction survives the partition's own doubt is `net_verdict`'s
+    call, not this object's.
     """
     siblings = sorted(({"ticker": o["ticker"], "units": round(o["units"], 4)}
                        for k2, o in carries.items()
                        if k2 != k and k2[0] == k[0] and o["from_ticker"] == c["from_ticker"]
                        and (k2[0], o["ticker"]) in listed), key=lambda x: x["ticker"])
-    bound = (("lower" if c["carried_native"] > 1e-9 else "upper") if c["split"] else None)
     return {"from_ticker": c["from_ticker"], "from_name": c["from_name"], "type": c["type"],
             "carried_on": c["carried_on"],
             "carried_sgd": round(c["carried_native"] * rate_to_sgd(c["currency"], fx), 2),
-            "split_with": siblings, "bound": bound}
+            "split_with": siblings, "bound": carry_bound(c)}
+
+
+def carry_bound(c):
+    """Which way a split carry's cost was mis-attributed, or `None` where nothing split.
+
+    `lower` — the name the whole cost went to: its cost is too high, so its Net is a floor.
+    `upper` — a sibling that took units and no cost: its cost is too low, so its Net is a
+              ceiling.
+
+    Read twice, deliberately: `net_verdict` needs it to decide whether the bound survives the
+    partition's own doubt, and `_provenance` ships it beside the sentence that discloses the
+    carry. The direction is a fact about the event and is shipped whatever the verdict does
+    with it — a `caveat` whose carry pointed `lower` still carries `bound: "lower"` on the
+    wire, and the renderer reads the VERDICT before it reads this."""
+    return (("lower" if c["carried_native"] > 1e-9 else "upper") if c["split"] else None)
 
 
 def _rebase_cost_events(p):
@@ -824,13 +836,13 @@ def ticker_car(legs, contracts, fx, today):
             "return_span_days": max((end - start).days, 0)}
 
 
-def net_verdict(parts, bounded=False):
+def net_verdict(parts, bound=None):
     """What a ticker's Net can claim, from its legs' cost partitions — #143 §8's first axis.
 
         refuse   <=>  costed == 0 and unknown > 0
         caveat   <=>  costed > 0  and unknown > 0
         hero     <=>  unknown == 0
-        bounded  <=   a split carry applies (`bounded`) — overrides hero AND caveat, not refuse
+        bounded  <=   a split carry applies (`bound`) — overrides hero AND caveat, not refuse
 
     **The counts are SUMMED across the ticker's legs before the rule reads them.** #130's
     per-leg `every()` rule is superseded, and the two genuinely disagree: leg A costed-only
@@ -845,22 +857,33 @@ def net_verdict(parts, bounded=False):
     are not costed units: they cost nothing, measurably, but no money stands against the
     unknown ones beside them.
 
-    **`bounded` is the one input that is not a count** (#143 §12, #138). A split carry puts a
+    **`bound` is the one input that is not a count** (#143 §12, #138). A split carry puts a
     whole event's cost on one successor and none on its sibling, so every unit on both pages
     can be priced while the TOTAL is mis-attributed — an event-level doubt the partition cannot
     express. It overrides a counts-derived `hero` (9CI: zero unknown units, over-costed by an
     unknown common amount), and it overrides `caveat` on the one name that carries both (C38U),
     where the partition's caveat lives on in the partition itself, the nulled cost-basis family
-    and the return axis — the two point the same way there, which is luck and not design. It
-    does NOT override `refuse`: a refusal has no Net, and `bounded` promises a Net with a
-    direction on it."""
+    and the return axis — the two point the same way there. It does NOT override `refuse`: a
+    refusal has no Net, and `bounded` promises a Net with a direction on it.
+
+    **OPEN CALL, RECORDED RATHER THAN GUARDED: a `lower` carry meeting unknown units.** The
+    partition's doubt is always a ceiling — units without a cost read as free, so the Net is
+    overstated — and `upper` agrees with it, which is why C38U's bound stands. `lower` would
+    not: the whole event's cost landed on that name, so its Net is UNDERstated, and a page
+    printing `≥` over a Net two doubts push opposite ways would assert a floor the book cannot
+    back. The combination is unreachable on the live book — the one `lower` name, 9CI, has zero
+    unknown units — so no branch here guards it and no second vocabulary exists for it.
+    **Trigger:** the first live name where a `lower` carry meets unknown-cost units. Recorded
+    beside #158's other open calls in `docs/runbooks/BACKEND.md` and `web/TESTING.md`."""
     costed = sum(p["costed"] for p in parts)
     unknown = sum(p["unknown"] for p in parts)
     if unknown <= 1e-6:
         verdict = "hero"
     else:
         verdict = "caveat" if costed > 1e-6 else "refuse"
-    return "bounded" if bounded and verdict != "refuse" else verdict
+    if bound is None or verdict == "refuse":
+        return verdict
+    return "bounded"
 
 
 def _net_pl(r):
@@ -1168,8 +1191,11 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
         by_ticker[meta[k]["canonical_ticker"]].append(part)
     carries = {k: {**p["carry"], "ticker": meta[k]["canonical_ticker"]}
                for k, p in pos.items() if p["carry"] and k in meta}
-    bounded = {c["ticker"] for c in carries.values() if c["split"]}
-    verdicts = {tk: net_verdict(ps, tk in bounded) for tk, ps in by_ticker.items()}
+    # last-wins over the same ordering `provenance` is built with below, so the verdict and the
+    # `bound` the page renders beside it can never come from different carries of one ticker.
+    bounds = {c["ticker"]: carry_bound(c)
+              for _, c in sorted(carries.items(), key=lambda kc: str(kc[0]))}
+    verdicts = {tk: net_verdict(ps, bounds.get(tk)) for tk, ps in by_ticker.items()}
     out = []
     for k, p in pos.items():
         m = meta.get(k)
@@ -1333,6 +1359,9 @@ def fold_ticker(rows):
         "invested_native": _sum(legs, "invested_native"), "fees_sgd": _sum(legs, "fees_sgd"),
         "cost_known": all(r["cost_known"] for r in legs),
     }
+    # whole-ticker, so any leg's carries it; absent unless a carry reached the name (§12)
+    if first.get("provenance"):
+        summary["provenance"] = first["provenance"]
     buckets = [{k: r[k] for k in LEG_FIELDS} for r in
                ({**r, "status": "open" if r["units"] > 1e-6 else "closed"} for r in legs)]
     return {"summary": summary, "buckets": buckets}

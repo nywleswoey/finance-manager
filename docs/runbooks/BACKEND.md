@@ -397,13 +397,27 @@ hero     ⟺  unknown == 0
 | | cause | tiles | direction |
 |---|---|---|---|
 | `caveat` | some units have **no** cost | **null** | always upper |
-| `bounded` | every unit costed; the **total is mis-attributed** | **kept** | lower *or* upper |
+| `bounded` | the **total is mis-attributed** | **kept** | lower *or* upper |
 
 - **Tiles follow the partition, not the verdict**, so 9CI keeps `avg_cost: 3.73` while C38U — the
   one name carrying both doubts — still nulls its cost-basis family and reads `return_verdict:
   caveat` on its unknown 500.
 - **`bound` is one claim over both axes**, not a third axis: the return axis keeps its own three
   values.
+- **Unevidenced (#158): `tiles kept` on the CEILING direction.** The criterion is proven on the
+  floor — 9CI keeps `avg_cost: 3.73` and its cost basis — and cannot be shown on the ceiling: the
+  only `upper`-bounded name is C38U, whose partition still doubts 500 units, so #148's rule nulls
+  the cost basis rather than letting pooled averaging invent one. Weakening that rule or
+  reclassifying the holding to evidence the criterion is rejected. **Trigger:** the first
+  ceiling-bounded name whose units are all costed. Recorded beside #158's other open calls in
+  `web/TESTING.md`.
+- **Open call (#158): a `lower` carry meeting unknown-cost units.** The partition's doubt is
+  always a ceiling and `upper` agrees with it, which is why C38U's bound stands over its caveat.
+  A `lower` carry does not: the whole event's cost landed on that name, so its Net is understated
+  while its uncosted units overstate it, and the page would print `≥` over a Net the book can
+  bound in neither direction. No live name is both — 9CI, the one `lower`, has zero unknown units
+  — so the rule above is left minimal and no second vocabulary exists for the combination.
+  **Trigger:** the first live name where a `lower` carry meets unknown-cost units.
 
 **`provenance`** ships on every row — null unless a carry reached the name, and whole-ticker like
 the verdict, so it rides every leg:
@@ -423,6 +437,8 @@ the verdict, so it rides every leg:
 - `bound`: `lower` on the name the cost went to, `upper` on a sibling, `null` on a single-successor
   carry. **Asserted, not computed** — nothing in the book bounds the magnitude.
 - Ships on the exact 1:1 carry too (0P0001OOJG): an exact number is not an accounted-for one.
+- `/api/holding`'s `summary` carries it (read off the first leg, **omitted** when null), so the detail page
+  renders its `≥` / `≤` on the figures and the carry sentence from the wire, not from a second query.
 
 Live: 9CI `bounded`/lower, C38U `bounded`/upper, 0P0001OOJG `hero` with `bound: null`. No numeric
 field on any row moved.

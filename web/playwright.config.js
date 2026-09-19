@@ -71,6 +71,13 @@ export default defineConfig({
       testMatch: /hero\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // What the hero says when the book does not know (#158): refusal, caveat, no capital and the
+    // bound in both directions. Copy and arithmetic, so one viewport — same reasoning as `hero`.
+    {
+      name: "unknown-book",
+      testMatch: /unknown-book\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     // The bucket split under the hero (#157): columns that add across to the hero and down to
     // their own Net. Arithmetic, not layout, so one viewport — same reasoning as `hero`.
     {

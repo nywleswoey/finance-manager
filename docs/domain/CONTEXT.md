@@ -195,7 +195,9 @@ costed, something unknown), `caveat` (some costed, some unknown — the Net is a
 units read as free) or `hero` (nothing unknown). Summed, not per-leg: a costed-only leg beside an
 unknown-only leg is a caveat, not a refusal. One input is not a count: a **split carry** makes it
 `bounded`, overriding `hero` and `caveat` but never `refuse` — `bounded` keeps the cost-basis tiles
-a caveat nulls, and its direction is the provenance's bound. **Not `cost_known`** — that flag is
+a caveat nulls, and its direction is the provenance's bound. A `lower` carry over unknown units
+would be doubted both ways at once; no live name is both, and the open call is recorded in
+`docs/runbooks/BACKEND.md` rather than guarded here. **Not `cost_known`** — that flag is
 false on a caveat's all-unknown leg and on a refusal alike.
 _Avoid_: return verdict (a different axis — AAPL is hero-on-Net and no-capital-on-return at once)
 

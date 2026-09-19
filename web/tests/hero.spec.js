@@ -210,9 +210,11 @@ for (const { ticker, body } of HOLDINGS) {
       const text = await page.locator(".main").innerText();
       const s = body.summary;
 
-      // `no_capital` is the one verdict with no return to state — and the percentage, the span
-      // and the peak die together, because they are one claim in three clauses.
-      const stated = s.return_verdict !== "no_capital";
+      // `no_capital` is the one RETURN verdict with no return to state — and the percentage,
+      // the span and the peak die together, because they are one claim in three clauses. A
+      // refusal takes the percentage with it too (#158): there is no Net to divide, whatever
+      // the peak did, so the slot is empty under either reason.
+      const stated = s.return_verdict !== "no_capital" && s.net_verdict !== "refuse";
       expect((s.return_pct == null), "the verdict and the figure disagree about whether a "
         + "return exists").toBe(!stated);
       expect((text.match(/%/g) ?? []).length,
