@@ -842,8 +842,7 @@ def net_verdict(parts, bound=None):
         refuse   <=>  costed == 0 and unknown > 0
         caveat   <=>  costed > 0  and unknown > 0
         hero     <=>  unknown == 0
-        bounded  <=   a split carry's direction (`bound`) that the partition does not
-                      contradict — overrides hero AND caveat, not refuse
+        bounded  <=   a split carry applies (`bound`) — overrides hero AND caveat, not refuse
 
     **The counts are SUMMED across the ticker's legs before the rule reads them.** #130's
     per-leg `every()` rule is superseded, and the two genuinely disagree: leg A costed-only
@@ -862,25 +861,27 @@ def net_verdict(parts, bound=None):
     whole event's cost on one successor and none on its sibling, so every unit on both pages
     can be priced while the TOTAL is mis-attributed — an event-level doubt the partition cannot
     express. It overrides a counts-derived `hero` (9CI: zero unknown units, over-costed by an
-    unknown common amount). It does NOT override `refuse`: a refusal has no Net, and `bounded`
-    promises a Net with a direction on it.
+    unknown common amount), and it overrides `caveat` on the one name that carries both (C38U),
+    where the partition's caveat lives on in the partition itself, the nulled cost-basis family
+    and the return axis — the two point the same way there. It does NOT override `refuse`: a
+    refusal has no Net, and `bounded` promises a Net with a direction on it.
 
-    **IT OVERRIDES `caveat` ONLY WHERE THE TWO DOUBTS POINT THE SAME WAY.** The partition's
-    doubt is always a ceiling — units without a cost are counted as free, so the Net is
-    overstated. `upper` agrees (a sibling took units and none of the cost, so its Net is
-    overstated too) and the bound stands: C38U, where the partition's caveat lives on in the
-    partition itself, the nulled cost-basis family and the return axis. `lower` disagrees — the
-    whole event's cost landed here, so that Net is UNDERstated — and two doubts in opposite
-    directions bound the Net in neither, so the counts keep the verdict and the page states the
-    caveat instead of a direction it cannot back. Zero-instance today (9CI has no unknown
-    units), which is why the precedence is written down rather than left to luck."""
+    **OPEN CALL, RECORDED RATHER THAN GUARDED: a `lower` carry meeting unknown units.** The
+    partition's doubt is always a ceiling — units without a cost read as free, so the Net is
+    overstated — and `upper` agrees with it, which is why C38U's bound stands. `lower` would
+    not: the whole event's cost landed on that name, so its Net is UNDERstated, and a page
+    printing `≥` over a Net two doubts push opposite ways would assert a floor the book cannot
+    back. The combination is unreachable on the live book — the one `lower` name, 9CI, has zero
+    unknown units — so no branch here guards it and no second vocabulary exists for it.
+    **Trigger:** the first live name where a `lower` carry meets unknown-cost units. Recorded
+    beside #158's other open calls in `docs/runbooks/BACKEND.md` and `web/TESTING.md`."""
     costed = sum(p["costed"] for p in parts)
     unknown = sum(p["unknown"] for p in parts)
     if unknown <= 1e-6:
         verdict = "hero"
     else:
         verdict = "caveat" if costed > 1e-6 else "refuse"
-    if bound is None or verdict == "refuse" or (bound == "lower" and unknown > 1e-6):
+    if bound is None or verdict == "refuse":
         return verdict
     return "bounded"
 

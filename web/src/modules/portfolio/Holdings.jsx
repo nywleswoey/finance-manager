@@ -79,12 +79,8 @@ const netOf = (r) => ({ net: r.net_pl_sgd, verdict: r.net_verdict, bound: r.prov
  * The glyph vocabulary: three values, three meanings, and the legend below carries all three.
  *
  *   `~`  caveat  — some entering units have NO known cost, so this Net reads them as free. The
- *                  doubt is per-unit and the cost-basis family is `not known`. The direction is
- *                  upper — unless a split carry also put a whole event's cost on this name, the
- *                  one state where `net_verdict` withholds `bounded` (`performance.py`) because
- *                  the two doubts pull opposite ways. The mark stays `~`, because the doubt is
- *                  still that a cost is unknown; only its direction goes, and the title says so.
- *                  The security's own page states the same thing at length.
+ *                  doubt is per-unit, the cost-basis family is `not known`, and the direction is
+ *                  always upper.
  *   `≥`  bounded, lower — every unit is costed and the TOTAL is mis-attributed: a split carry put
  *   `≤`  bounded, upper   a sibling's share of one event's cost on this name, or took this name's
  *                         share away. The tiles are exact and stay.
@@ -100,12 +96,8 @@ const NET_TITLE = "total P/L incl dividends + option premiums";
 const netMark = ({ verdict, bound }) => {
   if (verdict === "caveat")
     return { glyph: "~", pre: false,
-             title: bound === "lower"
-               ? "direction not known: some units entered with no known cost, which this Net "
-               + "reads as free, while a corporate action carried a whole event's cost here — "
-               + "the two pull opposite ways"
-               : "an upper bound: some units entered with no known cost, and this Net reads "
-               + "them as free" };
+             title: "an upper bound: some units entered with no known cost, and this Net reads "
+                  + "them as free" };
   if (verdict === "bounded")
     return bound === "upper"
       ? { glyph: "≤", pre: true,
@@ -483,9 +475,8 @@ export default function Holdings() {
           XIRR is the money-weighted return incl. realised trades & dividends.
           <b>Net</b> = total P/L (realised + unrealised + dividends) + option premiums, computed on the
           server — the same figure the security's own page shows; the bar shows its size vs the biggest
-          mover. Three marks qualify it: <b>~</b> some units entered with no known cost and Net reads them as
-          free — an upper bound, or no known direction at all where a carried cost pulls the other way
-          (the mark's own tooltip says which); <b>≥</b> and <b>≤</b> a floor or a ceiling, where a corporate
+          mover. Three marks qualify it: <b>~</b> an upper bound, because some units entered with no known
+          cost and Net reads them as free; <b>≥</b> and <b>≤</b> a floor or a ceiling, where a corporate
           action carried one event's cost between two successors and the total sits on the wrong one;
           <b>n/a</b> where no unit of the name has a recorded cost and there is no Net to state. Grouped by
           Ticker, a row covers the <b>whole</b> name — every funding bucket, open legs and closed ones —

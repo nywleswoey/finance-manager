@@ -141,28 +141,22 @@ const refusalSentence = (s) =>
  * adjacent paragraphs is a sentence spent saying nothing new: there it says only what the
  * DENOMINATOR adds. Same claim either way; the difference is what the reader has already read.
  *
- * NEITHER SENTENCE CLAIMS A DIRECTION THE PAYLOAD CONTRADICTS. A `caveat` that also carries a
- * split is the one state where the two doubts disagree — `net_verdict` withholds `bounded`
- * exactly there, and the hero drops its glyph with it — because the uncosted units count as
- * free (Net overstated) while the whole event's cost landed here (Net understated). The glyph
- * and the prose say the same thing in that state: the direction is not known. Everywhere else
- * the partition is the only doubt and its ceiling stands.
+ * NEITHER SENTENCE CLAIMS A DIRECTION THE PAYLOAD CONTRADICTS. The partition's doubt is always
+ * a ceiling, and `net_verdict` only ships `bounded` where the carry's own direction agrees with
+ * one on the live book — so an upper bound in prose is never a floor in the hero. A `lower`
+ * carry meeting unknown units would break that pairing; it is unreachable and recorded as an
+ * open call in `performance.py:net_verdict` rather than given a second vocabulary here.
  */
-const caveatNetSentence = (s, conflicted) =>
+const caveatNetSentence = (s) =>
   `${unitsUnknown(s.cost_partition)} entered without a recorded cost, and this Net counts ` +
-  (conflicted
-    ? "them as free, while the carry below put a whole event's cost on this name — the two " +
-      "pull opposite ways, so which side of the truth this Net falls on is not known."
-    : "them as free — so it is an upper bound.");
-const caveatReturnSentence = (conflicted, netStated) =>
-  (conflicted
-    ? "Both of those doubts land on the percentage again, and on the peak capital under it"
-    : netStated
-      ? "The percentage compounds it: its denominator, the peak capital, counts costed lots " +
-        "only — a lower bound under that upper-bound Net"
-      : "The percentage compounds one doubt twice: units that entered without a recorded cost " +
-        "count as free in the Net above it, an upper bound, while the peak capital under it " +
-        "counts costed lots only, a lower bound") +
+  "them as free — so it is an upper bound.";
+const caveatReturnSentence = (netStated) =>
+  (netStated
+    ? "The percentage compounds it: its denominator, the peak capital, counts costed lots " +
+      "only — a lower bound under that upper-bound Net"
+    : "The percentage compounds one doubt twice: units that entered without a recorded cost " +
+      "count as free in the Net above it, an upper bound, while the peak capital under it " +
+      "counts costed lots only, a lower bound") +
   " — so it is not comparable to any other name on the site.";
 
 /**
@@ -173,17 +167,10 @@ const caveatReturnSentence = (conflicted, netStated) =>
  * The exact 1:1 carry discloses too: an exact Net is not an accounted-for one when most of its
  * peak capital has no visible origin in the transactions table.
  *
- * THE SENTENCE SAYS WHAT THE VERDICT ALLOWS, NOT WHAT THE WIRE CARRIES. `provenance` ships its
- * `bound` on a split whoever holds it — including one whose partition contradicts the carry,
- * where `net_verdict` returns `caveat` rather than `bounded`. Stating "this Net too high" there
- * would put a direction on a Net the lines above say has none, so the caller names the MODE the
- * page is rendering:
- *
- *     lower/upper — the bound survived the partition, and the sentence carries its direction
- *     undirected  — a split whose two doubts disagree: the same disclosure, the same sibling,
- *                   the same whole-event cost the Net's sentence above points down to, minus
- *                   the direction neither doubt can settle
- *     exact       — the 1:1 carry, whose figure is right and whose origin is still off-page
+ * THE SENTENCE TAKES THE DIRECTION THE PAGE IS RENDERING, not the one the wire carries:
+ * `provenance` ships a `bound` on a split whoever holds it, including a refusal, and the hero
+ * decides whether that direction survives. `lower` and `upper` carry it; the 1:1 carry has none
+ * and discloses anyway, its figure right and its origin still off-page.
  *
  * A REFUSAL DOES NOT DISCLOSE. The refusal is one layout and three lines (§11), the last of
  * which hands the reader down to the block below; a fourth paragraph qualifying that handoff is
@@ -193,19 +180,16 @@ const caveatReturnSentence = (conflicted, netStated) =>
 function carrySentence(pv, mode) {
   const from = `Held as ${pv.from_ticker}${pv.from_name ? ` (${pv.from_name})` : ""}`;
   const sib = (pv.split_with || [])[0];
-  const whole = `${from}; the whole event's ${sgd(pv.carried_sgd)} cost carried here on ` +
-    `${pv.carried_on}` +
-    (sib ? `, including the share belonging to the ${fmt(sib.units, 0)} units distributed to ${sib.ticker}` : "");
   if (mode === "lower") {
-    return `${whole}, so this cost is too high and this Net too low.`;
+    return `${from}; the whole event's ${sgd(pv.carried_sgd)} cost carried here on ` +
+      `${pv.carried_on}` +
+      (sib ? `, including the share belonging to the ${fmt(sib.units, 0)} units distributed to ${sib.ticker}` : "") +
+      ", so this cost is too high and this Net too low.";
   }
   if (mode === "upper") {
     return `${from}; on ${pv.carried_on} its cost carried to ` +
       (sib ? `${sib.ticker}, ${fmt(sib.units, 0)} units,` : "the other name") +
       " and none of it to the units received here, so this cost is too low and this Net too high.";
-  }
-  if (mode === "undirected") {
-    return `${whole}, so the transactions below show only part of what this position cost.`;
   }
   return `${from}; the ${sgd(pv.carried_sgd)} cost carried here on ${pv.carried_on} was paid ` +
     "under that ticker, so the transactions below show only part of what this position cost.";
@@ -255,12 +239,6 @@ export default function SecurityDetail({ ticker, onBack }) {
   // The bound rides the provenance, whole-ticker; `null` on a 1:1 carry, which is exact.
   const pv = s.provenance || null;
   const bound = s.net_verdict === "bounded" ? pv?.bound ?? null : null;
-  // The one state the two doubts disagree in: the whole event's cost landed here (Net
-  // understated) while uncosted units count as free (Net overstated), so `net_verdict` withheld
-  // `bounded` and nothing on the page may name a direction for this Net. `upper` never lands
-  // here — there the two agree and the verdict is `bounded` — and the copy below says "landed
-  // here", which is only true of the side the cost went to.
-  const conflicted = s.net_verdict === "caveat" && pv?.bound === "lower";
   // Each paragraph reads its own axis, and the block exists only if one of them does — so a
   // wrapper cannot outlive its contents, and no combination renders an empty node.
   const netNote = s.net_verdict === "caveat";
@@ -367,14 +345,14 @@ export default function SecurityDetail({ ticker, onBack }) {
         {(netNote || returnNote || carryNote) && (
           <div data-testid="hero-notes">
             {netNote && (
-              <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s, conflicted)}</p>
+              <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
             )}
             {returnNote && (
-              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(conflicted, netNote)}</p>
+              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(netNote)}</p>
             )}
             {carryNote && (
               <p className="hero-note" data-testid="carry-note">
-                {carrySentence(pv, conflicted ? "undirected" : bound)}</p>
+                {carrySentence(pv, bound)}</p>
             )}
           </div>
         )}

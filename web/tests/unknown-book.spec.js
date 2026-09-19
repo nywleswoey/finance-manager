@@ -10,12 +10,13 @@
  * served (or off the provenance object this file attaches), so a recapture moves the numbers and
  * the gates keep meaning what they say.
  *
- * TWO PAYLOADS ARE DERIVED RATHER THAN CAPTURED, AND SAID SO. The captured `holding-9ci.json` and
- * `holding-c38u.json` predate `summary.provenance` reaching the wire, and no captured holding is
- * an exact carry (0P0001OOJG was never captured). Their provenance is attached here in the shape
- * `docs/runbooks/BACKEND.md` documents, and the exact carry is the plain PLTR hero with an exact
- * provenance beside it — a payload written to reach the branch, as `hero.spec.js` does for the
- * dividend line. A recapture that ships provenance makes the overlay a no-op for the bounded two.
+ * THE BOUNDED TWO BORROW A REAL PROVENANCE; ONLY TWO PAYLOADS ARE WRITTEN. `holding-9ci.json`
+ * and `holding-c38u.json` predate `summary.provenance` reaching the wire, but
+ * `positions-closed.json` does not: it carries both names' wire objects verbatim, so this file
+ * reads them off it rather than restating four fields a recapture would leave stale. Written,
+ * and said so: the exact 1:1 carry (0P0001OOJG was never captured, so it is the plain PLTR hero
+ * with an exact provenance beside it) and the refusal that still locked collateral — both
+ * payloads written to reach a branch, as `hero.spec.js` does for the dividend line.
  *
  * NOT HERE, ON PURPOSE: the refusal design says the page states what is missing *below the cash
  * streams it does know*, and the one real refusal (ASTREA6B) knows none. That clause is
@@ -24,7 +25,7 @@
  * dividend.
  */
 import { expect, test } from "@playwright/test";
-import { capturedHoldings } from "./fixtures/index.js";
+import { capturedHoldings, fixtureFor } from "./fixtures/index.js";
 import { openView } from "./support/app.js";
 import { fmt, sgd, money } from "../src/api.js";
 
@@ -41,22 +42,22 @@ const NOT_KNOWN = "not known";
 /** The captured payload with a provenance object beside its summary. */
 const withProvenance = (body, provenance) => ({ ...body, summary: { ...body.summary, provenance } });
 
-/** 9CI's side of the split: the whole cost went here, so the figures are floors. */
-const lower = () => {
-  const b = captured("9CI");
-  return withProvenance(b, {
-    from_ticker: "C31", from_name: "CapitaLand Ltd", type: "split",
-    carried_on: "2021-09-28", carried_sgd: b.summary.cost_basis_sgd,
-    split_with: [{ ticker: "C38U", units: 417 }], bound: "lower",
-  });
+/**
+ * A name's REAL provenance, off the captured `/api/positions` payload — which carries the wire
+ * objects the holding captures predate. Read rather than rebuilt so a recapture propagates
+ * instead of being maintained by hand against a second copy of the same four fields.
+ */
+const capturedProvenance = (ticker) => {
+  const row = fixtureFor("/api/positions?closed=true").body.positions
+    .find((r) => r.ticker === ticker && r.provenance);
+  expect(row, `${ticker} no longer carries a provenance object on the wire`).toBeTruthy();
+  return row.provenance;
 };
+
+/** 9CI's side of the split: the whole cost went here, so the figures are floors. */
+const lower = () => withProvenance(captured("9CI"), capturedProvenance("9CI"));
 /** The mirror of that split: units arrived with none of the cost, so the figures are ceilings. */
-const upperCarry = () => ({
-  from_ticker: "C31", from_name: "CapitaLand Ltd", type: "distribution",
-  carried_on: "2021-09-28", carried_sgd: 0,
-  split_with: [{ ticker: "9CI", units: captured("9CI").summary.units }], bound: "upper",
-});
-const upper = () => withProvenance(captured("C38U"), upperCarry());
+const upper = () => withProvenance(captured("C38U"), capturedProvenance("C38U"));
 /** A 1:1 carry: every figure exact, and still owing its provenance. */
 const exactCarry = (b) => ({
   from_ticker: "OLD", from_name: "Predecessor Fund", type: "switch",
@@ -70,8 +71,8 @@ const exact = () => {
 /**
  * A refusal that still locked collateral: every entering unit unknown, so the Net refuses, while
  * a written put keeps the peak standing — so `_return_figures` ships `caveat` with a null
- * percentage rather than `no_capital`. Derived like the provenance overlays above, because the
- * one captured refusal (ASTREA6B) never wrote an option and so never reaches that pairing.
+ * percentage rather than `no_capital`. Written, because the one captured refusal (ASTREA6B)
+ * never wrote an option and so never reaches that pairing.
  */
 const refusedWithPeak = () => {
   const b = captured("ASTREA6B");
@@ -79,30 +80,8 @@ const refusedWithPeak = () => {
                             peak_car_sgd: 12500, return_span_days: 900 } };
 };
 
-/**
- * The cost recipient of a split whose OWN book also doubts some entering units. The carry says
- * the Net is a floor and the partition says it is a ceiling, so `net_verdict` ships `caveat`
- * and not `bounded` (`performance.py`) while `provenance.bound` stays `lower` — the direction
- * is a fact about the event whatever the verdict does with it. Derived, because no captured
- * holding is both: 9CI carries with every unit costed.
- *
- * DERIVED WHOLE, not verdict-deep: a caveat nulls the cost-basis family and collapses the pair
- * into the `Stock P/L` its members sum to, so a payload that changed only the verdict would put
- * the page in a state the fold cannot emit — and the gate below reads those very cells.
- */
-const caveated = (o) => ({ ...o, avg_cost: null, cost_basis_native: null, cost_basis_sgd: null,
-                           realised_pl_sgd: null, unrealised_pl_sgd: null });
-const lowerWithUnknownUnits = () => {
-  const p = lower();
-  const part = p.summary.cost_partition;
-  return { ...p, buckets: (p.buckets || []).map(caveated),
-    summary: { ...caveated(p.summary), net_verdict: "caveat", return_verdict: "caveat",
-      cost_partition: { ...part, costed: part.units_in - 500, unknown: 500,
-                        unknown_pct: Math.round((500 / part.units_in) * 1e4) / 1e4 } } };
-};
-
 /** The upper side of a split that holds nothing else: it carries a bound, and its Net refuses. */
-const refusedCarry = () => withProvenance(captured("ASTREA6B"), upperCarry());
+const refusedCarry = () => withProvenance(captured("ASTREA6B"), capturedProvenance("C38U"));
 
 
 /** A caveat that also carries, exactly: three notes, and the caveat's two still adjacent. */
@@ -348,56 +327,6 @@ test.describe("bounded — the bound lands on the numbers", () => {
       expect(await note.innerText(), "the sentence points back at one that is not there")
         .not.toMatch(/same error|those doubts|compounds it/);
     });
-
-  test("a carry the partition contradicts states the caveat, not a direction", async ({ page, baseURL }) => {
-    const p = lowerWithUnknownUnits();
-    const s = p.summary;
-    // What the fold ships for this pairing: the counts keep the verdict, the event keeps its
-    // direction, and the two disagree — a floor from the carry against a ceiling from the 500.
-    expect(s.net_verdict).toBe("caveat");
-    expect(s.provenance.bound).toBe("lower");
-    expect(s.cost_partition.unknown).toBeGreaterThan(0);
-    await open(page, baseURL, "9CI", p);
-
-    // No direction lands on the Net, or on the percentage, or on the peak beneath it.
-    await expect(page.getByTestId("hero-bound")).toHaveCount(0);
-    expect(await page.locator(".hero").innerText()).not.toMatch(/[\u2265\u2264]/);
-    expect(await heroReturn(page).innerText())
-      .toContain(`on peak capital of ${fmt(s.peak_car_sgd, 2)}`);
-
-    // The caveat treatment instead: the uncosted units are named, and both sentences stand.
-    expect(await noteIds(page)).toEqual(["caveat-net", "caveat-return", "carry-note"]);
-    const net = page.getByTestId("caveat-net");
-    await expect(net)
-      .toContainText(`${fmt(s.cost_partition.unknown, 0)} of ${fmt(s.cost_partition.units_in, 0)} units`);
-    // …and the prose says what the missing glyph says: the direction is not known.
-    await expect(net).toContainText(NOT_KNOWN);
-    const ret = page.getByTestId("caveat-return");
-    await expect(ret).toContainText("not comparable to any other name");
-    for (const p2 of [net, ret]) {
-      expect(await p2.innerText(), "a sentence bounded a Net the verdict would not")
-        .not.toMatch(/upper bound|lower bound|floor|ceiling/);
-    }
-
-    // The caveat treatment reaches the cells too, which is what the payload above is shaped for.
-    expect(await tileVal(page, "Avg Cost")).toBe(NOT_KNOWN);
-    expect(await tileVal(page, "Cost Basis")).toBe(NOT_KNOWN);
-    const rowLabels = await labels(page);
-    expect(rowLabels).toContain("Stock P/L");
-    expect(rowLabels).not.toContain("Realised");
-    expect(rowLabels[rowLabels.length - 1], "the caveat lost its bottom line").toBe("Net");
-
-    // The carry still discloses, names the sibling, and says the figure is the whole event's —
-    // the clause the Net's sentence points down to. It just claims no direction.
-    const carry = page.getByTestId("carry-note");
-    const pv = s.provenance;
-    await expect(carry).toContainText(pv.from_ticker);
-    await expect(carry).toContainText(pv.carried_on);
-    await expect(carry).toContainText(`whole event's ${sgd(pv.carried_sgd)} cost`);
-    await expect(carry).toContainText(pv.split_with[0].ticker);
-    await expect(carry).toContainText(fmt(pv.split_with[0].units, 0));
-    expect(await carry.innerText()).not.toMatch(/too high|too low/);
-  });
 
   test("a caveat that also carries keeps its two sentences adjacent, the carry after both", async ({ page, baseURL }) => {
     const p = caveatWithExactCarry();

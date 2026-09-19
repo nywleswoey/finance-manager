@@ -364,33 +364,6 @@ test("three glyphs, three meanings, and a refusal that states no number", async 
   await expect.soft(cell.locator("span[title]")).toHaveAttribute("title", /not known/);
 });
 
-test("a caveat whose carry pulls the other way claims no direction", async ({ page }) => {
-  // The state `net_verdict` withholds `bounded` from: 9CI keeps its `lower` provenance while its
-  // partition doubts some units, so the carry says floor and the partition says ceiling. The
-  // detail page names no direction there, and this column reads the same two wire fields.
-  const source = positionsFixture.positions.find((r) => r.ticker === "9CI");
-  expect(source.provenance.bound, "the fixture must still carry the floor direction").toBe("lower");
-  const payload = { ...positionsFixture,
-    positions: positionsFixture.positions.map((r) => (r.ticker === "9CI"
-      ? { ...r, net_verdict: "caveat", avg_cost: null, cost_basis_sgd: null } : r)) };
-  // Registered after `beforeEach`'s seam, so it takes precedence over the catch-all, and the
-  // page is reloaded rather than re-seeded: `loadApp` re-registers that catch-all last.
-  await page.route("**/api/positions**", (route) => route.fulfill({
-    status: 200, contentType: "application/json", body: JSON.stringify(payload) }));
-  await page.reload();
-  await expect(page.locator(".app")).toBeVisible();
-  await holdings.open(page);
-  await page.getByLabel("Show closed positions").check();
-  await groupBy(page).selectOption("ticker");
-
-  const cell = netCell(page, "9CI");
-  await expect(cell).toContainText("~");
-  const title = await cell.locator("span[title]").first().getAttribute("title");
-  expect(title).toMatch(/not known/);
-  expect(title, "the marker bounded a Net the verdict would not")
-    .not.toMatch(/upper bound|lower bound|at least|at most|too high|too low/);
-});
-
 test("the legend carries all three marks and the refusal's", async ({ page }) => {
   // A glyph nobody can look up is a glyph nobody can read. The footnote is the only place on
   // this page that says what the marks mean, so it carries every one the table can render.

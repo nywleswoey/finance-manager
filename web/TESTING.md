@@ -309,15 +309,20 @@ from a fixture**; the one number written down is the tile count, which is a desi
 label), the caveat (tiles `not known`, one `Stock P/L` row, the bottom line kept, the Net's sentence
 then the percentage's, adjacent), no capital (percentage, span and peak absent together, no reason
 in the copy) and the bound in both directions plus the exact carry that still discloses. One
-viewport, one project; every expectation is read off the payload. The 9CI and C38U captures predate
-`summary.provenance` and no exact carry was captured, so those provenance objects are attached in
-the spec. **Unevidenced, two of them.** The refusal's "what the book does know, below" clause —
-the one real refusal knows no dividends; trigger is the next un-annotated carry-in that also pays
-one. And the bound's "tiles kept" on the CEILING direction: it is proven on the floor (9CI keeps
-its `avg_cost` and cost basis) and cannot be on the ceiling, because the only `upper`-bounded name
-(C38U) still carries doubted units and #148's partition rule correctly nulls a cost basis pooled
-averaging would have invented — see `docs/runbooks/BACKEND.md`. Trigger is the first
-ceiling-bounded name whose units are all costed.
+viewport, one project; every expectation is read off the payload. The 9CI and C38U holding captures
+predate `summary.provenance`, so the spec borrows each name's REAL wire object from
+`positions-closed.json`, which carries both; only the exact 1:1 carry and the refusal that still
+locked collateral are written payloads, and the file says which. **Open calls, three of them, and
+none papered over.** The refusal's "what the book does know, below" clause — the one real refusal
+knows no dividends; trigger is the next un-annotated carry-in that also pays one. The bound's
+"tiles kept" on the CEILING direction: proven on the floor (9CI keeps its `avg_cost` and cost
+basis) and not provable on the ceiling, because the only `upper`-bounded name (C38U) still carries
+doubted units and #148's partition rule correctly nulls a cost basis pooled averaging would have
+invented; trigger is the first ceiling-bounded name whose units are all costed. And a `lower` carry
+meeting unknown-cost units, where the carry's floor and the partition's ceiling would leave the Net
+bounded in neither: no live name is both, so the page carries one rule for direction and no second
+vocabulary; trigger is the first name that is. All three are stated in
+`docs/runbooks/BACKEND.md`.
 
 `tests/security-detail-options.spec.js` — **SecurityDetail's Options P/L**, the same kind of
 subject as `ticker.spec.js` and there for the same reason: a folded total is the same number at

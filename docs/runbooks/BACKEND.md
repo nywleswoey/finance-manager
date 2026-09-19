@@ -389,8 +389,7 @@ pending after the leg stays `unknown`. No tolerance window, so no unargued N.
 
 ```text
 refuse   ⟺  costed == 0 ∧ unknown > 0
-bounded  ⟸  a split carry reached the name — overrides hero; overrides caveat only where the
-            carry's direction agrees with it (upper); never refuse
+bounded  ⟸  a split carry reached the name — overrides caveat and hero, never refuse
 caveat   ⟺  costed > 0  ∧ unknown > 0
 hero     ⟺  unknown == 0
 ```
@@ -398,7 +397,7 @@ hero     ⟺  unknown == 0
 | | cause | tiles | direction |
 |---|---|---|---|
 | `caveat` | some units have **no** cost | **null** | always upper |
-| `bounded` | the **total is mis-attributed**, and the partition does not point the other way | **kept** | lower *or* upper |
+| `bounded` | the **total is mis-attributed** | **kept** | lower *or* upper |
 
 - **Tiles follow the partition, not the verdict**, so 9CI keeps `avg_cost: 3.73` while C38U — the
   one name carrying both doubts — still nulls its cost-basis family and reads `return_verdict:
@@ -410,8 +409,15 @@ hero     ⟺  unknown == 0
   only `upper`-bounded name is C38U, whose partition still doubts 500 units, so #148's rule nulls
   the cost basis rather than letting pooled averaging invent one. Weakening that rule or
   reclassifying the holding to evidence the criterion is rejected. **Trigger:** the first
-  ceiling-bounded name whose units are all costed. Recorded beside #158's other open call in
+  ceiling-bounded name whose units are all costed. Recorded beside #158's other open calls in
   `web/TESTING.md`.
+- **Open call (#158): a `lower` carry meeting unknown-cost units.** The partition's doubt is
+  always a ceiling and `upper` agrees with it, which is why C38U's bound stands over its caveat.
+  A `lower` carry does not: the whole event's cost landed on that name, so its Net is understated
+  while its uncosted units overstate it, and the page would print `≥` over a Net the book can
+  bound in neither direction. No live name is both — 9CI, the one `lower`, has zero unknown units
+  — so the rule above is left minimal and no second vocabulary exists for the combination.
+  **Trigger:** the first live name where a `lower` carry meets unknown-cost units.
 
 **`provenance`** ships on every row — null unless a carry reached the name, and whole-ticker like
 the verdict, so it rides every leg:
