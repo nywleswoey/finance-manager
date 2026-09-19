@@ -1333,6 +1333,9 @@ def fold_ticker(rows):
         "invested_native": _sum(legs, "invested_native"), "fees_sgd": _sum(legs, "fees_sgd"),
         "cost_known": all(r["cost_known"] for r in legs),
     }
+    # whole-ticker, so any leg's carries it; absent unless a carry reached the name (§12)
+    if first.get("provenance"):
+        summary["provenance"] = first["provenance"]
     buckets = [{k: r[k] for k in LEG_FIELDS} for r in
                ({**r, "status": "open" if r["units"] > 1e-6 else "closed"} for r in legs)]
     return {"summary": summary, "buckets": buckets}

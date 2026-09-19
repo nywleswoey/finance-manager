@@ -139,6 +139,8 @@ body { margin: 0; background: var(--bg); color: var(--txt);
 .hero-ccy { font-size: 18px; font-weight: 600; color: var(--mut); }
 .hero-return { margin-top: 2px; font-size: 14px; color: var(--txt);
   font-variant-numeric: tabular-nums; }
+.hero-bound { font-size: 18px; font-weight: 600; color: var(--mut); }
+.hero-note { margin: 4px 0 0; max-width: 62ch; font-size: 13px; color: var(--mut); }
 .hero-asof { margin-top: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
 .ledger { max-width: 34ch; margin-bottom: 18px; font-variant-numeric: tabular-nums; }
 .ledger-row { display: flex; align-items: baseline; justify-content: space-between; gap: 18px;

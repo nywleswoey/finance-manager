@@ -103,6 +103,70 @@ function ColumnHead({ name, o, status }) {
   );
 }
 
+/**
+ * What the hero says when the book does not know (#143 §11, §12) — every sentence is copy, and
+ * copy lives here: the server ships verdicts and a provenance object, never prose.
+ *
+ * NO SENTENCE BELOW CARRIES A `%` OR THE WORD "ANNUALISED". The page states one percentage and no
+ * annualised rate anywhere, and `hero.spec.js` counts both on the rendered text.
+ */
+
+/** "17,000 of 68,000 units" — or "All 15,000 units" when the whole entering position is doubted. */
+function unitsUnknown(p) {
+  return p.unknown >= p.units_in - 1e-6
+    ? `All ${fmt(p.units_in, 0)} units`
+    : `${fmt(p.unknown, 0)} of ${fmt(p.units_in, 0)} units`;
+}
+
+/**
+ * The refusal, in the hero slot (§11). It says what is missing and stops: no bottom line follows
+ * it, and no partial Net — no `Known cash received` subtotal under any label — is offered.
+ */
+const refusalSentence = (s) =>
+  `${unitsUnknown(s.cost_partition)} entered without a recorded cost.`;
+
+/**
+ * The caveat's two sentences, in a FIXED order (§11): the Net's bound first, then the
+ * percentage's incomparability, because the second only makes sense once the first is read.
+ *
+ * The Net's is the partition's (`caveat`): the units without a cost are counted as free, which
+ * is an upper bound. A bounded name states its own directional sentence instead (below) and
+ * still owes the percentage's second sentence when the return axis is a caveat too — C38U.
+ * Neither prints the Net a second time: the hero already carries the figure.
+ */
+const caveatNetSentence = (s) =>
+  `${unitsUnknown(s.cost_partition)} entered without a recorded cost, and this Net counts ` +
+  "them as free — so it is an upper bound.";
+const caveatReturnSentence =
+  "The same error runs both ways in the percentage: the Net above is an upper bound while " +
+  "the peak capital counts costed lots only, a lower bound — so it is not comparable to any " +
+  "other name on the site.";
+
+/**
+ * A carry's disclosure, below the percentage (§12). Directional where the carry split, and it
+ * NAMES THE SIBLING: this is the first bounded figure on the page whose counterpart is
+ * reachable, and a direction-free sentence would invite the reader to solve for a number the
+ * page will not give. The direction is asserted, not computed — nothing bounds the magnitude.
+ * The exact 1:1 carry discloses too: an exact Net is not an accounted-for one when most of its
+ * peak capital has no visible origin in the transactions table.
+ */
+function carrySentence(pv) {
+  const from = `Held as ${pv.from_ticker}${pv.from_name ? ` (${pv.from_name})` : ""}`;
+  const sib = (pv.split_with || [])[0];
+  if (pv.bound === "lower") {
+    return `${from}; the ${fmt(pv.carried_sgd, 0)} cost carried here on ${pv.carried_on}` +
+      (sib ? `, including the share belonging to the ${fmt(sib.units, 0)} units distributed to ${sib.ticker}` : "") +
+      ", so this cost is too high and this Net too low.";
+  }
+  if (pv.bound === "upper") {
+    return `${from}; on ${pv.carried_on} its cost carried to ` +
+      (sib ? `${sib.ticker}, ${fmt(sib.units, 0)} units,` : "the other name") +
+      " and none of it to the units received here, so this cost is too low and this Net too high.";
+  }
+  return `${from}; the ${fmt(pv.carried_sgd, 0)} cost carried here on ${pv.carried_on} was paid ` +
+    "under that ticker, so the transactions below show only part of what this position cost.";
+}
+
 export default function SecurityDetail({ ticker, onBack }) {
   const [d, setD] = useState(null);
   const phone = usePhone();
@@ -143,6 +207,12 @@ export default function SecurityDetail({ ticker, onBack }) {
   const rows = ledgerRows(d);
   const bks = d.buckets || [];
   const split = bks.length > 1;
+  const refused = s.net_verdict === "refuse";
+  // The bound rides the provenance, whole-ticker; `null` on a 1:1 carry, which is exact.
+  const pv = s.provenance || null;
+  const bound = s.net_verdict === "bounded" ? pv?.bound ?? null : null;
+  const BOUND_WORDS = { lower: ["at least", "at most"], upper: ["at most", "at least"] };
+  const [figureBound, capitalBound] = BOUND_WORDS[bound] || [null, null];
 
   return (
     <div>
@@ -171,12 +241,28 @@ export default function SecurityDetail({ ticker, onBack }) {
             the one verdict with no Net to state, and it ships null on every leg precisely so no
             partial Net exists under any name — so the hero reads the words. Branching on the
             null instead would make the render a guess about why the field is empty on the day a
-            second reason for an empty field arrives. #158 puts the refusal sentence here. */}
-        <div className="hero-net">
-          <span data-testid="hero-net" className={ledgerClass(s.net_pl_sgd)}>
-            {s.net_verdict === "refuse" ? NOT_KNOWN : ledgerAmount(s.net_pl_sgd)}</span>
-          {s.net_verdict !== "refuse" && <span className="hero-ccy"> SGD</span>}
-        </div>
+            second reason for an empty field arrives. */}
+        {refused ? (
+          /* THE NUMBER IS REPLACED BY PROSE, IN THE HERO SLOT (§11) — the answer to the reader's
+             question belongs where the answer goes. The block beneath loses its bottom line
+             rather than gaining an explanation of why it stopped. */
+          <div data-testid="hero-refusal">
+            <div className="hero-net">
+              <span data-testid="hero-net" className="mut">Net P/L — {NOT_KNOWN}</span>
+            </div>
+            <p className="hero-note" data-testid="hero-note">{refusalSentence(s)}</p>
+            <p className="hero-note" data-testid="hero-note">Below is what the book does know.</p>
+          </div>
+        ) : (
+          <div className="hero-net">
+            {/* THE BOUND LANDS ON THE NUMBER (§12): printing the figure in the largest type and
+                correcting it in prose two lines down is the shape this page rejects. */}
+            {figureBound && <span className="hero-bound" data-testid="hero-bound">{figureBound} </span>}
+            <span data-testid="hero-net" className={ledgerClass(s.net_pl_sgd)}>
+              {ledgerAmount(s.net_pl_sgd)}</span>
+            <span className="hero-ccy"> SGD</span>
+          </div>
+        )}
         {/* THE PAGE'S ONE PERCENTAGE, AND IT IS NOT A RATE (#143 §9, §10). `Net ÷ peak
             capital-at-risk`, a lifetime total, with its span and its peak in the same sentence:
             annualising a ratio whose denominator is a *peak* would assert the capital sat at
@@ -195,12 +281,36 @@ export default function SecurityDetail({ ticker, onBack }) {
             `no_capital` — nothing paid, no collateral locked — drops the percentage, the span
             and the peak TOGETHER, because they are one claim in three clauses and keeping the
             span would leave a sentence half in the vocabulary of a return. The verdict gates it,
-            not the null: `peak_car_sgd` ships as a measured `0` there and is not missing at all.
-            #158 puts its sentence in this slot. */}
+            not the null: `peak_car_sgd` ships as a measured `0` there and is not missing at all. */}
+        {!refused && s.return_verdict === "no_capital" && (
+          /* One claim, no reason: it says nothing was paid, not why. Nothing in the ledger calls
+             a lot a gift, and the transactions table on this page shows the cause. Not offered
+             on a refusal — "nothing was paid" would state as known what that hero says is not. */
+          <div className="hero-return" data-testid="hero-no-capital">
+            no capital at risk — nothing was ever paid for these units
+          </div>
+        )}
         {s.return_verdict !== "no_capital" && (
           <div className="hero-return" data-testid="hero-return">
-            {signedPct(s.return_pct, 1)} over {fmt(s.return_span_days / 365.25, 1)} years
-            {" "}on peak capital of {fmt(s.peak_car_sgd, 2)}
+            {figureBound && <>{figureBound} </>}{signedPct(s.return_pct, 1)} over{" "}
+            {fmt(s.return_span_days / 365.25, 1)} years on peak capital of{" "}
+            {capitalBound && <>{capitalBound} </>}{fmt(s.peak_car_sgd, 2)}
+          </div>
+        )}
+        {/* THE SENTENCES, ADJACENT AND IN A FIXED ORDER (§11): the Net's first, then the
+            percentage's incomparability. A carry's disclosure sits in the same block — below the
+            percentage, where the reader is looking at the span and the denominator it explains. */}
+        {(s.net_verdict === "caveat" || s.net_verdict === "bounded" || pv) && (
+          <div data-testid="hero-notes">
+            {s.net_verdict === "caveat" && (
+              <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
+            )}
+            {pv && (
+              <p className="hero-note" data-testid="carry-note">{carrySentence(pv)}</p>
+            )}
+            {s.net_verdict !== "refuse" && s.return_verdict === "caveat" && (
+              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence}</p>
+            )}
           </div>
         )}
         {/* TWO DATES, DELIBERATELY (#143 §2). `as_of` is the valuation date this page and
@@ -242,15 +352,18 @@ export default function SecurityDetail({ ticker, onBack }) {
             <span className={"ledger-val " + ledgerClass(v)}>{ledgerAmount(v)}</span>
           </div>
         ))}
-        <div className="ledger-row ledger-total" data-testid="ledger-net">
-          <span className="ledger-lbl">Net</span>
-          {split && bks.map((b) => (
-            <span key={b.bucket} className={"ledger-cell " + ledgerClass(b.net_pl_sgd)}>
-              {ledgerAmount(b.net_pl_sgd)}</span>
-          ))}
-          <span className={"ledger-val " + ledgerClass(s.net_pl_sgd)}>
-            {ledgerAmount(s.net_pl_sgd)}</span>
-        </div>
+        {/* A block that does not sum says so by not summing: a refusal has no bottom line. */}
+        {!refused && (
+          <div className="ledger-row ledger-total" data-testid="ledger-net">
+            <span className="ledger-lbl">Net</span>
+            {split && bks.map((b) => (
+              <span key={b.bucket} className={"ledger-cell " + ledgerClass(b.net_pl_sgd)}>
+                {ledgerAmount(b.net_pl_sgd)}</span>
+            ))}
+            <span className={"ledger-val " + ledgerClass(s.net_pl_sgd)}>
+              {ledgerAmount(s.net_pl_sgd)}</span>
+          </div>
+        )}
       </div>
 
       {/* The five position tiles, and only those five. Unrealised, Dividends and Options are

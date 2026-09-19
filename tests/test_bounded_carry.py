@@ -268,3 +268,16 @@ def test_provenance_and_the_verdict_ride_every_leg_of_the_ticker():
     assert len(legs) == 2
     assert legs[0]["provenance"] == legs[1]["provenance"] is not None
     assert {r["net_verdict"] for r in legs} == {"bounded"}
+
+
+def test_the_detail_summary_carries_provenance_only_where_a_carry_reached_the_name():
+    """`fold_ticker` reads it off the first leg — whole-ticker, like the verdict it explains —
+    and omits it elsewhere rather than shipping a null the page would have to interpret."""
+    rows = _fold(_capitaland(), SPLIT)
+    nine = perf.fold_ticker([r for r in rows if r["ticker"] == "9CI"])["summary"]
+    assert nine["provenance"] == _row(rows, "9CI")["provenance"]
+    assert nine["net_verdict"] == "bounded"
+
+    plain = perf.fold_ticker([r for r in _fold([_c38u(account="FSM", qty_signed=10, price=1.0)],
+                                               []) if r["ticker"] == "C38U"])["summary"]
+    assert "provenance" not in plain

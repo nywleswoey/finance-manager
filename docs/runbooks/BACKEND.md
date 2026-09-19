@@ -423,6 +423,8 @@ the verdict, so it rides every leg:
 - `bound`: `lower` on the name the cost went to, `upper` on a sibling, `null` on a single-successor
   carry. **Asserted, not computed** — nothing in the book bounds the magnitude.
 - Ships on the exact 1:1 carry too (0P0001OOJG): an exact number is not an accounted-for one.
+- `/api/holding`'s `summary` carries it (read off the first leg, **omitted** when null), so the detail page
+  renders its `at least` / `at most` and the carry sentence from the wire, not from a second query.
 
 Live: 9CI `bounded`/lower, C38U `bounded`/upper, 0P0001OOJG `hero` with `bound: null`. No numeric
 field on any row moved.

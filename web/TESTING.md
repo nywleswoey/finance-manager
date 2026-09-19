@@ -304,6 +304,16 @@ both fields. Its last test serves a payload whose `income_sgd` and `options_pl_s
 figure" apart from "re-derived it and got lucky". **No gate in the file states a numeric literal
 from a fixture**; the one number written down is the tile count, which is a design decision.
 
+`tests/unknown-book.spec.js` — **what the ticker detail page says when the book does not know**
+(#158): the refusal (prose in the hero slot, no bottom line, five tiles, no subtotal under any
+label), the caveat (tiles `not known`, one `Stock P/L` row, the bottom line kept, the Net's sentence
+then the percentage's, adjacent), no capital (percentage, span and peak absent together, no reason
+in the copy) and the bound in both directions plus the exact carry that still discloses. One
+viewport, one project; every expectation is read off the payload. The 9CI and C38U captures predate
+`summary.provenance` and no exact carry was captured, so those provenance objects are attached in
+the spec. **Unevidenced:** the refusal's "what the book does know, below" clause — the one real
+refusal knows no dividends; trigger is the next un-annotated carry-in that also pays one.
+
 `tests/security-detail-options.spec.js` — **SecurityDetail's Options P/L**, the same kind of
 subject as `ticker.spec.js` and there for the same reason: a folded total is the same number at
 every width, so it runs at **one viewport in a project of its own**. The page used to fold that
