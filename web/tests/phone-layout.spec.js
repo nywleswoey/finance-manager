@@ -6,8 +6,13 @@
  * WHY IT RUNS AT THE PHONE VIEWPORTS. Every claim here is about width: whether a block fits, a
  * row is 44px, a sentence is on screen or behind a disclosure. The eight captured payloads are
  * eight different shapes of the hero (a wheel, a windfall, a caveat, a two-bucket name, a closed
- * name, two carries and the refusal), so 8 tickers x the phone-tier viewports covers the
+ * name, two bounded names and the refusal), so 8 tickers x the phone-tier viewports covers the
  * "24 layout x state combinations" at 360 / 390 / 430 and adds the tier's last pixel.
+ *
+ * TWO LOOPS, AND THE SECOND EXISTS FOR ONE CLAIM. The captures reach every state this tier splits
+ * on except the bound prefix and the carry sentence: `summary.provenance` postdates them, and both
+ * ride that object. The `BOUNDED` loop at the foot of the file serves it and owns those two — the
+ * per-ticker loop above states neither, so there is one gate per claim and not two.
  *
  * NO GATE STATES A NUMERIC LITERAL FROM A FIXTURE — every expectation is read off the payload the
  * page was served, so a recapture moves the numbers and the gates keep meaning what they say.
@@ -76,8 +81,6 @@ for (const { ticker, body } of HOLDINGS) {
   const s = body.summary;
   const bks = body.buckets;
   const refused = s.net_verdict === "refuse";
-  // A 1:1 carry is `bounded` with no direction — exact, so nothing to prefix.
-  const bounded = s.net_verdict === "bounded" && !!s.provenance?.bound;
   const notes = [s.net_verdict === "caveat", !refused && s.return_verdict === "caveat",
     !!s.provenance && !refused].filter(Boolean).length;
 
@@ -105,6 +108,8 @@ for (const { ticker, body } of HOLDINGS) {
       expect(new Set(tops.map(Math.round)).size).toBe(5);
     });
 
+    // The bound prefix is the one truth claim no captured payload reaches; the `BOUNDED` loop
+    // below serves a real provenance and owns it.
     test("every truth claim stays visible; every explanation folds behind one row", async ({ page }) => {
       if (refused) {
         await expect(page.getByTestId("refusal-units")).toBeVisible();
@@ -113,10 +118,6 @@ for (const { ticker, body } of HOLDINGS) {
         await expect(page.getByTestId("hero-no-capital")).toBeVisible();
       } else {
         await expect(page.getByTestId("hero-return")).toBeVisible();
-      }
-      if (bounded) {
-        await expect(page.getByTestId("hero-bound")).toBeVisible();
-        await expect(page.getByTestId("hero-return")).toContainText(/[≥≤]/);
       }
       const notesBlock = page.getByTestId("hero-notes");
       if (notes === 0) {
