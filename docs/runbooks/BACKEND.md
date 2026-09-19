@@ -304,6 +304,38 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
   so in the divergence case the group Net drops leg B while the row Nets include it. No live
   ticker has that shape; the group-vs-ticker identity belongs to #155, which should close it.
 
+**`breakeven_price`** ships beside the Net on every position row and every bucket column: the
+native-currency price at which THAT column's Net reaches zero — `(cost_basis_sgd − realised −
+income − options) ÷ (fx_rate × units)`, quoted at 4dp like `avg_cost` and `price`. Defined against
+Net and not against avg cost: avg cost is the price that undoes the unrealised column, this is the
+price that undoes the NAME (UD1U: 0.3564 vs 0.4166, the gap being dividends and realised gains
+already banked). Solved in the fold, not `_build_row`, because the options stream is one of the
+components it has to undo.
+
+- **Null means there is no such price**, one meaning for all three routes: a `refuse` (no Net to
+  zero), a closed leg (no units to divide by — `units <= 1e-6`, not a `status` test), and a leg
+  that cannot price its units (`cost_basis_sgd` null, which `realised_pl_sgd` is null with).
+- **Negative is a real answer** — income and realised gains past cost basis mean the name is
+  already whole at any price, including zero — and is never clamped.
+- **Tolerance is the quote's, not a cent's.** Revaluing the fold at it lands the Net within
+  `5e-5 × units × rate` SGD (0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700); it scales with units
+  and the FX rate. `bucket-split.spec.js` gates `max(0.02, 5e-5 × units × rate)`.
+- **A `bounded` Net bounds it the OTHER way.** `price × rate × units ≡ mv_sgd − Net` with mv, rate
+  and units exact, so a `lower` carry floors the Net (`≥`) and ceilings the price (`≤`) — the
+  direction peak capital already takes, and the detail page marks it with the same glyph. `upper`
+  comes with unknown units, which null `cost_basis_sgd`, so `lower` with none (9CI) is the only
+  bounded shape that ships a price at all.
+- **The ticker's is solved from the summary**, never a weighted mean of the legs': a closed leg has
+  no breakeven of its own but its realised gains and dividends are in the hero, so averaging the
+  open legs would quote a price that zeroes only part of the number above it. `Holdings.jsx`'s
+  `mergeTicker` therefore ships `null` rather than folding one.
+
+**`fx_rate`** also ships on every `/api/positions` row, beside `provenance` and `cost_partition`:
+plumbing, with no consumer on the wire. `fold_ticker` is pure over rows and needs the rate to solve
+the summary's breakeven; recovering it by dividing a native/SGD pair would divide rounded figures
+and divide by zero on a closed leg's MV and a free lot's cost basis. `LEG_FIELDS` keeps it off the
+bucket columns and the `/api/holding` summary.
+
 **`return_pct` divides the Net that ships** — `Σ net_pl_sgd` over the ticker — and #152's inline
 `Σ pl_sgd + Σ options_pl_sgd` is gone: one numerator, one definition. A refused Net beside real put
 collateral reads `return_verdict: "caveat"` with `return_pct: null`, never `ok`. Against the live
@@ -327,13 +359,14 @@ no longer silently missing from the page.
 - **Computation is `performance.fold_ticker`**, pure; the handler fetches (`ticker_ledger`) and
   enriches the tables. The three folds (`fold_positions`, `rollup()`, Holdings' `mergeTicker`) stay
   three.
-- **`summary`** carries identity, position, the components, `net_pl_sgd` / `net_verdict`, the four
-  return fields, `cost_partition` (counts summed, `unknown_pct` recomputed), `invested_*`,
-  `fees_sgd` and `cost_known` (AND). **Absent, not null:** `xirr`, `simple_return`, `pl_sgd`, and the
-  singular `bucket` / `status`.
-- **`buckets`** is a list, largest MV first, of `{bucket, status, units, avg_cost, realised_pl_sgd,
-  unrealised_pl_sgd, stock_pl_sgd, income_sgd, options_pl_sgd, net_pl_sgd}`. Every key but the two
-  labels is a summary key. A single-bucket ticker ships one element.
+- **`summary`** carries identity, position, the components, `net_pl_sgd` / `net_verdict`,
+  `breakeven_price`, the four return fields, `cost_partition` (counts summed, `unknown_pct`
+  recomputed), `invested_*`, `fees_sgd` and `cost_known` (AND). **Absent, not null:** `xirr`,
+  `simple_return`, `pl_sgd`, and the singular `bucket` / `status`.
+- **`buckets`** is a list, largest MV first, of `{bucket, status, units, avg_cost, breakeven_price,
+  realised_pl_sgd, unrealised_pl_sgd, stock_pl_sgd, income_sgd, options_pl_sgd, net_pl_sgd}`
+  (`performance.LEG_FIELDS`, which `tests/test_holding_endpoint.py` pins the response against).
+  Every key but the two labels is a summary key. A single-bucket ticker ships one element.
 - **Fold rules.** Figures sum. `realised` / `unrealised` / `stock_pl` / `cost_basis_*` /
   `invested_sgd` are null if **any** leg's is — the spec's "null only when every leg is null" was
   written when a closed leg shipped null; since #149 a leg's null means only *not known*, and a

@@ -35,6 +35,13 @@ test.beforeAll(() => {
   expect(MULTI.length, "no multi-bucket holding captured").toBeGreaterThan(0);
   expect(SINGLE.length, "no single-bucket holding captured").toBeGreaterThan(0);
   expect(CLOSED_BUCKET.length, "no closed bucket inside a multi-bucket holding").toBeGreaterThan(0);
+  // the three states the single-bucket breakeven subheading has to render, each captured
+  const single = (f) => SINGLE.filter(({ body }) => f(body.summary)).length;
+  expect(single((s) => s.units > 0 && s.breakeven_price != null),
+    "no priceable single-bucket holding").toBeGreaterThan(0);
+  expect(single((s) => s.units > 0 && s.breakeven_price == null),
+    "no single-bucket holding that cannot price its units").toBeGreaterThan(0);
+  expect(single((s) => !(s.units > 0)), "no closed single-bucket holding").toBeGreaterThan(0);
 });
 
 const NOT_KNOWN_TEXT = "not known";   // the page's one word for an unmeasured figure
@@ -231,18 +238,51 @@ for (const { ticker, body } of MULTI) {
   });
 }
 
+// A SINGLE-BUCKET PAGE STATES ONE TOO. It has no column head to put it in, so it is a
+// right-aligned subheading over the amounts with NO column label — the figure exists on every
+// priceable name rather than only the multi-bucket ones. Same figure, same three states.
+for (const { ticker, body } of SINGLE) {
+  test(`${ticker}: the breakeven is a subheading over the rows, with no column label`,
+    async ({ page, baseURL }) => {
+      await openTicker(page, baseURL, ticker);
+      const s = body.summary;
+      const line = page.getByTestId("ledger-breakeven");
+      // #157 is untouched: one bucket still shows no bucket header and no column label, and a
+      // subheading is not a column head
+      await expect(page.getByTestId("ledger-head")).toHaveCount(0);
+      await expect(page.getByTestId("ledger-col")).toHaveCount(0);
+      await expect(page.getByTestId("ledger-sub")).toHaveCount(0);
+      await expect(page.locator(".tiles .tile")).toHaveCount(5);   // not a sixth tile either
+      if (!(s.units > 0)) {
+        // nothing held is no price — and must not read as a doubted one
+        await expect(line).toHaveCount(0);
+        return;
+      }
+      await expect(line).toHaveCount(1);
+      if (s.breakeven_price == null) {
+        await expect(line).toHaveText(`be ${NOT_KNOWN_TEXT}`);
+      } else {
+        // the page's price format — 4dp, like the avg cost it is read against; either minus
+        const q = escapeRe(Number(s.breakeven_price).toLocaleString("en-US",
+          { minimumFractionDigits: 4, maximumFractionDigits: 4 })).replace(/-/g, "[-\u2212]");
+        await expect(line).toHaveText(new RegExp(`^be ${q}$`));
+      }
+      // a claim ABOUT the column, not a member of it: it sits in the block and not in a row
+      await expect(ledger(page).locator(".ledger-row [data-testid='ledger-breakeven']"))
+        .toHaveCount(0);
+    });
+}
+
 // The line carries no `title` on any captured holding — a tooltip is unreachable on touch — and
-// a single-bucket page, which has no column head, carries no breakeven line at all.
+// a name holding nothing carries no line at all, in either layout.
 for (const { ticker, body } of HOLDINGS) {
   test(`${ticker}: the breakeven line has no title attribute`, async ({ page, baseURL }) => {
     await openTicker(page, baseURL, ticker);
     const lines = page.getByTestId("ledger-breakeven");
-    if (body.buckets.length === 1) {
-      await expect(lines).toHaveCount(0);
-      return;
-    }
-    expect(await lines.count()).toBeGreaterThan(0);
-    for (let i = 0; i < await lines.count(); i++) {
+    const n = await lines.count();
+    expect(n > 0, `${ticker}: line present iff the name still holds units`)
+      .toBe(body.summary.units > 0);
+    for (let i = 0; i < n; i++) {
       await expect(lines.nth(i)).not.toHaveAttribute("title", /.*/);
       await expect(lines.nth(i).locator("[title]")).toHaveCount(0);
     }
@@ -291,5 +331,40 @@ test.describe("the breakeven line's states, driven rather than observed", () => 
       if (b.status === "closed") await expect(line).toHaveCount(0);
       else await expect(line).toHaveText(`be ${NOT_KNOWN_TEXT}`);
     }
+  });
+
+  // A price solved from a bounded Net is itself bounded, and it is bounded the OTHER WAY:
+  // `price x rate x units == mv_sgd - Net` with mv, rate and units exact, so a floor on the Net
+  // is a CEILING on the price. No captured payload is `bounded` and multi-bucket, so the pair is
+  // driven; the gate is that the two glyphs disagree, which is the whole claim.
+  const carried = (body, bound) => ({
+    ...body,
+    summary: { ...body.summary, net_verdict: "bounded",
+      provenance: { from_ticker: "C31", from_name: "CapitaLand Ltd", type: "split",
+                    carried_on: "2021-09-28", carried_sgd: 10071.0,
+                    split_with: [{ ticker: "C38U", units: 417.0 }], bound } },
+  });
+
+  for (const [bound, hero, price] of [["lower", "\u2265", "\u2264"],
+                                      ["upper", "\u2264", "\u2265"]]) {
+    test(`a ${bound}-bounded Net puts the opposite bound on the price`, async ({ page, baseURL }) => {
+      const { ticker, body } = multi();
+      await serve(page, baseURL, ticker, carried(body, bound));
+      await expect(page.getByTestId("hero-bound")).toHaveText(hero);
+      const lines = page.getByTestId("ledger-breakeven");
+      const n = await lines.count();
+      expect(n, "a bounded name quoted no price at all").toBeGreaterThan(0);
+      for (let i = 0; i < n; i++) await expect(lines.nth(i)).toContainText(`be ${price}`);
+    });
+  }
+
+  test("a bounded column that cannot price its units is still just `not known`", async ({ page, baseURL }) => {
+    // there is no direction to bound when there is no figure
+    const { ticker, body } = multi();
+    await serve(page, baseURL, ticker, carried(withOpenBucket(body, null), "lower"));
+    const lines = page.getByTestId("ledger-breakeven");
+    const n = await lines.count();
+    expect(n).toBeGreaterThan(0);
+    for (let i = 0; i < n; i++) await expect(lines.nth(i)).toHaveText(`be ${NOT_KNOWN_TEXT}`);
   });
 });

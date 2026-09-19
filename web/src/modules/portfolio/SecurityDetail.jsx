@@ -85,41 +85,60 @@ function ledgerRows(d) {
 const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "—" : ledgerAmount(b[key]));
 
 /**
+ * The breakeven price of whatever column it is handed — one component, both ledger layouts.
+ *
+ * **It belongs above the reconciliation and not in the tile strip.** The tiles are the five
+ * position facts and only those five, and a breakeven is not a sixth: it is a price, it is per
+ * bucket, and two buckets do not share one — srs and cash bought at different averages and
+ * collected different dividends, so a single ticker-level tile would average away the only
+ * thing the number is for. On a split it is the column head's third line, beside the avg cost
+ * it is constantly mistaken for, which is where the difference between them reads; on a
+ * single-bucket page, which has no column head and no column label (#157), it is a right-
+ * aligned subheading over the same amounts. One figure on every priceable name either way.
+ *
+ * `be` IS NOT A ROW AND MUST NOT LOOK LIKE ONE: it is the price at which the Net BELOW it
+ * reaches zero, so it is a claim about that column, not a member of it — which is why it is a
+ * subheading in both layouts and a row in neither. It carries NO `title`: the ledger's rule is
+ * that a tooltip is unreachable on touch and an explanation that only a mouse can reach is not
+ * one (`hero.spec.js` gates it). Sitting in the same price format as the avg cost it is read
+ * against is the explanation.
+ *
+ * Null renders as the ledger's `not known` on a column that cannot price its units, and the
+ * line is dropped ENTIRELY on a closed one — a position with nothing left has no breakeven
+ * rather than an unknown one, and printing `not known` there would invent a doubt the server
+ * does not have.
+ *
+ * A BOUNDED NET BOUNDS THIS PRICE THE OTHER WAY, and the glyph says so rather than the figure
+ * shipping bare. `price × rate × units == mv_sgd − Net` with mv, rate and units all exact, so a
+ * Net floor is a price CEILING — the same direction peak capital takes, which is why this reads
+ * `BOUND_GLYPHS`' second element (`capitalBound`) passed in from the one place that decides it,
+ * rather than a fourth independent rule. Only a figure is marked: `not known` has no direction.
+ */
+function Breakeven({ o, status, bound, className }) {
+  if (status === "closed" || !(o.units > 0)) return null;
+  const known = o.breakeven_price != null;
+  return (
+    <div className={className} data-testid="ledger-breakeven">
+      be {known && bound ? `${bound} ` : ""}{known ? fmt(o.breakeven_price, 4) : NOT_KNOWN}
+    </div>
+  );
+}
+
+/**
  * The muted subheading under a column header: units, avg cost, breakeven and — for a bucket —
  * status. It is deliberately not a row (the block's claim is that its rows add up) and
  * deliberately carries no return figure of any kind: one page, one return vocabulary (#134 §2).
  * The Total column's avg cost is the server's exact pooled weighted average, read off the
  * summary and not re-derived.
- *
- * **Breakeven belongs here and not in the tile strip.** The tiles are the five position facts
- * and only those five, and a breakeven is not a sixth: it is a price, it is per bucket, and the
- * two buckets do not share one — srs and cash bought at different averages and collected
- * different dividends, so a single ticker-level tile would average away the only thing the
- * number is for. Under the column head it sits beside the avg cost it is constantly mistaken
- * for, which is where the difference between them reads.
- *
- * `be` is not a row and must not look like one: it is the price at which the Net BELOW it
- * reaches zero, so it is a claim about that column, not a member of it. It carries NO `title`:
- * the ledger's rule is that a tooltip is unreachable on touch and an explanation that only a
- * mouse can reach is not one (`hero.spec.js` gates it). Sitting directly under the `@ avg cost`
- * it is read against, in the same price format, is the explanation. Null renders as the
- * ledger's `not known` on a bucket that cannot price its units, and the line is dropped
- * entirely on a CLOSED bucket — a position with nothing left has no breakeven rather than an
- * unknown one, and printing `not known` there would invent a doubt the server does not have.
  */
-function ColumnHead({ name, o, status }) {
-  const closed = status === "closed";
+function ColumnHead({ name, o, status, bound }) {
   return (
     <div className="ledger-col" data-testid="ledger-col">
       <div className="ledger-colname">{name}</div>
       <div className="ledger-sub mut" data-testid="ledger-sub">
         <div>{fmt(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u</div>
         <div>@ {o.avg_cost == null ? NOT_KNOWN : fmt(o.avg_cost, 4)}</div>
-        {!closed && o.units > 0 && (
-          <div data-testid="ledger-breakeven">
-            be {o.breakeven_price == null ? NOT_KNOWN : fmt(o.breakeven_price, 4)}
-          </div>
-        )}
+        <Breakeven o={o} status={status} bound={bound} />
         {status && <div>{status}</div>}
       </div>
     </div>
@@ -393,14 +412,22 @@ export default function SecurityDetail({ ticker, onBack }) {
           bucket cells are `.ledger-cell`, so nothing that reads the ledger sums a bucket twice. */}
       <div className={"ledger" + (split ? " ledger-split" : "")} data-testid="ledger"
            style={split ? { "--cols": bks.length + 1 } : undefined}>
-        {split && (
+        {split ? (
           <div className="ledger-head" data-testid="ledger-head">
             <span className="ledger-lbl" />
             {bks.map((b) => (
-              <ColumnHead key={b.bucket} name={b.bucket} o={b} status={b.status} />
+              <ColumnHead key={b.bucket} name={b.bucket} o={b} status={b.status}
+                          bound={capitalBound} />
             ))}
-            <ColumnHead name="Total" o={s} />
+            <ColumnHead name="Total" o={s} bound={capitalBound} />
           </div>
+        ) : (
+          /* The single-bucket page's breakeven: the same figure with no column head to sit in,
+             so it is a right-aligned subheading over the amounts and carries NO label — #157's
+             rule is that one bucket shows no bucket header and no column label, and a
+             subheading is not a column head. The component owns the drop, so a closed name
+             renders nothing at all here rather than an empty line. */
+          <Breakeven o={s} bound={capitalBound} className="ledger-be mut" />
         )}
         {rows.map(([lbl, v, key]) => (
           <div className="ledger-row" key={lbl}>

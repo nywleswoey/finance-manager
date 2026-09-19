@@ -925,8 +925,16 @@ def _breakeven_price(r, units, rate):
     they are 0.4166 and 0.3564, and the six cents between them are dividends and realised gains
     already banked — a breakeven read off avg cost asks the market to pay for them a second time.
     Setting this price into the fold reproduces `net_pl_sgd == 0` by construction, because it is
-    that identity solved for price and it undoes the components **as shipped**, so it ties to the
-    Net beside it at the same zero tolerance the components tie to each other.
+    that identity solved for price and it undoes the components **as shipped**.
+
+    **THE TIE IS THE QUOTE'S, NOT A CENT'S.** The components tie to each other to the cent; this
+    does not, because it is quoted at 4dp — the way `avg_cost` and `price` are quoted, which is
+    the whole point of putting it under one of them. Revaluing the fold at it lands the Net
+    within `5e-5 × units × rate` SGD, half the last quoted decimal spread over the position it
+    multiplies: 0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700, and under a cent on anything
+    holding fewer than ~200. It scales with units and the FX rate and never tightens to a
+    constant, which is why the JS gate states `max(0.02, 5e-5 × units × rate)` and why
+    `test_fold_ticker.py`'s exact `== 0.0` is exact only for a fixture holding 60 units.
 
     It lands here and not in `_build_row` for the reason Net does: the options stream is one of
     the components it has to undo, and that is attached only just above (#143 §15).
@@ -944,6 +952,19 @@ def _breakeven_price(r, units, rate):
     exceeding cost basis means the name is already whole at any price including zero, and the
     negative number says by how much — clamping it at zero would report `already even` of a
     position that is ahead, and would be the only figure on this page that lies downward.
+
+    **A `bounded` Net bounds this price THE OTHER WAY, and the fourth state is that bound rather
+    than a null.** Substituting the components gives `price × rate × units == mv_sgd − Net`, and
+    `mv_sgd`, `rate` and `units` are all exact — only `cost_basis_sgd` carries the carry's
+    mis-attribution — so the Net and the price move in OPPOSITE directions: a `lower` carry
+    overstates the cost, which floors the Net (`≥`) and ceilings this price (`≤`). The direction
+    is therefore `carry_bound`'s, read once and inverted, which is exactly the direction peak
+    capital already takes; the renderer marks it with the same glyph it prints there rather than
+    deciding it again. The one bounded shape that could not be marked honestly — a `lower` carry
+    meeting unknown-cost units, where the partition's own doubt pushes the other way — cannot
+    reach here at all: it is `net_verdict`'s recorded open call, and unknown units null
+    `cost_basis_sgd`, so this refuses first. `lower` with no unknown units (9CI) is the only
+    bounded shape that ships a price.
     """
     if r["net_pl_sgd"] is None or r["cost_basis_sgd"] is None or units <= 1e-6:
         return None

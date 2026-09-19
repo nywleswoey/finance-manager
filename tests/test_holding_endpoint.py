@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from portfolio import options
 from portfolio.config import settings
-from portfolio.performance import LEG_FIELDS
+from portfolio.performance import LEG_FIELDS, _breakeven_price
 
 from server import main
 
@@ -40,13 +40,11 @@ def _row(**over):
          "peak_car_sgd": 80618.08, "return_span_days": 2000, "return_pct": 0.161,
          "return_verdict": "ok", "fx_rate": 1.0}
     r.update(over)
-    # derived AFTER the overrides, never passed in one: a breakeven hand-written beside the
-    # components it is solved from is a fixture that can disagree with itself, and every
-    # override below moves at least one of those components.
-    r["breakeven_price"] = (
-        None if r["net_pl_sgd"] is None or r["cost_basis_sgd"] is None or r["units"] <= 1e-6
-        else round((r["cost_basis_sgd"] - r["realised_pl_sgd"] - r["income_sgd"]
-                    - (r["options_pl_sgd"] or 0.0)) / (r["fx_rate"] * r["units"]), 4))
+    # derived AFTER the overrides and by the REAL helper, never passed in and never re-spelled:
+    # a breakeven hand-written beside the components it is solved from is a fixture that can
+    # disagree with itself or with the rule, and every override below moves at least one of
+    # those components. The arithmetic is gated in tests/test_fold_ticker.py.
+    r["breakeven_price"] = _breakeven_price(r, r["units"], r["fx_rate"])
     return r
 
 
