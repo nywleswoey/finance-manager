@@ -134,10 +134,12 @@ const refusalSentence = (s) =>
  * still owes the percentage's second sentence when the return axis is a caveat too — C38U.
  * Neither prints the Net a second time: the hero already carries the figure.
  *
- * NEITHER SENTENCE LEANS ON THE OTHER HAVING RENDERED. `caveat-net` is gated on the NET's
- * verdict and the percentage's on the RETURN's, and C38U ships `bounded` on one and `caveat` on
- * the other — so the percentage's sentence is the first line of prose on that page and has to
- * name its own doubt rather than open on "the same error".
+ * THE PERCENTAGE'S SENTENCE READS WHETHER THE NET'S RENDERED ABOVE IT. The two are gated on
+ * different axes — `caveat-net` on the NET's verdict, this one on the RETURN's — and C38U ships
+ * `bounded` on the first and `caveat` on the second, so there the percentage is the page's first
+ * line of prose and names the doubt itself. On Q01 both render, and naming it twice in two
+ * adjacent paragraphs is a sentence spent saying nothing new: there it says only what the
+ * DENOMINATOR adds. Same claim either way; the difference is what the reader has already read.
  *
  * NEITHER SENTENCE CLAIMS A DIRECTION THE PAYLOAD CONTRADICTS. A `caveat` that also carries a
  * split is the one state where the two doubts disagree — `net_verdict` withholds `bounded`
@@ -152,12 +154,15 @@ const caveatNetSentence = (s, conflicted) =>
     ? "them as free, while the carry below put a whole event's cost on this name — the two " +
       "pull opposite ways, so which side of the truth this Net falls on is not known."
     : "them as free — so it is an upper bound.");
-const caveatReturnSentence = (conflicted) =>
+const caveatReturnSentence = (conflicted, netStated) =>
   (conflicted
     ? "Both of those doubts land on the percentage again, and on the peak capital under it"
-    : "The percentage compounds one doubt twice: units that entered without a recorded cost " +
-      "count as free in the Net above it, an upper bound, while the peak capital under it " +
-      "counts costed lots only, a lower bound") +
+    : netStated
+      ? "The percentage compounds it: its denominator, the peak capital, counts costed lots " +
+        "only — a lower bound under that upper-bound Net"
+      : "The percentage compounds one doubt twice: units that entered without a recorded cost " +
+        "count as free in the Net above it, an upper bound, while the peak capital under it " +
+        "counts costed lots only, a lower bound") +
   " — so it is not comparable to any other name on the site.";
 
 /**
@@ -365,7 +370,7 @@ export default function SecurityDetail({ ticker, onBack }) {
               <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s, conflicted)}</p>
             )}
             {returnNote && (
-              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(conflicted)}</p>
+              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(conflicted, netNote)}</p>
             )}
             {carryNote && (
               <p className="hero-note" data-testid="carry-note">
