@@ -228,7 +228,7 @@ export default function SecurityDetail({ ticker, onBack }) {
               <RowCard key={i}
                 name={<>{t.trade_date || "—"} <span className="pill">{t.action}</span></>}
                 hero={t.gross_amount == null ? "—" : money(t.gross_amount, t.currency, 2)}
-                meta={[t.account, t.source_file]}
+                meta={[t.account, t.bucket, t.source_file]}
                 fields={[
                   { k: "Qty", v: `${t.qty_signed > 0 ? "+" : ""}${fmt(t.qty_signed, 2)}`, cls: cls(t.qty_signed) },
                   { k: "Balance", v: fmt(t.balance, 2) },
@@ -247,7 +247,7 @@ export default function SecurityDetail({ ticker, onBack }) {
         <div className="pinned">
         <table>
           <thead><tr>
-            <th className="l">Date</th><th className="l">Account</th><th className="l">Action</th>
+            <th className="l">Date</th><th className="l">Account</th><th className="l">Bucket</th><th className="l">Action</th>
             <th>Qty</th><th>Balance</th><th>Price</th><th>Amount</th><th className="l">Source</th>
           </tr></thead>
           <tbody>
@@ -255,6 +255,7 @@ export default function SecurityDetail({ ticker, onBack }) {
               <tr key={i} className={i === d.transactions.length - 1 ? "endrow" : ""}>
                 <td className="l mut">{t.trade_date || "—"}</td>
                 <td className="l mut">{t.account}</td>
+                <td className="l mut" data-col="bucket">{t.bucket}</td>
                 <td className="l">{t.action}</td>
                 <td className={cls(t.qty_signed)}>{t.qty_signed > 0 ? "+" : ""}{fmt(t.qty_signed, 2)}</td>
                 <td style={{ fontWeight: 700 }}>{fmt(t.balance, 2)}</td>
@@ -285,6 +286,7 @@ export default function SecurityDetail({ ticker, onBack }) {
                 hero={money(x.gross_sgd, "SGD", 2)} heroClass="pos"
                 meta={[
                   x.account,
+                  x.bucket,
                   ...(x.currency !== "SGD" ? [money(x.gross, x.currency, 2)] : []),
                 ]}
                 fields={[
@@ -306,7 +308,7 @@ export default function SecurityDetail({ ticker, onBack }) {
           <div className="pinned">
           <table>
             <thead><tr>
-              <th className="l">Date</th><th className="l">Account</th><th className="l">Kind</th>
+              <th className="l">Date</th><th className="l">Account</th><th className="l">Bucket</th><th className="l">Kind</th>
               <th>Qty held</th>
               <th title="per-unit rate as stated on the statement — native currency">Rate/unit</th>
               <th title="converted at latest FX; native amount shown underneath">Amount (SGD)</th>
@@ -316,6 +318,7 @@ export default function SecurityDetail({ ticker, onBack }) {
                 <tr key={i}>
                   <td className="l mut">{x.pay_date || "—"}</td>
                   <td className="l mut">{x.account}</td>
+                  <td className="l mut" data-col="bucket">{x.bucket}</td>
                   <td className="l">{x.kind}</td>
                   <td className="mut">{x.units == null ? "—" : fmt(x.units, 2)}</td>
                   <td className="mut">{money(x.rate, x.currency, 4)}</td>
@@ -334,6 +337,8 @@ export default function SecurityDetail({ ticker, onBack }) {
         <div className="card" style={{ marginTop: 18 }}>
           <h3>Option trades ({opts.length}) · {s.ticker} wheel
             <span className="pill" style={{ marginLeft: 8 }}>realised {sgd(optPlSgd)}</span></h3>
+          {/* NO BUCKET COLUMN HERE, on purpose (#159): the options rollup hardcodes the bucket, so
+              it would read one constant down every row. Provenance is per-row where it varies. */}
           {/* The one pinned table on this page — three tables, two patterns, deliberately.
               What you do with one security's wheel log is scan P/L and Outcome *down* the
               column, and the ledger is uncapped (73 trades on the longest). The pin is the
@@ -342,7 +347,8 @@ export default function SecurityDetail({ ticker, onBack }) {
             <table>
               <thead><tr>
                 <th className="l">Contract</th><th className="l">Closed</th>
-                <th>Premium</th><th>Buyback</th><th className="l">Outcome</th><th>P/L</th>
+                <th>Premium</th><th>Buyback</th><th className="l">Outcome</th>
+                <th className="l" title="whether this trade has realised — the server's own call, the rows the header figure is made of">Realised</th><th>P/L</th>
               </tr></thead>
               <tbody>
                 {opts.map((t, i) => (
@@ -352,6 +358,9 @@ export default function SecurityDetail({ ticker, onBack }) {
                     <td>{t.premium_open == null ? "—" : fmt(t.premium_open, 2)}</td>
                     <td className="mut">{t.premium_close ? fmt(t.premium_close, 2) : "—"}</td>
                     <td className="l mut">{t.outcome}</td>
+                    {/* The server's `realised` boolean, read as shipped. Not `close_date`: an
+                        expired-worthless leg realises with `close_date: null`. */}
+                    <td className="l" data-col="realised">{t.realised ? "Realised" : "Open"}</td>
                     <td className={cls(t.realized_native)}>
                       {money(t.realized_native, t.currency, 0)}</td>
                   </tr>

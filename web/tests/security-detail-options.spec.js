@@ -105,3 +105,28 @@ test.describe("rendered", () => {
     await expect(optionsCard(page)).toHaveCount(0);
   });
 });
+
+test.describe("three tables (#159)", () => {
+  test.beforeEach(async ({ page, baseURL }) => {
+    await openView(page, baseURL, "Portfolio › SecurityDetail");
+  });
+
+  test("options rows state realised from the server boolean; count matches the rows behind the header", async ({ page }) => {
+    const payload = structuredClone(fixture);
+    // flip a few so the marker is proven to follow `realised`, not close_date/outcome
+    payload.options.slice(0, 3).forEach((t) => { t.realised = false; });
+    await reopenPLTR(page, payload);
+    const cells = optionsCard(page).locator('td[data-col="realised"]');
+    await expect(cells).toHaveCount(payload.options.length);
+    const expected = payload.options.filter((t) => t.realised).length;
+    await expect(cells.filter({ hasText: /^Realised$/ })).toHaveCount(expected);
+    await expect(optionsCard(page).locator('th', { hasText: "Bucket" })).toHaveCount(0);
+  });
+
+  test("transactions carry a bucket cell on every row; no per-sell realised column", async ({ page }) => {
+    const card = page.locator(".card").filter({ hasText: "Transaction history" });
+    const cells = card.locator('td[data-col="bucket"]');
+    await expect(cells).toHaveCount(fixture.transactions.length);
+    await expect(card.locator("th", { hasText: /realised/i })).toHaveCount(0);
+  });
+});

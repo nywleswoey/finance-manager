@@ -98,8 +98,8 @@ const PINNED = [
   {
     view: "Portfolio › SecurityDetail",
     tables: [
-      { pin: "Date", cols: 8, cardsBelow: true },
-      { pin: "Contract", cols: 6 },
+      { pin: "Date", cols: 9, cardsBelow: true },
+      { pin: "Contract", cols: 7 },
     ],
     unrendered: [
       "SecurityDetail.jsx's dividend history (6 cols, pin `Date`) — PLTR is the row the " +
