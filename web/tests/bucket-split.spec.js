@@ -10,11 +10,17 @@
  * expectation is derived from the payload the page was served, so a recapture moves the numbers
  * and the gates keep meaning what they say.
  *
- * WHERE THE CROSS-PAGE GATE LIVES. Only on the multi-bucket fixture: on a single-bucket name the
- * Holdings-vs-detail comparison is a sum over one element and proves nothing about the fold.
+ * WHERE THE CROSS-PAGE GATE LIVES, AND IT IS NOT HERE. "Holdings' ticker-mode Net equals the
+ * holding payload's `net_pl_sgd`" is already stated on this very fixture by `ticker.spec.js`
+ * ("Holdings' Net for a ticker is the Net that ticker's own page states", which also asserts the
+ * fixture is genuinely multi-bucket), and `hero.spec.js` states the detail half — hero ===
+ * `net_pl_sgd` — for every captured holding. A third copy would not add a claim; it would add a
+ * second place to update, and it hard-coded Holdings' Net column as a bare index where
+ * `ticker.spec.js` names it.
  *
- * NOT HERE: the phone layout of this block (#160), the refusal/caveat hero states (#158), and
- * the history tables' bucket column (#159).
+ * NOT HERE EITHER: the phone layout of this block (#160) — `split-width.spec.js` keeps only the
+ * criterion the tier may not regress, that the pane never scrolls sideways — the refusal/caveat
+ * hero states (#158), and the history tables' bucket column (#159).
  */
 import { expect, test } from "@playwright/test";
 import { capturedHoldings } from "./fixtures/index.js";
@@ -32,8 +38,6 @@ test.beforeAll(() => {
 });
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const asSgd = (n) =>
-  "S$" + Number(n).toLocaleString("en-US", { maximumFractionDigits: 0, minimumFractionDigits: 0 });
 
 function amount(text) {
   const t = text.trim();
@@ -169,22 +173,3 @@ for (const { ticker, body } of SINGLE) {
       expect(body.buckets.length).toBe(1);
     });
 }
-
-test("Holdings' ticker-mode Net is the multi-bucket holding's net_pl_sgd, exactly",
-  async ({ page, baseURL }) => {
-    // The cross-page gate, and only on a fixture where the fold has something to fold.
-    for (const { ticker, body } of MULTI) {
-      await openView(page, baseURL, "Portfolio › Holdings");
-      const card = page.locator(".card").filter({ hasText: /^Holdings/ });
-      await card.locator("select").first().selectOption("ticker");
-      const row = page.locator(".pinned tbody tr").filter({
-        has: page.locator(".pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) });
-      // Header order: … · Options · Net · XIRR — Net is the second-to-last cell.
-      const net = row.locator("td").nth(11);
-      await expect(net).toContainText(asSgd(body.summary.net_pl_sgd));
-      // …and it is the very Net the detail page states as its hero
-      await row.first().click();
-      expect(amount(await hero(page).innerText())).toBe(body.summary.net_pl_sgd);
-      await page.getByText("← Holdings").click();
-    }
-  });
