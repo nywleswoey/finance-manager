@@ -1,5 +1,6 @@
 .PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net \
         flat-cash load-cash spending snapshot snapshot-commit ingest-all test-web capture-web-fixtures \
+        api-local \
         schedule-install schedule-status schedule-uninstall schedule-test sync-requirements
 
 PY = PYTHONPATH=. .venv/bin/python
@@ -75,6 +76,14 @@ NEON_GUARD = @test -n '$(NEON_URL)' || { echo "FATAL: no DATABASE_URL in .env.lo
 api:          ## run the API against Neon (serves built web/ at /)
 	$(NEON_GUARD)
 	@DATABASE_URL='$(NEON_URL)' $(PY) -m uvicorn server.main:app --reload --port 8000
+# The other half of the split above. `ingest-all` typed by hand writes the DOCKER db (.env sets
+# no DATABASE_URL, so config.py falls back to its localhost default), while `api` reads Neon —
+# so a hand-run ingest is invisible from `api` until the 06:15 agent repeats it against the
+# deployed db. This target is how you look at what you just ingested, without a write path to
+# prod existing anywhere near it. Different port so it can run BESIDE `api`: the question is
+# usually "is the new statement in there", and that is answered by comparing the two.
+api-local:    ## run the API against the local docker DB (what a hand-run ingest wrote)
+	$(PY) -m uvicorn server.main:app --reload --port 8001
 build-web:    ## build the React frontend
 	cd web && npm install && npm run build
 app: build-web   ## build frontend then run API+web on :8000, against Neon
