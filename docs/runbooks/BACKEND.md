@@ -317,9 +317,12 @@ components it has to undo.
   that cannot price its units (`cost_basis_sgd` null, which `realised_pl_sgd` is null with).
 - **Negative is a real answer** — income and realised gains past cost basis mean the name is
   already whole at any price, including zero — and is never clamped.
-- **Tolerance is the quote's, not a cent's.** Revaluing the fold at it lands the Net within
-  `5e-5 × units × rate` SGD (0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700); it scales with units
-  and the FX rate. `bucket-split.spec.js` gates `max(0.02, 5e-5 × units × rate)`.
+- **Tolerance is the quote's, not a cent's.** The field's own share of the drift when the fold is
+  revalued at it is `5e-5 × units × rate` SGD (0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700);
+  it scales with units and the FX rate and never tightens to a constant. It is not the whole
+  residual: `bucket-split.spec.js` gates the SUM of the three roundings that are really there —
+  the components' own cent-rounding (`0.02`), that quote, and the error in the FX rate the gate
+  must recover from the market-value pair since no endpoint ships one (`|be − price| × units × ε`).
 - **A `bounded` Net bounds it the OTHER way.** `price × rate × units ≡ mv_sgd − Net` with mv, rate
   and units exact, so a `lower` carry floors the Net (`≥`) and ceilings the price (`≤`) — the
   direction peak capital already takes, and the detail page marks it with the same glyph.

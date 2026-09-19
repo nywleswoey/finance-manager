@@ -52,18 +52,32 @@ test.beforeAll(() => {
   }
 });
 
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 const NOT_KNOWN_TEXT = "not known";   // the page's one word for an unmeasured figure
 // Whether a column has a breakeven to state at all, read off the payload at the threshold
 // the server holds positions to — the same one `_breakeven_price` nulls below.
 const holds = (o) => o.units > 1e-6;
-// The bound the PRICE takes, off the payload that renders it: the Net floors where the carry
-// overstated the cost, so the price it is solved from caps. Empty where there is no direction to
-// state — an unbounded payload, or no figure to put one on, since `not known` takes no bound.
+// The bound the PRICE takes. The pair IS restated here, deliberately: a test that looked the
+// glyph up the same way the component does would assert nothing, so this is the gate's own
+// oracle and only its SELECTION comes from the payload. The Net floors where the carry overstated
+// the cost, so the price solved from it caps — the inversion of what the hero prints.
 const PRICE_GLYPH = { lower: "\u2264", upper: "\u2265" };
-const priceBound = (o) => (o.breakeven_price != null && o.net_verdict === "bounded"
-  && o.provenance?.bound ? `${PRICE_GLYPH[o.provenance.bound]} ` : "");
+// Whole-ticker, so the direction is read off the SUMMARY whatever column is being checked, while
+// the figure it marks is that column's own: a column with no price takes no bound, because
+// `not known` has no direction.
+const priceBound = (col, s) => (col.breakeven_price != null && s.net_verdict === "bounded"
+  && s.provenance?.bound ? `${PRICE_GLYPH[s.provenance.bound]} ` : "");
 
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// The exact text one column's line renders — `fmt(n, 4)`'s quote behind whatever bound the
+// payload carries, anchored, either minus accepted. ONE rule: both layouts render the same
+// component, so both gates assert the same thing rather than one of them a prefix of it.
+const breakevenLine = (col, s) => {
+  if (col.breakeven_price == null) return new RegExp(`^be ${NOT_KNOWN_TEXT}$`);
+  const q = escapeRe(Number(col.breakeven_price).toLocaleString("en-US",
+    { minimumFractionDigits: 4, maximumFractionDigits: 4 })).replace(/-/g, "[-\u2212]");
+  return new RegExp(`^be ${priceBound(col, s)}${q}$`);
+};
 
 function amount(text) {
   const t = text.trim();
@@ -245,8 +259,13 @@ for (const { ticker, body } of MULTI) {
     // does — PLTR's recovered 1.26710518 against a true 1.2671 moves 0.29 SGD over 5 units, which
     // is why a tolerance covering only the 4dp quote would fail a payload with nothing wrong.
     const s = body.summary;
-    const rate = s.mv_native ? s.mv_sgd / s.mv_native : 1;
-    const e = s.mv_native ? 0.005 * (1 + rate) / Math.abs(s.mv_native) : 0;
+    // No market value is no recoverable rate — asserted rather than defaulted to 1, which would
+    // pass a foreign name at the wrong rate in silence. A priced name always has one; a name
+    // holding units it cannot quote still ships a breakeven, and this gate cannot check it.
+    expect(Math.abs(s.mv_native), `${ticker} has no market value to recover a rate from`)
+      .toBeGreaterThan(0);
+    const rate = s.mv_sgd / s.mv_native;
+    const e = 0.005 * (1 + Math.abs(rate)) / Math.abs(s.mv_native);
     const cols = [...body.buckets, s].filter(
       (b) => holds(b) && b.breakeven_price != null && b.net_pl_sgd != null);
     expect(cols.length, "no column with a breakeven to check").toBeGreaterThan(0);
@@ -275,11 +294,8 @@ for (const { ticker, body } of MULTI) {
           await expect(sub.getByTestId("ledger-breakeven")).toHaveCount(0);
           continue;
         }
-        await expect(sub.getByTestId("ledger-breakeven")).toContainText(
-          b.breakeven_price == null
-            ? NOT_KNOWN_TEXT
-            : Number(b.breakeven_price).toLocaleString("en-US",
-                { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
+        await expect(sub.getByTestId("ledger-breakeven"))
+          .toHaveText(breakevenLine(b, body.summary));
       }
       // the Total column carries the ticker's own, which is not any bucket's — and drops it on
       // the same rule the buckets do, so a name whose every bucket is closed states none
@@ -316,16 +332,9 @@ for (const { ticker, body } of SINGLE) {
         return;
       }
       await expect(line).toHaveCount(1);
-      if (s.breakeven_price == null) {
-        await expect(line).toHaveText(`be ${NOT_KNOWN_TEXT}`);
-      } else {
-        // the page's price format — 4dp, like the avg cost it is read against; either minus —
-        // behind whatever bound the payload itself carries, so this gate stays about the LAYOUT
-        // and a name that starts carrying a carry does not fail it under the wrong message
-        const q = escapeRe(Number(s.breakeven_price).toLocaleString("en-US",
-          { minimumFractionDigits: 4, maximumFractionDigits: 4 })).replace(/-/g, "[-\u2212]");
-        await expect(line).toHaveText(new RegExp(`^be ${priceBound(s)}${q}$`));
-      }
+      // behind whatever bound the payload itself carries, so this gate stays about the LAYOUT and
+      // a name that starts carrying a carry does not fail it under the wrong message
+      await expect(line).toHaveText(breakevenLine(s, s));
       // a claim ABOUT the column, not a member of it: it sits in the block and not in a row
       await expect(ledger(page).locator(".ledger-row [data-testid='ledger-breakeven']"))
         .toHaveCount(0);
@@ -344,28 +353,24 @@ for (const { ticker, body } of SINGLE) {
 // the object is borrowed at READ time off `positions-closed.json`, which carries both names' real
 // wire objects (`capturedProvenance` — the mechanism `unknown-book.spec.js` uses for the hero's
 // own bound, and the reason neither file hand-edits a capture). EVERYTHING ELSE IS THE CAPTURE:
-// the real verdict, the real units, the real price. The direction is not restated here — it is
-// read off the payload's own `bound`, so the gate is the INVERSION and not a memorised pair.
+// the real verdict, the real units, the real price. What comes off the payload is WHICH
+// direction; the glyph pair itself is `PRICE_GLYPH` above — the gate's own oracle, because a
+// test that looked it up the way the component does would assert nothing. The claim is that the
+// two disagree: the price takes the opposite glyph to the one the hero prints.
 for (const ticker of ["9CI", "C38U"]) {
   test(`${ticker}: its real carry bounds the price the other way`, async ({ page, baseURL }) => {
     const { body } = HOLDINGS.find((h) => h.ticker === ticker);
+    // single-bucket, so the page states exactly one line and it is the summary's own. Asserted,
+    // not branched on: a recapture that splits either name should say so here rather than
+    // quietly check a different claim.
+    expect(body.buckets.length, `${ticker} is no longer single-bucket`).toBe(1);
     const served = withProvenance(body, capturedProvenance(ticker));
     expect(served.summary.provenance.bound, `${ticker} carries no split direction`).toBeTruthy();
     await serve(page, baseURL, ticker, served);
-    const lines = page.getByTestId("ledger-breakeven");
-    const n = await lines.count();
-    // one line per column that still holds something — and a single-bucket page has no column
-    // head, so its only line is the subheading over the rows
-    expect(n, `${ticker} quoted no price to bound`).toBe(
-      body.buckets.length > 1
-        ? [...body.buckets, body.summary].filter(holds).length
-        : Number(holds(body.summary)));
-    for (let i = 0; i < n; i++) {
-      // no figure means no direction to put on one — the words stay bare
-      await expect(lines.nth(i)).toContainText(
-        served.summary.breakeven_price == null
-          ? `be ${NOT_KNOWN_TEXT}` : `be ${priceBound(served.summary)}`.trimEnd());
-    }
+    const line = page.getByTestId("ledger-breakeven");
+    await expect(line).toHaveCount(Number(holds(served.summary)));
+    // no figure means no direction to put on one — the words stay bare
+    await expect(line).toHaveText(breakevenLine(served.summary, served.summary));
     // and the hero takes the opposite one, off the same object
     await expect(page.getByTestId("hero-bound"))
       .toHaveText(served.summary.provenance.bound === "lower" ? "\u2265" : "\u2264");
@@ -417,12 +422,18 @@ test.describe("the breakeven line's states, driven rather than observed", () => 
                                       ["upper", "\u2264", "\u2265"]]) {
     test(`a ${bound}-bounded Net puts the opposite bound on the price`, async ({ page, baseURL }) => {
       const { ticker, body } = multi();
-      await serve(page, baseURL, ticker, carried(body, bound));
+      const served = carried(body, bound);
+      await serve(page, baseURL, ticker, served);
       await expect(page.getByTestId("hero-bound")).toHaveText(hero);
       const lines = page.getByTestId("ledger-breakeven");
-      const n = await lines.count();
-      expect(n, "a bounded name quoted no price at all").toBeGreaterThan(0);
-      for (let i = 0; i < n; i++) await expect(lines.nth(i)).toContainText(`be ${price}`);
+      // DOM order is the open buckets' subheadings, then Total's — the columns that state a price
+      const cols = [...served.buckets, served.summary].filter(holds);
+      await expect(lines).toHaveCount(cols.length);
+      expect(cols.length, "a bounded name quoted no price at all").toBeGreaterThan(0);
+      for (const [i, col] of cols.entries()) {
+        await expect(lines.nth(i)).toHaveText(breakevenLine(col, served.summary));
+        await expect(lines.nth(i)).toContainText(`be ${price}`);
+      }
     });
   }
 

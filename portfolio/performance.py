@@ -929,12 +929,20 @@ def _breakeven_price(r, units, rate):
 
     **THE TIE IS THE QUOTE'S, NOT A CENT'S.** The components tie to each other to the cent; this
     does not, because it is quoted at 4dp — the way `avg_cost` and `price` are quoted, which is
-    the whole point of putting it under one of them. Revaluing the fold at it lands the Net
-    within `5e-5 × units × rate` SGD, half the last quoted decimal spread over the position it
-    multiplies: 0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700, and under a cent on anything
-    holding fewer than ~200. It scales with units and the FX rate and never tightens to a
-    constant, which is why the JS gate states `max(0.02, 5e-5 × units × rate)` and why
-    `test_fold_ticker.py`'s exact `== 0.0` is exact only for a fixture holding 60 units.
+    the whole point of putting it under one of them. THIS FIELD'S OWN share of the drift when the
+    fold is revalued at it is `5e-5 × units × rate` SGD, half the last quoted decimal spread over
+    the position it multiplies: 0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700, and under a cent
+    on anything holding fewer than ~200. It scales with units and the FX rate and never tightens
+    to a constant.
+
+    **THAT TERM IS NOT THE WHOLE RESIDUAL, AND THE GATE THAT MEASURES IT SAYS SO.**
+    `bucket-split.spec.js` revalues each column off the shipped payload and checks the result
+    against a SUM of the three roundings really in it: the components' own cent-rounding, which
+    the Net is a sum of (`0.02`); this quote (`5e-5 × units × rate`); and the error in an FX rate
+    that gate has to RECOVER from the market-value pair, because no endpoint ships one
+    (`|be − price| × units × ε`). Only the middle term is this function's. `test_fold_ticker.py`
+    asserts an exact `== 0.0` instead, and can: it folds 60 units at a rate it passes in, so
+    neither of the other two terms exists there.
 
     It lands here and not in `_build_row` for the reason Net does: the options stream is one of
     the components it has to undo, and that is attached only just above (#143 §15).
