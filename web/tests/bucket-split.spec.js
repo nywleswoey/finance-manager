@@ -37,6 +37,8 @@ test.beforeAll(() => {
   expect(CLOSED_BUCKET.length, "no closed bucket inside a multi-bucket holding").toBeGreaterThan(0);
 });
 
+const NOT_KNOWN_TEXT = "not known";   // the page's one word for an unmeasured figure
+
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 function amount(text) {
@@ -172,4 +174,59 @@ for (const { ticker, body } of SINGLE) {
       await expect(ledger(page)).not.toHaveClass(/ledger-split/);
       expect(body.buckets.length).toBe(1);
     });
+}
+
+
+// ---------------------------------------------------------------- the breakeven price (#143)
+// The column head's third line. It is a claim ABOUT the column, not a member of it, so it is
+// gated here beside the arithmetic it is solved from rather than in a layout project: the only
+// thing that can go wrong with it is that it stops being the price that zeroes the Net below it.
+for (const { ticker, body } of MULTI) {
+  test.describe(`${ticker} breakeven`, () => {
+    test.beforeEach(async ({ page, baseURL }) => {
+      await openTicker(page, baseURL, ticker);
+    });
+
+    test("every open column quotes one, and a closed column quotes none", async ({ page }) => {
+      const subs = page.getByTestId("ledger-sub");
+      for (const [i, b] of body.buckets.entries()) {
+        const sub = subs.nth(i);
+        if (b.status === "closed") {
+          // nothing held is no price — and must not read as a doubted one
+          await expect(sub.getByTestId("ledger-breakeven")).toHaveCount(0);
+          continue;
+        }
+        await expect(sub.getByTestId("ledger-breakeven")).toContainText(
+          b.breakeven_price == null
+            ? NOT_KNOWN_TEXT
+            : Number(b.breakeven_price).toLocaleString("en-US",
+                { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
+      }
+      // the Total column carries the ticker's own, which is not any bucket's
+      await expect(subs.last().getByTestId("ledger-breakeven")).toBeVisible();
+    });
+
+    test("the price it quotes is the one that makes that column's Net zero", async () => {
+      // derived from the payload, never a literal: revalue each column at its own breakeven and
+      // the Net printed under it has to land on zero. The tolerance is the 4dp the price is
+      // quoted at spread over the units it multiplies — arithmetic, not a fudge factor.
+      const s = body.summary;
+      const rate = s.mv_native ? s.mv_sgd / s.mv_native : 1;
+      const cols = [...body.buckets, s].filter(
+        (b) => b.units > 0 && b.breakeven_price != null && b.net_pl_sgd != null);
+      expect(cols.length, "no column with a breakeven to check").toBeGreaterThan(0);
+      for (const b of cols) {
+        const moved = (b.breakeven_price - s.price) * b.units * rate;
+        expect(Math.abs(b.net_pl_sgd + moved),
+          `${ticker}: breakeven did not zero the Net`)
+          .toBeLessThanOrEqual(Math.max(0.02, 5e-5 * b.units * rate));
+      }
+    });
+
+    test("it did not become a sixth tile, and carries no return figure", async ({ page }) => {
+      await expect(page.locator(".tiles .tile")).toHaveCount(5);
+      expect(await page.getByTestId("ledger-head").innerText())
+        .not.toMatch(/%|XIRR|IRR|return/i);
+    });
+  });
 }

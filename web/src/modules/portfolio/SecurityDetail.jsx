@@ -85,18 +85,41 @@ function ledgerRows(d) {
 const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "—" : ledgerAmount(b[key]));
 
 /**
- * The muted subheading under a column header: units, avg cost and — for a bucket — status. It is
- * deliberately not a row (the block's claim is that its rows add up) and deliberately carries no
- * return figure of any kind: one page, one return vocabulary (#134 §2). The Total column's avg
- * cost is the server's exact pooled weighted average, read off the summary and not re-derived.
+ * The muted subheading under a column header: units, avg cost, breakeven and — for a bucket —
+ * status. It is deliberately not a row (the block's claim is that its rows add up) and
+ * deliberately carries no return figure of any kind: one page, one return vocabulary (#134 §2).
+ * The Total column's avg cost is the server's exact pooled weighted average, read off the
+ * summary and not re-derived.
+ *
+ * **Breakeven belongs here and not in the tile strip.** The tiles are the five position facts
+ * and only those five, and a breakeven is not a sixth: it is a price, it is per bucket, and the
+ * two buckets do not share one — srs and cash bought at different averages and collected
+ * different dividends, so a single ticker-level tile would average away the only thing the
+ * number is for. Under the column head it sits beside the avg cost it is constantly mistaken
+ * for, which is where the difference between them reads.
+ *
+ * `be` is not a row and must not look like one: it is the price at which the Net BELOW it
+ * reaches zero, so it is a claim about that column, not a member of it. It carries NO `title`:
+ * the ledger's rule is that a tooltip is unreachable on touch and an explanation that only a
+ * mouse can reach is not one (`hero.spec.js` gates it). Sitting directly under the `@ avg cost`
+ * it is read against, in the same price format, is the explanation. Null renders as the
+ * ledger's `not known` on a bucket that cannot price its units, and the line is dropped
+ * entirely on a CLOSED bucket — a position with nothing left has no breakeven rather than an
+ * unknown one, and printing `not known` there would invent a doubt the server does not have.
  */
 function ColumnHead({ name, o, status }) {
+  const closed = status === "closed";
   return (
     <div className="ledger-col" data-testid="ledger-col">
       <div className="ledger-colname">{name}</div>
       <div className="ledger-sub mut" data-testid="ledger-sub">
         <div>{fmt(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u</div>
         <div>@ {o.avg_cost == null ? NOT_KNOWN : fmt(o.avg_cost, 4)}</div>
+        {!closed && o.units > 0 && (
+          <div data-testid="ledger-breakeven">
+            be {o.breakeven_price == null ? NOT_KNOWN : fmt(o.breakeven_price, 4)}
+          </div>
+        )}
         {status && <div>{status}</div>}
       </div>
     </div>
