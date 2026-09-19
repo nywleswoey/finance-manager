@@ -108,14 +108,31 @@ const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "�
  * rather than an unknown one, and printing `not known` there would invent a doubt the server
  * does not have.
  *
+ * ONE CONDITION DECIDES THAT DROP, AND IT IS THE UNITS. `1e-6` is the threshold the server holds
+ * positions to: `_breakeven_price` nulls below it and `fold_ticker` derives `status` from it, so
+ * a `status === "closed"` test beside this one would be a second spelling of the same fact — and
+ * `status` is undefined on the Total column and on a single-bucket page, where the line still has
+ * to decide.
+ *
  * A BOUNDED NET BOUNDS THIS PRICE THE OTHER WAY, and the glyph says so rather than the figure
  * shipping bare. `price × rate × units == mv_sgd − Net` with mv, rate and units all exact, so a
  * Net floor is a price CEILING — the same direction peak capital takes, which is why this reads
  * `BOUND_GLYPHS`' second element (`capitalBound`) passed in from the one place that decides it,
  * rather than a fourth independent rule. Only a figure is marked: `not known` has no direction.
+ *
+ * OPEN CALL, RECORDED RATHER THAN GUARDED: A WHOLE-TICKER BOUND ON A PER-BUCKET FIGURE. This is
+ * the first per-column figure on the page to take one. `provenance` rides every leg of its
+ * ticker, so on a multi-bucket bounded name every column is marked — including a bucket the
+ * carry never touched, which would then claim a doubt it does not have. No finer marking is
+ * available: `carries` is keyed per (bucket, security) server-side, but `provenance` ships only
+ * `carried_on`, so the wire carries no bucket attribution at all and a renderer guessing one
+ * would be inventing it. Zero-instance today — both bounded names (9CI, C38U) are single-bucket,
+ * where the ticker's bound IS the bucket's. **Trigger:** the first multi-bucket bounded name
+ * whose carry touched only some of its buckets; that needs a bucket on `provenance` before this
+ * can narrow. Recorded beside `net_verdict`'s own open call, which this one sits next to.
  */
-function Breakeven({ o, status, bound, className }) {
-  if (status === "closed" || !(o.units > 0)) return null;
+function Breakeven({ o, bound, className }) {
+  if (!(o.units > 1e-6)) return null;
   const known = o.breakeven_price != null;
   return (
     <div className={className} data-testid="ledger-breakeven">
@@ -138,7 +155,7 @@ function ColumnHead({ name, o, status, bound }) {
       <div className="ledger-sub mut" data-testid="ledger-sub">
         <div>{fmt(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u</div>
         <div>@ {o.avg_cost == null ? NOT_KNOWN : fmt(o.avg_cost, 4)}</div>
-        <Breakeven o={o} status={status} bound={bound} />
+        <Breakeven o={o} bound={bound} />
         {status && <div>{status}</div>}
       </div>
     </div>

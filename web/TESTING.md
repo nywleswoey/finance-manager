@@ -265,15 +265,44 @@ shape stay `pinned.spec.js`'s, because consolidated rows are ordinary data rows 
 gates already. Nor does it gate the detail page's own render — the hero, the reconciliation block,
 the tiles and the refusal layout belong to the tickets that build them.
 
-`tests/bucket-split.spec.js` — **the bucket split under the hero** (#157): one block, a column per
-bucket plus Total. The Total column is the hero's ledger, so the gate is that the columns add
-**across** to it and each adds **down** to its own Net, at zero tolerance, derived from the
-fixture. It also gates the closed bucket keeping its column, a single-bucket name rendering no
-header or second column, and units / avg cost / status riding as a return-free subheading. One
-viewport; phone layout is #160's. The **cross-page gate** (Holdings' ticker-mode Net equals the
-payload's `net_pl_sgd`) is not here: `ticker.spec.js` already states it on this same multi-bucket
-fixture and `hero.spec.js` states the detail half, so a third copy would be a second place to
-update rather than a second claim.
+`tests/bucket-split.spec.js` — **the bucket split under the hero, and the breakeven price**
+(#157, #143 §5). The split half: one block, a column per bucket plus Total, where the Total column
+is the hero's ledger — so the gate is that the columns add **across** to it and each adds **down**
+to its own Net, at zero tolerance, derived from the fixture. It also gates the closed bucket
+keeping its column, a single-bucket name rendering no bucket header and no column label, and
+units / avg cost / status riding as a return-free subheading.
+
+The **breakeven** half is the larger one, and it spans BOTH layouts. A single-bucket page has no
+column head, so the figure renders there as a right-aligned subheading over the rows — a claim
+about the column below it and never a row in it — which is why that page's gate asserts the line
+**is** present while still proving no column label appeared. The rest: every open column quotes
+one and a closed column quotes none (the drop is one condition, the units, so the Total column and
+the single-bucket page decide it the same way); a column that cannot price its units reads the
+ledger's `not known`; the line carries **no `title`** on every captured holding; a negative price
+renders as the negative number it is; and a **bounded** Net puts the OPPOSITE glyph on the price —
+a floor on the Net is a ceiling on the price — with `not known` left bare, since there is no
+direction to bound where there is no figure.
+
+Two gates there do not open a browser or borrow one. The arithmetic gate is a claim about the
+**payload** — revalue a column at its own breakeven and the Net beside it lands on zero, within
+the 4dp the price is quoted at spread over the units it multiplies — so it takes no `page`
+fixture. And the bounded glyph is gated on the two REAL bounded names (9CI, C38U) rather than only
+on a written payload: their holding captures predate `summary.provenance` reaching the wire and
+ship `bounded` with none, a shape the server cannot produce, so the object is read off
+`positions-closed.json` by `capturedProvenance` — the same mechanism `unknown-book.spec.js` uses
+for the hero's own bound, and the reason neither file hand-edits a capture. The multi-bucket
+bounded shape has no live instance, so it is driven, on 9CI's real carry with only its direction
+flipped.
+
+One viewport; phone layout is #160's. The **cross-page gate** (Holdings' ticker-mode Net equals
+the payload's `net_pl_sgd`) is not here: `ticker.spec.js` already states it on this same
+multi-bucket fixture and `hero.spec.js` states the detail half, so a third copy would be a second
+place to update rather than a second claim.
+
+**What it cannot say:** whether a bucket the carry never touched deserves the bound it is marked
+with. `provenance` is whole-ticker on the wire and carries no bucket attribution, so on a
+multi-bucket bounded name every column takes the same glyph. Zero-instance — both bounded names
+are single-bucket — and recorded as an open call on `SecurityDetail`'s `Breakeven`.
 
 `tests/split-width.spec.js` — the one thing about the split that **is** a claim about width, so it
 runs at every viewport rather than with the arithmetic: opening the multi-bucket ticker leaves

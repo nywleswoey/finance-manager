@@ -12,8 +12,9 @@
  *
  * THE BOUNDED TWO BORROW A REAL PROVENANCE; ONLY TWO PAYLOADS ARE WRITTEN. `holding-9ci.json`
  * and `holding-c38u.json` predate `summary.provenance` reaching the wire, but
- * `positions-closed.json` does not: it carries both names' wire objects verbatim, so this file
- * reads them off it rather than restating four fields a recapture would leave stale. Written,
+ * `positions-closed.json` does not: it carries both names' wire objects verbatim, so
+ * `capturedProvenance` reads them off it rather than restating four fields a recapture would
+ * leave stale. `bucket-split.spec.js` reads the same objects for the bounded price. Written,
  * and said so: the exact 1:1 carry (0P0001OOJG was never captured, so it is the plain PLTR hero
  * with an exact provenance beside it) and the refusal that still locked collateral — both
  * payloads written to reach a branch, as `hero.spec.js` does for the dividend line.
@@ -25,7 +26,7 @@
  * dividend.
  */
 import { expect, test } from "@playwright/test";
-import { capturedHoldings, fixtureFor } from "./fixtures/index.js";
+import { capturedHoldings, capturedProvenance, withProvenance } from "./fixtures/index.js";
 import { openView } from "./support/app.js";
 import { fmt, sgd, money } from "../src/api.js";
 
@@ -38,21 +39,6 @@ const captured = (ticker) => {
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const NOT_KNOWN = "not known";
-
-/** The captured payload with a provenance object beside its summary. */
-const withProvenance = (body, provenance) => ({ ...body, summary: { ...body.summary, provenance } });
-
-/**
- * A name's REAL provenance, off the captured `/api/positions` payload — which carries the wire
- * objects the holding captures predate. Read rather than rebuilt so a recapture propagates
- * instead of being maintained by hand against a second copy of the same four fields.
- */
-const capturedProvenance = (ticker) => {
-  const row = fixtureFor("/api/positions?closed=true").body.positions
-    .find((r) => r.ticker === ticker && r.provenance);
-  expect(row, `${ticker} no longer carries a provenance object on the wire`).toBeTruthy();
-  return row.provenance;
-};
 
 /** 9CI's side of the split: the whole cost went here, so the figures are floors. */
 const lower = () => withProvenance(captured("9CI"), capturedProvenance("9CI"));

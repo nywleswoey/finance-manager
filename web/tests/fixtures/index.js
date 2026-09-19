@@ -78,6 +78,32 @@ export function fixtureFor(pathAndQuery) {
   return { status: entry.status, body: readFixture(entry.file) };
 }
 
+/**
+ * A name's REAL provenance object, read off the captured `/api/positions` payload.
+ *
+ * THE HOLDING CAPTURES PREDATE `summary.provenance` REACHING THE WIRE. `holding-9ci.json` and
+ * `holding-c38u.json` ship `net_verdict: "bounded"` with no provenance at all — a shape the
+ * server cannot produce, since `bounded` is only reachable when a carry gives `carry_bound` a
+ * direction and the same carry builds the object. `positions-closed.json` is captured from the
+ * build that ships it and carries both names' wire objects verbatim, so every spec that needs
+ * one reads it from there.
+ *
+ * Here rather than in a spec for the reason `capturedHoldings` is: the route table lives here,
+ * and a second reader of this payload in a second spec file is a second copy of four fields a
+ * recapture would leave stale in one of them. The fixtures are not hand-edited (see above), so
+ * re-attaching the object at read time is what keeps the gates on the real values.
+ */
+export function capturedProvenance(ticker) {
+  const row = fixtureFor("/api/positions?closed=true").body.positions
+    .find((r) => r.ticker === ticker && r.provenance);
+  if (!row) throw new Error(`${ticker} no longer carries a provenance object on the wire`);
+  return row.provenance;
+}
+
+/** A captured detail payload with a provenance object beside its summary. */
+export const withProvenance = (body, provenance) =>
+  ({ ...body, summary: { ...body.summary, provenance } });
+
 
 /**
  * The spend trend's counterfactual: how many pixels the SMALLEST of the four series would get

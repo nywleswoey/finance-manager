@@ -23,7 +23,8 @@
  * hero states (#158), and the history tables' bucket column (#159).
  */
 import { expect, test } from "@playwright/test";
-import { capturedHoldings } from "./fixtures/index.js";
+import { capturedHoldings, capturedProvenance, withProvenance }
+  from "./fixtures/index.js";
 import { openView } from "./support/app.js";
 
 const HOLDINGS = capturedHoldings();
@@ -37,14 +38,24 @@ test.beforeAll(() => {
   expect(CLOSED_BUCKET.length, "no closed bucket inside a multi-bucket holding").toBeGreaterThan(0);
   // the three states the single-bucket breakeven subheading has to render, each captured
   const single = (f) => SINGLE.filter(({ body }) => f(body.summary)).length;
-  expect(single((s) => s.units > 0 && s.breakeven_price != null),
+  expect(single((s) => holds(s) && s.breakeven_price != null),
     "no priceable single-bucket holding").toBeGreaterThan(0);
-  expect(single((s) => s.units > 0 && s.breakeven_price == null),
+  expect(single((s) => holds(s) && s.breakeven_price == null),
     "no single-bucket holding that cannot price its units").toBeGreaterThan(0);
-  expect(single((s) => !(s.units > 0)), "no closed single-bucket holding").toBeGreaterThan(0);
+  expect(single((s) => !holds(s)), "no closed single-bucket holding").toBeGreaterThan(0);
+  // and the two bounded names the price's glyph is gated on, still bounded and still captured
+  for (const tk of ["9CI", "C38U"]) {
+    const h = HOLDINGS.find((x) => x.ticker === tk);
+    expect(h, `${tk} is no longer a captured holding`).toBeTruthy();
+    expect(h.body.summary.net_verdict, `${tk} no longer reaches the bounded verdict`)
+      .toBe("bounded");
+  }
 });
 
 const NOT_KNOWN_TEXT = "not known";   // the page's one word for an unmeasured figure
+// Whether a column has a breakeven to state at all, read off the payload at the threshold
+// the server holds positions to — the same one `_breakeven_price` nulls below.
+const holds = (o) => o.units > 1e-6;
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -60,6 +71,23 @@ const cents = (n) => Number(n.toFixed(2));
 async function openTicker(page, baseURL, ticker) {
   await openView(page, baseURL, "Portfolio › Holdings");
   await page.getByLabel("Show closed positions").check();
+  await page.locator("tbody tr")
+    .filter({ has: page.locator("span.pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) })
+    .first().click();
+  await expect(page.getByText("← Holdings")).toBeVisible();
+}
+
+/**
+ * The same navigation, with a payload of our own standing in for the ticker's. Opening first and
+ * routing second is deliberate: the Holdings list has to be the captured one for the row to be
+ * there to click.
+ */
+async function serve(page, baseURL, ticker, payload) {
+  await openTicker(page, baseURL, ticker);
+  await page.route("**/api/holding**", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(payload),
+  }));
+  await page.getByText("← Holdings").click();
   await page.locator("tbody tr")
     .filter({ has: page.locator("span.pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) })
     .first().click();
@@ -188,6 +216,27 @@ for (const { ticker, body } of SINGLE) {
 // The column head's third line. It is a claim ABOUT the column, not a member of it, so it is
 // gated here beside the arithmetic it is solved from rather than in a layout project: the only
 // thing that can go wrong with it is that it stops being the price that zeroes the Net below it.
+
+// THE ARITHMETIC ITSELF TAKES NO BROWSER. It is a claim about the payload — revalue a column at
+// its own breakeven and the Net beside it lands on zero — so it takes no `page` fixture and
+// opens no page. Everything below this point renders.
+for (const { ticker, body } of MULTI) {
+  test(`${ticker}: the price it quotes is the one that makes that column's Net zero`, () => {
+    // derived from the payload, never a literal. The tolerance is the 4dp the price is quoted
+    // at spread over the units it multiplies — arithmetic, not a fudge factor.
+    const s = body.summary;
+    const rate = s.mv_native ? s.mv_sgd / s.mv_native : 1;
+    const cols = [...body.buckets, s].filter(
+      (b) => holds(b) && b.breakeven_price != null && b.net_pl_sgd != null);
+    expect(cols.length, "no column with a breakeven to check").toBeGreaterThan(0);
+    for (const b of cols) {
+      const moved = (b.breakeven_price - s.price) * b.units * rate;
+      expect(Math.abs(b.net_pl_sgd + moved), `${ticker}: breakeven did not zero the Net`)
+        .toBeLessThanOrEqual(Math.max(0.02, 5e-5 * b.units * rate));
+    }
+  });
+}
+
 for (const { ticker, body } of MULTI) {
   test.describe(`${ticker} breakeven`, () => {
     test.beforeEach(async ({ page, baseURL }) => {
@@ -209,25 +258,10 @@ for (const { ticker, body } of MULTI) {
             : Number(b.breakeven_price).toLocaleString("en-US",
                 { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
       }
-      // the Total column carries the ticker's own, which is not any bucket's
-      await expect(subs.last().getByTestId("ledger-breakeven")).toBeVisible();
-    });
-
-    test("the price it quotes is the one that makes that column's Net zero", async () => {
-      // derived from the payload, never a literal: revalue each column at its own breakeven and
-      // the Net printed under it has to land on zero. The tolerance is the 4dp the price is
-      // quoted at spread over the units it multiplies — arithmetic, not a fudge factor.
-      const s = body.summary;
-      const rate = s.mv_native ? s.mv_sgd / s.mv_native : 1;
-      const cols = [...body.buckets, s].filter(
-        (b) => b.units > 0 && b.breakeven_price != null && b.net_pl_sgd != null);
-      expect(cols.length, "no column with a breakeven to check").toBeGreaterThan(0);
-      for (const b of cols) {
-        const moved = (b.breakeven_price - s.price) * b.units * rate;
-        expect(Math.abs(b.net_pl_sgd + moved),
-          `${ticker}: breakeven did not zero the Net`)
-          .toBeLessThanOrEqual(Math.max(0.02, 5e-5 * b.units * rate));
-      }
+      // the Total column carries the ticker's own, which is not any bucket's — and drops it on
+      // the same rule the buckets do, so a name whose every bucket is closed states none
+      await expect(subs.last().getByTestId("ledger-breakeven"))
+        .toHaveCount(holds(body.summary) ? 1 : 0);
     });
 
     test("it did not become a sixth tile, and carries no return figure", async ({ page }) => {
@@ -253,7 +287,7 @@ for (const { ticker, body } of SINGLE) {
       await expect(page.getByTestId("ledger-col")).toHaveCount(0);
       await expect(page.getByTestId("ledger-sub")).toHaveCount(0);
       await expect(page.locator(".tiles .tile")).toHaveCount(5);   // not a sixth tile either
-      if (!(s.units > 0)) {
+      if (!holds(s)) {
         // nothing held is no price — and must not read as a doubted one
         await expect(line).toHaveCount(0);
         return;
@@ -281,7 +315,7 @@ for (const { ticker, body } of HOLDINGS) {
     const lines = page.getByTestId("ledger-breakeven");
     const n = await lines.count();
     expect(n > 0, `${ticker}: line present iff the name still holds units`)
-      .toBe(body.summary.units > 0);
+      .toBe(holds(body.summary));
     for (let i = 0; i < n; i++) {
       await expect(lines.nth(i)).not.toHaveAttribute("title", /.*/);
       await expect(lines.nth(i).locator("[title]")).toHaveCount(0);
@@ -289,22 +323,45 @@ for (const { ticker, body } of HOLDINGS) {
   });
 }
 
+// THE BOUND ON THE REAL BOUNDED NAMES, NOT A WRITTEN ONE. 9CI and C38U are the book's two
+// bounded names and both are single-bucket, so this is the layout the glyph actually reaches on
+// live data. Their holding captures predate `summary.provenance` and ship `bounded` with none —
+// a shape the server cannot produce — so the object is read off `positions-closed.json`, which
+// carries both names' real wire objects (`capturedProvenance`, the mechanism
+// `unknown-book.spec.js` uses for the hero's own bound). EVERYTHING ELSE IS THE CAPTURE: the
+// real verdict, the real units, the real price. The direction is not restated here — it is read
+// off the payload's own `bound`, so the gate is the INVERSION and not a memorised pair.
+const PRICE_GLYPH = { lower: "\u2264", upper: "\u2265" };   // the Net floors, so the price caps
+for (const ticker of ["9CI", "C38U"]) {
+  test(`${ticker}: its real carry bounds the price the other way`, async ({ page, baseURL }) => {
+    const { body } = HOLDINGS.find((h) => h.ticker === ticker);
+    const pv = capturedProvenance(ticker);
+    expect(PRICE_GLYPH[pv.bound], `${ticker} carries no split direction`).toBeTruthy();
+    await serve(page, baseURL, ticker, withProvenance(body, pv));
+    const lines = page.getByTestId("ledger-breakeven");
+    const n = await lines.count();
+    // one line per column that still holds something — and a single-bucket page has no column
+    // head, so its only line is the subheading over the rows
+    expect(n, `${ticker} quoted no price to bound`).toBe(
+      body.buckets.length > 1
+        ? [...body.buckets, body.summary].filter(holds).length
+        : Number(holds(body.summary)));
+    for (let i = 0; i < n; i++) {
+      // no figure means no direction to put on one — the words stay bare
+      await expect(lines.nth(i)).toContainText(
+        body.summary.breakeven_price == null
+          ? `be ${NOT_KNOWN_TEXT}` : `be ${PRICE_GLYPH[pv.bound]}`);
+    }
+    // and the hero takes the opposite one, off the same object
+    await expect(page.getByTestId("hero-bound"))
+      .toHaveText(pv.bound === "lower" ? "\u2265" : "\u2264");
+  });
+}
+
 test.describe("the breakeven line's states, driven rather than observed", () => {
   // The captured multi-bucket holdings only ever carry ordinary positive prices, so the negative
   // and unknown branches are driven on a payload written to reach them.
   const multi = () => MULTI.find((h) => h.body.buckets.some((b) => b.status === "closed"));
-
-  const serve = async (page, baseURL, ticker, payload) => {
-    await openTicker(page, baseURL, ticker);
-    await page.route("**/api/holding**", (route) => route.fulfill({
-      status: 200, contentType: "application/json", body: JSON.stringify(payload),
-    }));
-    await page.getByText("← Holdings").click();
-    await page.locator("tbody tr")
-      .filter({ has: page.locator("span.pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) })
-      .first().click();
-    await expect(page.getByText("← Holdings")).toBeVisible();
-  };
 
   const withOpenBucket = (body, breakeven_price) => ({
     ...body,
@@ -333,17 +390,14 @@ test.describe("the breakeven line's states, driven rather than observed", () => 
     }
   });
 
-  // A price solved from a bounded Net is itself bounded, and it is bounded the OTHER WAY:
-  // `price x rate x units == mv_sgd - Net` with mv, rate and units exact, so a floor on the Net
-  // is a CEILING on the price. No captured payload is `bounded` and multi-bucket, so the pair is
-  // driven; the gate is that the two glyphs disagree, which is the whole claim.
-  const carried = (body, bound) => ({
-    ...body,
-    summary: { ...body.summary, net_verdict: "bounded",
-      provenance: { from_ticker: "C31", from_name: "CapitaLand Ltd", type: "split",
-                    carried_on: "2021-09-28", carried_sgd: 10071.0,
-                    split_with: [{ ticker: "C38U", units: 417.0 }], bound } },
-  });
+  // THE SAME BOUND ACROSS SEVERAL COLUMNS, WHICH NO CAPTURED PAYLOAD IS. Both bounded names are
+  // single-bucket, so the multi-bucket shape is driven — but on 9CI's REAL carry with only its
+  // direction flipped, not four invented fields, so the object stays the one the wire ships.
+  // What this pins is the component's coarse marking: `provenance` is whole-ticker, so every
+  // column takes the bound (see `Breakeven`'s recorded open call).
+  const carried = (body, bound) => withProvenance(
+    { ...body, summary: { ...body.summary, net_verdict: "bounded" } },
+    { ...capturedProvenance("9CI"), bound });
 
   for (const [bound, hero, price] of [["lower", "\u2265", "\u2264"],
                                       ["upper", "\u2264", "\u2265"]]) {
