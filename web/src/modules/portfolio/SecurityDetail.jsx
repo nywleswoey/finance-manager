@@ -134,18 +134,25 @@ const refusalSentence = (s) =>
  * still owes the percentage's second sentence when the return axis is a caveat too — C38U.
  * Neither prints the Net a second time: the hero already carries the figure.
  *
- * THE SECOND SENTENCE IS NOT DIRECTIONAL ABOUT ANYTHING THE HERO CONTRADICTS. It renders only
- * under a `caveat` return, which needs unknown units — and `net_verdict` ships `bounded` there
- * only where the carry's direction agrees with the partition's ceiling (`upper`). So the Net it
- * calls an upper bound is the one the hero prints `≤` on, or no glyph at all.
+ * NEITHER SENTENCE CLAIMS A DIRECTION THE PAYLOAD CONTRADICTS. A `caveat` that also carries a
+ * split is the one state where the two doubts disagree — `net_verdict` withholds `bounded`
+ * exactly there, and the hero drops its glyph with it — because the uncosted units count as
+ * free (Net overstated) while the whole event's cost landed here (Net understated). The glyph
+ * and the prose say the same thing in that state: the direction is not known. Everywhere else
+ * the partition is the only doubt and its ceiling stands.
  */
-const caveatNetSentence = (s) =>
+const caveatNetSentence = (s, conflicted) =>
   `${unitsUnknown(s.cost_partition)} entered without a recorded cost, and this Net counts ` +
-  "them as free — so it is an upper bound.";
-const caveatReturnSentence =
-  "The same error runs both ways in the percentage: the Net above is an upper bound while " +
-  "the peak capital counts costed lots only, a lower bound — so it is not comparable to any " +
-  "other name on the site.";
+  (conflicted
+    ? "them as free, while the whole event's cost below landed here — the two pull opposite " +
+      "ways, so which side of the truth this Net falls on is not known."
+    : "them as free — so it is an upper bound.");
+const caveatReturnSentence = (conflicted) =>
+  (conflicted
+    ? "Both of those doubts land on the percentage again, and on the peak capital under it"
+    : "The same error runs both ways in the percentage: the Net above is an upper bound while " +
+      "the peak capital counts costed lots only, a lower bound") +
+  " — so it is not comparable to any other name on the site.";
 
 /**
  * A carry's disclosure, last in the notes block (§12). Directional where the carry split, and it
@@ -227,6 +234,9 @@ export default function SecurityDetail({ ticker, onBack }) {
   // The bound rides the provenance, whole-ticker; `null` on a 1:1 carry, which is exact.
   const pv = s.provenance || null;
   const bound = s.net_verdict === "bounded" ? pv?.bound ?? null : null;
+  // A caveat that still carries a split bound is the state the two doubts disagree in: the
+  // verdict withheld `bounded`, so nothing on the page may name a direction for this Net.
+  const conflicted = s.net_verdict === "caveat" && !!pv?.bound;
   const BOUND_GLYPHS = { lower: ["\u2265", "\u2264"], upper: ["\u2264", "\u2265"] };
   const [figureBound, carryCapitalBound] = BOUND_GLYPHS[bound] || [null, null];
   // A glyph on the denominator only where the page can claim that direction: under a `caveat`
@@ -328,10 +338,10 @@ export default function SecurityDetail({ ticker, onBack }) {
         {(s.net_verdict === "caveat" || s.net_verdict === "bounded" || pv) && (
           <div data-testid="hero-notes">
             {s.net_verdict === "caveat" && (
-              <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
+              <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s, conflicted)}</p>
             )}
             {!refused && s.return_verdict === "caveat" && (
-              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence}</p>
+              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(conflicted)}</p>
             )}
             {pv && (
               <p className="hero-note" data-testid="carry-note">{carrySentence(pv, bound, refused)}</p>

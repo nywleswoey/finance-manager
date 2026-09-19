@@ -342,9 +342,17 @@ test.describe("bounded — the bound lands on the numbers", () => {
 
     // The caveat treatment instead: the uncosted units are named, and both sentences stand.
     expect(await noteIds(page)).toEqual(["caveat-net", "caveat-return", "carry-note"]);
-    await expect(page.getByTestId("caveat-net"))
+    const net = page.getByTestId("caveat-net");
+    await expect(net)
       .toContainText(`${fmt(s.cost_partition.unknown, 0)} of ${fmt(s.cost_partition.units_in, 0)} units`);
-    await expect(page.getByTestId("caveat-return")).toContainText("not comparable to any other name");
+    // …and the prose says what the missing glyph says: the direction is not known.
+    await expect(net).toContainText(NOT_KNOWN);
+    const ret = page.getByTestId("caveat-return");
+    await expect(ret).toContainText("not comparable to any other name");
+    for (const p2 of [net, ret]) {
+      expect(await p2.innerText(), "a sentence bounded a Net the verdict would not")
+        .not.toMatch(/upper bound|lower bound|floor|ceiling/);
+    }
 
     // The carry still discloses — it just claims nothing about a Net it cannot bound.
     const carry = page.getByTestId("carry-note");
