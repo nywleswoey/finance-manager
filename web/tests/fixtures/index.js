@@ -71,6 +71,35 @@ export function capturedHoldings() {
     .sort((a, b) => (a.ticker < b.ticker ? -1 : 1));
 }
 
+/**
+ * A captured detail payload with a provenance object beside its summary.
+ *
+ * The `/api/holding` captures predate `summary.provenance` reaching the wire, so a carried name
+ * arrives from them with no carry to state and no bound to print. Two specs need one attached —
+ * `unknown-book.spec.js` for the copy and `phone-layout.spec.js` for the phone tier's
+ * visible-claim / folded-explanation split — so the shaper lives here beside the route table
+ * rather than in whichever spec was written first.
+ */
+export const withProvenance = (body, provenance) =>
+  ({ ...body, summary: { ...body.summary, provenance } });
+
+/**
+ * A name's REAL provenance, off the captured `/api/positions?closed=true` payload — which
+ * carries the wire objects the holding captures predate. Read rather than rebuilt, so a
+ * recapture propagates instead of being maintained by hand against a second copy of the same
+ * four fields.
+ *
+ * Throws rather than returning null: a caller asks for this because it is about to gate a claim
+ * the object is the only source of, and a missing one is a fixture that can no longer carry the
+ * gate — silence there is how a test goes vacuous.
+ */
+export function capturedProvenance(ticker) {
+  const row = (fixtureFor("/api/positions?closed=true")?.body.positions || [])
+    .find((r) => r.ticker === ticker && r.provenance);
+  if (!row) throw new Error(`${ticker} no longer carries a provenance object on the wire`);
+  return row.provenance;
+}
+
 /** The recorded response for a request path, or null if nothing was captured for it. */
 export function fixtureFor(pathAndQuery) {
   const entry = ROUTES.get(normalize(pathAndQuery));

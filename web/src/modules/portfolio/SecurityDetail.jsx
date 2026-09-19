@@ -289,6 +289,19 @@ export default function SecurityDetail({ ticker, onBack }) {
   const noteCount = +netNote + +returnNote + +carryNote;
   const BOUND_GLYPHS = { lower: ["\u2265", "\u2264"], upper: ["\u2264", "\u2265"] };
   const [figureBound, capitalBound] = BOUND_GLYPHS[bound] || [null, null];
+  const heroNotes = (
+    <>
+      {netNote && (
+        <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
+      )}
+      {returnNote && (
+        <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence}</p>
+      )}
+      {carryNote && (
+        <p className="hero-note" data-testid="carry-note">{carrySentence(pv, bound)}</p>
+      )}
+    </>
+  );
 
   return (
     <div>
@@ -382,36 +395,20 @@ export default function SecurityDetail({ ticker, onBack }) {
             why the carry's disclosure follows both rather than sitting where it reads most
             naturally on the one name that has a carry and no caveat-net. A name that is `caveat`
             and also carries would otherwise split the pair. */}
-        {noteCount > 0 && (() => {
-          const notes = (
-            <>
-              {netNote && (
-                <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
-              )}
-              {returnNote && (
-                <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence}</p>
-              )}
-              {carryNote && (
-                <p className="hero-note" data-testid="carry-note">
-                  {carrySentence(pv, bound)}</p>
-              )}
-            </>
-          );
-          /* THE PHONE KEEPS EVERY TRUTH CLAIM AND FOLDS EVERY EXPLANATION (#160). The bound on the
-             number, the `≥`/`≤` on the percentage, the no-capital sentence and the refusal all
-             stay where they were; what folds is the REASON — the Net's caveat, the percentage's
-             incomparability, the provenance — behind one 44px row. A `<details>`, so it opens
-             and never truncates: Holdings' footnote is the same idiom in the same tier. The
-             sentences keep their order and their test ids, folded or not. */
-          return phone ? (
-            <details className="hero-fold" data-testid="hero-notes">
-              <summary data-testid="hero-fold-toggle">
-                {noteCount} {noteCount === 1 ? "qualification" : "qualifications"} on this figure
-              </summary>
-              {notes}
-            </details>
-          ) : <div data-testid="hero-notes">{notes}</div>;
-        })()}
+        {/* THE PHONE KEEPS EVERY TRUTH CLAIM AND FOLDS EVERY EXPLANATION (#160). The bound on the
+            number, the `≥`/`≤` on the percentage, the no-capital sentence and the refusal all
+            stay where they were; what folds is the REASON — the Net's caveat, the percentage's
+            incomparability, the provenance — behind one 44px row. A `<details>`, so it opens
+            and never truncates: Holdings' footnote is the same idiom in the same tier. The
+            sentences keep their order and their test ids, folded or not. */}
+        {noteCount > 0 && (phone ? (
+          <details className="hero-fold" data-testid="hero-notes">
+            <summary data-testid="hero-fold-toggle">
+              {noteCount} {noteCount === 1 ? "qualification" : "qualifications"} on this figure
+            </summary>
+            {heroNotes}
+          </details>
+        ) : <div data-testid="hero-notes">{heroNotes}</div>)}
         {/* TWO DATES, DELIBERATELY (#143 §2). `as_of` is the valuation date this page and
             Holdings share; `fx_as_of` is `max(fx_rate.date)`. One date beside the words "at
             latest FX" would be read as FX's date, which it is not — so each says which it is,

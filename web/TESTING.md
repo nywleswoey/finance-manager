@@ -291,7 +291,11 @@ no-capital sentence, the refusal) is visible while the explanations sit behind o
 `N qualifications on this figure` row that opens untruncated. On the multi-bucket name: the total
 block is first, every block sums to its own Net, the written across-sum ties to the hero, and each
 block head carries its own units, avg cost and status — the phone half of the one subheading rule
-`bucket-split.spec.js` gates at 1280.
+`bucket-split.spec.js` gates at 1280. On the bounded names it serves the captured payload with the
+name's REAL provenance attached, read off `/api/positions?closed=true` by `capturedProvenance()`
+as `unknown-book.spec.js` does — the holding captures predate `summary.provenance` on the wire, so
+without it the `≥`/`≤` prefix and the carry sentence render for no fixture and the two claims the
+tier splits on (the bound is visible, the provenance folds) would both go untested.
 
 `tests/hero.spec.js` — the **ticker detail page's hero Net, the reconciliation ledger that proves
 it, and the five position tiles** (#156). The page's whole claim is that the figure in the largest

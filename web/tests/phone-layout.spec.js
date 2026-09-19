@@ -14,7 +14,7 @@
  */
 import { expect, test } from "@playwright/test";
 import { PHONE_TIER_BELOW } from "./viewports.js";
-import { capturedHoldings } from "./fixtures/index.js";
+import { capturedHoldings, capturedProvenance, withProvenance } from "./fixtures/index.js";
 import { mainPaneOverflow, openView } from "./support/app.js";
 
 const HOLDINGS = capturedHoldings();
@@ -40,12 +40,20 @@ function amount(text) {
   return n;
 }
 
-async function openTicker(page, baseURL, ticker) {
+async function openTicker(page, baseURL, ticker, payload) {
   await openView(page, baseURL, "Portfolio › Holdings");
   await page.getByLabel("Show closed positions").check();
-  await page.locator("tbody tr")
+  const row = () => page.locator("tbody tr")
     .filter({ has: page.locator("span.pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) })
-    .first().click();
+    .first();
+  await row().click();
+  await expect(page.getByText("← Holdings")).toBeVisible();
+  if (!payload) return;
+  await page.route("**/api/holding**", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(payload),
+  }));
+  await page.getByText("← Holdings").click();
+  await row().click();
   await expect(page.getByText("← Holdings")).toBeVisible();
 }
 
@@ -56,8 +64,12 @@ test.beforeEach(({ viewport }, testInfo) => {
   testInfo.annotations.push({ type: "viewport", description: `${viewport.width}px` });
 });
 
+// The bounded names, picked by shape rather than by name, as everything else here is.
+const BOUNDED = HOLDINGS.filter(({ body }) => body.summary.net_verdict === "bounded");
+
 test.beforeAll(() => {
   expect(HOLDINGS.length, "no /api/holding fixtures in the manifest").toBeGreaterThan(0);
+  expect(BOUNDED.length, "no bounded holding left to gate the bound prefix on").toBeGreaterThan(0);
 });
 
 for (const { ticker, body } of HOLDINGS) {
@@ -190,5 +202,57 @@ for (const { ticker, body } of HOLDINGS) {
         await expect(page.getByTestId("ledger-sum")).toHaveCount(0);
       });
     }
+  });
+}
+
+/**
+ * THE BOUND AND THE CARRY, THE ONE PAIR THE CAPTURES CANNOT REACH (#160). The bound prefix is a
+ * truth claim and stays on the number; the provenance sentence is an explanation and folds — and
+ * neither renders for any captured payload, because the `/api/holding` captures predate
+ * `summary.provenance` on the wire and a bound rides that object.
+ *
+ * So the bounded names borrow their REAL provenance off `/api/positions?closed=true`, which
+ * carries the wire objects verbatim — read, never rebuilt, exactly as `unknown-book.spec.js`
+ * borrows them for the copy at 1280. What is new here is the tier: that the glyph is outside the
+ * disclosure and the sentence is inside it is a claim about the phone and about nothing else.
+ */
+for (const { ticker, body } of BOUNDED) {
+  const provenance = capturedProvenance(ticker);
+  const served = withProvenance(body, provenance);
+  const s = served.summary;
+  // The number takes the direction of the bound and the peak capital takes its mirror (§12).
+  const [figure, capital] = provenance.bound === "lower" ? ["\u2265", "\u2264"] : ["\u2264", "\u2265"];
+  const notes = 1 + +(s.return_verdict === "caveat");
+
+  test.describe(`${ticker} (bounded ${provenance.bound}, carrying)`, () => {
+    test.beforeEach(async ({ page, baseURL }) => {
+      await openTicker(page, baseURL, ticker, served);
+    });
+
+    test("the bound stays on the number and on the percentage, outside the fold", async ({ page }) => {
+      await expect(page.getByTestId("hero-bound")).toBeVisible();
+      await expect(page.getByTestId("hero-bound")).toHaveText(figure);
+      await expect(page.getByTestId("hero-return")).toBeVisible();
+      await expect(page.getByTestId("hero-return"))
+        .toHaveText(new RegExp(`^${figure} .*peak capital of ${capital} `));
+      // Neither claim is inside the disclosure: they are what the reader believes the number to be.
+      expect(await page.locator("details.hero-fold [data-testid=hero-bound]").count()).toBe(0);
+      expect(await page.locator("details.hero-fold [data-testid=hero-return]").count()).toBe(0);
+    });
+
+    test("the carry is an explanation: it folds, opens and never truncates", async ({ page }) => {
+      const toggle = page.getByTestId("hero-fold-toggle");
+      await expect(toggle).toContainText(`${notes} qualification${notes === 1 ? "" : "s"} on this figure`);
+      const carry = page.getByTestId("carry-note");
+      expect(await page.locator("details.hero-fold [data-testid=carry-note]").count()).toBe(1);
+      await expect(carry).toBeHidden();
+      await toggle.click();
+      await expect(carry).toBeVisible();
+      await expect(carry).toContainText(provenance.from_ticker);
+      const clipped = await carry.evaluate((e) => e.scrollHeight > e.clientHeight + 1);
+      expect(clipped, "the carry sentence is truncated").toBe(false);
+      await expect(page.getByTestId("hero-bound")).toBeVisible();
+      expect(await mainPaneOverflow(page)).toBeLessThanOrEqual(0);
+    });
   });
 }
