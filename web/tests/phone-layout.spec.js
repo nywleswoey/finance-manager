@@ -122,21 +122,27 @@ for (const { ticker, body } of HOLDINGS) {
         await expect(blocks).toHaveCount(bks.length + 1);
         await expect(blocks.first()).toHaveAttribute("data-testid", "ledger-block-total");
 
-        // Every block is a complete ledger: its lines add up to its own Net.
-        for (let i = 0; i < bks.length + 1; i++) {
-          const rows = blocks.nth(i).locator(".ledger-row:not(.ledger-total) .ledger-val");
-          const vals = (await rows.allTextContents()).filter((t) => t !== "—" && t !== "not known").map(amount);
-          const net = amount(await blocks.nth(i).locator(".ledger-total .ledger-val").textContent());
-          expect(vals.reduce((a, b) => a + b, 0), `block ${i}`).toBeCloseTo(net, 1);
-        }
+        // A refusal has no bottom line to reconcile to, down or across, so it states none.
+        if (refused) {
+          await expect(page.locator(".ledger-block .ledger-total")).toHaveCount(0);
+          await expect(page.getByTestId("ledger-sum")).toHaveCount(0);
+        } else {
+          // Every block is a complete ledger: its lines add up to its own Net.
+          for (let i = 0; i < bks.length + 1; i++) {
+            const rows = blocks.nth(i).locator(".ledger-row:not(.ledger-total) .ledger-val");
+            const vals = (await rows.allTextContents()).filter((t) => t !== "—" && t !== "not known").map(amount);
+            const net = amount(await blocks.nth(i).locator(".ledger-total .ledger-val").textContent());
+            expect(vals.reduce((a, b) => a + b, 0), `block ${i}`).toBeCloseTo(net, 1);
+          }
 
-        // The across identity is an explicit sum, over every bucket, ending on the total.
-        const sum = await page.getByTestId("ledger-sum").textContent();
-        const [lhs, rhs] = sum.split(" = ");
-        for (const b of bks) expect(lhs).toContain(b.bucket);
-        const terms = lhs.split(" + ").map((t) => amount(t.replace(/^.*?([+−-]?[\d,]+\.\d+)$/, "$1")));
-        expect(terms.reduce((a, b) => a + b, 0)).toBeCloseTo(amount(rhs), 1);
-        expect(amount(rhs)).toBeCloseTo(amount(await page.getByTestId("hero-net").textContent()), 1);
+          // The across identity is an explicit sum, over every bucket, ending on the total.
+          const sum = await page.getByTestId("ledger-sum").textContent();
+          const [lhs, rhs] = sum.split(" = ");
+          for (const b of bks) expect(lhs).toContain(b.bucket);
+          const terms = lhs.split(" + ").map((t) => amount(t.replace(/^.*?([+−-]?[\d,]+\.\d+)$/, "$1")));
+          expect(terms.reduce((a, b) => a + b, 0)).toBeCloseTo(amount(rhs), 1);
+          expect(amount(rhs)).toBeCloseTo(amount(await page.getByTestId("hero-net").textContent()), 1);
+        }
 
         // Nothing is clipped: each block is as wide as the ledger and none scrolls.
         const ledger = await page.getByTestId("ledger").boundingBox();

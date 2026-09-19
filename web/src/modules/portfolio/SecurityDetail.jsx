@@ -106,14 +106,14 @@ function ColumnHead({ name, o, status }) {
 /**
  * ONE BLOCK OF THE PHONE'S STACKED SPLIT (#160): a complete ledger for one column of the wide
  * form — the whole ticker or one bucket — drawn as the plain vertical statement, so it sums to
- * its own Net on its own. `o` is the column's payload (the summary or a bucket), `read` gives one
- * line's figure and `text` the words it prints, and `net` is its bottom line (`undefined` on a
- * refusal, which has none).
+ * its own Net on its own. `o` is the column's payload (the summary or a bucket), `rows` carries
+ * this column's own lines as `[label, figure, words]`, and `net` is its bottom line (`undefined`
+ * on a refusal, which has none).
  *
  * The heading carries what the wide form's muted subheading carried, on one line, and no return
  * figure of any kind (#134 §2).
  */
-function LedgerBlock({ name, o, status, rows, read, text, net, testid }) {
+function LedgerBlock({ name, o, status, rows, net, testid }) {
   return (
     <div className="ledger-block" data-testid={testid}>
       <div className="ledger-blockhead">
@@ -124,10 +124,10 @@ function LedgerBlock({ name, o, status, rows, read, text, net, testid }) {
           {status ? ` · ${status}` : ""}
         </span>
       </div>
-      {rows.map(([lbl, , key]) => (
+      {rows.map(([lbl, v, text]) => (
         <div className="ledger-row" key={lbl}>
           <span className="ledger-lbl">{lbl}</span>
-          <span className={"ledger-val " + ledgerClass(read(key))}>{text(key)}</span>
+          <span className={"ledger-val " + ledgerClass(v)}>{text}</span>
         </div>
       ))}
       {net !== undefined && (
@@ -431,17 +431,15 @@ export default function SecurityDetail({ ticker, onBack }) {
            sideways would hide the whole second bucket column at 360, making "reconciles down
            and across" true of the DOM and false of the screen. */
         <div className="ledger ledger-stack" data-testid="ledger">
-          <LedgerBlock name="Total" o={s} rows={rows} testid="ledger-block-total"
-                       read={(key) => rows.find((r) => r[2] === key)[1]}
-                       text={(key) => ledgerAmount(rows.find((r) => r[2] === key)[1])}
+          <LedgerBlock name="Total" o={s} testid="ledger-block-total"
+                       rows={rows.map(([lbl, v]) => [lbl, v, ledgerAmount(v)])}
                        net={refused ? undefined : s.net_pl_sgd} />
           {bks.map((b) => (
-            <LedgerBlock key={b.bucket} name={b.bucket} o={b} status={b.status} rows={rows}
-                         testid="ledger-block-bucket"
-                         read={(key) => b[key]} text={(key) => bucketCell(b, key)}
+            <LedgerBlock key={b.bucket} name={b.bucket} o={b} status={b.status}
+                         rows={rows.map(([lbl, , key]) => [lbl, b[key], bucketCell(b, key)])}
                          net={refused ? undefined : b.net_pl_sgd} />
           ))}
-          {!refused && bks.every((b) => b.net_pl_sgd != null) && (
+          {!refused && (
             <div className="ledger-sum" data-testid="ledger-sum">
               {bks.map((b, i) => (
                 <React.Fragment key={b.bucket}>

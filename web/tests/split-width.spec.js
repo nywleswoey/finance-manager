@@ -17,7 +17,7 @@
  * keeps meaning what it says.
  */
 import { expect, test } from "@playwright/test";
-import { HSCROLL_GATE_APPLIES_BELOW, VIEWPORTS } from "./viewports.js";
+import { HSCROLL_GATE_APPLIES_BELOW, PHONE_TIER_BELOW, VIEWPORTS } from "./viewports.js";
 import { capturedHoldings } from "./fixtures/index.js";
 import { mainPaneOverflow, openView } from "./support/app.js";
 
@@ -42,8 +42,9 @@ test("the multi-bucket split leaves the main pane nothing to scroll sideways",
     await expect(page.getByText("← Holdings")).toBeVisible();
     // The split really is on screen: without this the measurement below could pass on a page
     // that rendered the plain vertical ledger for some unrelated reason.
-    // Below 640 the split is stacked blocks (#160) and not a header over columns.
-    await expect(page.getByTestId(vp.width < 640 ? "ledger-sum" : "ledger-head")).toBeVisible();
+    // Below the phone tier the split is stacked blocks (#160), not a header over columns.
+    await expect(page.getByTestId(
+      vp.width < PHONE_TIER_BELOW ? "ledger-sum" : "ledger-head")).toBeVisible();
 
     const overflow = await mainPaneOverflow(page);
     testInfo.annotations.push({

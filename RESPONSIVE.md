@@ -273,7 +273,8 @@ Failing these **changes a decision**, rather than reporting a bug.
   ~11,600 if the options table were cards too. It stays on the reading job (a trade, not a
   column) and on the bound: 19 rows is the security's own history, where 73 option legs are not.
   Fixture measurements at 390; the live book's are within a few hundred px (F34 5,000 here vs
-  4,126 live).
+  4,126 live). 3,987px is what the page measures now; #160 was written against 3,947px and the
+  page has moved since.
 - **Whether a phone list of 1001 cards is usable.** `spending/Transactions` fetches `limit=1000` and
   the card is ~2× an A row's height, so the pattern's own list is the app's longest render. Nothing
   about it is decidable at a desk, and the table it replaced was equally uncapped. **The By Category

@@ -904,7 +904,8 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
    whole-ticker total, each a complete vertical ledger, and states the across-identity as a
    written sum (`.ledger-sum`). Four numeric columns do not fit at 360, and scrolling them
    sideways hides the whole second bucket column — reconciling in the DOM and not on the screen.
-   The rows are the plain `.ledger-row`, so the 44px pitch and the tabular figures are unchanged. */
+   The rows are the plain `.ledger-row`, unchanged: the 44px floor is a `th, td` rule and the
+   ledger is divs, not a table, so nothing about the stack changes its pitch or its figures. */
 @media (max-width: 639.98px) {
   .ledger-stack { max-width: none; }
   .ledger-block { margin-bottom: 14px; }
