@@ -19,11 +19,16 @@ uv venv .venv && uv pip install --python .venv/bin/python \
   sqlalchemy alembic "psycopg[binary]" pydantic-settings python-dotenv fastapi uvicorn
 cp .env.example .env
 
-make setup     # db + schema + seed + ingest statements + fetch prices/FX
-make app       # build frontend + serve everything on http://localhost:8000
+make setup     # db + schema + seed + ingest statements + fetch prices/FX (local docker DB)
+make build-web && make api-local   # serve the docker DB on http://localhost:8001
 ```
 
-Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `make api`.
+`make api` / `make app` (:8000) instead serve the **deployed** Neon DB, read from `.env.local`
+(`vercel env pull`) — they fail without it. Those servers can write to it (refresh, snapshot
+delete, spending classify), so treat them as prod. `api-local` serves its own built `web/dist`;
+the vite dev server proxies to :8000, so it does not work with `api-local`.
+
+Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `make api-local`.
 
 ## Ingesting new data files
 

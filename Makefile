@@ -1,5 +1,6 @@
 .PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net \
         flat-cash load-cash spending snapshot snapshot-commit ingest-all test-web capture-web-fixtures \
+        api-local \
         schedule-install schedule-status schedule-uninstall schedule-test sync-requirements
 
 PY = PYTHONPATH=. .venv/bin/python
@@ -10,6 +11,7 @@ db-up:        ## start postgres
 db-down:      ## stop postgres
 	docker compose down
 migrate:      ## apply alembic migrations
+	@$(LOCAL_GUARD)
 	$(AL) upgrade head
 seed:         ## seed accounts / securities / aliases / corporate actions / net-worth catalogue
 	$(PY) scripts/seed.py
@@ -65,12 +67,36 @@ schedule-uninstall: ## remove the agent
 schedule-test:      ## run the agent right now
 	scripts/schedule.sh test
 
-api:          ## run the API (serves built web/ at /)
-	$(PY) -m uvicorn server.main:app --reload --port 8000
+# The local API reads the DEPLOYED Neon DB (DATABASE_URL from .env.local) so local shows the same
+# data as prod. Only `api`/`app` do: every other make target — reset, migrate, seed, ingest,
+# tests — stays on the docker DB via .env, so no destructive make TARGET can reach prod. The
+# running `api`/`app` server is a different matter: it serves mutating routes (refresh, snapshot
+# POST/PATCH/DELETE, the spending classify/recurring writes) against the deployed DB, and a local
+# DEV_AUTH_BYPASS authorises every localhost request. Deleting a snapshot in the local UI deletes
+# it in prod.
+# The URL carries the password, so it is read inside the recipe's shell and never expanded by make:
+# `make -n` / `make -d` show only the sed, never the value.
+NEON_ENV = u=$$(sed -nE 's/^DATABASE_URL="?([^"]*)"?$$/\1/p' .env.local 2>/dev/null); test -n "$$u" || { echo "FATAL: no DATABASE_URL in .env.local (vercel env pull)"; exit 1; }
+# An exported DATABASE_URL beats .env, so it would reach reset/migrate/api-local. Refuse a
+# non-localhost one, as scripts/scheduled_run.sh does in the other direction. Unset is fine.
+LOCAL_GUARD = case "$$DATABASE_URL" in ""|*localhost*|*127.0.0.1*) ;; *) echo "FATAL: DATABASE_URL in the environment is not the local docker DB — refusing"; exit 1 ;; esac
+
+api:          ## run the API against Neon (serves built web/ at /)
+	@$(NEON_ENV); DATABASE_URL="$$u" $(PY) -m uvicorn server.main:app --reload --port 8000
+# The other half of the split above. `ingest-all` typed by hand writes the DOCKER db (config.py
+# falls back to its localhost default, or .env's localhost URL), while `api` reads Neon —
+# so a hand-run ingest is invisible from `api` until the 06:15 agent repeats it against the
+# deployed db. This target is how you look at what you just ingested, without a write path to
+# prod existing anywhere near it. Different port so it can run BESIDE `api`: the question is
+# usually "is the new statement in there", and that is answered by comparing the two.
+# Serves its own built web/dist (run `make build-web` first); the vite dev server proxies to 8000.
+api-local:    ## run the API against the local docker DB (what a hand-run ingest wrote)
+	@$(LOCAL_GUARD)
+	$(PY) -m uvicorn server.main:app --reload --port 8001
 build-web:    ## build the React frontend
 	cd web && npm install && npm run build
-app: build-web   ## build frontend then run API+web on :8000
-	$(PY) -m uvicorn server.main:app --port 8000
+app: build-web   ## build frontend then run API+web on :8000, against Neon
+	@$(NEON_ENV); DATABASE_URL="$$u" $(PY) -m uvicorn server.main:app --port 8000
 
 test-web: build-web   ## Playwright viewport suite: 10 named viewports x 13 views (see web/TESTING.md)
 	@# Runs against the production build through vite's preview server, not the dev server,
@@ -95,6 +121,7 @@ net:          ## per-ticker net verdict (+/-) incl dividends + option premiums
 psql:         ## open a psql shell
 	docker exec -it portfolio_db psql -U portfolio
 reset:        ## drop + recreate schema (destructive)
+	@$(LOCAL_GUARD)
 	$(AL) downgrade base && $(AL) upgrade head
 
 setup: db-up migrate seed ingest prices   ## one-shot local bring-up
