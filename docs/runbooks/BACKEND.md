@@ -113,9 +113,9 @@ drift apart among ~25 flat siblings and the self-check is visible in one place.
 ## The four cell states
 
 A missing number on a position row means one of four things. The **fold names which** so a page
-can render each differently; the rendering itself is not here — the detail page still says `n/a`
-where it now means *not known*, and #158 / #159 land the words. The rule is *has this stream ever
-existed*, not *is the number zero*.
+can render each differently. The rule is *has this stream ever existed*, not *is the number zero*.
+The ticker detail page renders all four since #156 — `not known` in words, never a glyph and never
+a tooltip; #158 lands the prose the hero slot itself needs.
 
 | state | meaning | intended rendering |
 |---|---|---|
@@ -125,7 +125,37 @@ existed*, not *is the number zero*.
 | not known | the stream exists but is unmeasurable | words |
 
 So `null` means **exactly one thing per field**. `income_sgd` is named on the first line by
-#143 §6 and is **not** done: it still ships `0.0` on a name that never paid a dividend.
+#143 §6 and is **not** done: it still ships `0.0` on a name that never paid a dividend. The detail
+page answers the question off the dividend rows it already has — no rows and a zero is a stream
+that never existed — which is a render-side workaround for a wire-side gap, not a substitute for
+closing it: every other consumer still cannot tell *never paid* from *paid zero*.
+
+### `income_sgd` converts once, at the wrong rate, on a name paid in two currencies
+
+**Open defect, unfixed, and now on more surfaces than before.** `_accumulate_positions` adds each
+dividend's `gross` to `p["income"]` as a **native amount with its currency discarded**
+(`performance.py:1120`), and `_build_row` converts that sum once at the **security's** rate
+(`:1038`). A dividend paid in a currency other than the security's is therefore converted at the
+wrong rate — or, for an SGD-quoted security, not converted at all.
+
+Two names are live, and the error is not a rounding one:
+
+| ticker | currencies | `income_sgd` ships | true SGD | short by |
+|---|---|---:|---:|---:|
+| UD1U | EUR + SGD | 12,735.80 | 17,870.29 | **5,134.49** |
+| SET | SGD + EUR | 10,653.40 | 10,960.48 | **307.08** |
+
+It reaches `net_pl_sgd`, so Holdings' Net, `/api/performance`'s groups and the ticker detail
+page's hero are all understated on those two names by those amounts. The detail page used to be
+the one surface that escaped it, because it re-summed the rows' own `gross_sgd` client-side; #143
+§1 kills that reduce ("the frontend renders and never derives"), and keeping it would have put a
+second dividend total in the app and left the reconciliation ledger not adding up to its own Net.
+
+**The fix is one place**: accumulate the SGD amount per dividend, at the dividend's own currency's
+rate, rather than converting the native sum. It is deliberately not made here — it moves
+`/api/positions`, `/api/performance` and `/api/holding` together and wants its own ticket with its
+own numbers. **Neither name is a captured fixture**, so no gate in either suite sees it; a capture
+that adds one would be the cheapest way to make this fail loudly.
 
 - **`options_pl_sgd` null means no leg of this ticker has resolved yet** — a never-optioned ticker
   omits the row rather than carrying a permanent `Options 0` line (61 of 73 legs live). That is

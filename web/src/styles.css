@@ -120,6 +120,34 @@ body { margin: 0; background: var(--bg); color: var(--txt);
   padding: 6px 12px; border-radius: 6px; font: inherit; font-weight: 600; cursor: pointer; }
 .refresh-btn:hover:not(:disabled) { border-color: var(--acc); color: var(--acc); }
 .refresh-btn:disabled { opacity: .5; cursor: default; }
+/* THE TICKER DETAIL PAGE'S ANSWER, AND ITS PROOF (#156).
+
+   The hero is the one figure the page exists to state; the ledger under it is the only thing a
+   reader can check, so it is drawn as a statement — a label and a right-aligned amount, with a
+   rule above the bottom line — and not as a table. It is not one in the markup either: the
+   suite counts table tags under `web/src` against `RESPONSIVE.md`'s per-view assignment, and a
+   four-row block with no header row and no column to pin would enter that inventory owing an
+   answer to a question it does not raise.
+
+   `max-width` on the block rather than a width on the label column: the rule above Net has to
+   be as wide as the widest amount and no wider, or it reads as a page divider instead of as the
+   line you add above a total. `ch` because that is what the amounts are measured in —
+   tabular figures, so the block does not resize as the numbers change. */
+.hero { margin-bottom: 14px; }
+.hero-net { font-size: 32px; font-weight: 700; line-height: 1.15;
+  font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.hero-ccy { font-size: 18px; font-weight: 600; color: var(--mut); }
+.hero-return { margin-top: 2px; font-size: 14px; color: var(--txt);
+  font-variant-numeric: tabular-nums; }
+.hero-asof { margin-top: 4px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.ledger { max-width: 34ch; margin-bottom: 18px; font-variant-numeric: tabular-nums; }
+.ledger-row { display: flex; align-items: baseline; justify-content: space-between; gap: 18px;
+  padding: 3px 0; font-size: 14px; }
+.ledger-lbl { flex: none; color: var(--mut); }
+.ledger-val { flex: 1 1 auto; min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.ledger-total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px;
+  font-weight: 700; }
+.ledger-total .ledger-lbl { color: var(--txt); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 22px; }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .tile .lbl { color: var(--mut); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }

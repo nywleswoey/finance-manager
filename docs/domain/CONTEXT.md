@@ -166,8 +166,8 @@ null mean *not known* (units always entered, so those can be unmeasurable but ne
 `income_sgd` belongs on the first line by #143 §6 and does **not** ship that way yet — it is
 still `0.0` on a name that never paid, so nothing can tell
 *never paid* from *paid zero*.
-_Avoid_: "n/a" (it reads as *not applicable*, i.e. impossible, on cells that mean *not known* —
-the wording the detail page still uses, which #158 replaces with words), empty (says which pixels
+_Avoid_: "n/a" (it reads as *not applicable*, i.e. impossible, on cells that mean *not known*;
+the detail page says the words instead since #156), empty (says which pixels
 are blank, not which of the four facts is being stated)
 
 **Stock P/L**:
@@ -257,6 +257,13 @@ transaction ledger, with an *implied rate* (gross ÷ units) when a statement omi
 cash-landed view. Return math deliberately folds dividends on **ex_date** instead (the day the
 price drops); the two dates are a real distinction, not a discrepancy.
 _Avoid_: dividend date (name the basis — pay_date or ex_date — explicitly)
+
+**Income**:
+Dividends received, the third term of the Net. On the wire as `income_sgd`, per leg. **Known
+defect**: the fold sums the native `gross` amounts and converts once at the *security's* rate, so
+a name paid in a second currency is converted at the wrong one — UD1U is short 5,134.49 and SET
+307.08. It reaches every Net in the app; the runbook has the table and the fix.
+_Avoid_: dividends (the rows are dividends; this is their folded SGD total), yield
 
 ### Money
 
