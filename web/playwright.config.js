@@ -62,6 +62,15 @@ export default defineConfig({
       testMatch: /security-detail-options\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // The ticker detail page's hero and the ledger that proves it, on the same reasoning once
+    // more: a block of lines either adds up to the figure above it or it does not, and that is
+    // the same arithmetic at 360px as at 1440px (#156). It runs over every captured holding,
+    // which is eight payloads and not a width apiece.
+    {
+      name: "hero",
+      testMatch: /hero\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     // The composition chart's four unreachable states, on the same reasoning again: an empty
     // state is copy, a tick crossover is a count, and where a negative band lands is
     // arithmetic. None of the three is a claim about width, and two of them need a payload the

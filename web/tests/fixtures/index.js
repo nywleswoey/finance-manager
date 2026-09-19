@@ -55,6 +55,22 @@ export function readFixture(file) {
   return cache.get(file);
 }
 
+/**
+ * Every ticker a detail payload was captured for, with that payload — read off the route table
+ * so a recapture that adds or drops a holding moves what the gates run over.
+ *
+ * Here rather than in the one spec that walks them, because the route table lives here and a
+ * second `fs.readFileSync` of `manifest.json` in a spec file is a second parser of this file's
+ * own format.
+ */
+export function capturedHoldings() {
+  return [...ROUTES.entries()]
+    .map(([route, entry]) => [/^\/api\/holding\?ticker=(.+)$/.exec(route), entry])
+    .filter(([m]) => m)
+    .map(([m, entry]) => ({ ticker: decodeURIComponent(m[1]), body: readFixture(entry.file) }))
+    .sort((a, b) => (a.ticker < b.ticker ? -1 : 1));
+}
+
 /** The recorded response for a request path, or null if nothing was captured for it. */
 export function fixtureFor(pathAndQuery) {
   const entry = ROUTES.get(normalize(pathAndQuery));

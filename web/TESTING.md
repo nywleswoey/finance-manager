@@ -265,18 +265,46 @@ shape stay `pinned.spec.js`'s, because consolidated rows are ordinary data rows 
 gates already. Nor does it gate the detail page's own render — the hero, the reconciliation block,
 the tiles and the refusal layout belong to the tickets that build them.
 
+`tests/hero.spec.js` — the **ticker detail page's hero Net, the reconciliation ledger that proves
+it, and the five position tiles** (#156). The page's whole claim is that the figure in the largest
+type is checkable, so the gate is that the lines directly under it add up to it at **zero
+tolerance** — and it runs over **every captured holding**, because the eight `holding-*.json`
+payloads are eight shapes of that claim: a wheel, a windfall, a caveat, a two-bucket name, a closed
+name, two carries and the one refusal. A block of lines either adds up or it does not, and it does
+the same at 360px as at 1440px, so this runs at **one viewport in a project of its own**, the
+reasoning `ticker.spec.js` already carries.
+
+Besides the arithmetic it pins the rules that decide what is on screen at all: a stream that never
+existed is **omitted** and a stream that measured zero renders its **`0`**, so a never-optioned name
+loses its permanent `Options 0` line while a flat one keeps a zero; an unmeasurable cell reads the
+**words `not known`**, never a glyph and never a `title`; the **five** tiles are exactly Units, Avg
+Cost, Price, Cost Basis and Market Value, with **no XIRR tile and nothing backfilling its slot**; the
+percentage appears **exactly once**, carries its span and its peak inline, and no annualised rate
+appears anywhere on the page; and the price date and the FX date both render, each **saying which it
+is** — asserted on the labels rather than the values, because a capture can hold the same date in
+both fields. Its last test serves a payload whose `income_sgd` and `options_pl_sgd` deliberately
+**disagree** with the rows beneath them, which is the only way to tell "rendered the server's
+figure" apart from "re-derived it and got lucky". **No gate in the file states a numeric literal
+from a fixture**; the one number written down is the tile count, which is a design decision.
+
 `tests/security-detail-options.spec.js` — **SecurityDetail's Options P/L**, the same kind of
 subject as `ticker.spec.js` and there for the same reason: a folded total is the same number at
 every width, so it runs at **one viewport in a project of its own**. The page used to fold that
 total itself with a `close_date` truthy test, but `portfolio/options.py`'s `_is_open()` is the one
 authority on open-vs-realised and an expired-worthless short leg is realised with
 `close_date: null` — so the fold dropped every one of them, ~S$54,818 across 52 legs on the PLTR
-fixture, flipping the tile from a S$52,989 gain to a S$1,828 loss (#144). It now reads the
-server's `summary.options_pl_sgd`, and the spec pins the two edges of that: a null total with legs
-on screen reads a measured **zero** rather than `n/a`, and the Dividends tile beside it stays the
-rows' own `gross_sgd` sum, because `summary.income_sgd` adds native amounts across payment
-currencies. Every expectation is derived from the fixture, including the guard that the fixture
-still carries enough expired-worthless legs to tell the two folds apart.
+fixture, flipping the figure from a S$52,989 gain to a S$1,828 loss (#144). It now reads the
+server's `summary.options_pl_sgd`, and the spec pins the edges of that: a null total **with** legs
+on screen reads a measured **zero**, and a null total with **no** legs omits the line outright.
+Since #156 the figure is a reconciliation line rather than a tile and these gates follow it there;
+the dividends half of the file is **gone**, because it asserted the dividend total summed the rows
+on screen and §1 of the spec kills both of this page's client-side reductions — `hero.spec.js`
+gates the replacement for both streams at once. That deleted test was right about something,
+though: `income_sgd` adds native amounts across payment currencies, so it is 5,134.49 short on
+UD1U and 307.08 on SET. The defect outlived the test and is written down in
+`docs/runbooks/BACKEND.md`, where the fix is — on the wire, not on this page. Every expectation is derived from the fixture,
+including the guard that the fixture still carries enough expired-worthless legs to tell the two
+folds apart.
 
 `tests/composition.spec.js` — the states of the **net-worth composition chart** the committed
 fixture cannot reach, and the third spec here whose subject is not layout. An empty state is copy, a
