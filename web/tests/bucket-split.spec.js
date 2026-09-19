@@ -228,17 +228,34 @@ for (const { ticker, body } of SINGLE) {
 // opens no page. Everything below this point renders.
 for (const { ticker, body } of MULTI) {
   test(`${ticker}: the price it quotes is the one that makes that column's Net zero`, () => {
-    // derived from the payload, never a literal. The tolerance is the 4dp the price is quoted
-    // at spread over the units it multiplies — arithmetic, not a fudge factor.
+    // Derived from the payload, never a literal — including the FX rate, which this payload does
+    // NOT carry: `/api/positions` stopped shipping one on purpose, so the only route to it is the
+    // market-value pair, and BOTH halves of that pair are already rounded to the cent. The rate
+    // is therefore approximate, and the check has to carry that error rather than assume it away:
+    // it multiplies every SGD the revaluation moves. Recovering the rate from the breakeven
+    // instead would divide by the figure under test and blunt the gate, so it is the TOLERANCE
+    // that accounts for it, as an explicit sum of the three roundings that are really there:
+    //
+    //   the components' own cent-rounding, which the Net is a sum of ..... 0.02
+    //   the price's 4dp quote, over the units it multiplies .............. 5e-5 x units x rate
+    //   the recovered rate's error, over the SGD the move covers ......... |be - price| x units x e
+    //
+    // They ADD because the errors do. `e` bounds |mv_sgd/mv_native - rate| at half a cent on each
+    // half of the pair. On F34 (SGD) the middle term dominates; on a foreign name the last one
+    // does — PLTR's recovered 1.26710518 against a true 1.2671 moves 0.29 SGD over 5 units, which
+    // is why a tolerance covering only the 4dp quote would fail a payload with nothing wrong.
     const s = body.summary;
     const rate = s.mv_native ? s.mv_sgd / s.mv_native : 1;
+    const e = s.mv_native ? 0.005 * (1 + rate) / Math.abs(s.mv_native) : 0;
     const cols = [...body.buckets, s].filter(
       (b) => holds(b) && b.breakeven_price != null && b.net_pl_sgd != null);
     expect(cols.length, "no column with a breakeven to check").toBeGreaterThan(0);
     for (const b of cols) {
       const moved = (b.breakeven_price - s.price) * b.units * rate;
+      const tol = 0.02 + 5e-5 * b.units * rate
+        + Math.abs(b.breakeven_price - s.price) * b.units * e;
       expect(Math.abs(b.net_pl_sgd + moved), `${ticker}: breakeven did not zero the Net`)
-        .toBeLessThanOrEqual(Math.max(0.02, 5e-5 * b.units * rate));
+        .toBeLessThanOrEqual(tol);
     }
   });
 }
@@ -321,17 +338,20 @@ for (const { ticker, body } of SINGLE) {
 // give the rule a second place to drift. The presence-iff-units half is likewise already stated
 // per layout by the two loops above.
 
-// THE BOUND ON THE REAL BOUNDED NAMES, AS THEY SHIP. 9CI and C38U are the book's two bounded
-// names and both are single-bucket, so this is the layout the glyph actually reaches on live
-// data — and their captures now carry the same `provenance` object `positions-closed.json` does,
-// so nothing here is written. The direction is not restated: it is read off the payload's own
-// `bound`, which makes the gate the INVERSION and not a memorised pair.
+// THE BOUND ON THE REAL BOUNDED NAMES, NOT A WRITTEN ONE. 9CI and C38U are the book's two
+// bounded names and both are single-bucket, so this is the layout the glyph actually reaches on
+// live data. Their holding captures predate `summary.provenance` and ship `bounded` with none, so
+// the object is borrowed at READ time off `positions-closed.json`, which carries both names' real
+// wire objects (`capturedProvenance` — the mechanism `unknown-book.spec.js` uses for the hero's
+// own bound, and the reason neither file hand-edits a capture). EVERYTHING ELSE IS THE CAPTURE:
+// the real verdict, the real units, the real price. The direction is not restated here — it is
+// read off the payload's own `bound`, so the gate is the INVERSION and not a memorised pair.
 for (const ticker of ["9CI", "C38U"]) {
   test(`${ticker}: its real carry bounds the price the other way`, async ({ page, baseURL }) => {
     const { body } = HOLDINGS.find((h) => h.ticker === ticker);
-    const pv = body.summary.provenance;
-    expect(pv?.bound, `${ticker} no longer carries a split direction`).toBeTruthy();
-    await openTicker(page, baseURL, ticker);
+    const served = withProvenance(body, capturedProvenance(ticker));
+    expect(served.summary.provenance.bound, `${ticker} carries no split direction`).toBeTruthy();
+    await serve(page, baseURL, ticker, served);
     const lines = page.getByTestId("ledger-breakeven");
     const n = await lines.count();
     // one line per column that still holds something — and a single-bucket page has no column
@@ -343,12 +363,12 @@ for (const ticker of ["9CI", "C38U"]) {
     for (let i = 0; i < n; i++) {
       // no figure means no direction to put on one — the words stay bare
       await expect(lines.nth(i)).toContainText(
-        body.summary.breakeven_price == null
-          ? `be ${NOT_KNOWN_TEXT}` : `be ${priceBound(body.summary)}`.trimEnd());
+        served.summary.breakeven_price == null
+          ? `be ${NOT_KNOWN_TEXT}` : `be ${priceBound(served.summary)}`.trimEnd());
     }
     // and the hero takes the opposite one, off the same object
     await expect(page.getByTestId("hero-bound"))
-      .toHaveText(pv.bound === "lower" ? "\u2265" : "\u2264");
+      .toHaveText(served.summary.provenance.bound === "lower" ? "\u2265" : "\u2264");
   });
 }
 
