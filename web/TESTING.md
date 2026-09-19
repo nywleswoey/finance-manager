@@ -237,19 +237,33 @@ does not exist on touch, so a gate on the five that existed would not stop a six
 reach: `MatchTable` renders only after a POST the GET-captured fixtures do not carry, and that gap is
 annotated on every run.
 
-`tests/ticker.spec.js` — Holdings' **Group by: Ticker** fold, and the one spec here whose subject is
-arithmetic rather than layout. A consolidated row folds several positions of one security into one
-row, so it is either the right number or a wrong number rendered beautifully at ten viewports —
-which is why it has a **project of its own at one viewport**, on the same reasoning the inventory
-project runs once. Every expectation is **derived from the fixture**, never written as a literal, so
-recapturing the fixtures cannot quietly turn the gate into a tautology; it also asserts the fixtures
-still *carry* a split and a mixed open/closed split, because both gates are vacuous without one. The
-defect it was written for is the one the responsive suite could never see: the P/L column resolves
-per row — realised when closed, unrealised when open — so folding the raw fields read
-`unrealised_pl_sgd` for a ticker open in one bucket and closed in another and silently dropped the
-closed leg's realised result. What it deliberately does not check is anything responsive; the pin,
-the column count and the row shape stay `pinned.spec.js`'s, because consolidated rows are ordinary
-data rows and inherit those gates already.
+`tests/ticker.spec.js` — Holdings' **Group by: Ticker** fold and its **Net** column, and the one
+spec here whose subject is arithmetic rather than layout. A consolidated row folds several positions
+of one security into one row, so it is either the right number or a wrong number rendered beautifully
+at ten viewports — which is why it has a **project of its own at one viewport**, on the same
+reasoning the inventory project runs once. Every expectation is **derived from the fixture**, never
+written as a literal, so recapturing the fixtures cannot quietly turn the gate into a tautology; it
+also asserts the fixtures still *carry* a split and a mixed open/closed split, because both gates are
+vacuous without one. The defect it was written for is the one the responsive suite could never see:
+the P/L column resolves per row — realised when closed, unrealised when open — so folding the raw
+fields read `unrealised_pl_sgd` for a ticker open in one bucket and closed in another and silently
+dropped the closed leg's realised result.
+
+Since #155 it also carries the Net column's own rules, because they are the same kind of claim.
+Holdings reads the server's `net_pl_sgd` rather than rebuilding Net from components, so the gates
+are: the request is `?closed=true` **unconditionally**; the ticker fold covers every leg whether
+closed rows are listed or not, so ticking the box moves no number on any row; the rendered Net equals
+the matching `holding-*.json`'s `summary.net_pl_sgd` — the **cross-page** claim, on the multi-bucket
+ticker, since a single-bucket one makes it a sum over one element; and the three glyphs (`~` for an
+upper bound whose cause is per-unit, `≥`/`≤` for a split carry's floor or ceiling) each render with
+their own explanation, with `n/a` where the book records no cost at all. One of those is a file check
+rather than a render one, and says so: the retired client-side rule differs from the server's field
+by a **cent**, which no whole-dollar column can show.
+
+What it deliberately does not check is anything responsive; the pin, the column count and the row
+shape stay `pinned.spec.js`'s, because consolidated rows are ordinary data rows and inherit those
+gates already. Nor does it gate the detail page's own render — the hero, the reconciliation block,
+the tiles and the refusal layout belong to the tickets that build them.
 
 `tests/security-detail-options.spec.js` — **SecurityDetail's Options P/L**, the same kind of
 subject as `ticker.spec.js` and there for the same reason: a folded total is the same number at
@@ -264,18 +278,22 @@ rows' own `gross_sgd` sum, because `summary.income_sgd` adds native amounts acro
 currencies. Every expectation is derived from the fixture, including the guard that the fixture
 still carries enough expired-worthless legs to tell the two folds apart.
 
-`tests/composition.spec.js` — the four states of the **net-worth composition chart** the committed
+`tests/composition.spec.js` — the states of the **net-worth composition chart** the committed
 fixture cannot reach, and the third spec here whose subject is not layout. An empty state is copy, a
 tick crossover is a count, and whether a negative band lands above or below the zero line is
 arithmetic; none of the three is a claim about width, so it runs at **one viewport in a project of
-its own**. Two of them the live database can never hold again — this installation has five snapshots
-and has permanently left the zero- and one-snapshot states — and a fixture cannot carry both sides of
-a crossover, so this is the one file whose seam moves up a layer: it answers
-`/api/networth/composition` itself and derives every expectation from what it served. It gates the
+its own**. Two of them the live database can never hold again — it has permanently left the zero- and
+one-snapshot states — and a fixture cannot carry both sides of a crossover, so this is the one file
+whose seam moves up a layer: it answers `/api/networth/composition` itself and derives every
+expectation from what it served. **Both sides of the crossover are served here now.** It was five
+snapshots against a ceiling of six, so the capture held the sparse side; the ceiling is five since
+#155 and the history is six, so the capture holds the dense side and the sparse one has no fixture —
+the flip this file always said was coming. It gates the
 two empty strings (both **name** the New Snapshot card rather than pointing at it — the grid is one
-column on a phone, where "beside" is false, and two above it, where "below" is), the dense tick
-branch (month starts, `MMM`, the year on January — and the count is really asserting `interval={0}`,
-without which recharts silently thins an explicit `ticks` array), and **sign-aware stacking**: a
+column on a phone, where "beside" is false, and two above it, where "below" is), both tick branches
+(every snapshot date as `MMM D` under the crossover, month starts as `MMM` with the year on January
+above it — and the count is really asserting `interval={0}`, without which recharts silently thins an
+explicit `ticks` array), and **sign-aware stacking**: a
 negative band must hang below the zero line rather than be subtracted from the running total, which
 is the assertion that separates the two stack offsets and matters because a negative value already
 exists on an asset row on the first point the live chart draws.
@@ -311,16 +329,21 @@ intercepted in the browser: real Chromium, real layout, real media queries above
 fixtures below it. No test touches Postgres or the network, and the auth gate is satisfied by
 a mocked session endpoint, so Google's identity script never loads.
 
-Fixtures are not hand-written and should not be hand-edited. They carry five deliberately
+Fixtures are not hand-written and should not be hand-edited. They carry seven deliberately
 pathological rows — a 30-character subcategory name, a security with 73 option trades, a
-65-character merchant string, the null-category row, and the two-orders-of-magnitude spread
-across the four spend series inside the trend's window — each with a comment saying why.
-Plausible-looking data is what produced the 415px-vs-519px error that made fixtures
-necessary in the first place. The last of the five is the only one that is a claim about **two**
-payloads at once, since the spread only exists inside the window a second endpoint defines, and
-it is the one that keeps a gate from going vacuous rather than a measurement from being wrong:
-a window whose four series happened to agree in magnitude would pass "no series is flattened
-onto the floor" under a shared axis too.
+65-character merchant string, the null-category row, the two-orders-of-magnitude spread across the
+four spend series inside the trend's window, the refusal (the one name whose entering units have no
+recorded cost), and a ticker held open in one funding bucket and closed in another — each with a
+comment saying why. Plausible-looking data is what produced the 415px-vs-519px error that made
+fixtures necessary in the first place.
+
+Two of the seven are a claim about **two** payloads at once. The spend-trend spread only exists
+inside the window a second endpoint defines, and it is the one that keeps a gate from going vacuous
+rather than a measurement from being wrong: a window whose four series happened to agree in
+magnitude would pass "no series is flattened onto the floor" under a shared axis too. The refusal
+is a pair because its page is only reachable through its Holdings row — `SecurityDetail` is
+component state with one caller — so a payload with no row in front of it is a fixture no test can
+render, and a row with no payload behind it is a click that 404s.
 
 ## Where the reasoning lives
 

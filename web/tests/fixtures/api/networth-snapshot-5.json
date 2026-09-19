@@ -1,14 +1,14 @@
 {
- "id": 6,
- "date": "2026-08-31",
- "note": "statements: tiger tiger_prime_2026.csv + dbs dbs_202608.pdf (as at 31 Aug 2026)",
- "portfolio_value_sgd": 1276109.99,
- "total_assets": 2215001.08,
+ "id": 5,
+ "date": "2026-08-05",
+ "note": null,
+ "portfolio_value_sgd": 1137390.04,
+ "total_assets": 2171329.99,
  "total_liabilities": 285822.89,
- "liquid_assets": 86441.73,
- "net_worth": 1929178.19,
- "net_worth_excl_housing": 1821001.08,
- "net_worth_excl_housing_cpf": 1369273.32,
+ "liquid_assets": 184016.81,
+ "net_worth": 1885507.1,
+ "net_worth_excl_housing": 1777329.99,
+ "net_worth_excl_housing_cpf": 1325602.23,
  "values": [
   {
    "item_id": 1,
@@ -26,10 +26,10 @@
    "code": "dbs_multiplier",
    "label": "DBS Multiplier",
    "kind": "asset",
-   "native_value": 25992.27,
+   "native_value": 22045.8,
    "currency": "SGD",
    "rate_to_sgd": 1.0,
-   "value_sgd": 25992.27,
+   "value_sgd": 22045.8,
    "is_manual": false
   },
   {
@@ -37,10 +37,10 @@
    "code": "srs",
    "label": "SRS Account",
    "kind": "asset",
-   "native_value": 6721.6,
+   "native_value": 4195.38,
    "currency": "SGD",
    "rate_to_sgd": 1.0,
-   "value_sgd": 6721.6,
+   "value_sgd": 4195.38,
    "is_manual": false
   },
   {
@@ -48,10 +48,10 @@
    "code": "tiger_hkd",
    "label": "Tiger HKD Cash",
    "kind": "asset",
-   "native_value": 0.0,
+   "native_value": 22936.09,
    "currency": "HKD",
    "rate_to_sgd": 0.1633,
-   "value_sgd": 0.0,
+   "value_sgd": 3745.46,
    "is_manual": false
   },
   {
@@ -59,10 +59,10 @@
    "code": "tiger_sgd",
    "label": "Tiger SGD Cash",
    "kind": "asset",
-   "native_value": 10000.0,
+   "native_value": 0.0,
    "currency": "SGD",
    "rate_to_sgd": 1.0,
-   "value_sgd": 10000.0,
+   "value_sgd": 0.0,
    "is_manual": false
   },
   {
@@ -70,10 +70,10 @@
    "code": "tiger_usd",
    "label": "Tiger USD Cash",
    "kind": "asset",
-   "native_value": -39367.02,
+   "native_value": 4467.25,
    "currency": "USD",
    "rate_to_sgd": 1.281,
-   "value_sgd": -50429.15,
+   "value_sgd": 5722.55,
    "is_manual": false
   },
   {
@@ -81,10 +81,10 @@
    "code": "tiger_vault",
    "label": "Tiger Vault",
    "kind": "asset",
-   "native_value": 78344.62,
-   "currency": "USD",
-   "rate_to_sgd": 1.281,
-   "value_sgd": 100359.46,
+   "native_value": 151983.85,
+   "currency": "SGD",
+   "rate_to_sgd": 1.0,
+   "value_sgd": 151983.85,
    "is_manual": false
   },
   {

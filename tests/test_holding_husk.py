@@ -101,21 +101,50 @@ def test_the_successor_is_served(client):
         client.get("/api/holding", params={"ticker": "9CI"})
 
 
-def test_an_unlisted_leg_that_is_no_husk_is_also_404(client):
-    """ASTREA6B fails Holdings' listing rule exactly as a husk does, and is no husk. Since #153
-    the endpoint's 404 is `is_leg` itself, so it 404s too — the husk gate is not a special case."""
+def test_a_refusal_is_a_leg_even_with_nothing_left_in_it(client):
+    """The refusal is not a husk and is not noise, and `is_leg` used to call it both.
+
+    ASTREA6B's 15,000 units entered and left. `invested_native` is `0.0` not because no money
+    went in but because **the amount is unknown** — that is the refusal — and reading that zero
+    as "never really held" is the one place where unknown and zero must not be the same thing.
+    The consequence was a name the book cannot price being unreachable at every entry point: no
+    Holdings row, and `/api/holding` answering 404 because its 404 rule is this function.
+
+    So `is_leg` asks a fourth question — did any unit enter with no recorded cost — and the husk
+    ruling (§13) survives untouched: a husk's partition is entirely `costed`, so nothing about
+    it changes. The test below pins both halves at once."""
     astrea = next(r for r in _rows() if r["ticker"] == "ASTREA6B")
-    assert not perf.is_leg(astrea)
+    assert (astrea["net_verdict"], astrea["units"], astrea["invested_native"]) == \
+        ("refuse", 0.0, 0.0)
+    assert astrea["cost_partition"]["unknown"] == 15000.0
+    assert perf.is_leg(astrea)
     assert not perf.is_emptied_predecessor(astrea, _rows())
-    assert client.get("/api/holding", params={"ticker": "ASTREA6B"}).status_code == 404
+    # past the 404 gate: the tripwire firing IS the pass, the same way the successor's is
+    with pytest.raises(_Reached):
+        client.get("/api/holding", params={"ticker": "ASTREA6B"})
 
 
 def test_holding_and_positions_agree_on_what_a_leg_is(client, monkeypatch):
-    """One listing rule, two endpoints: the husk Holdings never lists is the husk this 404s."""
+    """One listing rule, two endpoints: the husk Holdings never lists is the husk this 404s, and
+    the refusal Holdings now lists is the refusal it now serves. Both directions, because a rule
+    written twice is how the two endpoints came apart in the first place."""
     monkeypatch.setattr(main, "session_scope", lambda *a, **k: _none())
     monkeypatch.setattr(main, "valuation_as_of", lambda s: None)
     listed = {r["ticker"] for r in client.get("/api/positions?closed=true").json()["positions"]}
-    assert listed == {"9CI"}
+    assert listed == {"9CI", "ASTREA6B"}
+
+
+def test_the_refusal_lists_with_no_net_rather_than_a_zero(client, monkeypatch):
+    """What Holdings receives for it: a row, and no Net on it. A `0.0` here would be a name the
+    book cannot price reporting that it broke even."""
+    monkeypatch.setattr(main, "session_scope", lambda *a, **k: _none())
+    monkeypatch.setattr(main, "valuation_as_of", lambda s: None)
+    rows = client.get("/api/positions?closed=true").json()["positions"]
+
+    astrea = next(r for r in rows if r["ticker"] == "ASTREA6B")
+    assert astrea["status"] == "closed"
+    assert astrea["net_pl_sgd"] is None
+    assert astrea["net_verdict"] == "refuse"
 
 
 @contextmanager

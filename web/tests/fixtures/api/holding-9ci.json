@@ -1,0 +1,146 @@
+{
+ "as_of": "2026-09-13",
+ "fx_as_of": "2026-09-13",
+ "summary": {
+  "ticker": "9CI",
+  "name": "CapitaLandInvest",
+  "market": "SG",
+  "asset_type": "reit",
+  "currency": "SGD",
+  "accounts": [
+   "Moomoo"
+  ],
+  "units": 2700.0,
+  "price": 2.6,
+  "avg_cost": 3.73,
+  "cost_basis_native": 10071.0,
+  "cost_basis_sgd": 10071.0,
+  "mv_native": 7020.0,
+  "mv_sgd": 7020.0,
+  "realised_pl_sgd": 0.0,
+  "unrealised_pl_sgd": -3051.0,
+  "stock_pl_sgd": -3051.0,
+  "income_sgd": 4187.7,
+  "options_pl_sgd": null,
+  "net_pl_sgd": 1136.7,
+  "net_verdict": "bounded",
+  "return_pct": 0.1129,
+  "return_verdict": "ok",
+  "peak_car_sgd": 10071.0,
+  "return_span_days": 1970,
+  "cost_partition": {
+   "units_in": 2700.0,
+   "costed": 2700.0,
+   "free": 0,
+   "unknown": 0,
+   "unknown_pct": 0.0
+  },
+  "invested_sgd": 10071.0,
+  "invested_native": 10071.0,
+  "fees_sgd": 0.0,
+  "cost_known": true
+ },
+ "buckets": [
+  {
+   "bucket": "cash",
+   "status": "open",
+   "units": 2700.0,
+   "avg_cost": 3.73,
+   "realised_pl_sgd": 0.0,
+   "unrealised_pl_sgd": -3051.0,
+   "stock_pl_sgd": -3051.0,
+   "income_sgd": 4187.7,
+   "options_pl_sgd": null,
+   "net_pl_sgd": 1136.7
+  }
+ ],
+ "transactions": [
+  {
+   "trade_date": "2021-09-28",
+   "account": "Moomoo",
+   "bucket": "cash",
+   "action": "open/transfer_in",
+   "qty_signed": 2700.0,
+   "price": null,
+   "gross_amount": null,
+   "currency": "SGD",
+   "source_file": "moomoo (pdf snapshot-diff)",
+   "balance": 2700.0
+  }
+ ],
+ "dividends": [
+  {
+   "pay_date": "2021-05-18",
+   "account": "Moomoo",
+   "bucket": "cash",
+   "gross": 243.0,
+   "currency": "SGD",
+   "kind": "cash",
+   "units": 2700.0,
+   "amount_per_unit": 0.09,
+   "rate": 0.09,
+   "gross_sgd": 243.0
+  },
+  {
+   "pay_date": "2021-09-17",
+   "account": "Moomoo",
+   "bucket": "cash",
+   "gross": 2567.7,
+   "currency": "SGD",
+   "kind": "cash",
+   "units": 2700.0,
+   "amount_per_unit": 0.95,
+   "rate": 0.95,
+   "gross_sgd": 2567.7
+  },
+  {
+   "pay_date": "2022-05-20",
+   "account": "Moomoo",
+   "bucket": "cash",
+   "gross": 405.0,
+   "currency": "SGD",
+   "kind": "cash",
+   "units": 2700.0,
+   "amount_per_unit": 0.15,
+   "rate": 0.15,
+   "gross_sgd": 405.0
+  },
+  {
+   "pay_date": "2023-05-15",
+   "account": "Moomoo",
+   "bucket": "cash",
+   "gross": 324.0,
+   "currency": "SGD",
+   "kind": "cash",
+   "units": 2700.0,
+   "amount_per_unit": 0.12,
+   "rate": 0.12,
+   "gross_sgd": 324.0
+  },
+  {
+   "pay_date": "2024-05-15",
+   "account": "Moomoo",
+   "bucket": "cash",
+   "gross": 324.0,
+   "currency": "SGD",
+   "kind": "cash",
+   "units": 2700.0,
+   "amount_per_unit": 0.12,
+   "rate": 0.12,
+   "gross_sgd": 324.0
+  },
+  {
+   "pay_date": "2025-05-15",
+   "account": "Moomoo",
+   "bucket": "cash",
+   "gross": 324.0,
+   "currency": "SGD",
+   "kind": "cash",
+   "units": 2700.0,
+   "amount_per_unit": 0.12,
+   "rate": 0.12,
+   "gross_sgd": 324.0
+  }
+ ],
+ "options": []
+}

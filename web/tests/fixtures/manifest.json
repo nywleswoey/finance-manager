@@ -19,10 +19,6 @@
   "file": "options-trades.json",
   "status": 200
  },
- "/api/positions": {
-  "file": "positions.json",
-  "status": 200
- },
  "/api/positions?closed=true": {
   "file": "positions-closed.json",
   "status": 200
@@ -57,6 +53,34 @@
  },
  "/api/holding?ticker=PLTR": {
   "file": "holding-pltr.json",
+  "status": 200
+ },
+ "/api/holding?ticker=AAPL": {
+  "file": "holding-aapl.json",
+  "status": 200
+ },
+ "/api/holding?ticker=Q01": {
+  "file": "holding-q01.json",
+  "status": 200
+ },
+ "/api/holding?ticker=F34": {
+  "file": "holding-f34.json",
+  "status": 200
+ },
+ "/api/holding?ticker=TSLA": {
+  "file": "holding-tsla.json",
+  "status": 200
+ },
+ "/api/holding?ticker=9CI": {
+  "file": "holding-9ci.json",
+  "status": 200
+ },
+ "/api/holding?ticker=C38U": {
+  "file": "holding-c38u.json",
+  "status": 200
+ },
+ "/api/holding?ticker=ASTREA6B": {
+  "file": "holding-astrea6b.json",
   "status": 200
  },
  "/api/networth/items": {
@@ -121,6 +145,22 @@
  },
  "/api/spending/classify/categories": {
   "file": "classify-categories.json",
+  "status": 200
+ },
+ "/api/networth/snapshots/6": {
+  "file": "networth-snapshot-6.json",
+  "status": 200
+ },
+ "/api/networth/snapshots/5": {
+  "file": "networth-snapshot-5.json",
+  "status": 200
+ },
+ "/api/networth/snapshots/4": {
+  "file": "networth-snapshot-4.json",
+  "status": 200
+ },
+ "/api/networth/snapshots/3": {
+  "file": "networth-snapshot-3.json",
   "status": 200
  },
  "/api/networth/snapshots/2": {

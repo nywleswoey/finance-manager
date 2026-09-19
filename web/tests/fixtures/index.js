@@ -91,19 +91,20 @@ export function sharedAxisSpanPx(trends, window, plotPx = 140) {
 }
 
 /**
- * The five pathological rows the fixtures exist to carry, each with the reason it is
+ * The seven pathological rows the fixtures exist to carry, each with the reason it is
  * here. `inventory.spec.js` asserts every one of them, so these are load-bearing checks
  * rather than commentary: the moment a recapture drops one, the suite says so.
  *
  * Every one of these came out of planning, and each of them either broke a measurement
  * or would have. Fixtures that were merely *plausible* would not contain any of them.
  *
- * `scripts/capture_web_fixtures.py` asserts the same five at capture time, so a
- * recapture cannot quietly drop one. Move a threshold here and move it there.
+ * `scripts/capture_web_fixtures.py` asserts the same seven at capture time, so a
+ * recapture cannot quietly drop one. Move a threshold here and move it there, and ADD A
+ * ROW IN BOTH — the duplication is what gives these checks their teeth.
  *
- * `fixture` IS ONE FILE OR SEVERAL. Four of these are a claim about one payload; the
- * fifth is a claim about two together, because the spread that decides the spend trend's
- * whole form only exists inside the window a second endpoint defines.
+ * `fixture` IS ONE FILE OR SEVERAL. Six are a claim about one payload; the spend-trend spread is
+ * a claim about two together, because the spread that decides that chart's whole form only exists
+ * inside the window a second endpoint defines.
  */
 export const PATHOLOGICAL = [
   {
@@ -155,6 +156,38 @@ export const PATHOLOGICAL = [
       const { name, px } = sharedAxisSpanPx(trends, win);
       return { ok: px < 5,
                saw: `${name} would draw ${px.toFixed(1)}px of a 140px plot under a shared axis` };
+    },
+  },
+  // THE REFUSAL IS TWO ROWS, NOT ONE, and they are the pair this list grew by. ASTREA6B is the
+  // only name in the book whose entering units have no recorded cost, so the only page with no
+  // bottom line — and the page is reachable only through the Holdings row, because
+  // `SecurityDetail` is component state with one caller. Each half is useless without the other,
+  // which is exactly why they are separate rows: two rows name WHICH half went missing, where one
+  // row could only say the state is gone.
+  {
+    name: "the refusal's own payload — a Net that is absent, not zero",
+    // Without this, the only page that says "the book does not know" has no payload behind it,
+    // and every gate on the refusal layout renders a 404 instead.
+    fixture: "holding-astrea6b.json",
+    holds: (body) => {
+      const s = body.summary ?? {};
+      return { ok: s.net_verdict === "refuse" && s.net_pl_sgd == null,
+               saw: `summary says net_verdict=${JSON.stringify(s.net_verdict)}, `
+                  + `net_pl_sgd=${JSON.stringify(s.net_pl_sgd)}` };
+    },
+  },
+  {
+    name: "the Holdings row that reaches the refusal",
+    // Without this, the payload above is a fixture no test can open: there is no deep link to a
+    // detail page, so the only route to one is clicking a row in this list. A row that lost its
+    // refusal — or a recapture where `is_leg` stopped keeping it — would take the whole refusal
+    // render state with it, in silence.
+    fixture: "positions-closed.json",
+    holds: (body) => {
+      const rows = (body.positions ?? []).filter((r) => r.net_verdict === "refuse");
+      return { ok: rows.length > 0,
+               saw: `${rows.length} refusing row(s) of ${(body.positions ?? []).length}`
+                  + `${rows.length ? ": " + rows.map((r) => r.ticker).join(", ") : ""}` };
     },
   },
   {

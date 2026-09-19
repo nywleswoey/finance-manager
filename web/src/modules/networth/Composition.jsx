@@ -70,16 +70,36 @@ const EDGE_NAMES = ["excl. hsg+CPF cash", "excl. hsg", "net worth"];
  * drawn on every band edge. One number rather than two, because they are one question — "are
  * there few enough measurements to name each one?" — and two constants would drift.
  *
- * SIX, AT EVERY WIDTH, AND NEVER KEYED TO VIEWPORT WIDTH. The phone's 244px plot seats seven
- * `MMM D` labels cleanly and collides at eight; the desktop tier's own *narrowest* plot is
- * 266px, 22px away from the phone's. So a width-derived rule would buy nothing and would hand
- * the generous branch to the narrower plot — the plot width in this app's two-column grid is
- * non-monotonic in viewport width (726px at 1100, 335px at 1180, because the grid flips to
- * two columns between them). Six keeps a 3.6pp margin against collision where seven keeps
- * 0.3pp, and an irregular series already spends a full count: the live five-point history is
- * exactly as dense as six evenly spaced ones.
+ * FIVE, AT EVERY WIDTH, AND NEVER KEYED TO VIEWPORT WIDTH. A width-derived rule would buy
+ * nothing and would hand the generous branch to the narrower plot — the plot width in this
+ * app's two-column grid is non-monotonic in viewport width (726px at 1100, 335px at 1180,
+ * because the grid flips to two columns between them). So the ceiling is set by the narrowest
+ * plot the app ever draws and applies everywhere.
+ *
+ * SIX, AND WHY IT DID NOT HOLD. The original measurement was of *evenly spaced* labels — the
+ * phone's 244px plot seats seven cleanly and collides at eight — with the irregularity
+ * discounted as "the live five-point history is exactly as dense as six evenly spaced ones".
+ * That discount was the whole margin. The 2026-08-31 snapshot made the history six points
+ * whose first two are **nine days apart in a 71-day span**, and on a time axis nine of
+ * seventy-one is 12.7% of the plot: `Jun 21` and `Jun 30` are 34 and 36px wide and overlap by
+ * 9px on the 298px plot at 360, by 5px at 390 and by 2px at 844×390. Measured at five
+ * viewports; `charts.spec.js` is where it failed.
+ *
+ * STATED ASSUMPTION WITH A NAMED TRIGGER. Five is the count the *current* history is safe at,
+ * not a count that is safe in general — a collision is set by the smallest adjacent GAP, and a
+ * count can only stand in for it while the series is roughly regular. **Trigger: the next
+ * series whose two closest dates are under ~13% of its span apart will collide at five too,**
+ * and the durable rule at that point is a minimum-gap test against the narrowest plot rather
+ * than a third value of this constant. It is not taken here because it needs a label-width
+ * number this module has no measurement for, and the month-start branch below is already the
+ * right answer for a history this dense.
+ *
+ * THREE SITES CROSS-REFERENCE THIS NUMBER and none of them can share it, because a spec file
+ * cannot import a module that imports React: `charts.spec.js` (twice — the tick branch and the
+ * dots), `composition.spec.js` (it serves a payload on each side of the crossover) and
+ * `web/TESTING.md`. Move it here and move it there.
  */
-const SPARSE_AT_MOST = 6;
+const SPARSE_AT_MOST = 5;
 
 /**
  * The colour a fabricated point is marked in — `--neg`, the app's one "this is wrong" red.
@@ -127,7 +147,7 @@ function monthStarts(first, last) {
 /**
  * The x ticks and how they read, by the one crossover above.
  *
- * `n <= 6` → every snapshot date, so each tick names a measurement that exists. Above it →
+ * `n <= 5` → every snapshot date, so each tick names a measurement that exists. Above it →
  * month starts, which are regular where the snapshots are not; the year rides on January
  * because that is the only tick where "Jan" alone is ambiguous.
  */

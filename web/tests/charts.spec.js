@@ -392,6 +392,11 @@ test.describe("Portfolio › Options", () => {
           axisTop: el.querySelector(".recharts-xAxis .recharts-cartesian-axis-line")
             .getBoundingClientRect().top,
           lowestBar: Math.max(...rects.map((r) => r.getBoundingClientRect().bottom)),
+          // The y tick nearest the axis sits at the DOMAIN MINIMUM, which is where the scale's
+          // range bottom lands — so this is the band itself, see below.
+          rangeBottom: Math.max(...[...el.querySelectorAll(
+            ".recharts-yAxis .recharts-cartesian-axis-tick line")]
+            .map((n) => n.getBoundingClientRect().top)),
         };
       });
 
@@ -412,16 +417,32 @@ test.describe("Portfolio › Options", () => {
       // the negative months would otherwise agree with itself perfectly.
       const window = readFixture("options.json").by_month
         .map((r) => Math.round(r.pl_sgd)).slice(phone ? -6 : -24);
-      const reserve = Math.round(geom.axisTop - geom.lowestBar);
+      // MEASURED FROM THE RANGE BOTTOM, NOT FROM THE LOWEST BAR, and the difference is the
+      // whole correctness of this gate. `<YAxis padding>` shrinks the scale's RANGE, so the
+      // band is the gap between the axis line and where the domain minimum maps — which is the
+      // lowest y tick. The gap to the lowest *bar* is that band PLUS however much headroom the
+      // niced domain leaves below the data minimum, and that second term is a property of the
+      // data: it was 0px while the fixture's most negative month happened to sit on a tick and
+      // 2.7px after a recapture moved it, which failed a gate pinned to ±1 for a reason that
+      // had nothing to do with the band. The app was right both times.
+      const reserve = Math.round(geom.axisTop - geom.rangeBottom);
       if (window.some((v) => v < 0)) {
         // 18px in `Options.jsx`'s `NEG_LABEL_BAND` — an 11px label plus its 5px offset. Not a
         // shared constant: a spec file cannot import a module that imports React, so the two
-        // sides cross-reference in comments the way `640`'s four sites do. Measured as 19,
-        // and the extra pixel is the axis line's own stroke, which the bar's box does not
-        // have. Pinned to ±1 rather than to a floor, so a band that *grew* by accident is a
-        // failure too — a floor would let the two numbers drift apart in one direction.
+        // sides cross-reference in comments the way `640`'s four sites do. Pinned to ±1 rather
+        // than to a floor, so a band that *grew* by accident is a failure too — a floor would
+        // let the two numbers drift apart in one direction.
         expect.soft(Math.abs(reserve - 18),
           `the band is ${reserve}px — Options.jsx's NEG_LABEL_BAND says 18`).toBeLessThanOrEqual(1);
+        // …and it is doing its job: the lowest bar stands clear of the axis by at least the
+        // band, whatever the scale leaves below it. A FLOOR, because the extra above the band is
+        // the data's business — and 17 rather than 18 for the reason the old two-sided pin
+        // recorded: `axisTop` is the top of the axis line's own 1px stroke box, which the bar's
+        // box does not have, so the two boxes can read a pixel apart in either direction. The
+        // band itself is pinned exactly, one assertion up; this one only forbids a bar growing
+        // down into the strip reserved for its label.
+        expect.soft(Math.round(geom.axisTop - geom.lowestBar),
+          "the lowest bar reaches into the band reserved for its label").toBeGreaterThanOrEqual(17);
       } else {
         expect.soft(reserve, "a band with no negative bar to serve leaves the bars floating")
           .toBeLessThanOrEqual(1);
@@ -486,13 +507,18 @@ test.describe("Net Worth › composition", () => {
       }
     });
 
-  test("draws a true time axis, ticked and formatted", async ({ page, baseURL }) => {
+  test("draws a true time axis, ticked and formatted", async ({ page, baseURL }, testInfo) => {
     await openView(page, baseURL, "Net Worth");
     const { series } = comp();
 
-    // AT n <= 6 EVERY SNAPSHOT DATE IS A TICK, `MMM D`, en-US — `en-GB` renders "21 Jun". The
+    // AT n <= 5 EVERY SNAPSHOT DATE IS A TICK, `MMM D`, en-US — `en-GB` renders "21 Jun". The
     // expected strings come from the payload's own dates rather than from a literal, so a
-    // recapture that adds a sixth snapshot keeps this honest instead of stale.
+    // recapture that adds a snapshot keeps this honest instead of stale.
+    //
+    // 5 IS `Composition.jsx`'s `SPARSE_AT_MOST`, written out here because no build step in this
+    // repo can share a constant with a spec. It was 6 until the 2026-08-31 snapshot made the
+    // live history six points whose first two are nine days apart in a 71-day span — and this
+    // gate is what caught the overlap. That module's docstring carries the measurement.
     //
     // THE SELECTOR IS NOT AN AXIS DESCENDANT, AND THAT IS THE POINT. recharts 3.x renders tick
     // labels in their own z-index layer outside the axis subtree, so the obvious
@@ -500,13 +526,22 @@ test.describe("Net Worth › composition", () => {
     // that way passes by finding zero ticks.
     const ticks = page.locator(".main .recharts-xAxis-tick-labels .recharts-cartesian-axis-tick-value");
     const fmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
-    if (series.length <= 6) {
+    if (series.length <= 5) {
       await expect.soft(ticks, "at or under the crossover every snapshot date is ticked")
         .toHaveText(series.map((r) => fmt.format(Date.parse(r.date + "T00:00:00Z"))));
     } else {
-      // The other branch is month starts, `MMM`, with the year on January. No fixture reaches
-      // it yet — five snapshots — so it is annotated rather than asserted blind.
+      // Month starts, `MMM`, with the year on January. THIS IS NOW THE BRANCH THE CAPTURE
+      // REACHES, and the sparse one above is the half no fixture can carry — a fixture cannot
+      // carry both sides of a crossover, which is exactly the trade `composition.spec.js`'s
+      // docstring names. Its exact strings are gated there, over a served payload.
       await expect.soft(ticks.first()).toHaveText(/^[A-Z][a-z]{2}( \d{4})?$/);
+      testInfo.annotations.push({
+        type: "not-covered-by-fixtures",
+        description:
+          `the live history is ${series.length} snapshots, past the crossover, so the captured ` +
+          "payload exercises the month-start branch; the every-date branch is gated in " +
+          "composition.spec.js over a served five-point payload",
+      });
     }
 
     // NO TICK MAY COLLIDE WITH ITS NEIGHBOUR, at any viewport this app supports — which is the
@@ -552,7 +587,7 @@ test.describe("Net Worth › composition", () => {
       // layer that carries the class. The count is exact anyway — the fill stack draws none.
       const dots = await page.locator(".main .recharts-area-dots .recharts-area-dot").count();
       expect.soft(dots, "a dot on every band edge while the series is sparse")
-        .toBe(series.length <= 6 ? bands.length * series.length : 0);
+        .toBe(series.length <= 5 ? bands.length * series.length : 0);
 
       const boxes = await page.locator(".main .recharts-responsive-container").evaluateAll(
         (els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));

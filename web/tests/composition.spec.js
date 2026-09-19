@@ -9,12 +9,15 @@
  * own, on the reasoning `catalogue.spec.js`, `ticker.spec.js` and the inventory project are
  * all built on: running a gate ten times only makes ten identical failures out of one.
  *
- * WHY THE PAYLOADS ARE SERVED RATHER THAN CAPTURED. The four states below are the ones the
- * live database does not hold and — for two of them — never will again: this installation has
- * five snapshots and has permanently left the zero- and one-snapshot states, and the day it
- * has more than six the sparse branch stops being reachable instead. A fixture cannot carry
- * both sides of a crossover. So the seam moves up one layer for this file only: the route is
- * answered here, and every expectation is still derived from the payload that was served.
+ * WHY THE PAYLOADS ARE SERVED RATHER THAN CAPTURED. The states below are the ones the live
+ * database does not hold and — for two of them — never will again: this installation has left
+ * the zero- and one-snapshot states permanently. **And the crossover has now flipped, exactly
+ * as this file predicted it would**: the history is six snapshots against a ceiling of five, so
+ * the CAPTURE exercises the month-start branch and the every-date branch is the one with no
+ * fixture. A fixture cannot carry both sides of a crossover, so both sides are served here and
+ * `charts.spec.js` gates whichever one the capture happens to reach. So the seam moves up one
+ * layer for this file only: the route is answered here, and every expectation is still derived
+ * from the payload that was served.
  *
  * THE BANDS ARE THE COMMITTED FIXTURE'S. Nothing below names a band, and the band count is
  * never written as a number — `bands` is the wire's literal bottom→top stacking order and it
@@ -111,12 +114,43 @@ test.describe("the empty states, threshold two", () => {
   });
 });
 
+test("at or under the crossover every snapshot date is a tick, and every edge is dotted",
+  async ({ page, baseURL }) => {
+    // THE HALF THE CAPTURE NO LONGER REACHES. The crossover is five and the live history is six,
+    // so this is now the side of the tick rule with no fixture behind it — the mirror of the
+    // note the test below used to carry.
+    //
+    // THE DATES ARE THE LIVE HISTORY'S OWN — the five the previous capture held, which is the
+    // densest real series the sparse branch has ever had to draw, and an invented regular series
+    // would be an easier case than any book has produced.
+    //
+    // IT IS NOT AS TIGHT AS TODAY'S HISTORY, AND IT CANNOT BE. `Composition.jsx` measures
+    // tightness as smallest-gap ÷ span: these five are 9 days apart over 45, which is 20%, while
+    // the six-point history that broke the old ceiling is 9 over 71, 12.7%. Anything at 12.7%
+    // collides at five points too — that is precisely the trigger recorded on `SPARSE_AT_MOST`,
+    // and a payload chosen to exercise it would be asserting the collision rather than the
+    // branch. So this gate covers the sparse branch at the densest spacing it is claimed to
+    // survive, and the trigger covers what happens past it.
+    const dates = ["2026-06-21", "2026-06-30", "2026-07-10", "2026-07-25", "2026-08-05"];
+    await openWith(page, baseURL, { bands: BANDS, series: dates.map((d) => point(d)), dropped: [] });
+
+    const fmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+    const ticks = page.locator(".main .recharts-xAxis-tick-labels .recharts-cartesian-axis-tick-value");
+    await expect(ticks).toHaveText(dates.map((d) => fmt.format(Date.parse(d + "T00:00:00Z"))));
+
+    // One number drives both halves of the crossover, so the dots are asserted beside the
+    // ticks: under it, every band edge is marked at every measurement.
+    await expect(page.locator(".main .recharts-area-dots .recharts-area-dot"))
+      .toHaveCount(BANDS.length * dates.length);
+  });
+
+
 test("above the crossover the axis ticks month starts, with the year on January",
   async ({ page, baseURL }) => {
-    // THE BRANCH NO CAPTURE CAN REACH FROM THE OTHER SIDE. The crossover is six and the live
-    // history is five, so this is the half of the tick rule that has no fixture — and the day
-    // it does, the sparse half is the one that has none. Eight monthly points across a new year,
-    // so both the `MMM` case and the January `MMM YYYY` case are on screen at once.
+    // Eight monthly points across a new year, so both the `MMM` case and the January
+    // `MMM YYYY` case are on screen at once. Served rather than captured for the same reason
+    // as the sparse case above — one fixture cannot be on both sides of a crossover — even
+    // though the live history now happens to land on this side of it.
     const series = ["2026-09-01", "2026-10-01", "2026-11-01", "2026-12-01",
                     "2027-01-01", "2027-02-01", "2027-03-01", "2027-04-01"].map((d) => point(d));
     await openWith(page, baseURL, { bands: BANDS, series, dropped: [] });

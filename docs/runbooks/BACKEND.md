@@ -312,11 +312,19 @@ no longer silently missing from the page.
   ÷ Σ units` (D05 → the exact weighted average); a single leg passes its own through, which is also
   the only answer a closed one has. Several legs holding zero units between them ship null — zero
   instances today.
-- **Legs.** Kept if `units > 1e-6 or invested_native or income_native` (`performance.is_leg`,
-  `/api/positions`' drop rule). **No leg kept → 404**, which is also the emptied predecessor's
-  (C31, 0P00006FYT) answer: a sum over nothing would ship `net_pl_sgd: 0, net_verdict: "hero"`.
-  `/api/positions?closed=true` drops by the same `is_leg`, so a 404 is never a ticker Holdings lists.
-  0P00006FYT, emptied since its switch carry fires (#164), 404s the same way.
+- **Legs.** Kept if `units > 1e-6 or invested_native or income_native or cost_partition.unknown > 1e-6`
+  (`performance.is_leg`, `/api/positions`' drop rule). **No leg kept → 404**, which is also the
+  emptied predecessor's (C31, 0P00006FYT) answer: a sum over nothing would ship
+  `net_pl_sgd: 0, net_verdict: "hero"`. `/api/positions?closed=true` drops by the same `is_leg`, so a
+  404 is never a ticker Holdings lists. 0P00006FYT, emptied since its switch carry fires (#164), 404s
+  the same way.
+  **The fourth clause is the refusal (#155).** `invested_native: 0.0` means two different things —
+  no money went in, or the amount is not recorded — and the first three clauses read the second as
+  the first. ASTREA6B's 15,000 units entered and left at an unrecorded cost, so it failed every
+  entry point at once: no Holdings row, and a 404 from `/api/holding`. Unknown and zero must not be
+  the same thing in the rule that decides whether the reader sees the row. A husk's partition is
+  entirely `costed`, so §13's ruling is untouched; measured on the live book, the clause adds
+  exactly one row.
 - **Tables.** Transactions and dividends carry `bucket` on every row, single-bucket names included;
   CDP rows from `cdp_cost_lot` take theirs from the account table by name. The running balance runs
   across buckets. `options` is fetched unconditionally, carries **no** bucket, and each trade ships
@@ -391,8 +399,10 @@ field on any row moved.
 
 **The emptied predecessor (#143 §13).** A husk fails `is_leg` — `/api/positions`' listing rule —
 so Holdings never lists one, and `/api/holding` answers **404** by the same rule (`fold_ticker`
-keeps no leg) rather than a summary that would read `hero` with a Net of zero. ASTREA6B fails it
-too and also 404s (#153). `is_emptied_predecessor` names the husks among those misses
+keeps no leg) rather than a summary that would read `hero` with a Net of zero. ASTREA6B used to
+fail it too (#153) and no longer does (#155): it is a refusal, not a husk, and the rule now asks
+about unknown entering units as well — so it lists with `net_pl_sgd: null` and its page is served.
+`is_emptied_predecessor` names the husks among the remaining misses
 (`tests/test_holding_husk.py`, `tests/test_performance_live.py`). No verdict value, no successor
 link. **Trigger:** if the detail page gains a URL, a bookmark or a search box, a husk becomes
 reachable and a redirect to the successor is the obvious answer.

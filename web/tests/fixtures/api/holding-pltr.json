@@ -1,44 +1,68 @@
 {
+ "as_of": "2026-09-13",
+ "fx_as_of": "2026-09-13",
  "summary": {
-  "bucket": "cash",
-  "accounts": [
-   "Tiger Prime"
-  ],
   "ticker": "PLTR",
   "name": "Palantir",
   "market": "US",
   "asset_type": "stock",
   "currency": "USD",
+  "accounts": [
+   "Tiger Prime"
+  ],
   "units": 5.0,
-  "price": 122.92,
-  "mv_native": 614.6,
+  "price": 167.23,
   "avg_cost": 35.6785,
   "cost_basis_native": 178.39,
-  "cost_basis_sgd": 230.14,
-  "unrealised_pl_sgd": 562.75,
-  "realised_pl_sgd": 16287.97,
-  "invested_native": 125053.04,
-  "income_native": 0.0,
-  "fees_sgd": 13.87,
-  "cost_known": true,
-  "uncosted_units": 0.0,
-  "total_pl_native": 13061.56,
-  "invested_sgd": 161330.93,
-  "mv_sgd": 792.9,
+  "cost_basis_sgd": 226.04,
+  "mv_native": 836.15,
+  "mv_sgd": 1059.49,
+  "realised_pl_sgd": 15997.58,
+  "unrealised_pl_sgd": 833.44,
+  "stock_pl_sgd": 16831.02,
   "income_sgd": 0.0,
-  "pl_sgd": 16850.72,
-  "xirr": 0.2957,
-  "simple_return": 0.1044,
-  "options_pl_sgd": 52989.24
+  "options_pl_sgd": 52351.8,
+  "net_pl_sgd": 69182.82,
+  "net_verdict": "hero",
+  "return_pct": 0.3201,
+  "return_verdict": "ok",
+  "peak_car_sgd": 216124.17,
+  "return_span_days": 1982,
+  "cost_partition": {
+   "units_in": 3505.0,
+   "costed": 3505.0,
+   "free": 0,
+   "unknown": 0,
+   "unknown_pct": 0.0
+  },
+  "invested_sgd": 158454.71,
+  "invested_native": 125053.04,
+  "fees_sgd": 13.62,
+  "cost_known": true
  },
+ "buckets": [
+  {
+   "bucket": "cash",
+   "status": "open",
+   "units": 5.0,
+   "avg_cost": 35.6785,
+   "realised_pl_sgd": 15997.58,
+   "unrealised_pl_sgd": 833.44,
+   "stock_pl_sgd": 16831.02,
+   "income_sgd": 0.0,
+   "options_pl_sgd": 52351.8,
+   "net_pl_sgd": 69182.82
+  }
+ ],
  "transactions": [
   {
    "trade_date": "2021-12-18",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 500.0,
    "price": 20.0,
-   "gross_amount": 10000.0,
+   "gross_amount": -10000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2021.csv",
    "balance": 500.0
@@ -46,10 +70,11 @@
   {
    "trade_date": "2022-02-19",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 500.0,
    "price": 15.0,
-   "gross_amount": 7500.0,
+   "gross_amount": -7500.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2022.csv",
    "balance": 1000.0
@@ -57,10 +82,11 @@
   {
    "trade_date": "2022-03-20",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "sell",
    "qty_signed": -1000.0,
    "price": 12.0,
-   "gross_amount": -12000.0,
+   "gross_amount": 12000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2022.csv",
    "balance": 0.0
@@ -68,10 +94,11 @@
   {
    "trade_date": "2023-03-14",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 1000.0,
    "price": 10.0,
-   "gross_amount": 10000.0,
+   "gross_amount": -10000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2023.csv",
    "balance": 1000.0
@@ -79,10 +106,11 @@
   {
    "trade_date": "2023-04-12",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 1.0,
    "price": 8.455,
-   "gross_amount": 8.46,
+   "gross_amount": -8.46,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2023.csv",
    "balance": 1001.0
@@ -90,10 +118,11 @@
   {
    "trade_date": "2023-04-12",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 1.0,
    "price": 8.455,
-   "gross_amount": 8.46,
+   "gross_amount": -8.46,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2023.csv",
    "balance": 1002.0
@@ -101,10 +130,11 @@
   {
    "trade_date": "2023-04-12",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 1.0,
    "price": 8.46,
-   "gross_amount": 8.46,
+   "gross_amount": -8.46,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2023.csv",
    "balance": 1003.0
@@ -112,10 +142,11 @@
   {
    "trade_date": "2023-04-12",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 1.0,
    "price": 8.46,
-   "gross_amount": 8.46,
+   "gross_amount": -8.46,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2023.csv",
    "balance": 1004.0
@@ -123,10 +154,11 @@
   {
    "trade_date": "2023-04-12",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 1.0,
    "price": 8.46,
-   "gross_amount": 8.46,
+   "gross_amount": -8.46,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2023.csv",
    "balance": 1005.0
@@ -134,10 +166,11 @@
   {
    "trade_date": "2023-09-16",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 1000.0,
    "price": 16.0,
-   "gross_amount": 16000.0,
+   "gross_amount": -16000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2023.csv",
    "balance": 2005.0
@@ -145,10 +178,11 @@
   {
    "trade_date": "2023-11-19",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "sell",
    "qty_signed": -1000.0,
    "price": 15.0,
-   "gross_amount": -15000.0,
+   "gross_amount": 15000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2023.csv",
    "balance": 1005.0
@@ -156,10 +190,11 @@
   {
    "trade_date": "2024-08-18",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "sell",
    "qty_signed": -1000.0,
    "price": 29.0,
-   "gross_amount": -29000.0,
+   "gross_amount": 29000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2024.csv",
    "balance": 5.0
@@ -167,10 +202,11 @@
   {
    "trade_date": "2025-11-15",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 200.0,
    "price": 177.5,
-   "gross_amount": 35500.0,
+   "gross_amount": -35500.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2025.csv",
    "balance": 205.0
@@ -178,10 +214,11 @@
   {
    "trade_date": "2025-11-22",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 100.0,
    "price": 160.0,
-   "gross_amount": 16000.0,
+   "gross_amount": -16000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2025.csv",
    "balance": 305.0
@@ -189,10 +226,11 @@
   {
    "trade_date": "2025-11-29",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "sell",
    "qty_signed": -100.0,
    "price": 160.0,
-   "gross_amount": -16000.0,
+   "gross_amount": 16000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2025.csv",
    "balance": 205.0
@@ -200,10 +238,11 @@
   {
    "trade_date": "2025-12-06",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "sell",
    "qty_signed": -200.0,
    "price": 177.5,
-   "gross_amount": -35500.0,
+   "gross_amount": 35500.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2025.csv",
    "balance": 5.0
@@ -211,10 +250,11 @@
   {
    "trade_date": "2026-02-20",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 100.0,
    "price": 150.0,
-   "gross_amount": 15000.0,
+   "gross_amount": -15000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2026.csv",
    "balance": 105.0
@@ -222,10 +262,11 @@
   {
    "trade_date": "2026-02-21",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "buy",
    "qty_signed": 100.0,
    "price": 150.0,
-   "gross_amount": 15000.0,
+   "gross_amount": -15000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2026.csv",
    "balance": 205.0
@@ -233,10 +274,11 @@
   {
    "trade_date": "2026-03-21",
    "account": "Tiger Prime",
+   "bucket": "cash",
    "action": "sell",
    "qty_signed": -200.0,
    "price": 150.0,
-   "gross_amount": -30000.0,
+   "gross_amount": 30000.0,
    "currency": "USD",
    "source_file": "tiger-prime/tiger_prime_2026.csv",
    "balance": 5.0
@@ -248,6 +290,22 @@
    "underlying": "PLTR",
    "type": "put",
    "contracts": 2.0,
+   "strike": 108.0,
+   "open_date": "2026-08-03",
+   "expiry": "2026-08-07",
+   "close_date": null,
+   "premium_open": 1.22,
+   "premium_close": 0.0,
+   "realized_native": 242.48,
+   "realized_sgd": 307.25,
+   "currency": "USD",
+   "outcome": "expired",
+   "realised": true
+  },
+  {
+   "underlying": "PLTR",
+   "type": "put",
+   "contracts": 2.0,
    "strike": 144.0,
    "open_date": "2026-06-02",
    "expiry": "2026-06-05",
@@ -255,9 +313,10 @@
    "premium_open": 1.04,
    "premium_close": 7.25,
    "realized_native": -1245.01,
-   "realized_sgd": -1606.19,
+   "realized_sgd": -1577.55,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -270,39 +329,10 @@
    "premium_open": 0.75,
    "premium_close": 0.0,
    "realized_native": 148.48,
-   "realized_sgd": 191.55,
+   "realized_sgd": 188.14,
    "currency": "USD",
-   "outcome": "expired"
-  },
-  {
-   "underlying": "PLTR",
-   "type": "put",
-   "contracts": 1.0,
-   "strike": 120.0,
-   "open_date": "2026-05-06",
-   "expiry": "2026-05-15",
-   "close_date": null,
-   "premium_open": 0.67,
-   "premium_close": 0.0,
-   "realized_native": 66.23,
-   "realized_sgd": 85.44,
-   "currency": "USD",
-   "outcome": "expired"
-  },
-  {
-   "underlying": "PLTR",
-   "type": "put",
-   "contracts": 1.0,
-   "strike": 130.0,
-   "open_date": "2026-05-06",
-   "expiry": "2026-05-15",
-   "close_date": null,
-   "premium_open": 3.0,
-   "premium_close": 0.0,
-   "realized_native": 299.23,
-   "realized_sgd": 386.04,
-   "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -315,9 +345,42 @@
    "premium_open": 1.46,
    "premium_close": 0.0,
    "realized_native": 145.23,
-   "realized_sgd": 187.36,
+   "realized_sgd": 184.02,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
+  },
+  {
+   "underlying": "PLTR",
+   "type": "put",
+   "contracts": 1.0,
+   "strike": 120.0,
+   "open_date": "2026-05-06",
+   "expiry": "2026-05-15",
+   "close_date": null,
+   "premium_open": 0.67,
+   "premium_close": 0.0,
+   "realized_native": 66.23,
+   "realized_sgd": 83.92,
+   "currency": "USD",
+   "outcome": "expired",
+   "realised": true
+  },
+  {
+   "underlying": "PLTR",
+   "type": "put",
+   "contracts": 1.0,
+   "strike": 130.0,
+   "open_date": "2026-05-06",
+   "expiry": "2026-05-15",
+   "close_date": null,
+   "premium_open": 3.0,
+   "premium_close": 0.0,
+   "realized_native": 299.23,
+   "realized_sgd": 379.15,
+   "currency": "USD",
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -330,9 +393,10 @@
    "premium_open": 3.45,
    "premium_close": 0.0,
    "realized_native": 688.48,
-   "realized_sgd": 888.21,
+   "realized_sgd": 872.37,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -345,9 +409,10 @@
    "premium_open": 1.31,
    "premium_close": 0.0,
    "realized_native": 260.5,
-   "realized_sgd": 336.07,
+   "realized_sgd": 330.08,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -360,9 +425,10 @@
    "premium_open": 1.28,
    "premium_close": 0.0,
    "realized_native": 127.24,
-   "realized_sgd": 164.15,
+   "realized_sgd": 161.23,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -375,9 +441,10 @@
    "premium_open": 0.67,
    "premium_close": 0.0,
    "realized_native": 132.5,
-   "realized_sgd": 170.94,
+   "realized_sgd": 167.89,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -390,9 +457,10 @@
    "premium_open": 0.9,
    "premium_close": 0.0,
    "realized_native": 178.5,
-   "realized_sgd": 230.28,
+   "realized_sgd": 226.18,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -405,9 +473,10 @@
    "premium_open": 5.0,
    "premium_close": 0.0,
    "realized_native": 998.5,
-   "realized_sgd": 1288.16,
+   "realized_sgd": 1265.2,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -420,9 +489,10 @@
    "premium_open": 0.9,
    "premium_close": 0.0,
    "realized_native": 89.25,
-   "realized_sgd": 115.14,
+   "realized_sgd": 113.09,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -435,9 +505,10 @@
    "premium_open": 3.85,
    "premium_close": 0.0,
    "realized_native": 384.25,
-   "realized_sgd": 495.72,
+   "realized_sgd": 486.88,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -450,9 +521,10 @@
    "premium_open": 1.35,
    "premium_close": 0.0,
    "realized_native": 268.5,
-   "realized_sgd": 346.39,
+   "realized_sgd": 340.22,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -465,9 +537,10 @@
    "premium_open": 1.9,
    "premium_close": 0.0,
    "realized_native": 189.25,
-   "realized_sgd": 244.15,
+   "realized_sgd": 239.8,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -480,9 +553,10 @@
    "premium_open": 2.8,
    "premium_close": 0.0,
    "realized_native": 558.5,
-   "realized_sgd": 720.52,
+   "realized_sgd": 707.68,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -495,9 +569,10 @@
    "premium_open": 1.15,
    "premium_close": 0.0,
    "realized_native": 228.5,
-   "realized_sgd": 294.79,
+   "realized_sgd": 289.53,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -510,9 +585,10 @@
    "premium_open": 1.7,
    "premium_close": 0.0,
    "realized_native": 338.5,
-   "realized_sgd": 436.7,
+   "realized_sgd": 428.91,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -525,9 +601,10 @@
    "premium_open": 9.0,
    "premium_close": 0.0,
    "realized_native": 1798.5,
-   "realized_sgd": 2320.24,
+   "realized_sgd": 2278.88,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -540,9 +617,10 @@
    "premium_open": 5.35,
    "premium_close": 0.0,
    "realized_native": 1068.5,
-   "realized_sgd": 1378.47,
+   "realized_sgd": 1353.9,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -555,9 +633,10 @@
    "premium_open": 5.35,
    "premium_close": 0.0,
    "realized_native": 1068.5,
-   "realized_sgd": 1378.47,
+   "realized_sgd": 1353.9,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -570,9 +649,10 @@
    "premium_open": 1.654,
    "premium_close": 0.0,
    "realized_native": 1646.28,
-   "realized_sgd": 2123.87,
+   "realized_sgd": 2086.0,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -585,9 +665,10 @@
    "premium_open": 3.278,
    "premium_close": 0.0,
    "realized_native": 3270.27,
-   "realized_sgd": 4218.98,
+   "realized_sgd": 4143.76,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -600,9 +681,10 @@
    "premium_open": 2.26,
    "premium_close": 2.838,
    "realized_native": -593.29,
-   "realized_sgd": -765.4,
+   "realized_sgd": -751.76,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -615,9 +697,10 @@
    "premium_open": 0.85,
    "premium_close": 0.0,
    "realized_native": 842.35,
-   "realized_sgd": 1086.72,
+   "realized_sgd": 1067.34,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -630,9 +713,10 @@
    "premium_open": 1.33,
    "premium_close": 0.0,
    "realized_native": 1322.36,
-   "realized_sgd": 1705.98,
+   "realized_sgd": 1675.56,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -645,9 +729,10 @@
    "premium_open": 1.75,
    "premium_close": 0.0,
    "realized_native": 1742.36,
-   "realized_sgd": 2247.82,
+   "realized_sgd": 2207.74,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -660,9 +745,10 @@
    "premium_open": 2.05,
    "premium_close": 0.0,
    "realized_native": 2042.42,
-   "realized_sgd": 2634.93,
+   "realized_sgd": 2587.95,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -675,9 +761,10 @@
    "premium_open": 1.8,
    "premium_close": 0.0,
    "realized_native": 1792.53,
-   "realized_sgd": 2312.54,
+   "realized_sgd": 2271.31,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -690,9 +777,10 @@
    "premium_open": 1.0,
    "premium_close": 0.0,
    "realized_native": 992.53,
-   "realized_sgd": 1280.46,
+   "realized_sgd": 1257.63,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -705,9 +793,10 @@
    "premium_open": 0.9,
    "premium_close": 0.0,
    "realized_native": 892.53,
-   "realized_sgd": 1151.45,
+   "realized_sgd": 1130.92,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -720,9 +809,10 @@
    "premium_open": 1.15,
    "premium_close": 0.0,
    "realized_native": 1142.53,
-   "realized_sgd": 1473.98,
+   "realized_sgd": 1447.7,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -735,9 +825,10 @@
    "premium_open": 1.33,
    "premium_close": 0.0,
    "realized_native": 1319.26,
-   "realized_sgd": 1701.98,
+   "realized_sgd": 1671.63,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -750,9 +841,10 @@
    "premium_open": 0.71,
    "premium_close": 0.0,
    "realized_native": 699.29,
-   "realized_sgd": 902.15,
+   "realized_sgd": 886.07,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -765,9 +857,10 @@
    "premium_open": 0.5,
    "premium_close": 0.0,
    "realized_native": 489.26,
-   "realized_sgd": 631.19,
+   "realized_sgd": 619.94,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -780,9 +873,10 @@
    "premium_open": 1.87,
    "premium_close": 0.0,
    "realized_native": 1859.29,
-   "realized_sgd": 2398.67,
+   "realized_sgd": 2355.91,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -795,9 +889,10 @@
    "premium_open": 1.56,
    "premium_close": 0.0,
    "realized_native": 1549.24,
-   "realized_sgd": 1998.67,
+   "realized_sgd": 1963.04,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -810,9 +905,10 @@
    "premium_open": 1.32,
    "premium_close": 0.0,
    "realized_native": 1309.14,
-   "realized_sgd": 1688.92,
+   "realized_sgd": 1658.81,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -825,9 +921,10 @@
    "premium_open": 1.19,
    "premium_close": 0.0,
    "realized_native": 1179.17,
-   "realized_sgd": 1521.25,
+   "realized_sgd": 1494.13,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -840,9 +937,10 @@
    "premium_open": 0.77,
    "premium_close": 0.04,
    "realized_native": 708.49,
-   "realized_sgd": 914.02,
+   "realized_sgd": 897.73,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -855,9 +953,10 @@
    "premium_open": 1.75,
    "premium_close": 0.02,
    "realized_native": 1711.57,
-   "realized_sgd": 2208.1,
+   "realized_sgd": 2168.73,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -870,9 +969,10 @@
    "premium_open": 0.92,
    "premium_close": 0.0,
    "realized_native": 909.17,
-   "realized_sgd": 1172.92,
+   "realized_sgd": 1152.01,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -885,9 +985,10 @@
    "premium_open": 1.08,
    "premium_close": 0.0,
    "realized_native": 1069.17,
-   "realized_sgd": 1379.34,
+   "realized_sgd": 1354.75,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -900,9 +1001,10 @@
    "premium_open": 3.477,
    "premium_close": 3.65,
    "realized_native": -196.75,
-   "realized_sgd": -253.83,
+   "realized_sgd": -249.3,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -915,9 +1017,10 @@
    "premium_open": 3.02,
    "premium_close": 3.35,
    "realized_native": -351.51,
-   "realized_sgd": -453.48,
+   "realized_sgd": -445.4,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -930,9 +1033,10 @@
    "premium_open": 1.97,
    "premium_close": 2.6,
    "realized_native": -651.77,
-   "realized_sgd": -840.85,
+   "realized_sgd": -825.86,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -945,9 +1049,10 @@
    "premium_open": 1.29,
    "premium_close": 0.26,
    "realized_native": 1011.62,
-   "realized_sgd": 1305.09,
+   "realized_sgd": 1281.82,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -960,9 +1065,10 @@
    "premium_open": 0.53,
    "premium_close": 0.01,
    "realized_native": 501.73,
-   "realized_sgd": 647.28,
+   "realized_sgd": 635.74,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -975,9 +1081,10 @@
    "premium_open": 0.5,
    "premium_close": 0.0,
    "realized_native": 487.98,
-   "realized_sgd": 629.54,
+   "realized_sgd": 618.32,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -990,9 +1097,10 @@
    "premium_open": 1.25,
    "premium_close": 0.0,
    "realized_native": 1239.18,
-   "realized_sgd": 1598.67,
+   "realized_sgd": 1570.16,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1005,9 +1113,10 @@
    "premium_open": 0.48,
    "premium_close": 0.0,
    "realized_native": 563.01,
-   "realized_sgd": 726.34,
+   "realized_sgd": 713.39,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1020,9 +1129,10 @@
    "premium_open": 1.0,
    "premium_close": 0.0,
    "realized_native": 1088.09,
-   "realized_sgd": 1403.74,
+   "realized_sgd": 1378.72,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1035,9 +1145,10 @@
    "premium_open": 0.23,
    "premium_close": 0.0,
    "realized_native": 219.18,
-   "realized_sgd": 282.76,
+   "realized_sgd": 277.72,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1050,9 +1161,10 @@
    "premium_open": 0.62,
    "premium_close": 0.0,
    "realized_native": 731.01,
-   "realized_sgd": 943.08,
+   "realized_sgd": 926.26,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1065,9 +1177,10 @@
    "premium_open": 0.8,
    "premium_close": 0.0,
    "realized_native": 789.17,
-   "realized_sgd": 1018.11,
+   "realized_sgd": 999.96,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1080,9 +1193,10 @@
    "premium_open": 0.36,
    "premium_close": 0.03,
    "realized_native": 400.88,
-   "realized_sgd": 517.18,
+   "realized_sgd": 507.96,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1095,9 +1209,10 @@
    "premium_open": 0.63,
    "premium_close": 0.08,
    "realized_native": 739.9,
-   "realized_sgd": 954.54,
+   "realized_sgd": 937.53,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1110,9 +1225,10 @@
    "premium_open": 0.19,
    "premium_close": 0.03,
    "realized_native": 221.95,
-   "realized_sgd": 286.34,
+   "realized_sgd": 281.23,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1125,9 +1241,10 @@
    "premium_open": 0.25,
    "premium_close": 0.2,
    "realized_native": 40.33,
-   "realized_sgd": 52.03,
+   "realized_sgd": 51.1,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1140,9 +1257,10 @@
    "premium_open": 0.28,
    "premium_close": 0.0,
    "realized_native": 350.2,
-   "realized_sgd": 451.79,
+   "realized_sgd": 443.74,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1155,9 +1273,10 @@
    "premium_open": 0.49,
    "premium_close": 0.0,
    "realized_native": 622.57,
-   "realized_sgd": 803.18,
+   "realized_sgd": 788.86,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1170,9 +1289,10 @@
    "premium_open": 0.31,
    "premium_close": 0.25,
    "realized_native": 45.4,
-   "realized_sgd": 58.57,
+   "realized_sgd": 57.53,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1185,9 +1305,10 @@
    "premium_open": 0.36,
    "premium_close": 1.38,
    "realized_native": -1042.23,
-   "realized_sgd": -1344.58,
+   "realized_sgd": -1320.61,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1200,9 +1321,10 @@
    "premium_open": 0.53,
    "premium_close": 0.0,
    "realized_native": 518.9,
-   "realized_sgd": 669.43,
+   "realized_sgd": 657.5,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1215,9 +1337,10 @@
    "premium_open": 0.63,
    "premium_close": 4.85,
    "realized_native": -4242.33,
-   "realized_sgd": -5473.03,
+   "realized_sgd": -5375.46,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1230,9 +1353,10 @@
    "premium_open": 0.36,
    "premium_close": 0.0,
    "realized_native": 348.77,
-   "realized_sgd": 449.95,
+   "realized_sgd": 441.93,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1245,24 +1369,10 @@
    "premium_open": 0.85,
    "premium_close": 0.09,
    "realized_native": 368.74,
-   "realized_sgd": 475.71,
+   "realized_sgd": 467.23,
    "currency": "USD",
-   "outcome": "closed"
-  },
-  {
-   "underlying": "PLTR",
-   "type": "put",
-   "contracts": 5.0,
-   "strike": 15.0,
-   "open_date": "2022-01-03",
-   "expiry": "2022-02-18",
-   "close_date": null,
-   "premium_open": 0.43,
-   "premium_close": 0.0,
-   "realized_native": 208.34,
-   "realized_sgd": 268.78,
-   "currency": "USD",
-   "outcome": "expired"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1275,9 +1385,26 @@
    "premium_open": 0.83,
    "premium_close": 0.06,
    "realized_native": 372.74,
-   "realized_sgd": 480.87,
+   "realized_sgd": 472.3,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
+  },
+  {
+   "underlying": "PLTR",
+   "type": "put",
+   "contracts": 5.0,
+   "strike": 15.0,
+   "open_date": "2022-01-03",
+   "expiry": "2022-02-18",
+   "close_date": null,
+   "premium_open": 0.43,
+   "premium_close": 0.0,
+   "realized_native": 208.34,
+   "realized_sgd": 263.99,
+   "currency": "USD",
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1290,9 +1417,10 @@
    "premium_open": 0.55,
    "premium_close": 0.23,
    "realized_native": 147.73,
-   "realized_sgd": 190.59,
+   "realized_sgd": 187.19,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1305,9 +1433,10 @@
    "premium_open": 0.45,
    "premium_close": 0.0,
    "realized_native": 218.34,
-   "realized_sgd": 281.68,
+   "realized_sgd": 276.66,
    "currency": "USD",
-   "outcome": "expired"
+   "outcome": "expired",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1320,9 +1449,10 @@
    "premium_open": 1.1,
    "premium_close": 0.38,
    "realized_native": 347.76,
-   "realized_sgd": 448.65,
+   "realized_sgd": 440.65,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   },
   {
    "underlying": "PLTR",
@@ -1335,9 +1465,10 @@
    "premium_open": 4.62,
    "premium_close": 3.15,
    "realized_native": 286.77,
-   "realized_sgd": 369.96,
+   "realized_sgd": 363.37,
    "currency": "USD",
-   "outcome": "closed"
+   "outcome": "closed",
+   "realised": true
   }
  ]
 }

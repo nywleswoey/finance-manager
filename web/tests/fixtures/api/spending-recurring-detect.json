@@ -2,10 +2,10 @@
  {
   "merchant": "YEOW ZHI XUAN  REF:SI",
   "cadence": "monthly",
-  "occurrences": 4,
+  "occurrences": 6,
   "avg_amount": 1095.2,
   "typical_day": 30,
-  "last_seen": "2026-06-30"
+  "last_seen": "2026-08-31"
  },
  {
   "merchant": "TAY BEE LIAN  REF:     SI",
@@ -18,10 +18,10 @@
  {
   "merchant": "TAY BEE LIAN  REF:SI",
   "cadence": "monthly",
-  "occurrences": 9,
+  "occurrences": 11,
   "avg_amount": 500.0,
-  "typical_day": 2,
-  "last_seen": "2026-06-02"
+  "typical_day": 1,
+  "last_seen": "2026-08-01"
  },
  {
   "merchant": "YEOW LEONG CHEE  REF:     SI",
@@ -34,10 +34,10 @@
  {
   "merchant": "YEOW LEONG CHEE  REF:SI",
   "cadence": "monthly",
-  "occurrences": 9,
+  "occurrences": 11,
   "avg_amount": 500.0,
-  "typical_day": 2,
-  "last_seen": "2026-06-02"
+  "typical_day": 1,
+  "last_seen": "2026-08-01"
  },
  {
   "merchant": "MIN OF EDUCATION",
@@ -50,10 +50,10 @@
  {
   "merchant": "SERAYA ENERGY PTE LTD",
   "cadence": "monthly",
-  "occurrences": 7,
-  "avg_amount": 127.75,
+  "occurrences": 8,
+  "avg_amount": 128.71,
   "typical_day": 26,
-  "last_seen": "2026-06-25"
+  "last_seen": "2026-07-27"
  },
  {
   "merchant": "SERAYA ENERGY PTE LTD Singapore SG",
@@ -66,34 +66,26 @@
  {
   "merchant": "TAMPINES TOWN COUNCIL",
   "cadence": "monthly",
-  "occurrences": 10,
-  "avg_amount": 60.6,
+  "occurrences": 11,
+  "avg_amount": 61.58,
   "typical_day": 9,
-  "last_seen": "2026-07-09"
+  "last_seen": "2026-08-11"
  },
  {
   "merchant": "MINISTRY OF MANPOWER",
   "cadence": "monthly",
-  "occurrences": 18,
+  "occurrences": 20,
   "avg_amount": 60.0,
   "typical_day": 17,
-  "last_seen": "2026-06-17"
- },
- {
-  "merchant": "Cabcharge",
-  "cadence": "monthly",
-  "occurrences": 13,
-  "avg_amount": 22.74,
-  "typical_day": 16,
-  "last_seen": "2026-07-05"
+  "last_seen": "2026-08-17"
  },
  {
   "merchant": "Netflix",
   "cadence": "monthly",
-  "occurrences": 10,
+  "occurrences": 11,
   "avg_amount": 15.98,
   "typical_day": 24,
-  "last_seen": "2026-06-23"
+  "last_seen": "2026-07-23"
  },
  {
   "merchant": "KCUTS",
@@ -106,10 +98,10 @@
  {
   "merchant": "EIGHT TELECOM",
   "cadence": "weekly",
-  "occurrences": 22,
+  "occurrences": 24,
   "avg_amount": 8.0,
   "typical_day": 6,
-  "last_seen": "2026-07-06"
+  "last_seen": "2026-08-05"
  },
  {
   "merchant": "KOUFU PTE LTD",

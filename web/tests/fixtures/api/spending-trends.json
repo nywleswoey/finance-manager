@@ -126,18 +126,25 @@
    "ym": "2026-05"
   },
   {
-   "Housing": 1060.04,
-   "Personal": 7442.07,
-   "Transport": 51.14,
-   "Uncategorized": 999.52,
+   "Housing": 1447.16,
+   "Personal": 7948.76,
+   "Transport": 82.25,
+   "Uncategorized": 74.6,
    "ym": "2026-06"
   },
   {
-   "Housing": 0,
-   "Personal": 0,
-   "Transport": 0,
-   "Uncategorized": 599.58,
+   "Housing": 1398.1,
+   "Personal": 5383.04,
+   "Transport": 168.85,
+   "Uncategorized": 1445.86,
    "ym": "2026-07"
+  },
+  {
+   "Housing": 1305.14,
+   "Personal": 3825.77,
+   "Transport": 133.47,
+   "Uncategorized": 521.81,
+   "ym": "2026-08"
   }
  ]
 }

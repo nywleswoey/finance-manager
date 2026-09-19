@@ -42,17 +42,71 @@ const plBase = (r) => (r.status === "closed" ? r.pl_sgd : r.unrealised_pl_sgd);
 // the raw fields instead would read `unrealised_pl_sgd` for the whole row and silently drop the
 // closed leg's realised result. This is the rule the group subtotal below already uses on its own
 // members (`a.pl += plOf(r)`); `pl_folded` is how a single row carries the same answer.
+//
+// THE COLUMN FOLLOWS NET ONTO THE WHOLE TICKER (#143 §15). Since the fold sees every leg whatever
+// the checkbox says, so does this: leaving P/L on the *visible* legs while Net covered all of them
+// would put two incompatible leg sets in adjacent cells of one row. `pl_mixed` is what makes that
+// sayable — the tooltip names both halves, and the Bucket pills name the hidden leg.
+//
+// TWO TRIGGERS RECORDED RATHER THAN TAKEN. Dropping this column in ticker mode is the better
+// long-run answer and is not done here: it redesigns Holdings' column set from inside a
+// detail-page change. And the day Holdings adopts the reconciliation block's components,
+// `plBase` has no reader left.
 const plOf = (r) => (r.pl_folded !== undefined ? r.pl_folded : plBase(r));
 
-// the verdict: total economic P/L (realised + unrealised + dividends) + option premiums.
-// cost-unknown names (CDP / transferred-in) can't give a true stock P/L → net shows only the
-// known cash streams (dividends + premiums) and is flagged partial.
-const netOf = (r) => {
-  const opt = r.options_pl_sgd || 0;
-  // consolidated rows carry folded Net and partial state; use those first
-  if (r.net_folded !== undefined) return { net: r.net_folded + opt, partial: r.net_partial };
-  if (r.cost_known && r.pl_sgd != null) return { net: r.pl_sgd + opt, partial: false };
-  return { net: (r.income_sgd || 0) + opt, partial: true };
+/**
+ * The Net a row reports, and what that row can claim about it — **both of them the server's**
+ * (#143 §15).
+ *
+ * `net_pl_sgd` is `realised + unrealised + dividends + premiums`, computed once in
+ * `performance.py` and read here rather than rebuilt: this page and the detail page agree about
+ * what a name earned **by construction**, not by two implementations happening to match. What
+ * this replaced was a second definition of Net living in the browser, and the drift it allowed
+ * was definitional rather than arithmetic — the worst kind, because both numbers were right
+ * about different questions.
+ *
+ * `net_verdict` replaces the `partial` boolean it used to carry, because a boolean cannot say
+ * *17,000 of 68,000*: the verdict distinguishes a per-unit doubt (`caveat`) from an event-level
+ * one with a direction (`bounded`), and names the one case with no Net at all (`refuse`).
+ * `provenance.bound` is that direction; like the verdict it is whole-ticker and rides every leg.
+ *
+ * A refusal ships `null` — there is no partial Net on the wire under any name — so callers get a
+ * null and render the absence rather than a number that would have to be explained away.
+ */
+const netOf = (r) => ({ net: r.net_pl_sgd, verdict: r.net_verdict, bound: r.provenance?.bound });
+
+/**
+ * The glyph vocabulary: three values, three meanings, and the legend below carries all three.
+ *
+ *   `~`  caveat  — some entering units have NO known cost, so this Net reads them as free. The
+ *                  doubt is per-unit, the cost-basis family is `not known`, and the direction is
+ *                  always upper.
+ *   `≥`  bounded, lower — every unit is costed and the TOTAL is mis-attributed: a split carry put
+ *   `≤`  bounded, upper   a sibling's share of one event's cost on this name, or took this name's
+ *                         share away. The tiles are exact and stay.
+ *
+ * Reusing `~` for a bound is rejected outright: its explanation is about a cost that is unknown,
+ * which is flatly false for a name whose every unit is priced, and that would put a wrong
+ * explanation on a correct number.
+ *
+ * The bound is a PREFIX and `~` a suffix, deliberately. `≥ 839.70` is a claim about the number
+ * that reads the way an inequality reads, left of the value; `~` qualifies the value it follows.
+ */
+const NET_TITLE = "total P/L incl dividends + option premiums";
+const netMark = ({ verdict, bound }) => {
+  if (verdict === "caveat")
+    return { glyph: "~", pre: false,
+             title: "an upper bound: some units entered with no known cost, and this Net reads "
+                  + "them as free" };
+  if (verdict === "bounded")
+    return bound === "upper"
+      ? { glyph: "≤", pre: true,
+          title: "at most: a corporate action carried this name's share of one event's cost to a "
+               + "sibling, so this cost is too low and this Net too high" }
+      : { glyph: "≥", pre: true,
+          title: "at least: a corporate action carried a sibling's share of one event's cost "
+               + "here, so this cost is too high and this Net too low" };
+  return null;
 };
 
 /**
@@ -85,6 +139,11 @@ const netOf = (r) => {
  */
 const sumOf = (rs, f) => rs.reduce((a, r) => a + (f(r) || 0), 0);
 
+// Σ of figures the server already rounded at 2dp, re-rounded to clear float noise — never a
+// third rounding of a full-precision quantity, which is where a stray cent between two pages
+// would come from.
+const round2 = (x) => Math.round(x * 100) / 100;
+
 // null only when every part is null, so a closed constituent — whose cost basis is null because it
 // holds nothing — contributes 0 rather than erasing the open side's real figure.
 const sumOrNull = (rs, f) =>
@@ -106,17 +165,10 @@ function mergeTicker(rows) {
   const first = rs[0];
   const units = sumOf(rs, (r) => r.units);
   const costNative = sumOrNull(rs, (r) => r.cost_basis_native);
-  // cost is fully known only if every part's is; this drives `netOf`'s partial flag, so a merge
-  // that swallows a cost-unknown leg is marked `~` rather than quietly reported as complete.
+  // cost is fully known only if every part's is. It no longer drives what Net claims — that is
+  // `net_verdict`'s job now, whole-ticker and server-side — and is kept because the cost-basis
+  // family below is null wherever a leg's is.
   const costKnown = rs.every((r) => r.cost_known);
-  // Fold each constituent's Net value, summing only from cost-known legs; partial if ANY leg
-  // lacks cost. This preserves the per-constituent Net calculation that would otherwise be lost
-  // when netOf sees a consolidated row's cost_known=false (because one leg was cost-unknown).
-  const netFolded = rs.reduce((a, r) => {
-    if (r.cost_known && r.pl_sgd != null) return a + r.pl_sgd;
-    return a + (r.income_sgd || 0);
-  }, 0);
-  const netPartial = rs.some((r) => !r.cost_known);
   return {
     ...first,
     // `bucket` stays a single value: the largest leg, which the drill's analytics event reports.
@@ -135,8 +187,20 @@ function mergeTicker(rows) {
     realised_pl_sgd: sumOrNull(rs, (r) => r.realised_pl_sgd),
     pl_sgd: costKnown ? sumOrNull(rs, (r) => r.pl_sgd) : null,
     cost_known: costKnown,
-    net_folded: netFolded,                                   // folded Net for netOf to consume
-    net_partial: netPartial,                                 // whether any leg is partial
+    // Net is Σ of the server's own per-leg Nets and nothing else — no reconstruction from
+    // components here, which is what keeps this fold incapable of disagreeing with the detail
+    // page. `net_verdict`, `provenance` and the whole-ticker return figures pass through from
+    // `first`: the server already repeats them identically on every leg.
+    //
+    // NULL IF ANY LEG IS NULL, rather than `verdict === "refuse"`. The two agree today — a
+    // refusal nulls every leg of its ticker and nothing else nulls any — but they fail
+    // differently if that ever stops being true. `sumOf` coalesces a null to 0, so reading the
+    // verdict off one leg would print a whole-ticker number that is silently short by a bucket;
+    // testing the legs themselves reports `n/a`, which is what a fold that cannot add up should
+    // say. `performance.py`'s equivalent raises instead, for the same reason and with a server's
+    // freedom to crash.
+    net_pl_sgd: rs.some((r) => r.net_pl_sgd == null) ? null
+      : round2(sumOf(rs, (r) => r.net_pl_sgd)),
     // The partition folds by addition — every leg's entering units are that leg's own, so no
     // unit is counted twice and the three conditions stay a partition of the merged total.
     // `unknown_pct` is recomputed rather than averaged: a mean of two percentages is not the
@@ -171,7 +235,17 @@ function consolidate(rows) {
                            : (b.pl_sgd || 0) - (a.pl_sgd || 0)));
 }
 
-function NetCell({ net, partial, max }) {
+function NetCell({ net, verdict, bound, max }) {
+  // A refusal: not a zero and not a small number, but no answer. Every entering unit arrived
+  // with no cost, so there is nothing to net — and no bar either, because a bar length is a
+  // magnitude and this row has none.
+  if (net == null) return (
+    <td style={{ minWidth: 110 }}>
+      <span className="mut" title="not known: every unit of this name entered with no recorded cost">
+        n/a</span>
+    </td>
+  );
+  const mark = netMark({ verdict, bound });
   const w = max > 0 ? Math.min(100, (Math.abs(net) / max) * 100) : 0;
   const color = net >= 0 ? "16,185,129" : "239,68,68";   // green / red
   return (
@@ -179,11 +253,11 @@ function NetCell({ net, partial, max }) {
       <div style={{ position: "relative", padding: "1px 4px" }}>
         <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: w + "%",
                       background: `rgba(${color},0.18)`, borderRadius: 3 }} />
-        <span className={cls(net)}
-              title={partial ? "dividends + premiums only (cost basis unknown)"
-                             : "total P/L incl dividends + option premiums"}
+        <span className={cls(net)} title={mark ? mark.title : NET_TITLE}
               style={{ position: "relative", fontWeight: 700 }}>
-          {sgd(net)}{partial && <span className="mut" style={{ fontWeight: 400 }}> ~</span>}
+          {mark && mark.pre && <span className="mut" style={{ fontWeight: 400 }}>{mark.glyph} </span>}
+          {sgd(net)}
+          {mark && !mark.pre && <span className="mut" style={{ fontWeight: 400 }}> {mark.glyph}</span>}
         </span>
       </div>
     </td>
@@ -193,7 +267,7 @@ function NetCell({ net, partial, max }) {
 function DataRow({ r, onClick, max }) {
   const closed = r.status === "closed";
   const pl = plOf(r);
-  const { net, partial } = netOf(r);
+  const { net, verdict, bound } = netOf(r);
   return (
     <tr className="rowlink" style={{ cursor: "pointer", opacity: closed ? 0.7 : 1 }} onClick={onClick}>
       {/* The ticker sits on the sub-line rather than beside the name, and this cell is the
@@ -231,7 +305,7 @@ function DataRow({ r, onClick, max }) {
         {r.income_sgd ? sgd(r.income_sgd) : "—"}</td>
       <td className={cls(r.options_pl_sgd)} title="realised options (wheel) P/L">
         {r.options_pl_sgd ? sgd(r.options_pl_sgd) : "—"}</td>
-      <NetCell net={net} partial={partial} max={max} />
+      <NetCell net={net} verdict={verdict} bound={bound} max={max} />
       {/* A pooled row's XIRR is refused, not blank-by-accident — say so on hover, since the dash
           is the same glyph a position with too short a span already renders. */}
       <td className={cls(r.xirr)}
@@ -257,18 +331,35 @@ export default function Holdings() {
 
   useEffect(() => {
     setRows(null);
+    // `?closed=true` UNCONDITIONALLY (#143 §15). The ticker fold covers the whole ticker whatever
+    // the checkbox says, so every leg has to be in hand before anything is hidden — fetching the
+    // open-only route when the box is unticked is what used to make Net a different number
+    // depending on a control labelled visibility. Holdings is this endpoint's only caller in
+    // `web/`, so the no-parameter route now goes unrequested and its fixture is deleted; the
+    // `closed` parameter stays on the endpoint as API surface.
+    //
     // {as_of, positions}: the endpoint carries the date its prices are as of (issue #56).
     // Nothing renders it yet — flagging a stale book is a follow-up — but the rows now arrive
     // inside an envelope, so unwrap before anything downstream sees them.
-    get("/api/positions" + (showClosed ? "?closed=true" : ""))
+    get("/api/positions?closed=true")
       .then((d) => setRows(d.positions ?? []))
       .catch(() => setRows([]));
-  }, [showClosed]);
+  }, []);
 
   // Ticker mode is the one option that changes the row *set* rather than only bracketing it, so
   // everything downstream — the group fold, the bar scale, the heading count — reads `display`.
-  const display = useMemo(
-    () => (rows && by === "ticker" ? consolidate(rows) : rows), [rows, by]);
+  //
+  // FOLD FIRST, FILTER SECOND, and the order is the whole point. `showClosed` is a **pure
+  // row-visibility filter** with no arithmetic consequence: it decides which rows you see and
+  // never what any of them says. It used to decide the row set the fold consumed, which made it
+  // silently a *Net definition* — F34 and S61 (the only two names in the book with an open leg
+  // and a closed one) read their whole-ticker Net with the box ticked and a leg short of it
+  // unticked, so the figure disagreed with their own detail pages on the default view.
+  const display = useMemo(() => {
+    if (!rows) return rows;
+    const folded = by === "ticker" ? consolidate(rows) : rows;
+    return showClosed ? folded : folded.filter((r) => r.status !== "closed");
+  }, [rows, by, showClosed]);
 
   const groups = useMemo(() => {
     if (!display) return [];
@@ -284,7 +375,9 @@ export default function Holdings() {
       a.pl += plOf(r) || 0;
       a.inc += r.income_sgd || 0;
       a.opt += r.options_pl_sgd || 0;
-      a.net += netOf(r).net;
+      // a refusal has no Net to add — not a zero, no answer — so it contributes nothing, which
+      // is also what its group contributes in `/api/performance` (#143 §15).
+      a.net += netOf(r).net || 0;
       return a;
     }, { mv: 0, pl: 0, inc: 0, opt: 0, net: 0 });
     return [...m.entries()]
@@ -296,7 +389,8 @@ export default function Holdings() {
   // from `display` rather than `rows`: in ticker mode a merged row's Net is the sum of its parts,
   // and scaling those bars against an unmerged maximum would cap the biggest one at the rail.
   const maxNet = useMemo(
-    () => (display ? display.reduce((m, r) => Math.max(m, Math.abs(netOf(r).net)), 0) : 0), [display]);
+    () => (display ? display.reduce((m, r) => Math.max(m, Math.abs(netOf(r).net || 0)), 0) : 0),
+    [display]);
 
   if (sel) return <SecurityDetail ticker={sel.ticker} onBack={() => setSel(null)} />;
   if (!rows) return <div className="loading">Loading…</div>;
@@ -379,8 +473,14 @@ export default function Holdings() {
           P/L. Avg cost / cost basis / XIRR shown where transaction cost is known. CDP cost comes from
           cdp-stocks; positions transferred CDP→FSM keep their CDP purchase cost (pooled per funding bucket).
           XIRR is the money-weighted return incl. realised trades & dividends.
-          <b>Net</b> = total P/L (realised + unrealised + dividends) + option premiums — the bar shows its
-          size vs the biggest mover; <b>~</b> marks cost-unknown names where Net counts only dividends + premiums.
+          <b>Net</b> = total P/L (realised + unrealised + dividends) + option premiums, computed on the
+          server — the same figure the security's own page shows; the bar shows its size vs the biggest
+          mover. Three marks qualify it: <b>~</b> an upper bound, because some units entered with no known
+          cost and Net reads them as free; <b>≥</b> and <b>≤</b> a floor or a ceiling, where a corporate
+          action carried one event's cost between two successors and the total sits on the wrong one;
+          <b>n/a</b> where no unit of the name has a recorded cost and there is no Net to state. Grouped by
+          Ticker, a row covers the <b>whole</b> name — every funding bucket, open legs and closed ones —
+          whatever “Show closed positions” is set to, which only decides which rows are listed.
         </p>
       </details>
     </div>
