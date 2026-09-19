@@ -118,7 +118,8 @@ Moomoo, FSM, CDP or Endowus — the schedule loads whatever is sitting there, th
 you drop it.
 
 The local job writes to the **deployed** Neon database — that is the whole point, and the one
-thing to get wrong: `make ingest` with no `DATABASE_URL` writes to the local docker DB and
+thing to get wrong: `make ingest` with no `DATABASE_URL` writes to the local docker DB (`.env` from
+`.env.example` points there too) and
 reports success while the site goes stale. `scripts/scheduled_run.sh` resolves
 `DATABASE_URL_UNPOOLED` from `.env.local` and refuses to run against a localhost URL.
 
@@ -247,9 +248,13 @@ the 300s function ceiling. It stays sequential and unretried — a failed run is
   Minor/patch **development** bumps auto-merge once CI passes; anything that reaches
   production waits for you. See [§Dependency updates](#dependency-updates) below.
 - **Local dev**: copy `.env.example` → `.env` (`COOKIE_SECURE=false` for http), and
-  `web/.env.example` → `web/.env.local`. Run API (`make api`, i.e. `uvicorn server.main:app
-  --port 8000`) + `npm run dev` (Vite proxies `/api` **and** `/ingest` → 8000, so the
-  same-origin cookie works and PostHog traffic takes the same proxy path as production).
+  `web/.env.example` → `web/.env.local`. Two APIs: `make api` (:8000) serves the **deployed**
+  Neon DB (`DATABASE_URL` from the repo-root `.env.local`, `vercel env pull`; fails without it)
+  and its mutating routes write to it; `make api-local` (:8001) serves the docker DB, and only
+  its own built `web/dist` (`make build-web` first). `npm run dev` (Vite proxies `/api` **and**
+  `/ingest` → 8000, so the same-origin cookie works and PostHog traffic takes the same proxy
+  path as production) therefore goes with `make api`, not `api-local`. `reset`, `migrate` and
+  `api-local` refuse a non-localhost `DATABASE_URL` exported in the shell.
 - **Headers**: HTTP security headers (CSP/HSTS/X-Content-Type-Options/X-Frame-Options/
   Referrer-Policy) are set by the FastAPI middleware in `server/main.py`, which serves both
   the API and the static SPA. CSP allows `accounts.google.com` for Google Identity Services

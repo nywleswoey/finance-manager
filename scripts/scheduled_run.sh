@@ -9,7 +9,7 @@
 #   has to be findable from the PATH set here, not from the one you have interactively.
 #
 #   the database — `make ingest` with no DATABASE_URL writes to the local docker DB, because
-#   that is config.py's default and .env sets nothing. A scheduled job that did that would
+#   that is config.py's default (and what a .env copied from .env.example sets). A scheduled job that did that would
 #   run green forever while the deployed site went stale. That happened once by hand; this
 #   script resolves the deployed URL explicitly and refuses to run against a local one.
 #
