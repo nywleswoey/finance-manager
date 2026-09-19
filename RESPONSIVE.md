@@ -5,8 +5,10 @@ carries most of it.
 
 **The regression trigger is the suite, and the command is `make test-web`.** Ten named viewports ×
 thirteen views, run against a production build through vite's preview server with every API call
-served from committed fixtures: **1,415 passed, 477 skipped, 0 failed**, as of #100 — and ~7.5
-minutes on an unloaded machine, measured at #47 and not re-measured since. The skips are structural rather than disabled tests — a gate
+served from committed fixtures. Its size and wall clock are written **once** — in the [open
+call](#open-calls) on 768 and 1000, where the cost of another project is what the decision turns
+on — because a second copy here is a second thing to re-measure, and it is the copy that went
+stale. The skips are structural rather than disabled tests — a gate
 whose subject does not render at a viewport skips there, which is what makes "no card-per-row at 640
 and above" and "the desktop table is untouched" separate claims from their positive halves.
 `web/TESTING.md` says what each spec claims. The table-inventory grep this file used to ask a human
@@ -164,7 +166,7 @@ person still looks at, and "—" means the suite has all of it.
 | Portfolio › Dividends | crosstab **A** (grows in columns, so h-scroll never expires) · payment ledger **B** below 640, **A** on `Date` from 640 to 1024 · `LabelList` dropped below 640 · `--selfscroll: 520px` keeps desktop's box height without an inline `max-height` | — |
 | Portfolio › Options | contract ledger **A**, pinning `Underlying` · by-ticker and by-type unchanged (273/261px — they genuinely fit) · monthly P/L 6 bars below the tier against 24 above it, with the reserved band only when the window holds a loss | — |
 | Portfolio › Transactions | **B** below 640 · **A** on `Date` from 640 to 1024 | — *(telling two same-day trades apart is an [open call](#open-calls), not a check)* |
-| Portfolio › SecurityDetail | the **bucket split** under the hero (#157), on multi-bucket names only: one grid, a column per bucket plus Total, at every width — its `12ch` track floor drops to `minmax(0, 1fr)` below 1024 and the label track and gap tighten to `8ch`/`8px` below 640, so the block fits the pane instead of scrolling it (`split-width.spec.js`); #160 replaces the phone layout and inherits that constraint · txn history **B** · dividend history **B** · options history **A**, pinning the merged two-line `Contract` cell — and **B, A, A** above 640, since the tier gives both histories the pin on `Date` · `← Holdings` is `a.backlink`, a ≥44px target below the tier and the only way back — it was 17px until #47, see [Observations](#observations) | the dividend history renders for no fixture (PLTR has none) — its wrapper is the one thing in the tier no fixture reaches, and `pinned.spec.js` annotates that on every run |
+| Portfolio › SecurityDetail | the **bucket split** (#157, drawn for the phone by #160), on multi-bucket names only: below 640 it **loses its across axis** — one `.ledger-block` per bucket under the whole-ticker total, each a complete ledger summing to its own Net, and the across identity restated as a written sum (`.ledger-sum`: `cash +5,565.15 + cpf · closed +940.00 = +6,505.15`, the gated F34 fixture's own figures); from 640 to 1024 it is the grid, its `12ch` track floor dropped to `minmax(0, 1fr)` (`split-width.spec.js`) · the **five tiles are five full-width label/value rows** at the 44px floor (page-local: `.tiles` keeps its grid at the other seven call sites; a second view wanting rows makes a modifier, not a second block) · the **hero keeps every truth claim** (the `≥`/`≤` glyphs, the no-capital sentence, the refusal) **and folds every explanation** — the Net's caveat, the percentage's comparability caveat, the provenance sentence — behind one 44px `N qualifications on this figure` `<details>` (`phone-layout.spec.js`, 8 tickers x the phone viewports, plus the two bounded names served with the real provenance the holding captures predate — the only way the bound prefix and the carry sentence render at all) · txn history **B** · dividend history **B** · options history **A**, pinning the merged two-line `Contract` cell — and **B, A, A** above 640, since the tier gives both histories the pin on `Date` · `← Holdings` is `a.backlink`, a ≥44px target below the tier and the only way back — it was 17px until #47, see [Observations](#observations) | the dividend history renders for no fixture (PLTR has none) — its wrapper is the one thing in the tier no fixture reaches, and `pinned.spec.js` annotates that on every run |
 | Net Worth | editor floor · composition chart at a declared **480** at every width, in the grid cell the two-line chart had, with a DOM `.chartkey` carrying a per-band delta rather than a `<Legend>` · Breakdown and History `.contained` **below 1024**, not unconditionally · row grid unchanged | readable — the editors' remaining criterion · whether four bands and a four-chip key are legible at 390 in a cell that is also 480px tall |
 | Spending › Overview | donut dropped below 640, the list is the chart · stacked bar chart's `<Legend>` is a `.chartkey` · spend-trend small multiples full-width between the grid and the stacked bar: `auto-fit` at a **185px floor and a 14px gap**, 4 → 2 → 1 with **no new breakpoint**, panels 140px, present at 390 as one column — and three panels with an orphan at 844×390 and only there, see [Observations](#observations) · that card carries **no `.chartkey` by decision** — its four panel headers are the key · Top Line Items **B** below 640, **A** on `Category` from 640 to 1024 | whether the two charts reading in **opposite directions** is confusing in one viewport — the trend runs newest-at-the-left and the stacked bar left-to-right, which is accepted because every panel's caption states its direction in words, and the bar is deliberately **not** flipped *(the stacked bar chart was unreachable while `/api/spending/trends` was captured as a **500**; **#35** fixed the endpoint, the fixture holds a real chart, and `charts.spec.js` asserts its key in the DOM. The view's hscroll residual did not move — both charts are full-width cards holding percentage-width containers, and that number was always the `.grid2` track floor)* |
 | Spending › By Category | donut dropped below 640 · Categories **A** with the name column pinned, keeping its own `▸`/`▾` and the `.rowtap` flash *instead of* the persistent `›` · drilled transactions **B**, **outside the `.grid2` entirely** rather than merely outside the table | whether three levels of drill read as one structure once the third leaves the grid |
@@ -268,11 +270,13 @@ Failing these **changes a decision**, rather than reporting a bug.
   information design entirely, not a reflow.
 - Recurring's two nested scroll regions — geometry is fine; whether it *feels* confusing is not
   measurable from here.
-- `SecurityDetail.jsx:49` txn history stays **B**, but it measures the same ~4 cards per screen that
-  overturned B for the options table beside it (9 cols since the Bucket column of #159, so the
-  914px is a stale measurement and the real width is wider; up to 71 rows, four numbers per row).
-  If it reads as cramped, it wants **A** and SecurityDetail becomes B, A, A. **Buildable rather than
-  hypothetical** — the cards are on screen, so this is a look rather than a thought experiment.
+- ~~`SecurityDetail.jsx:49` txn history~~ — **closed by #160: stays B, measured.** 19 rows (PLTR)
+  is 2,569px of cards at 390 against a table capped at `60svh`, and the page is 3,987px against
+  ~11,600 if the options table were cards too. It stays on the reading job (a trade, not a
+  column) and on the bound: 19 rows is the security's own history, where 73 option legs are not.
+  Fixture measurements at 390; the live book's are within a few hundred px (F34 5,000 here vs
+  4,126 live). 3,987px is what the page measures now; #160 was written against 3,947px and the
+  page has moved since.
 - **Whether a phone list of 1001 cards is usable.** `spending/Transactions` fetches `limit=1000` and
   the card is ~2× an A row's height, so the pattern's own list is the app's longest render. Nothing
   about it is decidable at a desk, and the table it replaced was equally uncapped. **The By Category
@@ -294,9 +298,15 @@ Failing these **changes a decision**, rather than reporting a bug.
   suite gates three of them (640, 834, and 844×390 for the height guard). Both missing widths sit
   strictly inside a band whose ends are measured, and both read **0** on every view when measured by
   hand at the tier's landing — but that measurement is a moment in time and the suite is what makes
-  a fact durable. Adding them is two more projects on a suite that is already ten deep and ~8
-  minutes per full run, which is the cost side. Decide it once, here, rather than each time someone
-  notices.
+  a fact durable. Adding them is two more projects on a suite that is already ten deep and 8.5
+  minutes per full run, which is the cost side. That figure is measured, not estimated: `cd web &&
+  npx playwright test` (what `make test-web` runs after the build) reported `1734 passed (8.5m)` on
+  2026-09-19 on a macOS (Darwin 25.6.0) developer laptop, including #160's new per-viewport
+  `phone-layout.spec.js` and its narrowed `split-width.spec.js`. It is a single run, not an
+  average, and it was taken while #160 was still in review, before its last rounds moved those
+  two test files — so
+  re-measure with `make test-web` before deciding the call on it. Decide it once, here, rather than
+  each time someone notices.
 
 *(`Options.jsx:71` left this list: resolved to **A**, on the measurement that a 9-field card is 4
 rows per screen against A's 12 — the same reasoning that rejected B for Holdings at 3. A's 12 was a
@@ -571,7 +581,8 @@ Things the build session must be told, not left to discover.
 ## Re-running
 
 **The trigger is the suite. The command is `make test-web`.** It builds the frontend and runs all
-ten viewport projects plus the file-reading `inventory` project; a full run is ~7.5 minutes.
+ten viewport projects plus the file-reading `inventory` project; what a full run measures is in the
+[open call](#open-calls) on 768 and 1000, which is the one place that figure is written.
 
 ```
 make test-web                                          # everything

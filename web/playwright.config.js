@@ -106,7 +106,7 @@ export default defineConfig({
     },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
-      testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts|editors|tablet|tap|split-width)\.spec\.js/,
+      testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts|editors|tablet|tap|split-width|phone-layout)\.spec\.js/,
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: v.width, height: v.height },

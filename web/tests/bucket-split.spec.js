@@ -18,9 +18,10 @@
  * second place to update, and it hard-coded Holdings' Net column as a bare index where
  * `ticker.spec.js` names it.
  *
- * NOT HERE EITHER: the phone layout of this block (#160) — `split-width.spec.js` keeps only the
- * criterion the tier may not regress, that the pane never scrolls sideways — the refusal/caveat
- * hero states (#158), and the history tables' bucket column (#159).
+ * NOT HERE EITHER: the phone layout of this block (#160) — below 640 it is not this markup at
+ * all but stacked per-bucket blocks, and `phone-layout.spec.js` owns them, including the phone
+ * half of the subheading rule this file gates at 1280 — the refusal/caveat hero states (#158),
+ * and the history tables' bucket column (#159).
  */
 import { expect, test } from "@playwright/test";
 import { capturedHoldings, capturedProvenance, withProvenance }

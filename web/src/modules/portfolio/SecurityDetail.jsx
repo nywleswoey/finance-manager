@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { Fragment, useEffect, useState } from "react";
 import { get, fmt, sgd, money, cls, signed, signedPct } from "../../api.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 import { ContractCell } from "./contract.jsx";
@@ -142,22 +142,73 @@ function Breakeven({ o, bound, className }) {
 }
 
 /**
- * The muted subheading under a column header: units, avg cost, breakeven and — for a bucket —
- * status. It is deliberately not a row (the block's claim is that its rows add up) and
- * deliberately carries no return figure of any kind: one page, one return vocabulary (#134 §2).
- * The Total column's avg cost is the server's exact pooled weighted average, read off the
- * summary and not re-derived.
+ * WHAT A COLUMN'S SUBHEADING SAYS, in one place: units, avg cost and — for a bucket — status,
+ * as the lines to print in order. The wide head stacks them and the phone's block head runs them
+ * together, but the words are the same words. The breakeven is NOT one of these strings: it
+ * carries a bound glyph and a test id, so `Breakeven` above renders it in both heads.
+ *
+ * It is deliberately not a row (the block's claim is that its rows add up) and deliberately
+ * carries no return figure of any kind: one page, one return vocabulary (#134 §2). The Total
+ * column's avg cost is the server's exact pooled weighted average, read off the summary and not
+ * re-derived.
  */
+const columnSubheading = (o, status) => [
+  `${fmt(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u`,
+  `@ ${o.avg_cost == null ? NOT_KNOWN : fmt(o.avg_cost, 4)}`,
+  ...(status ? [status] : []),
+];
+
+/** The muted subheading under a wide column header, one line per part. */
 function ColumnHead({ name, o, status, bound }) {
   return (
     <div className="ledger-col" data-testid="ledger-col">
       <div className="ledger-colname">{name}</div>
       <div className="ledger-sub mut" data-testid="ledger-sub">
-        <div>{fmt(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u</div>
-        <div>@ {o.avg_cost == null ? NOT_KNOWN : fmt(o.avg_cost, 4)}</div>
-        <Breakeven o={o} bound={bound} />
-        {status && <div>{status}</div>}
+        {columnSubheading(o, status).map((line, i) => (
+          <Fragment key={line}>
+            <div>{line}</div>
+            {i === 1 && <Breakeven o={o} bound={bound} />}
+          </Fragment>
+        ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * ONE BLOCK OF THE PHONE'S STACKED SPLIT (#160): a complete ledger for one column of the wide
+ * form — the whole ticker or one bucket — drawn as the plain vertical statement, so it sums to
+ * its own Net on its own. `o` is the column's payload (the summary or a bucket), `rows` carries
+ * this column's own lines as `[label, figure, words]`, and `net` is its bottom line (`undefined`
+ * on a refusal, which has none).
+ *
+ * The heading carries what the wide form's muted subheading carried, on one line, and no return
+ * figure of any kind (#134 §2).
+ */
+function LedgerBlock({ name, o, status, bound, rows, net, testid }) {
+  return (
+    <div className="ledger-block" data-testid={testid}>
+      <div className="ledger-blockhead">
+        <span className="ledger-colname">{name}</span>
+        <span className="ledger-sub mut" data-testid="ledger-sub">
+          {columnSubheading(o, status).join(" · ")}
+        </span>
+        {/* the breakeven rides the block head as its own line: it is a claim about this block's
+            Net, not a member of the subheading string, and the head already wraps */}
+        <Breakeven o={o} bound={bound} className="ledger-be mut" />
+      </div>
+      {rows.map(([lbl, v, text]) => (
+        <div className="ledger-row" key={lbl}>
+          <span className="ledger-lbl">{lbl}</span>
+          <span className={"ledger-val " + ledgerClass(v)}>{text}</span>
+        </div>
+      ))}
+      {net !== undefined && (
+        <div className="ledger-row ledger-total">
+          <span className="ledger-lbl">Net</span>
+          <span className={"ledger-val " + ledgerClass(net)}>{ledgerAmount(net)}</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -300,8 +351,22 @@ export default function SecurityDetail({ ticker, onBack }) {
   const netNote = s.net_verdict === "caveat";
   const returnNote = !refused && s.return_verdict === "caveat";
   const carryNote = !!pv && !refused;
+  const noteCount = +netNote + +returnNote + +carryNote;
   const BOUND_GLYPHS = { lower: ["\u2265", "\u2264"], upper: ["\u2264", "\u2265"] };
   const [figureBound, capitalBound] = BOUND_GLYPHS[bound] || [null, null];
+  const heroNotes = (
+    <>
+      {netNote && (
+        <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
+      )}
+      {returnNote && (
+        <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence}</p>
+      )}
+      {carryNote && (
+        <p className="hero-note" data-testid="carry-note">{carrySentence(pv, bound)}</p>
+      )}
+    </>
+  );
 
   return (
     <div>
@@ -395,20 +460,20 @@ export default function SecurityDetail({ ticker, onBack }) {
             why the carry's disclosure follows both rather than sitting where it reads most
             naturally on the one name that has a carry and no caveat-net. A name that is `caveat`
             and also carries would otherwise split the pair. */}
-        {(netNote || returnNote || carryNote) && (
-          <div data-testid="hero-notes">
-            {netNote && (
-              <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
-            )}
-            {returnNote && (
-              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence}</p>
-            )}
-            {carryNote && (
-              <p className="hero-note" data-testid="carry-note">
-                {carrySentence(pv, bound)}</p>
-            )}
-          </div>
-        )}
+        {/* THE PHONE KEEPS EVERY TRUTH CLAIM AND FOLDS EVERY EXPLANATION (#160). The bound on the
+            number, the `≥`/`≤` on the percentage, the no-capital sentence and the refusal all
+            stay where they were; what folds is the REASON — the Net's caveat, the percentage's
+            incomparability, the provenance — behind one 44px row. A `<details>`, so it opens
+            and never truncates: Holdings' footnote is the same idiom in the same tier. The
+            sentences keep their order and their test ids, folded or not. */}
+        {noteCount > 0 && (phone ? (
+          <details className="hero-fold" data-testid="hero-notes">
+            <summary data-testid="hero-fold-toggle">
+              {noteCount} {noteCount === 1 ? "qualification" : "qualifications"} on this figure
+            </summary>
+            {heroNotes}
+          </details>
+        ) : <div data-testid="hero-notes">{heroNotes}</div>)}
         {/* TWO DATES, DELIBERATELY (#143 §2). `as_of` is the valuation date this page and
             Holdings share; `fx_as_of` is `max(fx_rate.date)`. One date beside the words "at
             latest FX" would be read as FX's date, which it is not — so each says which it is,
@@ -425,8 +490,42 @@ export default function SecurityDetail({ ticker, onBack }) {
           one column per bucket plus Total, every column its own complete ledger. A closed bucket
           keeps its column so the realised P/L already inside the hero has a visible origin.
           Single-bucket is the plain vertical reconciliation — no header, no column label, no
-          empty second column. The Total column is the whole-ticker ledger (`.ledger-val`);
-          bucket cells are `.ledger-cell`, so nothing that reads the ledger sums a bucket twice. */}
+          empty second column. In THIS wide form the Total column is the whole-ticker ledger
+          (`.ledger-val`) and bucket cells are `.ledger-cell`, so nothing that reads the ledger
+          sums a bucket twice. The stacked phone form below has no bucket cells at all: every
+          block is its own ledger of `.ledger-val`, so a reader of the figures scopes to one
+          `.ledger-block` rather than to the ledger. */}
+      {split && phone ? (
+        /* BELOW 640 THE LEDGER LOSES ITS ACROSS AXIS (#160). One block per bucket, stacked, the
+           whole-ticker total on top, and the across-identity restated as a written sum. This is
+           not the rejected earlier variant: that split stopped reconciling, and this one keeps
+           the arithmetic on BOTH axes — each block is a complete ledger summing to its own Net,
+           and the across-check is stated, not implied. Keeping the columns and scrolling
+           sideways would hide the whole second bucket column at 360, making "reconciles down
+           and across" true of the DOM and false of the screen. */
+        <div className="ledger ledger-stack" data-testid="ledger">
+          <LedgerBlock name="Total" o={s} bound={capitalBound} testid="ledger-block-total"
+                       rows={rows.map(([lbl, v]) => [lbl, v, ledgerAmount(v)])}
+                       net={refused ? undefined : s.net_pl_sgd} />
+          {bks.map((b) => (
+            <LedgerBlock key={b.bucket} name={b.bucket} o={b} status={b.status} bound={capitalBound}
+                         rows={rows.map(([lbl, , key]) => [lbl, b[key], bucketCell(b, key)])}
+                         net={refused ? undefined : b.net_pl_sgd} />
+          ))}
+          {!refused && (
+            <div className="ledger-sum" data-testid="ledger-sum">
+              {bks.map((b, i) => (
+                <React.Fragment key={b.bucket}>
+                  {i > 0 && " + "}
+                  <span className="mut">{b.bucket}{b.status && b.status !== "open" ? ` \u00b7 ${b.status}` : ""}</span>
+                  {" "}{ledgerAmount(b.net_pl_sgd)}
+                </React.Fragment>
+              ))}
+              {" = "}<strong>{ledgerAmount(s.net_pl_sgd)}</strong>
+            </div>
+          )}
+        </div>
+      ) : (
       <div className={"ledger" + (split ? " ledger-split" : "")} data-testid="ledger"
            style={split ? { "--cols": bks.length + 1 } : undefined}>
         {split ? (
@@ -469,11 +568,12 @@ export default function SecurityDetail({ ticker, onBack }) {
           </div>
         )}
       </div>
+      )}
 
       {/* The five position tiles, and only those five. Unrealised, Dividends and Options are
           reconciliation rows now, not tiles: as tiles they were three of the hero's own
           components standing beside it with nothing saying they add up to anything. */}
-      <div className="tiles" style={{ marginTop: 14 }}>
+      <div className="tiles tiles-list" style={{ marginTop: 14 }}>
         <Tile lbl="Units" val={fmt(s.units, s.units < 10 ? 4 : 0)} />
         <Tile lbl="Avg Cost"
               val={s.avg_cost == null ? NOT_KNOWN : money(s.avg_cost, s.currency, 4)} />

@@ -13,7 +13,7 @@
  * THE BOUNDED TWO BORROW A REAL PROVENANCE; ONLY TWO PAYLOADS ARE WRITTEN. `holding-9ci.json`
  * and `holding-c38u.json` predate `summary.provenance` reaching the wire, but
  * `positions-closed.json` does not: it carries both names' wire objects verbatim, so
- * `capturedProvenance` reads them off it rather than restating four fields a recapture would
+ * `capturedProvenance()` reads them off it rather than restating four fields a recapture would
  * leave stale. `bucket-split.spec.js` reads the same objects for the bounded price. Written,
  * and said so: the exact 1:1 carry (0P0001OOJG was never captured, so it is the plain PLTR hero
  * with an exact provenance beside it) and the refusal that still locked collateral — both
