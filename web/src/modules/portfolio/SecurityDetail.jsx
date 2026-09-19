@@ -245,10 +245,7 @@ export default function SecurityDetail({ ticker, onBack }) {
   const returnNote = !refused && s.return_verdict === "caveat";
   const carryNote = !!pv && !refused;
   const BOUND_GLYPHS = { lower: ["\u2265", "\u2264"], upper: ["\u2264", "\u2265"] };
-  const [figureBound, carryCapitalBound] = BOUND_GLYPHS[bound] || [null, null];
-  // A glyph on the denominator only where the page can claim that direction: under a `caveat`
-  // return the partition doubts the peak too, and the sentence below states that instead.
-  const capitalBound = s.return_verdict === "caveat" ? null : carryCapitalBound;
+  const [figureBound, capitalBound] = BOUND_GLYPHS[bound] || [null, null];
 
   return (
     <div>

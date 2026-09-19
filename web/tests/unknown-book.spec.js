@@ -287,7 +287,7 @@ test.describe("bounded — the bound lands on the numbers", () => {
     await expect(note).toContainText(`${sgd(pv.carried_sgd)} cost`);
   });
 
-  test("an upper bound: \u2264 on the Net and on the percentage, none on a caveated capital", async ({ page, baseURL }) => {
+  test("an upper bound: \u2264 on the Net, \u2264 on the percentage, \u2265 on the capital", async ({ page, baseURL }) => {
     const p = upper();
     const s = p.summary;
     await open(page, baseURL, "C38U", p);
@@ -295,12 +295,13 @@ test.describe("bounded — the bound lands on the numbers", () => {
     expect(s.net_verdict).toBe("bounded");
     await expect(page.getByTestId("hero-bound")).toHaveText(/^\u2264/);
     await expect(heroReturn(page)).toContainText(/^\u2264 /);
-    // The partition doubts the peak as well as the carry does, so the denominator claims no
-    // direction — `caveat-return` states the compounding in prose instead.
-    expect(s.return_verdict).toBe("caveat");
+    // One rule marks the denominator, and the sentence beside it reads the same way: the carry
+    // took this name's share of the cost away and the uncosted units add none, so the true peak
+    // is at least the figure shown — a lower bound in prose, `\u2265` on the number.
     await expect(heroReturn(page))
-      .toContainText(new RegExp(`on peak capital of ${escapeRe(fmt(s.peak_car_sgd, 2))}`));
-    expect(((await heroReturn(page).innerText()).match(/[\u2265\u2264]/g) ?? []).length).toBe(1);
+      .toContainText(new RegExp(`on peak capital of \u2265 ${escapeRe(fmt(s.peak_car_sgd, 2))}`));
+    expect(s.return_verdict).toBe("caveat");
+    await expect(page.getByTestId("caveat-return")).toContainText("a lower bound");
 
     const pv = s.provenance;
     const note = page.getByTestId("carry-note");
