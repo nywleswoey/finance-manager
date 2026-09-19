@@ -25,7 +25,7 @@ D = dt.date
 SGD = 1.0     # every row here is an SGD name, so the fold's rate is 1.0
 
 
-def _row(**over):
+def _row(rate=SGD, **over):
     """A `fold_positions` row carrying every field `fold_ticker` reads."""
     r = {"bucket": "cash", "accounts": ["FSM"], "ticker": "D05", "name": "DBS", "market": "SG",
          "asset_type": "stock", "currency": "SGD", "units": 3080.0, "price": 30.0,
@@ -45,7 +45,7 @@ def _row(**over):
     # a breakeven hand-written beside the components it is solved from is a fixture that can
     # disagree with itself or with the rule, and every override below moves at least one of
     # those components. The arithmetic is gated in tests/test_fold_ticker.py.
-    r["breakeven_price"] = _breakeven_price(r, r["units"], SGD)
+    r["breakeven_price"] = _breakeven_price(r, r["units"], rate)
     return r
 
 
@@ -169,18 +169,23 @@ def test_the_breakeven_is_solved_at_the_rate_its_own_figures_were_converted_at(c
     reconstructing the SGD shortfall (`mv_sgd − net_pl_sgd`, which is the identity solved for
     price) rather than by re-spelling the formula."""
     fold, live = 1.30, 1.50                # the fold's rate, and a fresher one beside it
-    usd = _row(ticker="AAPL", name="Apple", market="US", currency="USD",
-               mv_sgd=round(92400.0 * fold, 2), cost_basis_sgd=round(80618.08 * fold, 2),
-               income_sgd=round(1200.0 * fold, 2))
-    usd["unrealised_pl_sgd"] = round(usd["mv_sgd"] - usd["cost_basis_sgd"], 2)
-    usd["stock_pl_sgd"] = usd["unrealised_pl_sgd"]
-    usd["net_pl_sgd"] = round(usd["stock_pl_sgd"] + usd["income_sgd"], 2)
+    mv, cost = round(92400.0 * fold, 2), round(80618.08 * fold, 2)
+    income, unreal = round(1200.0 * fold, 2), round(92400.0 * fold - 80618.08 * fold, 2)
+    # every component handed in as an override, so the row derives its own breakeven ONCE, from
+    # the figures it ships and at its own rate
+    usd = _row(rate=fold, ticker="AAPL", name="Apple", market="US", currency="USD",
+               mv_sgd=mv, cost_basis_sgd=cost, income_sgd=income,
+               unrealised_pl_sgd=unreal, stock_pl_sgd=unreal,
+               net_pl_sgd=round(unreal + income, 2))
     monkeypatch.setattr(main, "perf_fold", lambda: ([usd], {"USD": fold}))
     monkeypatch.setattr(main, "ticker_ledger",
                         lambda s, tk: ([], [], {"USD": live}))
 
     s = client.get("/api/holding?ticker=AAPL").json()["summary"]
 
+    # a single-bucket ticker's column IS its summary: one price, not two
+    assert client.get("/api/holding?ticker=AAPL").json()["buckets"][0]["breakeven_price"] == \
+        s["breakeven_price"]
     shortfall = round(s["mv_sgd"] - s["net_pl_sgd"], 2)
     # the 4dp the price is quoted at, spread over the units it multiplies
     assert abs(s["breakeven_price"] * fold * s["units"] - shortfall) <= 5e-5 * fold * s["units"]

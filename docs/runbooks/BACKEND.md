@@ -348,10 +348,12 @@ components it has to undo.
   numerator is SGD and the answer is native, so a rate from a later reading returns the true price
   scaled by the ratio between the two, and it stops zeroing the Net beside it — the one property
   the field is defined by. `/api/positions`' fold is memoized with no TTL and `ticker_ledger`
-  re-reads FX per request, so `server/main.py` caches the rows and the map as ONE value under one
-  key (`perf_fold`), and `/api/holding` takes both from it. One key rather than two filled
-  together: two can be separated by a `_cache.clear()` landing between them, or by a caller
-  replacing one accessor and not the other.
+  re-reads FX per request, so `performance.compute_with_fx` returns the rows **with the very map
+  it converted them with** — not a second `fx_map()` beside it, which a rate committed during
+  compute's own SQL would already have moved — and `server/main.py` caches that pair as ONE value
+  under one key (`perf_fold`), which `/api/holding` takes both halves from. One key rather than
+  two filled together: two can be separated by a `_cache.clear()` landing between them.
+  `compute()` is `compute_with_fx()` with the map dropped.
   `audit_ledger` does NOT have that guarantee and does not need one. `fetch()` reads FX a second
   time, in its own session, after `compute()` read its own — two reads, two transactions — and
   hands that second map to `ticker_nets`. It is a one-shot offline script whose only consumer of

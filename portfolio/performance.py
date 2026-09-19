@@ -1469,6 +1469,22 @@ def fold_ticker(rows, rate):
 def compute(session=None):
     """Fetch adapter: pull every input the fold needs from the DB, then hand off to the pure
     fold_positions(). The heavy SQL lives here; the cost-basis arithmetic lives in the fold."""
+    return compute_with_fx(session)[0]
+
+
+def compute_with_fx(session=None):
+    """`(rows, fx)` — the fold's rows and **the very map they were converted at**, not a second
+    reading of it.
+
+    Every SGD figure on a row is a native amount times a rate read once at the top of this
+    function. A caller that has to move one of those figures BACK into native — `fold_ticker`
+    solving a breakeven price out of an SGD shortfall — needs that object and not a fresh
+    `fx_map()`: a rate committed between the two reads makes the price the true one scaled by
+    the ratio, so it stops zeroing the Net beside it. Same session is not enough, because
+    Postgres takes a fresh snapshot per statement under READ COMMITTED and this function's SQL
+    runs for seconds. Returning it is the only way to hold the two together.
+
+    `compute()` is this with the map dropped — one projection, not a second fetch."""
     today = dt.date.today()
     with session_scope(session) as s:
         fx, price = _fx_and_price(s)
@@ -1496,7 +1512,7 @@ def compute(session=None):
     from .options import contracts_by_ticker, realized_by_ticker
     options = realized_by_ticker()
     return fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today,
-                          contracts=contracts_by_ticker())
+                          contracts=contracts_by_ticker()), fx
 
 
 def alloc_by_account(session=None):

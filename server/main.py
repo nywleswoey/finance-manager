@@ -26,8 +26,8 @@ from server import auth
 from portfolio.db import SessionLocal, fx_as_of, fx_map, session_scope, valuation_as_of
 from portfolio.money import rate_to_sgd, to_sgd
 from portfolio.options import trades_for
-from portfolio.performance import (alloc_by_account, cdp_transactions, compute, empty_group,
-                                   fold_ticker, is_leg, rollup)
+from portfolio.performance import (alloc_by_account, cdp_transactions, compute,
+                                   compute_with_fx, empty_group, fold_ticker, is_leg, rollup)
 from portfolio import spending
 from portfolio import dividends
 
@@ -172,9 +172,9 @@ def _as_of():
 
 
 def _read_fold():
-    """One session, one read: the fold's rows and the FX map they were converted at."""
-    with session_scope() as s:
-        return compute(s), fx_map(s)
+    """The fold's rows and the FX map they were converted at, from the one read that converted
+    them — `compute_with_fx`, never a second `fx_map()` beside it."""
+    return compute_with_fx()
 
 
 def perf_fold():
@@ -189,10 +189,10 @@ def perf_fold():
     `_cache` has no TTL, and a write that bypasses this process leaves a warm instance folding at
     yesterday's rate (see `_as_of`).
 
-    THE PAIR IS ONE VALUE RATHER THAN TWO KEYS FILLED TOGETHER. Two keys can be separated — by a
-    `_cache.clear()` landing between the two reads, and by a caller replacing one accessor and
-    not the other — and a rate that has lost its rows is worse than no rate at all. One key
-    cannot be split by either."""
+    THE PAIR IS ONE VALUE RATHER THAN TWO KEYS FILLED TOGETHER, and `compute_with_fx` hands it
+    over as one so the map is the one the rows were converted with rather than a second reading
+    of it. Two cache keys could be separated by a `_cache.clear()` landing between their fills;
+    one key cannot. `perf_all` is a projection of this value and never a second source of it."""
     return _cached("all", _read_fold)
 
 

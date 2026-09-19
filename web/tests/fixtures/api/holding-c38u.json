@@ -40,6 +40,20 @@
   "invested_native": 11121.87,
   "fees_sgd": 12.87,
   "cost_known": true,
+   "provenance": {
+    "from_ticker": "C31",
+    "from_name": "CapitaLand Ltd",
+    "type": "distribution",
+    "carried_on": "2021-09-28",
+    "carried_sgd": 0.0,
+    "split_with": [
+     {
+      "ticker": "9CI",
+      "units": 2700.0
+     }
+    ],
+    "bound": "upper"
+   },
   "breakeven_price": null
  },
  "buckets": [
