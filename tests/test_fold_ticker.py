@@ -352,6 +352,18 @@ def test_a_refusal_nulls_the_breakeven_with_the_net():
     assert all(b["breakeven_price"] is None for b in t["buckets"])
 
 
+def test_a_leg_that_cannot_price_its_units_has_no_breakeven_though_its_net_is_known():
+    """The third null, with no test of its own in the formula: q01 is a caveat, so Net is known
+    (it rides `stock_pl_sgd`) while cost basis and realised are not. The price that would make
+    it whole cannot be said, and the arithmetic refuses with them rather than beside them."""
+    t = q01()
+    assert t["summary"]["cost_basis_sgd"] is None and t["summary"]["realised_pl_sgd"] is None
+    for r in (t["summary"], *t["buckets"]):
+        assert r["net_pl_sgd"] is not None and r["units"] > 0
+        assert r["realised_pl_sgd"] is None
+        assert r["breakeven_price"] is None
+
+
 def test_a_name_already_ahead_on_income_breaks_even_below_zero():
     """Income past the cost basis means no price can lose: the negative says by how much, and
     is not clamped to a reassuring zero."""

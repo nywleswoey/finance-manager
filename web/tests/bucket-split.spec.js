@@ -230,3 +230,66 @@ for (const { ticker, body } of MULTI) {
     });
   });
 }
+
+// The line carries no `title` on any captured holding — a tooltip is unreachable on touch — and
+// a single-bucket page, which has no column head, carries no breakeven line at all.
+for (const { ticker, body } of HOLDINGS) {
+  test(`${ticker}: the breakeven line has no title attribute`, async ({ page, baseURL }) => {
+    await openTicker(page, baseURL, ticker);
+    const lines = page.getByTestId("ledger-breakeven");
+    if (body.buckets.length === 1) {
+      await expect(lines).toHaveCount(0);
+      return;
+    }
+    expect(await lines.count()).toBeGreaterThan(0);
+    for (let i = 0; i < await lines.count(); i++) {
+      await expect(lines.nth(i)).not.toHaveAttribute("title", /.*/);
+      await expect(lines.nth(i).locator("[title]")).toHaveCount(0);
+    }
+  });
+}
+
+test.describe("the breakeven line's states, driven rather than observed", () => {
+  // The captured multi-bucket holdings only ever carry ordinary positive prices, so the negative
+  // and unknown branches are driven on a payload written to reach them.
+  const multi = () => MULTI.find((h) => h.body.buckets.some((b) => b.status === "closed"));
+
+  const serve = async (page, baseURL, ticker, payload) => {
+    await openTicker(page, baseURL, ticker);
+    await page.route("**/api/holding**", (route) => route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify(payload),
+    }));
+    await page.getByText("← Holdings").click();
+    await page.locator("tbody tr")
+      .filter({ has: page.locator("span.pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) })
+      .first().click();
+    await expect(page.getByText("← Holdings")).toBeVisible();
+  };
+
+  const withOpenBucket = (body, breakeven_price) => ({
+    ...body,
+    buckets: body.buckets.map((b) => (b.status === "closed" ? b : { ...b, breakeven_price })),
+    summary: { ...body.summary, breakeven_price },
+  });
+
+  test("a negative breakeven renders as the negative number it is", async ({ page, baseURL }) => {
+    const { ticker, body } = multi();
+    await serve(page, baseURL, ticker, withOpenBucket(body, -1.2345));
+    const lines = page.getByTestId("ledger-breakeven");
+    expect(await lines.count()).toBeGreaterThan(0);
+    for (let i = 0; i < await lines.count(); i++) {
+      await expect(lines.nth(i)).toHaveText(/^be [-−]1\.2345$/);
+    }
+  });
+
+  test("an unpriceable open column says `not known`, and a closed one says nothing", async ({ page, baseURL }) => {
+    const { ticker, body } = multi();
+    await serve(page, baseURL, ticker, withOpenBucket(body, null));
+    const subs = page.getByTestId("ledger-sub");
+    for (const [i, b] of body.buckets.entries()) {
+      const line = subs.nth(i).getByTestId("ledger-breakeven");
+      if (b.status === "closed") await expect(line).toHaveCount(0);
+      else await expect(line).toHaveText(`be ${NOT_KNOWN_TEXT}`);
+    }
+  });
+});
