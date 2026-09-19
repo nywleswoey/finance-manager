@@ -405,6 +405,13 @@ hero     ⟺  unknown == 0
   caveat` on its unknown 500.
 - **`bound` is one claim over both axes**, not a third axis: the return axis keeps its own three
   values.
+- **Unevidenced (#158): `tiles kept` on the CEILING direction.** The criterion is proven on the
+  floor — 9CI keeps `avg_cost: 3.73` and its cost basis — and cannot be shown on the ceiling: the
+  only `upper`-bounded name is C38U, whose partition still doubts 417 units, so #148's rule nulls
+  the cost basis rather than letting pooled averaging invent one. Weakening that rule or
+  reclassifying the holding to evidence the criterion is rejected. **Trigger:** the first
+  ceiling-bounded name whose units are all costed. Recorded beside #158's other open call in
+  `web/TESTING.md`.
 
 **`provenance`** ships on every row — null unless a carry reached the name, and whole-ticker like
 the verdict, so it rides every leg:

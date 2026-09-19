@@ -311,8 +311,13 @@ then the percentage's, adjacent), no capital (percentage, span and peak absent t
 in the copy) and the bound in both directions plus the exact carry that still discloses. One
 viewport, one project; every expectation is read off the payload. The 9CI and C38U captures predate
 `summary.provenance` and no exact carry was captured, so those provenance objects are attached in
-the spec. **Unevidenced:** the refusal's "what the book does know, below" clause — the one real
-refusal knows no dividends; trigger is the next un-annotated carry-in that also pays one.
+the spec. **Unevidenced, two of them.** The refusal's "what the book does know, below" clause —
+the one real refusal knows no dividends; trigger is the next un-annotated carry-in that also pays
+one. And the bound's "tiles kept" on the CEILING direction: it is proven on the floor (9CI keeps
+its `avg_cost` and cost basis) and cannot be on the ceiling, because the only `upper`-bounded name
+(C38U) still carries doubted units and #148's partition rule correctly nulls a cost basis pooled
+averaging would have invented — see `docs/runbooks/BACKEND.md`. Trigger is the first
+ceiling-bounded name whose units are all costed.
 
 `tests/security-detail-options.spec.js` — **SecurityDetail's Options P/L**, the same kind of
 subject as `ticker.spec.js` and there for the same reason: a folded total is the same number at

@@ -104,6 +104,7 @@ const lowerWithUnknownUnits = () => {
 /** The upper side of a split that holds nothing else: it carries a bound, and its Net refuses. */
 const refusedCarry = () => withProvenance(captured("ASTREA6B"), upperCarry());
 
+
 /** A caveat that also carries, exactly: three notes, and the caveat's two still adjacent. */
 const caveatWithExactCarry = () => {
   const b = captured("Q01");
@@ -323,6 +324,23 @@ test.describe("bounded — the bound lands on the numbers", () => {
     await expect(note).toContainText(pv.split_with[0].ticker);
   });
 
+  test("the captured C38U states the percentage's sentence with none above it to lean on", async ({ page, baseURL }) => {
+    // The capture itself, no provenance overlay — the one live payload whose Net is `bounded`
+    // and whose return is `caveat`, so `caveat-net` is gated out and this sentence is the first
+    // prose on the page. It names its own doubt rather than pointing at one that never rendered.
+    const s = captured("C38U").summary;
+    expect(s.net_verdict).toBe("bounded");
+    expect(s.return_verdict).toBe("caveat");
+    await open(page, baseURL, "C38U");
+
+    expect(await noteIds(page)).toEqual(["caveat-return"]);
+    const note = page.getByTestId("caveat-return");
+    await expect(note).toContainText("without a recorded cost");
+    await expect(note).toContainText("not comparable to any other name");
+    expect(await note.innerText(), "the sentence points back at one that is not there")
+      .not.toMatch(/same error|those doubts/);
+  });
+
   test("a name carrying both doubts states the percentage's incomparability, then the carry", async ({ page, baseURL }) => {
     const p = upper();
     // C38U is the one name where the partition's return caveat and the split carry meet.
@@ -392,21 +410,19 @@ test.describe("bounded — the bound lands on the numbers", () => {
     expect(gap).toBe("caveat-return");
   });
 
-  test("a refusal keeps the disclosure and drops the direction", async ({ page, baseURL }) => {
+  test("a refusal that carries stays at its three lines", async ({ page, baseURL }) => {
+    // The carry note is the bounded figure's disclosure, and a refusal has no figure — a fourth
+    // paragraph would qualify the very line that hands the reader down to the block below.
     const p = refusedCarry();
-    const pv = p.summary.provenance;
     expect(p.summary.net_verdict).toBe("refuse");
-    expect(pv.bound).toBe("upper");
+    expect(p.summary.provenance.bound).toBe("upper");
     await open(page, baseURL, "ASTREA6B", p);
 
     await expect(hero(page)).toContainText(NOT_KNOWN);
-    const note = page.getByTestId("carry-note");
-    await expect(note).toContainText(pv.from_ticker);
-    await expect(note).toContainText(pv.carried_on);
-    // No direction on a Net the hero says does not exist, and no sibling to solve it against.
-    const text = await note.innerText();
-    expect(text).not.toMatch(/too high|too low|[\u2265\u2264]/);
-    expect(text).not.toContain(pv.split_with[0].ticker);
+    await expect(page.getByTestId("carry-note")).toHaveCount(0);
+    await expect(page.getByTestId("hero-notes")).toHaveCount(0);
+    await expect(page.getByTestId("hero-refusal").locator("p")).toHaveCount(2);
+    expect(await page.locator(".hero").innerText()).not.toContain(p.summary.provenance.from_ticker);
   });
 
   test("the exact carry still discloses, and is bounded nowhere", async ({ page, baseURL }) => {
