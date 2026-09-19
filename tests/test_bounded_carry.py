@@ -135,6 +135,23 @@ def test_bounded_coexists_with_a_partition_caveat_on_the_one_name_carrying_both(
     assert c38u["net_pl_sgd"] is not None
 
 
+def test_a_carry_the_partition_contradicts_is_not_bounded():
+    """9CI takes the whole event's cost — its Net is a FLOOR — and then buys 300 more units at
+    an unrecorded price, which are counted as free and make the same Net a CEILING. Two doubts
+    in opposite directions bound it in neither, so the counts keep the verdict. The event still
+    ships its direction: which way the cost was mis-attributed is a fact about the event, and
+    what the page may claim from it is this rule's call."""
+    nine = _row(_fold(_capitaland(_nine_ci(action="buy", qty_signed=300, price=None,
+                                           trade_date=D(2022, 6, 1))), SPLIT), "9CI")
+    assert nine["cost_partition"]["unknown"] == 300.0
+    assert nine["net_verdict"] == "caveat"
+    assert nine["provenance"]["bound"] == "lower"
+    # the rule itself, both ways round: the sibling's direction agrees with the partition's
+    # ceiling and survives it, this one does not.
+    assert perf.net_verdict([nine["cost_partition"]], "lower") == "caveat"
+    assert perf.net_verdict([nine["cost_partition"]], "upper") == "bounded"
+
+
 def test_bounded_keeps_its_tiles_where_a_caveat_nulls_them():
     """Every unit of 9CI carries an exact average cost. Nulling `avg_cost: 3.73` would delete
     the only proof the reader has that the position cost anything, on the very page whose

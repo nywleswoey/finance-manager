@@ -134,24 +134,18 @@ const refusalSentence = (s) =>
  * still owes the percentage's second sentence when the return axis is a caveat too — C38U.
  * Neither prints the Net a second time: the hero already carries the figure.
  *
- * THE SECOND SENTENCE READS THE SAME BOUND THE HERO'S GLYPH DOES. A bounded name's Net takes the
- * carry's direction, not the partition's — `net_verdict` says so — so a `lower` name prints `≥`
- * on the figure, and a sentence hardcoded to "upper bound" would put a ceiling and a floor on
- * one Net two lines apart. On `lower` the two doubts pull the DENOMINATOR opposite ways — the
- * carried cost raises the peak, the units without one lower it — so that clause claims no
- * direction either, which is exactly the incomparability this sentence exists to state.
+ * THE SECOND SENTENCE IS NOT DIRECTIONAL ABOUT ANYTHING THE HERO CONTRADICTS. It renders only
+ * under a `caveat` return, which needs unknown units — and `net_verdict` ships `bounded` there
+ * only where the carry's direction agrees with the partition's ceiling (`upper`). So the Net it
+ * calls an upper bound is the one the hero prints `≤` on, or no glyph at all.
  */
 const caveatNetSentence = (s) =>
   `${unitsUnknown(s.cost_partition)} entered without a recorded cost, and this Net counts ` +
   "them as free — so it is an upper bound.";
-const caveatReturnSentence = (bound) =>
-  (bound === "lower"
-    ? "Neither side of the percentage is a clean bound: the Net above is a lower bound while " +
-      "the peak capital is raised by the cost carried in and lowered by the units that entered " +
-      "without one"
-    : "The same error runs both ways in the percentage: the Net above is an upper bound while " +
-      "the peak capital counts costed lots only, a lower bound") +
-  " — so it is not comparable to any other name on the site.";
+const caveatReturnSentence =
+  "The same error runs both ways in the percentage: the Net above is an upper bound while " +
+  "the peak capital counts costed lots only, a lower bound — so it is not comparable to any " +
+  "other name on the site.";
 
 /**
  * A carry's disclosure, last in the notes block (§12). Directional where the carry split, and it
@@ -161,25 +155,26 @@ const caveatReturnSentence = (bound) =>
  * The exact 1:1 carry discloses too: an exact Net is not an accounted-for one when most of its
  * peak capital has no visible origin in the transactions table.
  *
- * A REFUSAL KEEPS THE DISCLOSURE AND LOSES THE DIRECTION. `provenance` ships its `bound` on a
- * split whoever holds it, including a successor whose every entering unit is unknown, whose Net
- * refuses — and "this Net too high" states a direction on a Net the hero above says does not
- * exist. The verdict decides, not the presence of a bound: where there is no Net, the sentence
- * says only where the units came from.
+ * THE SENTENCE TAKES THE DIRECTION THE VERDICT ALLOWS, NOT THE ONE THE WIRE CARRIES.
+ * `provenance` ships its `bound` on a split whoever holds it — including a successor whose Net
+ * refuses, and one whose partition contradicts the carry, where `net_verdict` returns `refuse`
+ * or `caveat` rather than `bounded`. Stating "this Net too high" on either would put a
+ * direction on a Net the lines above say has none. So the caller passes the bound the page is
+ * rendering (null on both), and those names disclose the carry without a direction on it.
  */
-function carrySentence(pv, refused) {
+function carrySentence(pv, bound, refused) {
   const from = `Held as ${pv.from_ticker}${pv.from_name ? ` (${pv.from_name})` : ""}`;
   if (refused) {
     return `${from}; these units carried in on ${pv.carried_on}, so the transactions below show ` +
       "only part of this position's history.";
   }
   const sib = (pv.split_with || [])[0];
-  if (pv.bound === "lower") {
+  if (bound === "lower") {
     return `${from}; the ${sgd(pv.carried_sgd)} cost carried here on ${pv.carried_on}` +
       (sib ? `, including the share belonging to the ${fmt(sib.units, 0)} units distributed to ${sib.ticker}` : "") +
       ", so this cost is too high and this Net too low.";
   }
-  if (pv.bound === "upper") {
+  if (bound === "upper") {
     return `${from}; on ${pv.carried_on} its cost carried to ` +
       (sib ? `${sib.ticker}, ${fmt(sib.units, 0)} units,` : "the other name") +
       " and none of it to the units received here, so this cost is too low and this Net too high.";
@@ -274,8 +269,8 @@ export default function SecurityDetail({ ticker, onBack }) {
             <div className="hero-net">
               <span data-testid="hero-net" className="mut">Net P/L — {NOT_KNOWN}</span>
             </div>
-            <p className="hero-note" data-testid="hero-note">{refusalSentence(s)}</p>
-            <p className="hero-note" data-testid="hero-note">Below is what the book does know.</p>
+            <p className="hero-note" data-testid="refusal-units">{refusalSentence(s)}</p>
+            <p className="hero-note" data-testid="refusal-below">Below is what the book does know.</p>
           </div>
         ) : (
           <div className="hero-net">
@@ -336,10 +331,10 @@ export default function SecurityDetail({ ticker, onBack }) {
               <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
             )}
             {!refused && s.return_verdict === "caveat" && (
-              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(bound)}</p>
+              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence}</p>
             )}
             {pv && (
-              <p className="hero-note" data-testid="carry-note">{carrySentence(pv, refused)}</p>
+              <p className="hero-note" data-testid="carry-note">{carrySentence(pv, bound, refused)}</p>
             )}
           </div>
         )}

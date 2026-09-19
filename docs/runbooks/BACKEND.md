@@ -389,7 +389,8 @@ pending after the leg stays `unknown`. No tolerance window, so no unargued N.
 
 ```text
 refuse   ⟺  costed == 0 ∧ unknown > 0
-bounded  ⟸  a split carry reached the name — overrides caveat and hero, never refuse
+bounded  ⟸  a split carry reached the name — overrides hero; overrides caveat only where the
+            carry's direction agrees with it (upper); never refuse
 caveat   ⟺  costed > 0  ∧ unknown > 0
 hero     ⟺  unknown == 0
 ```
@@ -397,7 +398,7 @@ hero     ⟺  unknown == 0
 | | cause | tiles | direction |
 |---|---|---|---|
 | `caveat` | some units have **no** cost | **null** | always upper |
-| `bounded` | every unit costed; the **total is mis-attributed** | **kept** | lower *or* upper |
+| `bounded` | the **total is mis-attributed**, and the partition does not point the other way | **kept** | lower *or* upper |
 
 - **Tiles follow the partition, not the verdict**, so 9CI keeps `avg_cost: 3.73` while C38U — the
   one name carrying both doubts — still nulls its cost-basis family and reads `return_verdict:

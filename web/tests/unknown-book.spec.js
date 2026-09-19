@@ -80,15 +80,16 @@ const refusedWithPeak = () => {
 };
 
 /**
- * The cost recipient of a split whose OWN book also doubts some entering units: `net_verdict`
- * takes the carry's direction (`bounded`/lower, so the hero prints a floor) while
- * `_return_figures` sees `unknown > 0` and returns `caveat`. Derived, because no captured
- * holding is both — 9CI carries with every unit costed.
+ * The cost recipient of a split whose OWN book also doubts some entering units. The carry says
+ * the Net is a floor and the partition says it is a ceiling, so `net_verdict` ships `caveat`
+ * and not `bounded` (`performance.py`) while `provenance.bound` stays `lower` — the direction
+ * is a fact about the event whatever the verdict does with it. Derived, because no captured
+ * holding is both: 9CI carries with every unit costed.
  */
 const lowerWithUnknownUnits = () => {
   const p = lower();
   const part = p.summary.cost_partition;
-  return { ...p, summary: { ...p.summary, return_verdict: "caveat",
+  return { ...p, summary: { ...p.summary, net_verdict: "caveat", return_verdict: "caveat",
     cost_partition: { ...part, costed: part.units_in - 500, unknown: 500,
                       unknown_pct: Math.round((500 / part.units_in) * 1e4) / 1e4 } } };
 };
@@ -139,11 +140,14 @@ test.describe("refusal — the number is replaced by prose, and the block does n
     expect(s.net_verdict).toBe("refuse");
     await expect(hero(page)).toContainText(NOT_KNOWN);
     await expect(hero(page)).toContainText("Net P/L");
-    const note = page.getByTestId("hero-refusal").getByTestId("hero-note").first();
+    const note = page.getByTestId("hero-refusal").getByTestId("refusal-units");
     // The whole entering position is doubted, so the copy says `All N` and not `N of N`.
     expect(s.cost_partition.unknown).toBe(s.cost_partition.units_in);
     await expect(note)
       .toHaveText(`All ${fmt(s.cost_partition.unknown, 0)} units entered without a recorded cost.`);
+    // And the second half of the hero slot, which hands the reader down to the block below.
+    await expect(page.getByTestId("hero-refusal").getByTestId("refusal-below"))
+      .toHaveText("Below is what the book does know.");
     // Inside the hero block, above the ledger, not a caption beneath it.
     expect(await page.locator(".hero [data-testid=hero-refusal]").count()).toBe(1);
   });
@@ -320,25 +324,33 @@ test.describe("bounded — the bound lands on the numbers", () => {
     expect(await noteIds(page)).toEqual(["caveat-return", "carry-note"]);
   });
 
-  test("a lower bound reads as a floor in the percentage's sentence too", async ({ page, baseURL }) => {
+  test("a carry the partition contradicts states the caveat, not a direction", async ({ page, baseURL }) => {
     const p = lowerWithUnknownUnits();
-    expect(p.summary.net_verdict).toBe("bounded");
-    expect(p.summary.provenance.bound).toBe("lower");
-    expect(p.summary.return_verdict).toBe("caveat");
+    const s = p.summary;
+    // What the fold ships for this pairing: the counts keep the verdict, the event keeps its
+    // direction, and the two disagree — a floor from the carry against a ceiling from the 500.
+    expect(s.net_verdict).toBe("caveat");
+    expect(s.provenance.bound).toBe("lower");
+    expect(s.cost_partition.unknown).toBeGreaterThan(0);
     await open(page, baseURL, "9CI", p);
 
-    await expect(page.getByTestId("hero-bound")).toHaveText(/^\u2265/);
-    const note = page.getByTestId("caveat-return");
-    await expect(note).toContainText("the Net above is a lower bound");
-    await expect(note).toContainText("not comparable to any other name");
-    // The hero says floor; the sentence may not say ceiling two lines under it.
-    expect(await note.innerText()).not.toMatch(/Net above is an upper bound/);
-    // Nor may the peak carry a ceiling above prose that refuses to bound it: the carried cost
-    // raises the peak and the uncosted units lower it, so no glyph on the denominator.
-    const line = await heroReturn(page).innerText();
-    expect(line).toContain(`on peak capital of ${fmt(p.summary.peak_car_sgd, 2)}`);
-    expect((line.match(/[\u2265\u2264]/g) ?? []).length).toBe(1);
-    expect(await note.innerText()).not.toMatch(/costed lots only/);
+    // No direction lands on the Net, or on the percentage, or on the peak beneath it.
+    await expect(page.getByTestId("hero-bound")).toHaveCount(0);
+    expect(await page.locator(".hero").innerText()).not.toMatch(/[\u2265\u2264]/);
+    expect(await heroReturn(page).innerText())
+      .toContain(`on peak capital of ${fmt(s.peak_car_sgd, 2)}`);
+
+    // The caveat treatment instead: the uncosted units are named, and both sentences stand.
+    expect(await noteIds(page)).toEqual(["caveat-net", "caveat-return", "carry-note"]);
+    await expect(page.getByTestId("caveat-net"))
+      .toContainText(`${fmt(s.cost_partition.unknown, 0)} of ${fmt(s.cost_partition.units_in, 0)} units`);
+    await expect(page.getByTestId("caveat-return")).toContainText("not comparable to any other name");
+
+    // The carry still discloses — it just claims nothing about a Net it cannot bound.
+    const carry = page.getByTestId("carry-note");
+    await expect(carry).toContainText(s.provenance.from_ticker);
+    await expect(carry).toContainText(s.provenance.carried_on);
+    expect(await carry.innerText()).not.toMatch(/too high|too low/);
   });
 
   test("a caveat that also carries keeps its two sentences adjacent, the carry after both", async ({ page, baseURL }) => {
