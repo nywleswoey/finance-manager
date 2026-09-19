@@ -144,8 +144,8 @@ const refusalSentence = (s) =>
 const caveatNetSentence = (s, conflicted) =>
   `${unitsUnknown(s.cost_partition)} entered without a recorded cost, and this Net counts ` +
   (conflicted
-    ? "them as free, while the whole event's cost below landed here — the two pull opposite " +
-      "ways, so which side of the truth this Net falls on is not known."
+    ? "them as free, while the carry below put a whole event's cost on this name — the two " +
+      "pull opposite ways, so which side of the truth this Net falls on is not known."
     : "them as free — so it is an upper bound.");
 const caveatReturnSentence = (conflicted) =>
   (conflicted
@@ -162,29 +162,39 @@ const caveatReturnSentence = (conflicted) =>
  * The exact 1:1 carry discloses too: an exact Net is not an accounted-for one when most of its
  * peak capital has no visible origin in the transactions table.
  *
- * THE SENTENCE TAKES THE DIRECTION THE VERDICT ALLOWS, NOT THE ONE THE WIRE CARRIES.
- * `provenance` ships its `bound` on a split whoever holds it — including a successor whose Net
- * refuses, and one whose partition contradicts the carry, where `net_verdict` returns `refuse`
- * or `caveat` rather than `bounded`. Stating "this Net too high" on either would put a
- * direction on a Net the lines above say has none. So the caller passes the bound the page is
- * rendering (null on both), and those names disclose the carry without a direction on it.
+ * THE SENTENCE SAYS WHAT THE VERDICT ALLOWS, NOT WHAT THE WIRE CARRIES. `provenance` ships its
+ * `bound` on a split whoever holds it — including a successor whose Net refuses, and one whose
+ * partition contradicts the carry, where `net_verdict` returns `refuse` or `caveat` rather than
+ * `bounded`. Stating "this Net too high" on either would put a direction on a Net the lines
+ * above say has none, so the caller names the MODE the page is rendering:
+ *
+ *     refuse      — no Net at all, so no figure to attribute: where the units came from, and stop
+ *     lower/upper — the bound survived the partition, and the sentence carries its direction
+ *     undirected  — a split whose two doubts disagree: the same disclosure, the same sibling,
+ *                   the same whole-event cost the Net's sentence above points down to, minus
+ *                   the direction neither doubt can settle
+ *     exact       — the 1:1 carry, whose figure is right and whose origin is still off-page
  */
-function carrySentence(pv, bound, refused) {
+function carrySentence(pv, mode) {
   const from = `Held as ${pv.from_ticker}${pv.from_name ? ` (${pv.from_name})` : ""}`;
-  if (refused) {
+  if (mode === "refuse") {
     return `${from}; these units carried in on ${pv.carried_on}, so the transactions below show ` +
       "only part of this position's history.";
   }
   const sib = (pv.split_with || [])[0];
-  if (bound === "lower") {
-    return `${from}; the ${sgd(pv.carried_sgd)} cost carried here on ${pv.carried_on}` +
-      (sib ? `, including the share belonging to the ${fmt(sib.units, 0)} units distributed to ${sib.ticker}` : "") +
-      ", so this cost is too high and this Net too low.";
+  const whole = `${from}; the whole event's ${sgd(pv.carried_sgd)} cost carried here on ` +
+    `${pv.carried_on}` +
+    (sib ? `, including the share belonging to the ${fmt(sib.units, 0)} units distributed to ${sib.ticker}` : "");
+  if (mode === "lower") {
+    return `${whole}, so this cost is too high and this Net too low.`;
   }
-  if (bound === "upper") {
+  if (mode === "upper") {
     return `${from}; on ${pv.carried_on} its cost carried to ` +
       (sib ? `${sib.ticker}, ${fmt(sib.units, 0)} units,` : "the other name") +
       " and none of it to the units received here, so this cost is too low and this Net too high.";
+  }
+  if (mode === "undirected") {
+    return `${whole}, so the transactions below show only part of what this position cost.`;
   }
   return `${from}; the ${sgd(pv.carried_sgd)} cost carried here on ${pv.carried_on} was paid ` +
     "under that ticker, so the transactions below show only part of what this position cost.";
@@ -234,9 +244,12 @@ export default function SecurityDetail({ ticker, onBack }) {
   // The bound rides the provenance, whole-ticker; `null` on a 1:1 carry, which is exact.
   const pv = s.provenance || null;
   const bound = s.net_verdict === "bounded" ? pv?.bound ?? null : null;
-  // A caveat that still carries a split bound is the state the two doubts disagree in: the
-  // verdict withheld `bounded`, so nothing on the page may name a direction for this Net.
-  const conflicted = s.net_verdict === "caveat" && !!pv?.bound;
+  // The one state the two doubts disagree in: the whole event's cost landed here (Net
+  // understated) while uncosted units count as free (Net overstated), so `net_verdict` withheld
+  // `bounded` and nothing on the page may name a direction for this Net. `upper` never lands
+  // here — there the two agree and the verdict is `bounded` — and the copy below says "landed
+  // here", which is only true of the side the cost went to.
+  const conflicted = s.net_verdict === "caveat" && pv?.bound === "lower";
   const BOUND_GLYPHS = { lower: ["\u2265", "\u2264"], upper: ["\u2264", "\u2265"] };
   const [figureBound, carryCapitalBound] = BOUND_GLYPHS[bound] || [null, null];
   // A glyph on the denominator only where the page can claim that direction: under a `caveat`
@@ -335,7 +348,7 @@ export default function SecurityDetail({ ticker, onBack }) {
             why the carry's disclosure follows both rather than sitting where it reads most
             naturally on the one name that has a carry and no caveat-net. A name that is `caveat`
             and also carries would otherwise split the pair. */}
-        {(s.net_verdict === "caveat" || s.net_verdict === "bounded" || pv) && (
+        {(s.net_verdict === "caveat" || pv) && (
           <div data-testid="hero-notes">
             {s.net_verdict === "caveat" && (
               <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s, conflicted)}</p>
@@ -344,7 +357,8 @@ export default function SecurityDetail({ ticker, onBack }) {
               <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(conflicted)}</p>
             )}
             {pv && (
-              <p className="hero-note" data-testid="carry-note">{carrySentence(pv, bound, refused)}</p>
+              <p className="hero-note" data-testid="carry-note">
+                {carrySentence(pv, refused ? "refuse" : conflicted ? "undirected" : bound)}</p>
             )}
           </div>
         )}

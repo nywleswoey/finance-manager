@@ -85,13 +85,20 @@ const refusedWithPeak = () => {
  * and not `bounded` (`performance.py`) while `provenance.bound` stays `lower` — the direction
  * is a fact about the event whatever the verdict does with it. Derived, because no captured
  * holding is both: 9CI carries with every unit costed.
+ *
+ * DERIVED WHOLE, not verdict-deep: a caveat nulls the cost-basis family and collapses the pair
+ * into the `Stock P/L` its members sum to, so a payload that changed only the verdict would put
+ * the page in a state the fold cannot emit — and the gate below reads those very cells.
  */
+const caveated = (o) => ({ ...o, avg_cost: null, cost_basis_native: null, cost_basis_sgd: null,
+                           realised_pl_sgd: null, unrealised_pl_sgd: null });
 const lowerWithUnknownUnits = () => {
   const p = lower();
   const part = p.summary.cost_partition;
-  return { ...p, summary: { ...p.summary, net_verdict: "caveat", return_verdict: "caveat",
-    cost_partition: { ...part, costed: part.units_in - 500, unknown: 500,
-                      unknown_pct: Math.round((500 / part.units_in) * 1e4) / 1e4 } } };
+  return { ...p, buckets: (p.buckets || []).map(caveated),
+    summary: { ...caveated(p.summary), net_verdict: "caveat", return_verdict: "caveat",
+      cost_partition: { ...part, costed: part.units_in - 500, unknown: 500,
+                        unknown_pct: Math.round((500 / part.units_in) * 1e4) / 1e4 } } };
 };
 
 /** The upper side of a split that holds nothing else: it carries a bound, and its Net refuses. */
@@ -354,10 +361,23 @@ test.describe("bounded — the bound lands on the numbers", () => {
         .not.toMatch(/upper bound|lower bound|floor|ceiling/);
     }
 
-    // The carry still discloses — it just claims nothing about a Net it cannot bound.
+    // The caveat treatment reaches the cells too, which is what the payload above is shaped for.
+    expect(await tileVal(page, "Avg Cost")).toBe(NOT_KNOWN);
+    expect(await tileVal(page, "Cost Basis")).toBe(NOT_KNOWN);
+    const rowLabels = await labels(page);
+    expect(rowLabels).toContain("Stock P/L");
+    expect(rowLabels).not.toContain("Realised");
+    expect(rowLabels[rowLabels.length - 1], "the caveat lost its bottom line").toBe("Net");
+
+    // The carry still discloses, names the sibling, and says the figure is the whole event's —
+    // the clause the Net's sentence points down to. It just claims no direction.
     const carry = page.getByTestId("carry-note");
-    await expect(carry).toContainText(s.provenance.from_ticker);
-    await expect(carry).toContainText(s.provenance.carried_on);
+    const pv = s.provenance;
+    await expect(carry).toContainText(pv.from_ticker);
+    await expect(carry).toContainText(pv.carried_on);
+    await expect(carry).toContainText(`whole event's ${sgd(pv.carried_sgd)} cost`);
+    await expect(carry).toContainText(pv.split_with[0].ticker);
+    await expect(carry).toContainText(fmt(pv.split_with[0].units, 0));
     expect(await carry.innerText()).not.toMatch(/too high|too low/);
   });
 
