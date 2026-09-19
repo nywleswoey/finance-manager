@@ -23,6 +23,16 @@ const TAP = 44;
 // Zero tolerance on the ledger's arithmetic, as `hero.spec.js` states it: the components ship
 // already rounded and the Net is their sum, so "close enough" is not the claim (#143 §14).
 const cents = (n) => Number(n.toFixed(2));
+const dec = (n, d) =>
+  Number(n).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+// What a block head says, whole: fractional units to 4 places and whole ones to none, the avg
+// cost to 4 or the ledger's `not known`, and a bucket's status last. Stated exactly, so a
+// change to either precision fails here rather than passing on a substring.
+const headLine = (o, status) => [
+  `${dec(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u`,
+  `@ ${o.avg_cost == null ? "not known" : dec(o.avg_cost, 4)}`,
+  ...(status ? [status] : []),
+].join(" \u00b7 ");
 
 function amount(text) {
   const n = Number(text.trim().replace(/−/g, "-").replace(/[,+]/g, ""));
@@ -39,10 +49,11 @@ async function openTicker(page, baseURL, ticker) {
   await expect(page.getByText("← Holdings")).toBeVisible();
 }
 
-test.beforeEach(({ page }, testInfo) => {
-  const w = page.viewportSize().width;
-  test.skip(w >= PHONE_TIER_BELOW, `the phone layout applies below ${PHONE_TIER_BELOW}px`);
-  testInfo.annotations.push({ type: "viewport", description: `${w}px` });
+test.skip(({ viewport }) => viewport.width >= PHONE_TIER_BELOW,
+  `the phone layout applies below ${PHONE_TIER_BELOW}px`);
+
+test.beforeEach(({ viewport }, testInfo) => {
+  testInfo.annotations.push({ type: "viewport", description: `${viewport.width}px` });
 });
 
 test.beforeAll(() => {
@@ -141,8 +152,15 @@ for (const { ticker, body } of HOLDINGS) {
           // The across identity is an explicit sum, over every bucket, ending on the total.
           const sum = await page.getByTestId("ledger-sum").textContent();
           const [lhs, rhs] = sum.split(" = ");
-          for (const b of bks) expect(lhs).toContain(b.bucket);
-          const terms = lhs.split(" + ").map((t) => amount(t.replace(/^.*?([+−-]?[\d,]+\.\d+)$/, "$1")));
+          // Each term is named, and qualified only where the bucket's state is not `open`.
+          const parts = lhs.split(" + ");
+          expect(parts).toHaveLength(bks.length);
+          const terms = parts.map((t, i) => {
+            const b = bks[i];
+            const label = b.status && b.status !== "open" ? `${b.bucket} \u00b7 ${b.status}` : b.bucket;
+            expect(t.startsWith(`${label} `), `term ${i} reads "${t}"`).toBe(true);
+            return amount(t.slice(label.length));
+          });
           expect(cents(terms.reduce((a, b) => a + b, 0))).toBe(amount(rhs));
           expect(amount(rhs)).toBe(amount(await page.getByTestId("hero-net").textContent()));
         }
@@ -158,14 +176,10 @@ for (const { ticker, body } of HOLDINGS) {
         async ({ page }) => {
           const heads = page.locator(".ledger-block").getByTestId("ledger-sub");
           await expect(heads).toHaveCount(bks.length + 1);
-          for (const [i, o] of [s, ...bks].entries()) {
-            const head = heads.nth(i);
-            await expect(head).toContainText(
-              Number(o.units).toLocaleString("en-US", { maximumFractionDigits: 4 }));
-            await expect(head).toContainText(o.avg_cost == null ? "not known"
-              : Number(o.avg_cost).toLocaleString("en-US",
-                { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
-            if (o.status) await expect(head).toContainText(o.status);
+          // The Total column is the whole ticker and carries no status; each bucket carries its own.
+          const cols = [[s, undefined], ...bks.map((b) => [b, b.status])];
+          for (const [i, [o, status]] of cols.entries()) {
+            await expect(heads.nth(i)).toHaveText(headLine(o, status));
           }
           expect(await page.getByTestId("ledger").innerText(),
             "a return figure rode the block head").not.toMatch(/%|XIRR|IRR/i);
