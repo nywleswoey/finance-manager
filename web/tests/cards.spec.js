@@ -89,10 +89,10 @@ const CARDED = [
     lists: [{
       what: "the transaction history",
       rows: () => readFixture("holding-pltr.json").transactions.length,
-      tableIndex: 0, cols: 8, fields: 3,
+      tableIndex: 0, cols: 9, fields: 3,
     }],
     unrendered: [
-      "SecurityDetail's dividend history (6 cols) — PLTR is the row the suite drills into " +
+      "SecurityDetail's dividend history (7 cols) — PLTR is the row the suite drills into " +
       "because it has 73 option trades, and it has no dividends at all, so that card list " +
       "is never mounted",
     ],

@@ -323,6 +323,17 @@ UD1U and 307.08 on SET. The defect outlived the test and is written down in
 including the guard that the fixture still carries enough expired-worthless legs to tell the two
 folds apart.
 
+**Since #159 it also carries the three history tables' own gates**, here rather than in the two
+pattern files because each is a claim about *which field a cell reads*, not about width. Every
+option row states `Realised` or `Open` from the server's `realised` boolean — proven by flipping
+that key on a served payload, so a marker re-derived from `outcome` or `close_date` fails — and
+the realised rows' own P/L is asserted to fold back to the `summary.options_pl_sgd` above them,
+which is what ties the count on screen to the rows behind the header figure. The options table is
+gated to carry **no** `Bucket` header (the rollup hardcodes the bucket, so the column would be a
+constant), and the transaction history to carry one bucket cell per row with **no** per-sell
+realised column. The dividend table's own bucket column is unreached for the same reason
+`cards.spec.js` already names: PLTR has no dividends, so no fixture mounts it.
+
 `tests/composition.spec.js` — the states of the **net-worth composition chart** the committed
 fixture cannot reach, and the third spec here whose subject is not layout. An empty state is copy, a
 tick crossover is a count, and whether a negative band lands above or below the zero line is

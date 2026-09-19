@@ -10,9 +10,12 @@
  * S$1,828 loss. The fix reads the server's own `summary.options_pl_sgd` instead of re-deriving
  * it. That number's chain is `performance.compute()` → `options.realized_by_ticker()` →
  * `_closed_trades()` → `_is_open()`, attached per leg at `performance.py:1190` and folded by
- * `_sum_stream` at `performance.py:1301`. NOT `_trade_dict`'s `realised` key: that rides the
- * per-trade wire rows, nothing under `web/src` reads it, and `holding-pltr.json` does not even
- * carry it — which is why these assertions pass against a fixture without it.
+ * `_sum_stream` at `performance.py:1301`. The TOTAL is still that summary figure and nothing
+ * else. The PER-ROW marker is a different field: `_trade_dict`'s `realised` key, which rides
+ * the per-trade wire rows and which the options table renders as `Realised`/`Open` since #159.
+ * Both sides of the page answer to the same `_is_open()` call, which is why the realised rows'
+ * own P/L folds back to `summary.options_pl_sgd` — the `three tables (#159)` block below gates
+ * exactly that, so neither the boolean nor the total can be dropped without a failure.
  *
  * THE FIGURE MOVED OUT OF A TILE AND INTO THE RECONCILIATION LEDGER (#156). Options P/L is one
  * of the hero's own components, so it is a line that adds up to the Net rather than a tile
@@ -103,5 +106,38 @@ test.describe("rendered", () => {
 
     await expect(optionsRow(page)).toHaveCount(0);
     await expect(optionsCard(page)).toHaveCount(0);
+  });
+});
+
+test.describe("three tables (#159)", () => {
+  test.beforeEach(async ({ page, baseURL }) => {
+    await openView(page, baseURL, "Portfolio › SecurityDetail");
+  });
+
+  test("options rows state realised from the server boolean; count matches the rows behind the header", async ({ page }) => {
+    // The header figure is `summary.options_pl_sgd`, and the rows behind it are exactly the ones
+    // the server marked realised — so on the shipped fixture their own P/L folds back to it.
+    const realised = fixture.options.filter((t) => t.realised);
+    expect(realised.reduce((a, t) => a + Number(t.realized_sgd || 0), 0))
+      .toBeCloseTo(fixture.summary.options_pl_sgd, 2);
+    await expect(optionsCard(page).getByTestId("option-realised")
+      .filter({ hasText: /^Realised$/ })).toHaveCount(realised.length);
+
+    // flip a few so the marker is proven to follow `realised`, not close_date/outcome
+    const payload = structuredClone(fixture);
+    payload.options.slice(0, 3).forEach((t) => { t.realised = false; });
+    await reopenPLTR(page, payload);
+    const cells = optionsCard(page).getByTestId("option-realised");
+    await expect(cells).toHaveCount(payload.options.length);
+    const expected = payload.options.filter((t) => t.realised).length;
+    await expect(cells.filter({ hasText: /^Realised$/ })).toHaveCount(expected);
+    await expect(optionsCard(page).locator('th', { hasText: "Bucket" })).toHaveCount(0);
+  });
+
+  test("transactions carry a bucket cell on every row; no per-sell realised column", async ({ page }) => {
+    const card = page.locator(".card").filter({ hasText: "Transaction history" });
+    const cells = card.getByTestId("txn-bucket");
+    await expect(cells).toHaveCount(fixture.transactions.length);
+    await expect(card.locator("th", { hasText: /realised/i })).toHaveCount(0);
   });
 });
