@@ -154,6 +154,22 @@ for (const { ticker, body } of HOLDINGS) {
           expect(box.x + box.width).toBeLessThanOrEqual(ledger.x + ledger.width + 1);
         }
       });
+      test("each block's head carries its units, avg cost and status — and no return figure",
+        async ({ page }) => {
+          const heads = page.locator(".ledger-block").getByTestId("ledger-sub");
+          await expect(heads).toHaveCount(bks.length + 1);
+          for (const [i, o] of [s, ...bks].entries()) {
+            const head = heads.nth(i);
+            await expect(head).toContainText(
+              Number(o.units).toLocaleString("en-US", { maximumFractionDigits: 4 }));
+            await expect(head).toContainText(o.avg_cost == null ? "not known"
+              : Number(o.avg_cost).toLocaleString("en-US",
+                { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
+            if (o.status) await expect(head).toContainText(o.status);
+          }
+          expect(await page.getByTestId("ledger").innerText(),
+            "a return figure rode the block head").not.toMatch(/%|XIRR|IRR/i);
+        });
     } else {
       test("a single bucket keeps the plain vertical ledger", async ({ page }) => {
         await expect(page.locator(".ledger-block")).toHaveCount(0);

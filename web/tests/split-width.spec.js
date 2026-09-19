@@ -6,6 +6,11 @@
  * horizontal-overflow criterion applies — `RESPONSIVE.md`'s criterion 1, the same gate
  * `baseline.spec.js` enforces per view.
  *
+ * WHAT IT OWNS IS THE GRID, so it stops at the phone tier's edge. Below 640 there is no grid to
+ * overflow: the split is #160's stacked blocks, and `phone-layout.spec.js` measures that tier
+ * per captured ticker — "nothing scrolls the pane sideways" on this same multi-bucket name, and
+ * "the split is stacked, with the total on top and the sum written out" for the markup itself.
+ *
  * WHY IT IS NOT A FOURTEENTH ENTRY IN `VIEWS`. `Portfolio › SecurityDetail` opens PLTR, which
  * is single-bucket, so the baseline sweep measures this page with no split on it at all — that
  * is exactly how the overflow got in. The hole is one ticker on one view rather than a view the
@@ -30,6 +35,8 @@ test("the multi-bucket split leaves the main pane nothing to scroll sideways",
     const vp = viewportOf(testInfo.project.name);
     test.skip(vp.width >= HSCROLL_GATE_APPLIES_BELOW,
       `the overflow criterion is exempt at and above ${HSCROLL_GATE_APPLIES_BELOW}px`);
+    test.skip(vp.width < PHONE_TIER_BELOW,
+      `below ${PHONE_TIER_BELOW}px the split is stacked blocks, not a grid — phone-layout.spec.js`);
     expect(MULTI.length, "no multi-bucket holding captured — see fixtures/index.js")
       .toBeGreaterThan(0);
     const { ticker } = MULTI[0];
@@ -42,10 +49,7 @@ test("the multi-bucket split leaves the main pane nothing to scroll sideways",
     await expect(page.getByText("← Holdings")).toBeVisible();
     // The split really is on screen: without this the measurement below could pass on a page
     // that rendered the plain vertical ledger for some unrelated reason.
-    // Below the phone tier the split is stacked blocks (#160), not a header over columns. The
-    // total block is what every state renders, refusal included; the written sum is not.
-    await expect(page.getByTestId(
-      vp.width < PHONE_TIER_BELOW ? "ledger-block-total" : "ledger-head")).toBeVisible();
+    await expect(page.getByTestId("ledger-head")).toBeVisible();
 
     const overflow = await mainPaneOverflow(page);
     testInfo.annotations.push({

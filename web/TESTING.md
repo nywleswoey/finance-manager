@@ -279,8 +279,9 @@ update rather than a second claim.
 runs at every viewport rather than with the arithmetic: opening the multi-bucket ticker leaves
 `.main` nothing to scroll sideways, at every viewport where that criterion applies. It exists
 because `VIEWS`' `Portfolio › SecurityDetail` opens PLTR, which is single-bucket — so the baseline
-sweep measures that page with no split on it, which is how a phone-width overflow got in. Below
-640 the split is the stacked layout (#160), so the gate there looks for `ledger-sum`.
+sweep measures that page with no split on it, which is how a phone-width overflow got in. What it
+owns is the grid, so it stops at 640: below that the split is #160's stacked blocks and
+`phone-layout.spec.js` measures the same ticker at every phone viewport.
 
 `tests/phone-layout.spec.js` — **the ticker detail page's phone tier** (#160), at the phone
 viewports, over every captured holding (8 tickers x 360 / 390 / 430 / 639 — the "24 layout x state
@@ -288,7 +289,9 @@ combinations" plus the tier's last pixel). Per ticker: `.main` has nothing to sc
 five tiles are five full-width rows at the 44px floor; every truth claim (the bound glyphs, the
 no-capital sentence, the refusal) is visible while the explanations sit behind one 44px
 `N qualifications on this figure` row that opens untruncated. On the multi-bucket name: the total
-block is first, every block sums to its own Net, and the written across-sum ties to the hero.
+block is first, every block sums to its own Net, the written across-sum ties to the hero, and each
+block head carries its own units, avg cost and status — the phone half of the one subheading rule
+`bucket-split.spec.js` gates at 1280.
 
 `tests/hero.spec.js` — the **ticker detail page's hero Net, the reconciliation ledger that proves
 it, and the five position tiles** (#156). The page's whole claim is that the figure in the largest

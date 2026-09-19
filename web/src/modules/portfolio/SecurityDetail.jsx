@@ -85,19 +85,29 @@ function ledgerRows(d) {
 const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "—" : ledgerAmount(b[key]));
 
 /**
- * The muted subheading under a column header: units, avg cost and — for a bucket — status. It is
- * deliberately not a row (the block's claim is that its rows add up) and deliberately carries no
- * return figure of any kind: one page, one return vocabulary (#134 §2). The Total column's avg
- * cost is the server's exact pooled weighted average, read off the summary and not re-derived.
+ * WHAT A COLUMN'S SUBHEADING SAYS, in one place: units, avg cost and — for a bucket — status,
+ * as the lines to print in order. The wide head stacks them and the phone's block head runs them
+ * together, but the words are the same words, so a line added here (a breakeven, say) lands in
+ * both heads rather than in whichever one its author was looking at.
+ *
+ * It is deliberately not a row (the block's claim is that its rows add up) and deliberately
+ * carries no return figure of any kind: one page, one return vocabulary (#134 §2). The Total
+ * column's avg cost is the server's exact pooled weighted average, read off the summary and not
+ * re-derived.
  */
+const columnSubheading = (o, status) => [
+  `${fmt(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u`,
+  `@ ${o.avg_cost == null ? NOT_KNOWN : fmt(o.avg_cost, 4)}`,
+  ...(status ? [status] : []),
+];
+
+/** The muted subheading under a wide column header, one line per part. */
 function ColumnHead({ name, o, status }) {
   return (
     <div className="ledger-col" data-testid="ledger-col">
       <div className="ledger-colname">{name}</div>
       <div className="ledger-sub mut" data-testid="ledger-sub">
-        <div>{fmt(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u</div>
-        <div>@ {o.avg_cost == null ? NOT_KNOWN : fmt(o.avg_cost, 4)}</div>
-        {status && <div>{status}</div>}
+        {columnSubheading(o, status).map((line) => <div key={line}>{line}</div>)}
       </div>
     </div>
   );
@@ -118,10 +128,8 @@ function LedgerBlock({ name, o, status, rows, net, testid }) {
     <div className="ledger-block" data-testid={testid}>
       <div className="ledger-blockhead">
         <span className="ledger-colname">{name}</span>
-        <span className="ledger-sub mut">
-          {fmt(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u
-          {" @ "}{o.avg_cost == null ? NOT_KNOWN : fmt(o.avg_cost, 4)}
-          {status ? ` · ${status}` : ""}
+        <span className="ledger-sub mut" data-testid="ledger-sub">
+          {columnSubheading(o, status).join(" · ")}
         </span>
       </div>
       {rows.map(([lbl, v, text]) => (
