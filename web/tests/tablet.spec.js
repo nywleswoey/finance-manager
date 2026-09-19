@@ -334,11 +334,13 @@ test("the tier invents nothing — no rule of its own between 640 and 1024",
     await loadApp(page, baseURL);
 
     // THE CLAIM THE WHOLE TIER RESTS ON, asserted against the shipped stylesheet: there is no
-    // `min-width: 640px` block, and no `(max-width: 1023.98px)` block beyond the two that
-    // predate this ticket — `.contained`, which is the editors' containment, and `.pinned`,
-    // which is pattern A. The tier extends an existing rule to more tables; it does not add
-    // a rule. A `@media (min-width: 640px) and (max-width: 1023.98px)` appearing here is the
-    // second design the map's brief forbids, arriving one convenient block at a time.
+    // `min-width: 640px` block, and no `(max-width: 1023.98px)` block beyond the three that
+    // do not belong to this tier — `.contained`, which is the editors' containment, `.pinned`,
+    // which is pattern A, and `.ledger-split`'s track floor (#157), which drops the split's
+    // `12ch` minimum so the block fits the pane. The tier extends an existing rule to more
+    // tables; it does not add a rule. A `@media (min-width: 640px) and (max-width: 1023.98px)`
+    // appearing here is the second design the map's brief forbids, arriving one convenient
+    // block at a time.
     const conditions = await page.evaluate(() => {
       const found = [];
       const walk = (rules) => {

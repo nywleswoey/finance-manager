@@ -174,7 +174,8 @@ body { margin: 0; background: var(--bg); color: var(--txt);
    other. A fixed label track and `1fr` amounts make every row resolve identically, which is the
    only reason the block reads as a sum at all.
 
-   1023.98px FOR THE THIRD TIME IN THIS FILE, and still `PIN_TIER_BELOW` in
+   1023.98px FOR THE THIRD TIME IN THIS FILE — the third site, `.contained`'s and `.pinned`'s
+   being the other two, both further down — and still `PIN_TIER_BELOW` in
    `tests/viewports.js` — the width below which the app stops promising the desktop layout, and
    exactly where the horizontal-overflow gate starts applying. Above it nothing moves: the 12ch
    floor is what gives desktop its even columns and it is untouched there.
