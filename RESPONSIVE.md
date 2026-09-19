@@ -5,8 +5,10 @@ carries most of it.
 
 **The regression trigger is the suite, and the command is `make test-web`.** Ten named viewports ×
 thirteen views, run against a production build through vite's preview server with every API call
-served from committed fixtures: **1,415 passed, 477 skipped, 0 failed**, as of #100 — and ~7.5
-minutes on an unloaded machine, measured at #47 and not re-measured since. The skips are structural rather than disabled tests — a gate
+served from committed fixtures. Its size and wall clock are written **once** — in the [open
+call](#open-calls) on 768 and 1000, where the cost of another project is what the decision turns
+on — because a second copy here is a second thing to re-measure, and it is the copy that went
+stale. The skips are structural rather than disabled tests — a gate
 whose subject does not render at a viewport skips there, which is what makes "no card-per-row at 640
 and above" and "the desktop table is untouched" separate claims from their positive halves.
 `web/TESTING.md` says what each spec claims. The table-inventory grep this file used to ask a human
@@ -299,9 +301,10 @@ Failing these **changes a decision**, rather than reporting a bug.
   a fact durable. Adding them is two more projects on a suite that is already ten deep and 8.5
   minutes per full run, which is the cost side. That figure is measured, not estimated: `cd web &&
   npx playwright test` (what `make test-web` runs after the build) reported `1734 passed (8.5m)` on
-  2026-09-19 on a macOS (Darwin 25.6.0) developer laptop, including this change's new per-viewport
-  `phone-layout.spec.js` and the modified `split-width.spec.js`. It is a single run, not an
-  average, and it was taken before the later review-fix rounds moved those test files — so
+  2026-09-19 on a macOS (Darwin 25.6.0) developer laptop, including #160's new per-viewport
+  `phone-layout.spec.js` and its narrowed `split-width.spec.js`. It is a single run, not an
+  average, and it was taken while #160 was still in review, before its last rounds moved those
+  two test files — so
   re-measure with `make test-web` before deciding the call on it. Decide it once, here, rather than
   each time someone notices.
 
@@ -578,7 +581,8 @@ Things the build session must be told, not left to discover.
 ## Re-running
 
 **The trigger is the suite. The command is `make test-web`.** It builds the frontend and runs all
-ten viewport projects plus the file-reading `inventory` project; a full run is ~7.5 minutes.
+ten viewport projects plus the file-reading `inventory` project; what a full run measures is in the
+[open call](#open-calls) on 768 and 1000, which is the one place that figure is written.
 
 ```
 make test-web                                          # everything

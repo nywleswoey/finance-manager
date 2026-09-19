@@ -89,7 +89,8 @@ plausible one.
 _Avoid_: position (the fold's *input* is positions, and the whole point is that this is not one)
 
 **Leg**:
-One funding bucket's position inside a ticker — one column of the bucket split. Only a position
+One funding bucket's position inside a ticker — one column of the bucket split, and one stacked
+block of it below 640 (#160). Only a position
 that holds units, had money go in, or had income come out is a leg; the rest is noise, or an
 emptied predecessor whose cost carried to its successor.
 _Avoid_: bucket (the pool, not this ticker's position in it); not a **stock-moving leg**, which is
