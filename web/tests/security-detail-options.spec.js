@@ -120,14 +120,14 @@ test.describe("three tables (#159)", () => {
     const realised = fixture.options.filter((t) => t.realised);
     expect(realised.reduce((a, t) => a + Number(t.realized_sgd || 0), 0))
       .toBeCloseTo(fixture.summary.options_pl_sgd, 2);
-    await expect(optionsCard(page).locator('td[data-col="realised"]')
+    await expect(optionsCard(page).getByTestId("option-realised")
       .filter({ hasText: /^Realised$/ })).toHaveCount(realised.length);
 
     // flip a few so the marker is proven to follow `realised`, not close_date/outcome
     const payload = structuredClone(fixture);
     payload.options.slice(0, 3).forEach((t) => { t.realised = false; });
     await reopenPLTR(page, payload);
-    const cells = optionsCard(page).locator('td[data-col="realised"]');
+    const cells = optionsCard(page).getByTestId("option-realised");
     await expect(cells).toHaveCount(payload.options.length);
     const expected = payload.options.filter((t) => t.realised).length;
     await expect(cells.filter({ hasText: /^Realised$/ })).toHaveCount(expected);
@@ -136,7 +136,7 @@ test.describe("three tables (#159)", () => {
 
   test("transactions carry a bucket cell on every row; no per-sell realised column", async ({ page }) => {
     const card = page.locator(".card").filter({ hasText: "Transaction history" });
-    const cells = card.locator('td[data-col="bucket"]');
+    const cells = card.getByTestId("txn-bucket");
     await expect(cells).toHaveCount(fixture.transactions.length);
     await expect(card.locator("th", { hasText: /realised/i })).toHaveCount(0);
   });

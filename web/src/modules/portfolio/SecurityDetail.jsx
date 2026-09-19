@@ -255,7 +255,7 @@ export default function SecurityDetail({ ticker, onBack }) {
               <tr key={i} className={i === d.transactions.length - 1 ? "endrow" : ""}>
                 <td className="l mut">{t.trade_date || "—"}</td>
                 <td className="l mut">{t.account}</td>
-                <td className="l mut" data-col="bucket">{t.bucket}</td>
+                <td className="l mut" data-testid="txn-bucket">{t.bucket}</td>
                 <td className="l">{t.action}</td>
                 <td className={cls(t.qty_signed)}>{t.qty_signed > 0 ? "+" : ""}{fmt(t.qty_signed, 2)}</td>
                 <td style={{ fontWeight: 700 }}>{fmt(t.balance, 2)}</td>
@@ -318,7 +318,7 @@ export default function SecurityDetail({ ticker, onBack }) {
                 <tr key={i}>
                   <td className="l mut">{x.pay_date || "—"}</td>
                   <td className="l mut">{x.account}</td>
-                  <td className="l mut" data-col="bucket">{x.bucket}</td>
+                  <td className="l mut" data-testid="dividend-bucket">{x.bucket}</td>
                   <td className="l">{x.kind}</td>
                   <td className="mut">{x.units == null ? "—" : fmt(x.units, 2)}</td>
                   <td className="mut">{money(x.rate, x.currency, 4)}</td>
@@ -360,7 +360,7 @@ export default function SecurityDetail({ ticker, onBack }) {
                     <td className="l mut">{t.outcome}</td>
                     {/* The server's `realised` boolean, read as shipped. Not `close_date`: an
                         expired-worthless leg realises with `close_date: null`. */}
-                    <td className="l" data-col="realised">{t.realised ? "Realised" : "Open"}</td>
+                    <td className="l" data-testid="option-realised">{t.realised ? "Realised" : "Open"}</td>
                     <td className={cls(t.realized_native)}>
                       {money(t.realized_native, t.currency, 0)}</td>
                   </tr>
