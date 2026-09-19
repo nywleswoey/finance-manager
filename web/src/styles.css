@@ -148,6 +148,17 @@ body { margin: 0; background: var(--bg); color: var(--txt);
 .ledger-total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px;
   font-weight: 700; }
 .ledger-total .ledger-lbl { color: var(--txt); }
+/* THE BUCKET SPLIT (#157): the same statement with one column per bucket plus Total. Still divs,
+   not a table, for the reason above. The Total column keeps `.ledger-val`; bucket cells are
+   `.ledger-cell`. The head shares the rows' grid so each subheading sits over its own amounts. */
+.ledger-split { max-width: none; width: fit-content; min-width: 34ch; }
+.ledger-split .ledger-row, .ledger-head { display: grid; gap: 18px;
+  grid-template-columns: 10ch repeat(var(--cols), minmax(12ch, 1fr)); }
+.ledger-head { padding: 3px 0 6px; font-size: 14px; }
+.ledger-col { text-align: right; }
+.ledger-colname { font-weight: 600; }
+.ledger-sub { font-size: 12px; }
+.ledger-cell { min-width: 0; text-align: right; overflow-wrap: anywhere; }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 22px; }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .tile .lbl { color: var(--mut); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }

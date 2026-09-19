@@ -265,6 +265,15 @@ shape stay `pinned.spec.js`'s, because consolidated rows are ordinary data rows 
 gates already. Nor does it gate the detail page's own render — the hero, the reconciliation block,
 the tiles and the refusal layout belong to the tickets that build them.
 
+`tests/bucket-split.spec.js` — **the bucket split under the hero** (#157): one block, a column per
+bucket plus Total. The Total column is the hero's ledger, so the gate is that the columns add
+**across** to it and each adds **down** to its own Net, at zero tolerance, derived from the
+fixture. It also gates the closed bucket keeping its column, a single-bucket name rendering no
+header or second column, and units / avg cost / status riding as a return-free subheading. The
+**cross-page gate** (Holdings' ticker-mode Net equals the payload's `net_pl_sgd`) runs on the
+multi-bucket fixture only — over one bucket it would be a sum over one element. One viewport;
+phone layout is #160's.
+
 `tests/hero.spec.js` — the **ticker detail page's hero Net, the reconciliation ledger that proves
 it, and the five position tiles** (#156). The page's whole claim is that the figure in the largest
 type is checkable, so the gate is that the lines directly under it add up to it at **zero
