@@ -960,11 +960,29 @@ def _breakeven_price(r, units, rate):
     overstates the cost, which floors the Net (`≥`) and ceilings this price (`≤`). The direction
     is therefore `carry_bound`'s, read once and inverted, which is exactly the direction peak
     capital already takes; the renderer marks it with the same glyph it prints there rather than
-    deciding it again. The one bounded shape that could not be marked honestly — a `lower` carry
-    meeting unknown-cost units, where the partition's own doubt pushes the other way — cannot
-    reach here at all: it is `net_verdict`'s recorded open call, and unknown units null
-    `cost_basis_sgd`, so this refuses first. `lower` with no unknown units (9CI) is the only
-    bounded shape that ships a price.
+    deciding it again.
+
+    **WHAT MAKES THAT DIRECTION THE ONLY ONE ON A PRICE THAT SHIPS, PER COLUMN AND NOT PER
+    TICKER.** The two doubts on this page push opposite ways: a carry's mis-attribution moves
+    `cost_basis_sgd`, and the partition's unknown units read as free, which moves the Net the
+    other way. A figure carrying both could be bounded in neither direction — `net_verdict`'s own
+    recorded open call, which it does not guard. It cannot arise here, and the guard is the third
+    null above rather than anything about the ticker: `cost_basis_sgd` is null on **any column
+    holding unknown units** — a leg by `priceable` (`cost_known and unknown < 1e-6`), the summary
+    by `_sum_known` — so every column that ships a price has zero unknown units and the carry's
+    is the only doubt left on it. THE COLUMN IS THE UNIT OF THAT CLAIM. `net_verdict` sums its
+    counts across a ticker's legs, so `bounded` says nothing about any one of them.
+
+    **What each level does in the shape that reaches it** — a `lower` carry on a ticker whose
+    cash leg is fully costed and whose srs leg is all-unknown, which is `caveat` promoted to
+    `bounded`: the SUMMARY nulls (`_sum_known` takes the srs leg's null) and renders `not known`,
+    unmarked; the SRS COLUMN nulls for its own partition and renders `not known`, unmarked; the
+    CASH COLUMN ships a real price and is marked `≤`, which is honest about the direction because
+    that column holds no unknown units. What is left open there is not the direction but WHOSE
+    doubt it is: `provenance` is whole-ticker and names no bucket, so a bucket the carry never
+    touched is marked with it anyway. That is recorded on the renderer (`SecurityDetail.jsx`,
+    `Breakeven`), which is where the marking happens; nothing here refuses it, and this docstring
+    claims no unreachability it cannot point at a guard for.
     """
     if r["net_pl_sgd"] is None or r["cost_basis_sgd"] is None or units <= 1e-6:
         return None
@@ -1122,16 +1140,6 @@ def _build_row(k, p, m, fx, price, today, part, verdict):
         "pl_sgd": round(total_pl * rate, 2) if cost_known else None,
         "xirr": _rn(xirr, 4),
         "simple_return": _rn(simple, 4),
-        # Plumbing, not a figure: it rides the row because `fold_ticker` is pure over rows and
-        # has no `fx` of its own, and the whole-ticker breakeven has to move an SGD shortfall
-        # back into the native price it is quoted in. Recovering it there instead, by dividing
-        # one of the native/SGD column pairs, would divide two figures already rounded to the
-        # cent and would divide by ZERO on exactly the legs this file is careful about — a
-        # closed leg's mv, a free lot's cost basis (AAPL). It reaches no bucket column, because
-        # `LEG_FIELDS` narrows those and the summary is built by hand; it DOES reach
-        # `/api/positions`, which ships the whole row on purpose and already carries `provenance`
-        # and `cost_partition` the same way. No page reads it, and none should.
-        "fx_rate": rate,
     }
 
 
@@ -1299,7 +1307,8 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
         r["net_verdict"] = verdicts[r["ticker"]]
         r["net_pl_sgd"] = _net_pl(r)
         # solved from the Net one line above it, and therefore never from quantities beside it.
-        r["breakeven_price"] = _breakeven_price(r, r["units"], r["fx_rate"])
+        r["breakeven_price"] = _breakeven_price(r, r["units"],
+                                                rate_to_sgd(r["currency"], fx))
     # peak capital-at-risk and the one percentage (#143 §9). Whole-ticker: the peak is a max
     # over the SUM of a name's legs, which is not the sum of their maxima, and the percentage
     # answers "did I make money on this name" rather than on one funding pool of it. The four
@@ -1370,9 +1379,18 @@ def _sum_stream(legs, k):
     return round(sum(vals), 2) if vals else None
 
 
-def fold_ticker(rows):
+def fold_ticker(rows, rate):
     """One ticker's `fold_positions` rows folded into the detail page's `summary` and its
     `buckets` split (#143 §2, §4). Pure: plain rows in, one dict out, no DB.
+
+    `rate` is the ticker's SGD-per-unit FX rate — the one thing here that is not on a row and
+    cannot be recovered from one. The summary's breakeven has to move an SGD shortfall back into
+    the native price it is quoted in, and dividing one of the native/SGD column pairs to get
+    there would divide two figures already rounded to the cent and would divide by ZERO on
+    exactly the legs this file is careful about (a closed leg's mv, a free lot's cost basis).
+    A parameter rather than a field on every row: both callers hold the FX map already, and a
+    rate on the row would be a permanent `/api/positions` field no page may read. Every leg of a
+    ticker is one currency, so one rate covers the fold.
 
     Returns `None` when `is_leg` keeps no leg — the caller's 404. A sum over nothing is `0`
     with nothing unknown, which reads `net_pl_sgd: 0, net_verdict: "hero"`: a lie that would
@@ -1442,7 +1460,7 @@ def fold_ticker(rows):
     # over the units that are still there, which is the only reading under which the tile and
     # the hero are about the same position. Every input is the column as shipped, so a null
     # anywhere — a refusal, an unpriceable leg, or nothing held — refuses here too.
-    summary["breakeven_price"] = _breakeven_price(summary, units, first["fx_rate"])
+    summary["breakeven_price"] = _breakeven_price(summary, units, rate)
     buckets = [{k: r[k] for k in LEG_FIELDS} for r in
                ({**r, "status": "open" if r["units"] > 1e-6 else "closed"} for r in legs)]
     return {"summary": summary, "buckets": buckets}

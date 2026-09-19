@@ -24,7 +24,7 @@ from portfolio.config import settings
 
 from server import auth
 from portfolio.db import SessionLocal, fx_as_of, fx_map, session_scope, valuation_as_of
-from portfolio.money import to_sgd
+from portfolio.money import rate_to_sgd, to_sgd
 from portfolio.options import trades_for
 from portfolio.performance import (alloc_by_account, cdp_transactions, compute, empty_group,
                                    fold_ticker, is_leg, rollup)
@@ -338,11 +338,14 @@ def holding(ticker: str):
     "at latest FX" is as of. The options table carries no bucket — see BACKEND.md for the stated
     assumption and its trigger."""
     # perf_all (not perf) so a fully CLOSED ticker still has legs to fold
-    folded = fold_ticker([r for r in perf_all() if r["ticker"] == ticker])
-    if folded is None:
-        return JSONResponse({"detail": "not found"}, status_code=404)
+    rows = [r for r in perf_all() if r["ticker"] == ticker]
     with session_scope() as s:
         txns, divs, fx = ticker_ledger(s, ticker)
+    # the ledger's own FX map, and the fold takes the rate rather than reading one off a row:
+    # every leg of a ticker is one currency, and no page has any use for a rate on the wire.
+    folded = rows and fold_ticker(rows, rate_to_sgd(rows[0]["currency"], fx))
+    if not folded:
+        return JSONResponse({"detail": "not found"}, status_code=404)
     txns.sort(key=_date_key("trade_date"))
     bal = 0.0
     for t in txns:

@@ -32,7 +32,7 @@ def _row(ticker="AAA", bucket="cash", **over):
              income_native=0.0, options_pl_sgd=None, net_pl_sgd=0.0, net_verdict="hero",
              return_pct=0.0, return_verdict="ok", peak_car_sgd=10.0, return_span_days=365,
              cost_partition=_part(10, 10), invested_sgd=10.0, invested_native=10.0,
-             fees_sgd=0.0, cost_known=True, fx_rate=1.0, breakeven_price=1.0)
+             fees_sgd=0.0, cost_known=True, breakeven_price=1.0)
     r.update(over)
     return r
 

@@ -22,6 +22,7 @@ from portfolio.performance import LEG_FIELDS, _breakeven_price
 from server import main
 
 D = dt.date
+SGD = 1.0     # every row here is an SGD name, so the fold's rate is 1.0
 
 
 def _row(**over):
@@ -38,13 +39,13 @@ def _row(**over):
          "total_pl_native": 12981.92, "pl_sgd": 12981.92, "xirr": 0.12, "simple_return": 0.16,
          "options_pl_sgd": None, "net_verdict": "hero", "net_pl_sgd": 12981.92,
          "peak_car_sgd": 80618.08, "return_span_days": 2000, "return_pct": 0.161,
-         "return_verdict": "ok", "fx_rate": 1.0}
+         "return_verdict": "ok"}
     r.update(over)
     # derived AFTER the overrides and by the REAL helper, never passed in and never re-spelled:
     # a breakeven hand-written beside the components it is solved from is a fixture that can
     # disagree with itself or with the rule, and every override below moves at least one of
     # those components. The arithmetic is gated in tests/test_fold_ticker.py.
-    r["breakeven_price"] = _breakeven_price(r, r["units"], r["fx_rate"])
+    r["breakeven_price"] = _breakeven_price(r, r["units"], SGD)
     return r
 
 

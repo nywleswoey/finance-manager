@@ -274,10 +274,10 @@ def test_the_detail_summary_carries_provenance_only_where_a_carry_reached_the_na
     """`fold_ticker` reads it off the first leg — whole-ticker, like the verdict it explains —
     and omits it elsewhere rather than shipping a null the page would have to interpret."""
     rows = _fold(_capitaland(), SPLIT)
-    nine = perf.fold_ticker([r for r in rows if r["ticker"] == "9CI"])["summary"]
+    nine = perf.fold_ticker([r for r in rows if r["ticker"] == "9CI"], 1.0)["summary"]
     assert nine["provenance"] == _row(rows, "9CI")["provenance"]
     assert nine["net_verdict"] == "bounded"
 
     plain = perf.fold_ticker([r for r in _fold([_c38u(account="FSM", qty_signed=10, price=1.0)],
-                                               []) if r["ticker"] == "C38U"])["summary"]
+                                               []) if r["ticker"] == "C38U"], 1.0)["summary"]
     assert "provenance" not in plain

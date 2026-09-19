@@ -186,8 +186,8 @@ function mergeTicker(rows) {
     // bought at different averages and collected different dividends), and `first`'s would put
     // the LARGEST LEG's price beside the whole ticker's Net — the leg-vs-ticker mismatch
     // `fold_ticker`'s own note rejects. `/api/holding` solves the ticker's from the summary's
-    // components; nothing here can. `fx_rate` passes through from `first` and is right: legs of
-    // a ticker share a currency, so every leg carries the same rate.
+    // components, at a rate the server passes into the fold; no row carries one, so nothing here
+    // could solve it even if there were a merged price to solve for.
     breakeven_price: null,
     unrealised_pl_sgd: sumOrNull(rs, (r) => r.unrealised_pl_sgd),
     pl_folded: sumOrNull(rs, plBase),                        // what the P/L column shows — see plOf

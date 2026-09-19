@@ -12,6 +12,7 @@ import datetime as dt
 import pytest
 
 from portfolio import performance as perf
+from portfolio.money import rate_to_sgd
 
 D = dt.date
 TODAY = D(2026, 1, 1)
@@ -38,8 +39,16 @@ def _rows(txns, *, fx=None, price=None, divs=None, corp=None, options=None, tick
     return [r for r in rows if r["ticker"] == ticker]
 
 
+# The fold takes its FX rate as a PARAMETER rather than reading one off a row, so no
+# `/api/positions` row carries a rate no page may read. `SGD` is the rate for the SGD-only
+# fixtures below; a foreign name resolves its own from the same `fx` map `_rows` folded at.
+SGD = 1.0
+
+
 def _ticker(txns, **kw):
-    return perf.fold_ticker(_rows(txns, **kw))
+    rows = _rows(txns, **kw)
+    ccy = rows[0]["currency"] if rows else None
+    return perf.fold_ticker(rows, rate_to_sgd(ccy, kw.get("fx") or {}))
 
 
 def _div(gross, account_id=1, pay_date=D(2021, 1, 1)):
@@ -258,7 +267,7 @@ def test_the_cost_partition_is_the_legs_counts_summed():
 def test_the_return_figures_are_the_tickers_own():
     rows = _rows([_txn(qty_signed=100, price=10.0), _cpf(qty_signed=40, price=10.0)],
                  price={10: 12.0})
-    s = perf.fold_ticker(rows)["summary"]
+    s = perf.fold_ticker(rows, SGD)["summary"]
     for k in ("return_pct", "return_verdict", "peak_car_sgd", "return_span_days"):
         assert s[k] == rows[0][k], k
 
@@ -270,19 +279,19 @@ def test_a_noise_leg_is_dropped_before_the_fold():
     rows = _rows([_txn(qty_signed=100, price=10.0)], price={10: 12.0})
     noise = {**rows[0], "bucket": "srs", "units": 0.0, "invested_native": 0.0,
              "income_native": 0.0, "mv_sgd": 0.0}
-    assert [b["bucket"] for b in perf.fold_ticker(rows + [noise])["buckets"]] == ["cash"]
+    assert [b["bucket"] for b in perf.fold_ticker(rows + [noise], SGD)["buckets"]] == ["cash"]
 
 
 def test_a_closed_leg_with_only_income_survives():
     rows = _rows([_txn(qty_signed=100, price=10.0)], price={10: 12.0})
     kept = {**rows[0], "bucket": "srs", "units": 0.0, "invested_native": 0.0,
             "income_native": 3.0}
-    assert len(perf.fold_ticker(rows + [kept])["buckets"]) == 2
+    assert len(perf.fold_ticker(rows + [kept], SGD)["buckets"]) == 2
 
 
 def test_no_legs_left_is_no_ticker_not_a_zero_hero():
     """A sum over nothing is 0 and `unknown == 0` is hero — the lie the 404 exists to refuse."""
-    assert perf.fold_ticker([]) is None
+    assert perf.fold_ticker([], SGD) is None
 
 
 def test_an_emptied_predecessor_folds_to_nothing():
@@ -295,7 +304,7 @@ def test_an_emptied_predecessor_folds_to_nothing():
                  qty_signed=2700, price=None, trade_date=D(2021, 9, 28))]
     husk = _rows(txns, corp=[("C31", "9CI", "split")], price={2: 4.0}, ticker="C31")
     assert len(husk) == 1                              # the fold does emit its row …
-    assert perf.fold_ticker(husk) is None              # … and the ticker fold refuses it
+    assert perf.fold_ticker(husk, SGD) is None              # … and the ticker fold refuses it
 
 
 # ------------------------------------------------------------------- the breakeven price (#143)
@@ -310,7 +319,7 @@ def test_the_breakeven_price_zeroes_the_net_it_is_solved_from():
     t = _ticker(txns, price={10: 12.0}, divs=[_div(90.0)])
     be = t["summary"]["breakeven_price"]
     assert be is not None
-    assert perf.fold_ticker(_rows(txns, price={10: be}, divs=[_div(90.0)]))["summary"][
+    assert perf.fold_ticker(_rows(txns, price={10: be}, divs=[_div(90.0)]), SGD)["summary"][
         "net_pl_sgd"] == 0.0
 
 

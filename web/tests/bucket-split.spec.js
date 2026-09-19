@@ -307,21 +307,11 @@ for (const { ticker, body } of SINGLE) {
     });
 }
 
-// The line carries no `title` on any captured holding — a tooltip is unreachable on touch — and
-// a name holding nothing carries no line at all, in either layout.
-for (const { ticker, body } of HOLDINGS) {
-  test(`${ticker}: the breakeven line has no title attribute`, async ({ page, baseURL }) => {
-    await openTicker(page, baseURL, ticker);
-    const lines = page.getByTestId("ledger-breakeven");
-    const n = await lines.count();
-    expect(n > 0, `${ticker}: line present iff the name still holds units`)
-      .toBe(holds(body.summary));
-    for (let i = 0; i < n; i++) {
-      await expect(lines.nth(i)).not.toHaveAttribute("title", /.*/);
-      await expect(lines.nth(i).locator("[title]")).toHaveCount(0);
-    }
-  });
-}
+// NO `title` GATE HERE. The line lives inside `[data-testid=ledger]`, and `hero.spec.js` already
+// asserts that block carries no `[title]` at all — over these same eight captured holdings. A
+// copy of it here would open eight more browsers to restate a rule that is already kept, and
+// give the rule a second place to drift. The presence-iff-units half is likewise already stated
+// per layout by the two loops above.
 
 // THE BOUND ON THE REAL BOUNDED NAMES, NOT A WRITTEN ONE. 9CI and C38U are the book's two
 // bounded names and both are single-bucket, so this is the layout the glyph actually reaches on

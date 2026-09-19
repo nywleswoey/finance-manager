@@ -306,7 +306,7 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
 
 **`breakeven_price`** ships beside the Net on every position row and every bucket column: the
 native-currency price at which THAT column's Net reaches zero — `(cost_basis_sgd − realised −
-income − options) ÷ (fx_rate × units)`, quoted at 4dp like `avg_cost` and `price`. Defined against
+income − options) ÷ (rate × units)`, quoted at 4dp like `avg_cost` and `price`. Defined against
 Net and not against avg cost: avg cost is the price that undoes the unrealised column, this is the
 price that undoes the NAME (UD1U: 0.3564 vs 0.4166, the gap being dividends and realised gains
 already banked). Solved in the fold, not `_build_row`, because the options stream is one of the
@@ -322,19 +322,29 @@ components it has to undo.
   and the FX rate. `bucket-split.spec.js` gates `max(0.02, 5e-5 × units × rate)`.
 - **A `bounded` Net bounds it the OTHER way.** `price × rate × units ≡ mv_sgd − Net` with mv, rate
   and units exact, so a `lower` carry floors the Net (`≥`) and ceilings the price (`≤`) — the
-  direction peak capital already takes, and the detail page marks it with the same glyph. `upper`
-  comes with unknown units, which null `cost_basis_sgd`, so `lower` with none (9CI) is the only
-  bounded shape that ships a price at all.
+  direction peak capital already takes, and the detail page marks it with the same glyph.
+  **That direction is the only doubt on any price that ships, and the reason is per COLUMN, not
+  per ticker.** The partition's doubt pushes the other way, and a figure carrying both could be
+  bounded in neither — but `cost_basis_sgd` is null on any column holding unknown units (a leg by
+  `priceable`, the summary by `_sum_known`), so such a column has no price to bound in the first
+  place. `net_verdict` sums its counts across a ticker's legs, so `bounded` says nothing about any
+  one of them: on a `lower`-carried ticker with one fully costed leg and one all-unknown leg, the
+  summary and the unknown leg both ship `null` while the costed leg ships a marked price. Live,
+  9CI (`lower`, no unknown units) is the only name that ships a bounded price; C38U's `upper`
+  comes with unknown units and nulls.
 - **The ticker's is solved from the summary**, never a weighted mean of the legs': a closed leg has
   no breakeven of its own but its realised gains and dividends are in the hero, so averaging the
   open legs would quote a price that zeroes only part of the number above it. `Holdings.jsx`'s
   `mergeTicker` therefore ships `null` rather than folding one.
 
-**`fx_rate`** also ships on every `/api/positions` row, beside `provenance` and `cost_partition`:
-plumbing, with no consumer on the wire. `fold_ticker` is pure over rows and needs the rate to solve
-the summary's breakeven; recovering it by dividing a native/SGD pair would divide rounded figures
-and divide by zero on a closed leg's MV and a free lot's cost basis. `LEG_FIELDS` keeps it off the
-bucket columns and the `/api/holding` summary.
+- **The FX rate is a `fold_ticker` PARAMETER, not a row field.** The summary's breakeven has to
+  move an SGD shortfall back into the native price it is quoted in, and `fold_ticker` is pure over
+  rows; recovering the rate there by dividing a native/SGD pair would divide figures already
+  rounded to the cent and would divide by zero on a closed leg's MV and a free lot's cost basis.
+  Both callers hold the FX map already — `/api/holding` via `ticker_ledger`, `audit_ledger` via
+  `_fx_and_price` — so the rate is passed in rather than shipped on every `/api/positions` row as
+  a permanent public field no page may read. Every leg of a ticker is one currency, so one rate
+  covers the fold.
 
 **`return_pct` divides the Net that ships** — `Σ net_pl_sgd` over the ticker — and #152's inline
 `Σ pl_sgd + Σ options_pl_sgd` is gone: one numerator, one definition. A refused Net beside real put

@@ -278,10 +278,14 @@ about the column below it and never a row in it — which is why that page's gat
 **is** present while still proving no column label appeared. The rest: every open column quotes
 one and a closed column quotes none (the drop is one condition, the units, so the Total column and
 the single-bucket page decide it the same way); a column that cannot price its units reads the
-ledger's `not known`; the line carries **no `title`** on every captured holding; a negative price
-renders as the negative number it is; and a **bounded** Net puts the OPPOSITE glyph on the price —
+ledger's `not known`; a negative price renders as the negative number it is; and a **bounded** Net
+puts the OPPOSITE glyph on the price —
 a floor on the Net is a ceiling on the price — with `not known` left bare, since there is no
 direction to bound where there is no figure.
+
+Its **no-`title`** rule is gated once, and not here: `hero.spec.js` asserts the whole ledger block
+carries no `[title]` over these same eight captured holdings, which covers this line the moment it
+renders. A copy here would be eight more browser opens restating a kept rule.
 
 Two gates there do not open a browser or borrow one. The arithmetic gate is a claim about the
 **payload** — revalue a column at its own breakeven and the Net beside it lands on zero, within
