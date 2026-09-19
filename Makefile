@@ -65,12 +65,21 @@ schedule-uninstall: ## remove the agent
 schedule-test:      ## run the agent right now
 	scripts/schedule.sh test
 
-api:          ## run the API (serves built web/ at /)
-	$(PY) -m uvicorn server.main:app --reload --port 8000
+# The local API reads the DEPLOYED Neon DB (DATABASE_URL from .env.local) so local shows the same
+# data as prod. Only `api`/`app` do: every other target — reset, migrate, seed, ingest, tests —
+# stays on the docker DB via .env, so a destructive local command can never reach prod. Recipes
+# are `@`-prefixed so make never echoes the URL (it carries the password).
+NEON_URL = $(shell sed -nE 's/^DATABASE_URL="?([^"]*)"?$$/\1/p' .env.local 2>/dev/null)
+NEON_GUARD = @test -n '$(NEON_URL)' || { echo "FATAL: no DATABASE_URL in .env.local (vercel env pull)"; exit 1; }
+
+api:          ## run the API against Neon (serves built web/ at /)
+	$(NEON_GUARD)
+	@DATABASE_URL='$(NEON_URL)' $(PY) -m uvicorn server.main:app --reload --port 8000
 build-web:    ## build the React frontend
 	cd web && npm install && npm run build
-app: build-web   ## build frontend then run API+web on :8000
-	$(PY) -m uvicorn server.main:app --port 8000
+app: build-web   ## build frontend then run API+web on :8000, against Neon
+	$(NEON_GUARD)
+	@DATABASE_URL='$(NEON_URL)' $(PY) -m uvicorn server.main:app --port 8000
 
 test-web: build-web   ## Playwright viewport suite: 10 named viewports x 13 views (see web/TESTING.md)
 	@# Runs against the production build through vite's preview server, not the dev server,
