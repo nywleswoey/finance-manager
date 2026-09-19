@@ -182,25 +182,12 @@ body { margin: 0; background: var(--bg); color: var(--txt);
    exactly where the horizontal-overflow gate starts applying. Above it nothing moves: the 12ch
    floor is what gives desktop its even columns and it is untouched there.
 
-   NOT #160's PHONE LAYOUT, AND NOT A DOWN PAYMENT ON IT — the same block, the same columns, the
-   same rows, narrower. #160 replaces the whole of it. `tests/split-width.spec.js` is what keeps
-   the scroll from coming back with it. */
+   THE TABLET TIER'S RULE, AND THE PHONE HAS NONE: below 640 the split is not drawn as columns
+   at all (`.ledger-stack`, at the foot of this file), so nothing here is read there.
+   `tests/split-width.spec.js` is what keeps the scroll from coming back. */
 @media (max-width: 1023.98px) {
   .ledger-split .ledger-row, .ledger-split .ledger-head {
     grid-template-columns: 10ch repeat(var(--cols), minmax(0, 1fr));
-  }
-}
-/* Two characters off the label and ten off the gap again on the phone tier, where the pane is
-   332px rather than 384 and losing the floor is not enough on its own: at 10ch and 18px the
-   bottom line — bold, so both its label track and its own figures measure wider than the lines
-   above — wrapped to two rows
-   at 360px. 8ch and 8px give every column 76px and the whole block 323, so the live two-bucket
-   name renders on four single lines with the columns still aligned under each other. `ch` is
-   read against each row's own weight, which is why 8 here and 10 above are the same decision at
-   two widths rather than a tightening for its own sake. The tablet tier needs none of it. */
-@media (max-width: 639.98px) {
-  .ledger-split .ledger-row, .ledger-split .ledger-head {
-    gap: 8px; grid-template-columns: 8ch repeat(var(--cols), minmax(0, 1fr));
   }
 }
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 22px; }
@@ -909,4 +896,44 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
      it happened to compute, with nothing to scroll it back. */
   .fillpane { display: block; flex: none; }
   .fillpane > .grow { display: block; flex: none; overflow: visible; }
+}
+
+/* THE TICKER DETAIL PAGE'S PHONE TIER (#160, spec #143 §18). Three things, all below 640.
+
+   THE LEDGER LOSES ITS ACROSS AXIS. `JSX` renders one `.ledger-block` per bucket under the
+   whole-ticker total, each a complete vertical ledger, and states the across-identity as a
+   written sum (`.ledger-sum`). Four numeric columns do not fit at 360, and scrolling them
+   sideways hides the whole second bucket column — reconciling in the DOM and not on the screen.
+   The rows are the plain `.ledger-row`, so the 44px pitch and the tabular figures are unchanged. */
+@media (max-width: 639.98px) {
+  .ledger-stack { max-width: none; }
+  .ledger-block { margin-bottom: 14px; }
+  .ledger-blockhead { display: flex; align-items: baseline; justify-content: space-between;
+    flex-wrap: wrap; gap: 2px 12px; padding: 3px 0 6px; border-bottom: 1px solid var(--line);
+    margin-bottom: 3px; font-size: 14px; }
+  .ledger-sum { padding: 8px 0 0; border-top: 1px solid var(--line); font-size: 14px;
+    line-height: 1.5; overflow-wrap: anywhere; }
+
+  /* THE FIVE TILES AS FIVE LABEL/VALUE ROWS, at the tap floor. Page-local divergence: `.tiles`
+     has eight call sites and the other seven keep the grid. TRIGGER: a second view that wants
+     rows gets a modifier on `.tiles`, not a second page-local block like this one. The labels
+     align down the left edge so `not known` reads as a state and not as a missing box. */
+  .tiles-list { display: block; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; }
+  .tiles-list .tile { display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; min-height: var(--tap); padding: 0 14px; border: 0; border-radius: 0;
+    background: none; }
+  .tiles-list .tile + .tile { border-top: 1px solid var(--line); }
+  .tiles-list .tile .val { margin-top: 0; min-width: 0; text-align: right;
+    overflow-wrap: anywhere; }
+
+  /* THE HERO'S EXPLANATIONS, FOLDED. The row is the summary; the sentences inside keep the
+     `.hero-note` look. `list-item` and the platform marker are dropped for a `▾` that turns,
+     because a row this prominent that says "qualifications" wants to read as openable. */
+  .hero-fold > summary { display: flex; align-items: center; justify-content: space-between;
+    min-height: var(--tap); color: var(--mut); font-size: 13px; font-weight: 600;
+    cursor: pointer; list-style: none; }
+  .hero-fold > summary::-webkit-details-marker { display: none; }
+  .hero-fold > summary::after { content: "\25BE"; }
+  .hero-fold[open] > summary::after { content: "\25B4"; }
 }
