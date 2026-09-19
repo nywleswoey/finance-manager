@@ -288,9 +288,15 @@ carries no `[title]` over these same eight captured holdings, which covers this 
 renders. A copy here would be eight more browser opens restating a kept rule.
 
 Two gates there do not open a browser or borrow one. The arithmetic gate is a claim about the
-**payload** — revalue a column at its own breakeven and the Net beside it lands on zero, within
-the 4dp the price is quoted at spread over the units it multiplies — so it takes no `page`
-fixture. And the bounded glyph is gated on the two REAL bounded names (9CI, C38U) rather than only
+**payload** — revalue a column at its own breakeven and the Net beside it lands on zero — so it
+takes no `page` fixture, and it runs over EVERY captured holding rather than the multi-bucket
+ones, because the only foreign names are single-bucket and the rate's error is the term that
+needs them. Its tolerance is the SUM of the three roundings really in that residual: the
+components' own cent-rounding (`0.02`), the 4dp the price is quoted at spread over the units it
+multiplies (`5e-5 × units × rate`), and the error in an FX rate the gate must RECOVER from the
+market-value pair because no endpoint ships one (`|be − price| × units × ε`). The same three
+are stated in `performance.py`'s `_breakeven_price` and in BACKEND.md; a name that ships no
+priced column is skipped rather than asserted. And the bounded glyph is gated on the two REAL bounded names (9CI, C38U) rather than only
 on a written payload: their holding captures predate `summary.provenance` reaching the wire and
 ship `bounded` with none, a shape the server cannot produce, so the object is read off
 `positions-closed.json` by `capturedProvenance` — the same mechanism `unknown-book.spec.js` uses

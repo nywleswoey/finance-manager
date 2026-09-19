@@ -43,6 +43,13 @@ test.beforeAll(() => {
   expect(single((s) => holds(s) && s.breakeven_price == null),
     "no single-bucket holding that cannot price its units").toBeGreaterThan(0);
   expect(single((s) => !holds(s)), "no closed single-bucket holding").toBeGreaterThan(0);
+  // the arithmetic gate skips a name with no priced column, so pin that it cannot skip them all
+  // — and that a FOREIGN one survives, which is the only shape exercising its FX-error term
+  const priced = HOLDINGS.filter(({ body }) => [...body.buckets, body.summary]
+    .some((c) => holds(c) && c.breakeven_price != null && c.net_pl_sgd != null));
+  expect(priced.length, "no captured holding quotes a breakeven").toBeGreaterThan(0);
+  expect(priced.filter(({ body }) => body.summary.currency !== "SGD").length,
+    "no foreign captured holding quotes a breakeven — the rate term is untested").toBeGreaterThan(0);
   // and the two bounded names the price's glyph is gated on, still bounded and still captured
   for (const tk of ["9CI", "C38U"]) {
     const h = HOLDINGS.find((x) => x.ticker === tk);
@@ -240,7 +247,14 @@ for (const { ticker, body } of SINGLE) {
 // THE ARITHMETIC ITSELF TAKES NO BROWSER. It is a claim about the payload — revalue a column at
 // its own breakeven and the Net beside it lands on zero — so it takes no `page` fixture and
 // opens no page. Everything below this point renders.
-for (const { ticker, body } of MULTI) {
+//
+// EVERY CAPTURED HOLDING, not just the multi-bucket ones. The tolerance's FX term is only real on
+// a foreign name and both of those (AAPL, PLTR) are single-bucket, so a loop over `MULTI` would
+// carry that term without ever exercising it — the sole multi-bucket capture is SGD, where the
+// recovered rate is exactly 1. A name that ships no priced column at all is skipped rather than
+// asserted; `beforeAll` pins that some name ships one and that some FOREIGN name does, so the
+// skip cannot quietly empty the gate.
+for (const { ticker, body } of HOLDINGS) {
   test(`${ticker}: the price it quotes is the one that makes that column's Net zero`, () => {
     // Derived from the payload, never a literal — including the FX rate, which this payload does
     // NOT carry: `/api/positions` stopped shipping one on purpose, so the only route to it is the
@@ -256,19 +270,21 @@ for (const { ticker, body } of MULTI) {
     //
     // They ADD because the errors do. `e` bounds |mv_sgd/mv_native - rate| at half a cent on each
     // half of the pair. On F34 (SGD) the middle term dominates; on a foreign name the last one
-    // does — PLTR's recovered 1.26710518 against a true 1.2671 moves 0.29 SGD over 5 units, which
-    // is why a tolerance covering only the 4dp quote would fail a payload with nothing wrong.
+    // does — PLTR's recovered 1.26710518 against a true 1.2671 moves 0.29 SGD over its 5 units,
+    // which a tolerance covering only the 4dp quote would fail with nothing wrong. That name is
+    // in this loop, so the term is exercised rather than merely argued for.
     const s = body.summary;
+    const cols = [...body.buckets, s].filter(
+      (b) => holds(b) && b.breakeven_price != null && b.net_pl_sgd != null);
+    // a refusal, a name that cannot price its units, and one holding nothing all correctly quote
+    // no price — there is no identity to check, which is a different thing from failing one
+    test.skip(cols.length === 0, `${ticker} quotes no price to check`);
     // No market value is no recoverable rate — asserted rather than defaulted to 1, which would
-    // pass a foreign name at the wrong rate in silence. A priced name always has one; a name
-    // holding units it cannot quote still ships a breakeven, and this gate cannot check it.
+    // pass a foreign name at the wrong rate in silence.
     expect(Math.abs(s.mv_native), `${ticker} has no market value to recover a rate from`)
       .toBeGreaterThan(0);
     const rate = s.mv_sgd / s.mv_native;
     const e = 0.005 * (1 + Math.abs(rate)) / Math.abs(s.mv_native);
-    const cols = [...body.buckets, s].filter(
-      (b) => holds(b) && b.breakeven_price != null && b.net_pl_sgd != null);
-    expect(cols.length, "no column with a breakeven to check").toBeGreaterThan(0);
     for (const b of cols) {
       const moved = (b.breakeven_price - s.price) * b.units * rate;
       const tol = 0.02 + 5e-5 * b.units * rate
