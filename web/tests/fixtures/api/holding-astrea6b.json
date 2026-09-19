@@ -1,0 +1,60 @@
+{
+ "as_of": "2026-09-13",
+ "fx_as_of": "2026-09-13",
+ "summary": {
+  "ticker": "ASTREA6B",
+  "name": "ASTREAVIB310318",
+  "market": "SG",
+  "asset_type": "stock",
+  "currency": "SGD",
+  "accounts": [
+   "CDP"
+  ],
+  "units": 0.0,
+  "price": null,
+  "avg_cost": null,
+  "cost_basis_native": null,
+  "cost_basis_sgd": null,
+  "mv_native": 0.0,
+  "mv_sgd": 0.0,
+  "realised_pl_sgd": null,
+  "unrealised_pl_sgd": null,
+  "stock_pl_sgd": null,
+  "income_sgd": 0.0,
+  "options_pl_sgd": null,
+  "net_pl_sgd": null,
+  "net_verdict": "refuse",
+  "return_pct": null,
+  "return_verdict": "no_capital",
+  "peak_car_sgd": 0.0,
+  "return_span_days": 1675,
+  "cost_partition": {
+   "units_in": 15000.0,
+   "costed": 0,
+   "free": 0,
+   "unknown": 15000.0,
+   "unknown_pct": 1.0
+  },
+  "invested_sgd": null,
+  "invested_native": 0.0,
+  "fees_sgd": 0.0,
+  "cost_known": false
+ },
+ "buckets": [
+  {
+   "bucket": "cash",
+   "status": "closed",
+   "units": 0.0,
+   "avg_cost": null,
+   "realised_pl_sgd": null,
+   "unrealised_pl_sgd": null,
+   "stock_pl_sgd": null,
+   "income_sgd": 0.0,
+   "options_pl_sgd": null,
+   "net_pl_sgd": null
+  }
+ ],
+ "transactions": [],
+ "dividends": [],
+ "options": []
+}

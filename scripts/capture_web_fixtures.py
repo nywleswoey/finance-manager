@@ -12,18 +12,20 @@ invented rows during planning and 519px against real ones. An assertion about a
 measured width is meaningless untethered from fixed data.
 
 Which is also why "derived from the live database" is load-bearing, and why this
-script *enforces* the four pathological rows planning surfaced (see PATHOLOGICAL
-below) rather than trusting them to show up. Three of the four land naturally in the
+script *enforces* the pathological rows planning surfaced (see `check_pathological`
+below) rather than trusting them to show up. Most of them land naturally in the
 windows the frontend asks for; the 65-character merchant does not, so it is spliced
 in from a targeted query against the same database — see `_ensure_long_merchant`.
 
 Re-run only when the fixtures genuinely need to move. Regenerating them casually
 re-tethers every measured assertion in the suite to whatever the database holds today.
 
-Three fixtures are not reproducible byte-for-byte: `return.json`, and every `xirr` in
-`positions.json` / `positions-closed.json`. They move for three different reasons, and a
-recapture diff is only readable if you keep them apart (issues #52 and #56, which are where
-the numbers below come from).
+Two fixtures are not reproducible byte-for-byte: `return.json`, and every `xirr` in
+`positions-closed.json`. They move for three different reasons, and a recapture diff is only
+readable if you keep them apart (issues #52 and #56, which are where the numbers below come
+from). It was three until #155 stopped capturing `/api/positions` without `?closed=true` —
+`positions.json` is referred to below as the fixture the measurements were taken against, which
+is history rather than a live path.
 
 1. The clock alone. `twr_annualised` raises a fixed total return to `1/years`, and `xirr`
    / `xirr_annualised` re-solve with the terminal inflow discounted over a longer span —
@@ -105,7 +107,12 @@ ENDPOINTS: list[tuple[str, str]] = [
     ("return", "/api/return"),
     ("options", "/api/options"),
     ("options-trades", "/api/options-trades?limit=500"),
-    ("positions", "/api/positions"),
+    # ONE positions route, not two. Holdings asks for `?closed=true` unconditionally (#143
+    # §15) — the ticker fold covers the whole ticker whatever the "Show closed positions"
+    # checkbox says, so every leg has to be in hand before any row is hidden — and Holdings is
+    # this endpoint's only caller in `web/`. The no-parameter route is therefore never
+    # requested by the app, so capturing it would commit a fixture nothing can reach. The
+    # `closed` parameter stays on the endpoint as API surface.
     ("positions-closed", "/api/positions?closed=true"),
     ("performance-market", "/api/performance?by=market"),
     ("performance-bucket", "/api/performance?by=bucket"),
@@ -114,9 +121,35 @@ ENDPOINTS: list[tuple[str, str]] = [
     ("dividend-details", "/api/dividend-details"),
     ("accounts", "/api/accounts"),
     ("transactions", "/api/transactions?"),
-    # SecurityDetail's only entry point. PLTR is deliberate: 73 option trades, the
-    # longest options history in the database (see PATHOLOGICAL).
+    # --- the detail page: eight tickers, and every one of them the only thing that reaches
+    # what it reaches (#143, Testing Decisions tier 2). Not "a few representative names": each
+    # line below closes a render state no other ticker in the book can.
+    #
+    # PLTR      the plain hero, the 3-row reconciliation block, and 73 option trades — the
+    #           longest options history in the database, which is what makes this page the
+    #           tallest view in the app (see PATHOLOGICAL).
+    # AAPL      the no-capital hero, and the ONLY fixture that reaches the Dividends row at
+    #           all: `holding-pltr.json`'s `dividends` is `[]` and PLTR structurally cannot
+    #           have one. Also a hero carrying latest FX.
+    # Q01       the caveat — `stock_pl_sgd` carrying a nulled realised/unrealised pair, tiles
+    #           reading `not known`, the two-sided percentage sentence. The only caveat in the
+    #           book whose uncosted lot is still HELD.
+    # F34       multi-bucket columns, the closed-leg measured `0.0`, the dated carry, and the
+    #           cross-page gate (Holdings' ticker-mode Net === this payload's summary Net).
+    #           Load-bearing three times; single-bucket PLTR cannot carry the cross-page gate
+    #           because Σ over one element proves nothing about the fold.
+    # TSLA      all-options reconciliation, and the first closed-ticker page any test renders.
+    # 9CI       `bounded` with a LOWER bound (`≥`) — a split carry that landed here.
+    # C38U      `bounded` with an UPPER bound (`≤`), naming a sibling the reader can reach.
+    # ASTREA6B  the only refusal in the book, and the only page with no bottom line.
     ("holding-pltr", "/api/holding?ticker=PLTR"),
+    ("holding-aapl", "/api/holding?ticker=AAPL"),
+    ("holding-q01", "/api/holding?ticker=Q01"),
+    ("holding-f34", "/api/holding?ticker=F34"),
+    ("holding-tsla", "/api/holding?ticker=TSLA"),
+    ("holding-9ci", "/api/holding?ticker=9CI"),
+    ("holding-c38u", "/api/holding?ticker=C38U"),
+    ("holding-astrea6b", "/api/holding?ticker=ASTREA6B"),
     # --- net worth ---
     ("networth-items", "/api/networth/items"),
     ("networth-snapshots", "/api/networth/snapshots"),
@@ -201,16 +234,16 @@ def write(name: str, payload) -> None:
     print(f"  {name}.json  ({size:,} bytes)")
 
 
-# ---------------- the five pathological rows ----------------
+# ---------------- the seven pathological rows ----------------
 # Each of these broke, or nearly broke, a measurement during planning. Fixtures that
 # were merely *plausible* would reproduce the original error, so capture asserts they
 # are present and fails loudly if the database no longer holds them.
 #
-# The same five are asserted again on every test run, from the committed files, in
+# The same seven are asserted again on every test run, from the committed files, in
 # `web/tests/fixtures/index.js` (PATHOLOGICAL). Deliberately both: here it fails at the
 # source, the moment a recapture would have quietly dropped one; there it fails for
 # whoever hand-edits a fixture without ever running this script. Move a threshold in one
-# place and move it in the other.
+# place and move it in the other, and ADD A ROW IN BOTH — the duplication is the point.
 
 def _ensure_long_merchant(base: str, rows: list[dict]) -> list[dict]:
     """Splice in the longest merchant string if it fell outside the captured window.
@@ -264,6 +297,8 @@ def check_pathological(captured: dict[str, object]) -> None:
     trades = captured["options-trades"]
     txns = captured["spending-transactions"]
     holding = captured["holding-pltr"]
+    refusal = captured["holding-astrea6b"]
+    positions = captured["positions-closed"]
 
     subs = summary.get("by_subcategory") or []
     longest_sub = max((str(s.get("subcategory") or "") for s in subs), key=len, default="")
@@ -307,6 +342,22 @@ def check_pathological(captured: dict[str, object]) -> None:
     checks.append((len(pltr_history) >= 73,
                    f"the holding-pltr fixture carries {len(pltr_history)} option trades, "
                    f"expected >= 73"))
+    # THE REFUSAL, AS TWO CHECKS AND NOT ONE. ASTREA6B is the only name in the book whose entering
+    # units have no recorded cost, so the only page with no bottom line — and the page is reachable
+    # only through its Holdings row, because `SecurityDetail` is component state with one caller.
+    # Each half is useless without the other, which is why they are counted separately: two checks
+    # name WHICH half went missing, where one could only say the state is gone.
+    refusal_summary = (refusal or {}).get("summary") or {}
+    checks.append((refusal_summary.get("net_verdict") == "refuse"
+                   and refusal_summary.get("net_pl_sgd") is None,
+                   f"holding-astrea6b is no longer a refusal on the wire: net_verdict="
+                   f"{refusal_summary.get('net_verdict')!r}, "
+                   f"net_pl_sgd={refusal_summary.get('net_pl_sgd')!r}"))
+    refusal_rows = [r for r in (positions.get("positions") or [])
+                    if r.get("net_verdict") == "refuse"]
+    checks.append((bool(refusal_rows),
+                   f"positions-closed carries no refusing row, so no test can click through to "
+                   f"the refusal page ({len(positions.get('positions') or [])} rows captured)"))
 
     bad = [msg for ok, msg in checks if not ok]
     if bad:
@@ -316,7 +367,9 @@ def check_pathological(captured: dict[str, object]) -> None:
         sys.exit(1)
     print(f"\n  pathological rows present: {len(longest_sub)}-char subcategory, "
           f"PLTR x{len(pltr_trades)} option trades, {len(longest_merchant)}-char merchant, "
-          f"null-category row, {flat_series} at {flat_px:.1f}px under a shared axis")
+          f"null-category row, {flat_series} at {flat_px:.1f}px under a shared axis, "
+          f"the refusal on the wire and as a Holdings row "
+          f"({', '.join(r['ticker'] for r in refusal_rows) or 'none'})")
 
 
 def main() -> None:

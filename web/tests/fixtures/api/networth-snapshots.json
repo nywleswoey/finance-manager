@@ -1,5 +1,53 @@
 [
  {
+  "id": 6,
+  "date": "2026-08-31",
+  "note": "statements: tiger tiger_prime_2026.csv + dbs dbs_202608.pdf (as at 31 Aug 2026)",
+  "portfolio_value_sgd": 1276109.99,
+  "total_assets": 2215001.08,
+  "total_liabilities": 285822.89,
+  "liquid_assets": 86441.73,
+  "net_worth": 1929178.19,
+  "net_worth_excl_housing": 1821001.08,
+  "net_worth_excl_housing_cpf": 1369273.32
+ },
+ {
+  "id": 5,
+  "date": "2026-08-05",
+  "note": null,
+  "portfolio_value_sgd": 1137390.04,
+  "total_assets": 2171329.99,
+  "total_liabilities": 285822.89,
+  "liquid_assets": 184016.81,
+  "net_worth": 1885507.1,
+  "net_worth_excl_housing": 1777329.99,
+  "net_worth_excl_housing_cpf": 1325602.23
+ },
+ {
+  "id": 4,
+  "date": "2026-07-25",
+  "note": null,
+  "portfolio_value_sgd": 1117914.67,
+  "total_assets": 2171243.18,
+  "total_liabilities": 285235.99,
+  "liquid_assets": 206505.55,
+  "net_worth": 1886007.19,
+  "net_worth_excl_housing": 1777243.18,
+  "net_worth_excl_housing_cpf": 1328615.42
+ },
+ {
+  "id": 3,
+  "date": "2026-07-10",
+  "note": null,
+  "portfolio_value_sgd": 1117741.94,
+  "total_assets": 2176068.0,
+  "total_liabilities": 285235.99,
+  "liquid_assets": 211503.1,
+  "net_worth": 1890832.01,
+  "net_worth_excl_housing": 1782068.0,
+  "net_worth_excl_housing_cpf": 1333440.24
+ },
+ {
   "id": 2,
   "date": "2026-06-30",
   "note": "statements: tiger tiger_prime_2026.csv + dbs dbs_202606.pdf (as at 30 Jun 2026)",
