@@ -102,7 +102,7 @@ const PINNED = [
       { pin: "Contract", cols: 7 },
     ],
     unrendered: [
-      "SecurityDetail.jsx's dividend history (6 cols, pin `Date`) — PLTR is the row the " +
+      "SecurityDetail.jsx's dividend history (7 cols, pin `Date`) — PLTR is the row the " +
       "suite drills into because it has the longest options history in the fixtures, and " +
       "it has no dividends at all, so that branch never mounts",
     ],

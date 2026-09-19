@@ -269,7 +269,8 @@ Failing these **changes a decision**, rather than reporting a bug.
 - Recurring's two nested scroll regions — geometry is fine; whether it *feels* confusing is not
   measurable from here.
 - `SecurityDetail.jsx:49` txn history stays **B**, but it measures the same ~4 cards per screen that
-  overturned B for the options table beside it (8 cols, 914px, up to 71 rows, four numbers per row).
+  overturned B for the options table beside it (9 cols since the Bucket column of #159, so the
+  914px is a stale measurement and the real width is wider; up to 71 rows, four numbers per row).
   If it reads as cramped, it wants **A** and SecurityDetail becomes B, A, A. **Buildable rather than
   hypothetical** — the cards are on screen, so this is a look rather than a thought experiment.
 - **Whether a phone list of 1001 cards is usable.** `spending/Transactions` fetches `limit=1000` and
