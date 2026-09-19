@@ -76,10 +76,9 @@ def _stub(monkeypatch):
     """Two legs of D05 and C31's husk; the ledger and options book canned. No database."""
     main._cache.clear()
     settings.dev_auth_bypass = True
-    monkeypatch.setattr(main, "perf_all", lambda: [_row(), dict(CPF), dict(HUSK)])
-    # the fold generation's own FX map, which `perf_all` fills beside its rows. Stubbed here for
-    # the same reason the rows are: empty is SGD-only, which is what these rows are priced in.
-    main._cache["fx"] = {}
+    # the fold generation: rows AND the rate their SGD figures were converted at, which the
+    # server hands out as one value. Empty is SGD-only, which is what these rows are priced in.
+    monkeypatch.setattr(main, "perf_fold", lambda: ([_row(), dict(CPF), dict(HUSK)], {}))
     monkeypatch.setattr(main, "session_scope", lambda *a, **k: _no_session())
     monkeypatch.setattr(main, "valuation_as_of", lambda s: D(2026, 7, 25))
     monkeypatch.setattr(main, "fx_as_of", lambda s: D(2026, 8, 5))
@@ -176,8 +175,7 @@ def test_the_breakeven_is_solved_at_the_rate_its_own_figures_were_converted_at(c
     usd["unrealised_pl_sgd"] = round(usd["mv_sgd"] - usd["cost_basis_sgd"], 2)
     usd["stock_pl_sgd"] = usd["unrealised_pl_sgd"]
     usd["net_pl_sgd"] = round(usd["stock_pl_sgd"] + usd["income_sgd"], 2)
-    monkeypatch.setattr(main, "perf_all", lambda: [usd])
-    main._cache["fx"] = {"USD": fold}
+    monkeypatch.setattr(main, "perf_fold", lambda: ([usd], {"USD": fold}))
     monkeypatch.setattr(main, "ticker_ledger",
                         lambda s, tk: ([], [], {"USD": live}))
 

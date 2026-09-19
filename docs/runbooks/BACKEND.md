@@ -348,10 +348,16 @@ components it has to undo.
   numerator is SGD and the answer is native, so a rate from a later reading returns the true price
   scaled by the ratio between the two, and it stops zeroing the Net beside it — the one property
   the field is defined by. `/api/positions`' fold is memoized with no TTL and `ticker_ledger`
-  re-reads FX per request, so `server/main.py` fills the map under `"fx"` in the same breath as
-  the rows (`perf_all`) and `/api/holding` reads it back through `perf_fx()`; the pair clears
-  together, so no caller can split them. `audit_ledger` passes `fetch()`'s own `_fx_and_price`
-  map, read in the same pass as the rows it folds.
+  re-reads FX per request, so `server/main.py` caches the rows and the map as ONE value under one
+  key (`perf_fold`), and `/api/holding` takes both from it. One key rather than two filled
+  together: two can be separated by a `_cache.clear()` landing between them, or by a caller
+  replacing one accessor and not the other.
+  `audit_ledger` does NOT have that guarantee and does not need one. `fetch()` reads FX a second
+  time, in its own session, after `compute()` read its own — two reads, two transactions — and
+  hands that second map to `ticker_nets`. It is a one-shot offline script whose only consumer of
+  the fold is `net_pl_sgd`; no invariant reads `breakeven_price`, which is the only figure the
+  rate touches. **Trigger:** the first audit invariant over breakevens — it would have to thread
+  `compute`'s own map through instead.
 
 **`return_pct` divides the Net that ships** — `Σ net_pl_sgd` over the ticker — and #152's inline
 `Σ pl_sgd + Σ options_pl_sgd` is gone: one numerator, one definition. A refused Net beside real put

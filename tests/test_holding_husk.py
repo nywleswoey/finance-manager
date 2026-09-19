@@ -11,7 +11,7 @@ units, so every rule reads it as `hero` and it would print `+0.0% on peak capita
 The assertion that would have caught this class of thing in the first place is "does not
 return a hero", so it is written in exactly those words, on a row the real fold produced.
 
-`perf_all` is replaced by the fold over fabricated rows and
+`perf_fold` is replaced by the fold over fabricated rows and
 `session_scope` by a tripwire, so no database is touched: a request that gets past the 404 gate
 trips the wire instead.
 
@@ -66,7 +66,9 @@ def _stub(monkeypatch):
     main._cache.clear()
     monkeypatch.setattr(settings, "dev_auth_bypass", True)
     rows = _rows()
-    monkeypatch.setattr(main, "perf_all", lambda: rows)
+    # the fold generation: rows AND the rate their SGD figures were converted at. Stubbing
+    # the pair is the only way to stub either — these rows are SGD, so the map is empty.
+    monkeypatch.setattr(main, "perf_fold", lambda: (rows, {}))
 
     def _tripwire(*a, **k):
         raise _Reached

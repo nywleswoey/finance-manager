@@ -171,30 +171,34 @@ def _as_of():
     return _iso(valuation_as_of)
 
 
+def _read_fold():
+    """One session, one read: the fold's rows and the FX map they were converted at."""
+    with session_scope() as s:
+        return compute(s), fx_map(s)
+
+
+def perf_fold():
+    """`(rows, fx)` — the fold's rows and the rate their SGD figures were converted at.
+
+    ONE GENERATION, ONE RATE, AND **ONE CACHE KEY** SO NOTHING CAN HOLD HALF OF IT. Every SGD
+    figure on a row is a native amount times a rate `compute()` read when this key filled.
+    Anything that has to move one of those figures BACK into a native amount — the ticker fold
+    solving its breakeven price out of an SGD shortfall — must use THAT rate and not a fresher
+    one, or the price it returns is the true one scaled by the ratio between two readings and no
+    longer zeroes the Net it sits beside. A live `fx_map()` per request is exactly that bug:
+    `_cache` has no TTL, and a write that bypasses this process leaves a warm instance folding at
+    yesterday's rate (see `_as_of`).
+
+    THE PAIR IS ONE VALUE RATHER THAN TWO KEYS FILLED TOGETHER. Two keys can be separated — by a
+    `_cache.clear()` landing between the two reads, and by a caller replacing one accessor and
+    not the other — and a rate that has lost its rows is worse than no rate at all. One key
+    cannot be split by either."""
+    return _cached("all", _read_fold)
+
+
 def perf_all():
-    """The fold's rows — and, filled in the same breath under `"fx"`, the FX map they were
-    converted at.
-
-    ONE GENERATION, ONE RATE. Every SGD figure on a row is a native amount times a rate
-    `compute()` read when this key filled. Anything that has to move one of those figures BACK
-    into a native amount — the ticker fold solving its breakeven price out of an SGD shortfall —
-    must use THAT rate and not a fresher one, or the price it returns is the true one scaled by
-    the ratio between two readings and no longer zeroes the Net it sits beside. A live
-    `fx_map()` per request is exactly that bug: `_cache` has no TTL, and a write that bypasses
-    this process leaves a warm instance folding at yesterday's rate (see `_as_of`). The pair
-    fills together and `_cache.clear()` drops it together, so no caller can split them."""
-    if "all" not in _cache:
-        with session_scope() as s:
-            rows, fx = compute(s), fx_map(s)
-        _cache["all"], _cache["fx"] = rows, fx
-    return _cache["all"]
-
-
-def perf_fx():
-    """The FX map `perf_all()`'s figures were converted at — the only rate anything may convert
-    one of them back with."""
-    perf_all()
-    return _cache["fx"]
+    """The fold's rows. The rate they were converted at rides with them — see `perf_fold`."""
+    return perf_fold()[0]
 
 
 def perf():
@@ -359,13 +363,13 @@ def holding(ticker: str):
     handler only fetches. `as_of` is `/api/positions`' valuation date verbatim; `fx_as_of` is what
     "at latest FX" is as of. The options table carries no bucket — see BACKEND.md for the stated
     assumption and its trigger."""
-    # perf_all (not perf) so a fully CLOSED ticker still has legs to fold
-    rows = [r for r in perf_all() if r["ticker"] == ticker]
-    # THE FOLD'S OWN RATE, not the ledger's read below. The fold takes it as a parameter rather
-    # than off a row (no page has any use for a rate on the wire), and every leg of a ticker is
-    # one currency — but it has to be the rate these rows' SGD figures were converted at, which
-    # is `perf_fx()` and never a fresher map.
-    folded = rows and fold_ticker(rows, rate_to_sgd(rows[0]["currency"], perf_fx()))
+    # perf_fold (not perf) so a fully CLOSED ticker still has legs to fold — and it hands over
+    # the rows WITH the rate their SGD figures were converted at. The fold takes that rate as a
+    # parameter rather than off a row (no page has any use for a rate on the wire), and every
+    # leg of a ticker is one currency; what it must never take is the ledger's fresher read below.
+    all_rows, fx = perf_fold()
+    rows = [r for r in all_rows if r["ticker"] == ticker]
+    folded = rows and fold_ticker(rows, rate_to_sgd(rows[0]["currency"], fx))
     if not folded:
         return JSONResponse({"detail": "not found"}, status_code=404)
     with session_scope() as s:
