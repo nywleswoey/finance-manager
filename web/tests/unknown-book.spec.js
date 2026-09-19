@@ -50,19 +50,21 @@ const lower = () => {
     split_with: [{ ticker: "C38U", units: 417 }], bound: "lower",
   });
 };
-/** C38U's mirror: units arrived with none of the cost, so the figures are ceilings. */
-const upper = () => withProvenance(captured("C38U"), {
+/** The mirror of that split: units arrived with none of the cost, so the figures are ceilings. */
+const upperCarry = () => ({
   from_ticker: "C31", from_name: "CapitaLand Ltd", type: "distribution",
   carried_on: "2021-09-28", carried_sgd: 0,
   split_with: [{ ticker: "9CI", units: captured("9CI").summary.units }], bound: "upper",
 });
+const upper = () => withProvenance(captured("C38U"), upperCarry());
 /** A 1:1 carry: every figure exact, and still owing its provenance. */
+const exactCarry = (b) => ({
+  from_ticker: "OLD", from_name: "Predecessor Fund", type: "switch",
+  carried_on: b.as_of, carried_sgd: b.summary.peak_car_sgd, split_with: [], bound: null,
+});
 const exact = () => {
   const b = captured("PLTR");
-  return withProvenance(b, {
-    from_ticker: "OLD", from_name: "Predecessor Fund", type: "switch",
-    carried_on: b.as_of, carried_sgd: b.summary.peak_car_sgd, split_with: [], bound: null,
-  });
+  return withProvenance(b, exactCarry(b));
 };
 
 /**
@@ -75,6 +77,29 @@ const refusedWithPeak = () => {
   const b = captured("ASTREA6B");
   return { ...b, summary: { ...b.summary, return_verdict: "caveat", return_pct: null,
                             peak_car_sgd: 12500, return_span_days: 900 } };
+};
+
+/**
+ * The cost recipient of a split whose OWN book also doubts some entering units: `net_verdict`
+ * takes the carry's direction (`bounded`/lower, so the hero prints a floor) while
+ * `_return_figures` sees `unknown > 0` and returns `caveat`. Derived, because no captured
+ * holding is both — 9CI carries with every unit costed.
+ */
+const lowerWithUnknownUnits = () => {
+  const p = lower();
+  const part = p.summary.cost_partition;
+  return { ...p, summary: { ...p.summary, return_verdict: "caveat",
+    cost_partition: { ...part, costed: part.units_in - 500, unknown: 500,
+                      unknown_pct: Math.round((500 / part.units_in) * 1e4) / 1e4 } } };
+};
+
+/** The upper side of a split that holds nothing else: it carries a bound, and its Net refuses. */
+const refusedCarry = () => withProvenance(captured("ASTREA6B"), upperCarry());
+
+/** A caveat that also carries, exactly: three notes, and the caveat's two still adjacent. */
+const caveatWithExactCarry = () => {
+  const b = captured("Q01");
+  return withProvenance(b, exactCarry(b));
 };
 
 async function open(page, baseURL, ticker, payload) {
@@ -115,8 +140,10 @@ test.describe("refusal — the number is replaced by prose, and the block does n
     await expect(hero(page)).toContainText(NOT_KNOWN);
     await expect(hero(page)).toContainText("Net P/L");
     const note = page.getByTestId("hero-refusal").getByTestId("hero-note").first();
-    await expect(note).toContainText(`${fmt(s.cost_partition.unknown, 0)} units`);
-    await expect(note).toContainText("without a recorded cost");
+    // The whole entering position is doubted, so the copy says `All N` and not `N of N`.
+    expect(s.cost_partition.unknown).toBe(s.cost_partition.units_in);
+    await expect(note)
+      .toHaveText(`All ${fmt(s.cost_partition.unknown, 0)} units entered without a recorded cost.`);
     // Inside the hero block, above the ledger, not a caption beneath it.
     expect(await page.locator(".hero [data-testid=hero-refusal]").count()).toBe(1);
   });
@@ -215,8 +242,10 @@ test.describe("no capital — the percentage, the span and the peak die together
     await expect(heroReturn(page)).toHaveCount(0);
     const heroText = await page.locator(".hero").innerText();
     expect(heroText).not.toMatch(/%|\byears?\b|peak capital|capital of/);
-    // Not `peak capital of 0` under another spelling.
-    expect(heroText).not.toMatch(/of 0\b|0\.00/);
+    // Not `peak capital of 0` under another spelling — read off the return slot alone, so the
+    // Net this test just asserted is present cannot answer for it.
+    const returnSlot = (await page.locator(".hero .hero-return").allInnerTexts()).join("\n");
+    expect(returnSlot).not.toMatch(/of 0\b|0\.00/);
   });
 
   test("its copy asserts no reason", async ({ page }) => {
@@ -276,12 +305,55 @@ test.describe("bounded — the bound lands on the numbers", () => {
     await expect(note).toContainText(pv.split_with[0].ticker);
   });
 
-  test("a name carrying both doubts states the carry first and the percentage's incomparability second", async ({ page, baseURL }) => {
+  test("a name carrying both doubts states the percentage's incomparability, then the carry", async ({ page, baseURL }) => {
     const p = upper();
     // C38U is the one name where the partition's return caveat and the split carry meet.
     expect(p.summary.return_verdict).toBe("caveat");
     await open(page, baseURL, "C38U", p);
-    expect(await noteIds(page)).toEqual(["carry-note", "caveat-return"]);
+    expect(await noteIds(page)).toEqual(["caveat-return", "carry-note"]);
+  });
+
+  test("a lower bound reads as a floor in the percentage's sentence too", async ({ page, baseURL }) => {
+    const p = lowerWithUnknownUnits();
+    expect(p.summary.net_verdict).toBe("bounded");
+    expect(p.summary.provenance.bound).toBe("lower");
+    expect(p.summary.return_verdict).toBe("caveat");
+    await open(page, baseURL, "9CI", p);
+
+    await expect(page.getByTestId("hero-bound")).toHaveText(/^\u2265/);
+    const note = page.getByTestId("caveat-return");
+    await expect(note).toContainText("the Net above is a lower bound");
+    await expect(note).toContainText("not comparable to any other name");
+    // The hero says floor; the sentence may not say ceiling two lines under it.
+    expect(await note.innerText()).not.toMatch(/Net above is an upper bound/);
+  });
+
+  test("a caveat that also carries keeps its two sentences adjacent, the carry after both", async ({ page, baseURL }) => {
+    const p = caveatWithExactCarry();
+    expect(p.summary.net_verdict).toBe("caveat");
+    await open(page, baseURL, "Q01", p);
+
+    expect(await noteIds(page)).toEqual(["caveat-net", "caveat-return", "carry-note"]);
+    const gap = await page.getByTestId("caveat-net")
+      .evaluate((el) => el.nextElementSibling?.dataset.testid);
+    expect(gap).toBe("caveat-return");
+  });
+
+  test("a refusal keeps the disclosure and drops the direction", async ({ page, baseURL }) => {
+    const p = refusedCarry();
+    const pv = p.summary.provenance;
+    expect(p.summary.net_verdict).toBe("refuse");
+    expect(pv.bound).toBe("upper");
+    await open(page, baseURL, "ASTREA6B", p);
+
+    await expect(hero(page)).toContainText(NOT_KNOWN);
+    const note = page.getByTestId("carry-note");
+    await expect(note).toContainText(pv.from_ticker);
+    await expect(note).toContainText(pv.carried_on);
+    // No direction on a Net the hero says does not exist, and no sibling to solve it against.
+    const text = await note.innerText();
+    expect(text).not.toMatch(/too high|too low|[\u2265\u2264]/);
+    expect(text).not.toContain(pv.split_with[0].ticker);
   });
 
   test("the exact carry still discloses, and is bounded nowhere", async ({ page, baseURL }) => {

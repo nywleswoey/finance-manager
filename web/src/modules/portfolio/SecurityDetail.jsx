@@ -133,25 +133,44 @@ const refusalSentence = (s) =>
  * is an upper bound. A bounded name states its own directional sentence instead (below) and
  * still owes the percentage's second sentence when the return axis is a caveat too — C38U.
  * Neither prints the Net a second time: the hero already carries the figure.
+ *
+ * THE SECOND SENTENCE READS THE SAME BOUND THE HERO'S GLYPH DOES. A bounded name's Net takes the
+ * carry's direction, not the partition's — `net_verdict` says so — so a `lower` name prints `≥`
+ * on the figure, and a sentence hardcoded to "upper bound" would put a ceiling and a floor on
+ * one Net two lines apart. On `lower` both doubts point the same way and neither bounds the
+ * ratio, which is the incomparability this sentence exists to state.
  */
 const caveatNetSentence = (s) =>
   `${unitsUnknown(s.cost_partition)} entered without a recorded cost, and this Net counts ` +
   "them as free — so it is an upper bound.";
-const caveatReturnSentence =
-  "The same error runs both ways in the percentage: the Net above is an upper bound while " +
-  "the peak capital counts costed lots only, a lower bound — so it is not comparable to any " +
-  "other name on the site.";
+const caveatReturnSentence = (bound) =>
+  (bound === "lower"
+    ? "The doubts do not cancel in the percentage: the Net above is a lower bound while the " +
+      "peak capital counts costed lots only, a lower bound as well"
+    : "The same error runs both ways in the percentage: the Net above is an upper bound while " +
+      "the peak capital counts costed lots only, a lower bound") +
+  " — so it is not comparable to any other name on the site.";
 
 /**
- * A carry's disclosure, below the percentage (§12). Directional where the carry split, and it
+ * A carry's disclosure, last in the notes block (§12). Directional where the carry split, and it
  * NAMES THE SIBLING: this is the first bounded figure on the page whose counterpart is
  * reachable, and a direction-free sentence would invite the reader to solve for a number the
  * page will not give. The direction is asserted, not computed — nothing bounds the magnitude.
  * The exact 1:1 carry discloses too: an exact Net is not an accounted-for one when most of its
  * peak capital has no visible origin in the transactions table.
+ *
+ * A REFUSAL KEEPS THE DISCLOSURE AND LOSES THE DIRECTION. `provenance` ships its `bound` on a
+ * split whoever holds it, including a successor whose every entering unit is unknown, whose Net
+ * refuses — and "this Net too high" states a direction on a Net the hero above says does not
+ * exist. The verdict decides, not the presence of a bound: where there is no Net, the sentence
+ * says only where the units came from.
  */
-function carrySentence(pv) {
+function carrySentence(pv, refused) {
   const from = `Held as ${pv.from_ticker}${pv.from_name ? ` (${pv.from_name})` : ""}`;
+  if (refused) {
+    return `${from}; these units carried in on ${pv.carried_on}, so the transactions below show ` +
+      "only part of this position's history.";
+  }
   const sib = (pv.split_with || [])[0];
   if (pv.bound === "lower") {
     return `${from}; the ${fmt(pv.carried_sgd, 0)} cost carried here on ${pv.carried_on}` +
@@ -302,18 +321,20 @@ export default function SecurityDetail({ ticker, onBack }) {
           </div>
         ))}
         {/* THE SENTENCES, ADJACENT AND IN A FIXED ORDER (§11): the Net's first, then the
-            percentage's incomparability. A carry's disclosure sits in the same block — below the
-            percentage, where the reader is looking at the span and the denominator it explains. */}
+            percentage's incomparability, with NOTHING BETWEEN THEM IN ANY COMBINATION — which is
+            why the carry's disclosure follows both rather than sitting where it reads most
+            naturally on the one name that has a carry and no caveat-net. A name that is `caveat`
+            and also carries would otherwise split the pair. */}
         {(s.net_verdict === "caveat" || s.net_verdict === "bounded" || pv) && (
           <div data-testid="hero-notes">
             {s.net_verdict === "caveat" && (
               <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
             )}
-            {pv && (
-              <p className="hero-note" data-testid="carry-note">{carrySentence(pv)}</p>
+            {!refused && s.return_verdict === "caveat" && (
+              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(bound)}</p>
             )}
-            {s.net_verdict !== "refuse" && s.return_verdict === "caveat" && (
-              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence}</p>
+            {pv && (
+              <p className="hero-note" data-testid="carry-note">{carrySentence(pv, refused)}</p>
             )}
           </div>
         )}
