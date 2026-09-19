@@ -20,6 +20,9 @@ import { mainPaneOverflow, openView } from "./support/app.js";
 const HOLDINGS = capturedHoldings();
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const TAP = 44;
+// Zero tolerance on the ledger's arithmetic, as `hero.spec.js` states it: the components ship
+// already rounded and the Net is their sum, so "close enough" is not the claim (#143 §14).
+const cents = (n) => Number(n.toFixed(2));
 
 function amount(text) {
   const n = Number(text.trim().replace(/−/g, "-").replace(/[,+]/g, ""));
@@ -132,7 +135,7 @@ for (const { ticker, body } of HOLDINGS) {
             const rows = blocks.nth(i).locator(".ledger-row:not(.ledger-total) .ledger-val");
             const vals = (await rows.allTextContents()).filter((t) => t !== "—" && t !== "not known").map(amount);
             const net = amount(await blocks.nth(i).locator(".ledger-total .ledger-val").textContent());
-            expect(vals.reduce((a, b) => a + b, 0), `block ${i}`).toBeCloseTo(net, 1);
+            expect(cents(vals.reduce((a, b) => a + b, 0)), `block ${i}`).toBe(net);
           }
 
           // The across identity is an explicit sum, over every bucket, ending on the total.
@@ -140,8 +143,8 @@ for (const { ticker, body } of HOLDINGS) {
           const [lhs, rhs] = sum.split(" = ");
           for (const b of bks) expect(lhs).toContain(b.bucket);
           const terms = lhs.split(" + ").map((t) => amount(t.replace(/^.*?([+−-]?[\d,]+\.\d+)$/, "$1")));
-          expect(terms.reduce((a, b) => a + b, 0)).toBeCloseTo(amount(rhs), 1);
-          expect(amount(rhs)).toBeCloseTo(amount(await page.getByTestId("hero-net").textContent()), 1);
+          expect(cents(terms.reduce((a, b) => a + b, 0))).toBe(amount(rhs));
+          expect(amount(rhs)).toBe(amount(await page.getByTestId("hero-net").textContent()));
         }
 
         // Nothing is clipped: each block is as wide as the ledger and none scrolls.

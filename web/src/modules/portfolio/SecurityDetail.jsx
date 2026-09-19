@@ -420,8 +420,11 @@ export default function SecurityDetail({ ticker, onBack }) {
           one column per bucket plus Total, every column its own complete ledger. A closed bucket
           keeps its column so the realised P/L already inside the hero has a visible origin.
           Single-bucket is the plain vertical reconciliation — no header, no column label, no
-          empty second column. The Total column is the whole-ticker ledger (`.ledger-val`);
-          bucket cells are `.ledger-cell`, so nothing that reads the ledger sums a bucket twice. */}
+          empty second column. In THIS wide form the Total column is the whole-ticker ledger
+          (`.ledger-val`) and bucket cells are `.ledger-cell`, so nothing that reads the ledger
+          sums a bucket twice. The stacked phone form below has no bucket cells at all: every
+          block is its own ledger of `.ledger-val`, so a reader of the figures scopes to one
+          `.ledger-block` rather than to the ledger. */}
       {split && phone ? (
         /* BELOW 640 THE LEDGER LOSES ITS ACROSS AXIS (#160). One block per bucket, stacked, the
            whole-ticker total on top, and the across-identity restated as a written sum. This is

@@ -151,8 +151,10 @@ body { margin: 0; background: var(--bg); color: var(--txt);
   font-weight: 700; }
 .ledger-total .ledger-lbl { color: var(--txt); }
 /* THE BUCKET SPLIT (#157): the same statement with one column per bucket plus Total. Still divs,
-   not a table, for the reason above. The Total column keeps `.ledger-val`; bucket cells are
-   `.ledger-cell`. The head shares the rows' grid so each subheading sits over its own amounts. */
+   not a table, for the reason above. In this wide form the Total column keeps `.ledger-val` and
+   bucket cells are `.ledger-cell`; the phone's stacked form (#160, below) has no bucket cells —
+   each block carries its own `.ledger-val` figures.
+   The head shares the rows' grid so each subheading sits over its own amounts. */
 .ledger-split { max-width: none; width: fit-content; min-width: 34ch; }
 .ledger-split .ledger-row, .ledger-head { display: grid; gap: 18px;
   grid-template-columns: 10ch repeat(var(--cols), minmax(12ch, 1fr)); }

@@ -42,9 +42,10 @@ test("the multi-bucket split leaves the main pane nothing to scroll sideways",
     await expect(page.getByText("← Holdings")).toBeVisible();
     // The split really is on screen: without this the measurement below could pass on a page
     // that rendered the plain vertical ledger for some unrelated reason.
-    // Below the phone tier the split is stacked blocks (#160), not a header over columns.
+    // Below the phone tier the split is stacked blocks (#160), not a header over columns. The
+    // total block is what every state renders, refusal included; the written sum is not.
     await expect(page.getByTestId(
-      vp.width < PHONE_TIER_BELOW ? "ledger-sum" : "ledger-head")).toBeVisible();
+      vp.width < PHONE_TIER_BELOW ? "ledger-block-total" : "ledger-head")).toBeVisible();
 
     const overflow = await mainPaneOverflow(page);
     testInfo.annotations.push({
