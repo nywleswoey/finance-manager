@@ -172,7 +172,29 @@ def _as_of():
 
 
 def perf_all():
-    return _cached("all", compute)
+    """The fold's rows — and, filled in the same breath under `"fx"`, the FX map they were
+    converted at.
+
+    ONE GENERATION, ONE RATE. Every SGD figure on a row is a native amount times a rate
+    `compute()` read when this key filled. Anything that has to move one of those figures BACK
+    into a native amount — the ticker fold solving its breakeven price out of an SGD shortfall —
+    must use THAT rate and not a fresher one, or the price it returns is the true one scaled by
+    the ratio between two readings and no longer zeroes the Net it sits beside. A live
+    `fx_map()` per request is exactly that bug: `_cache` has no TTL, and a write that bypasses
+    this process leaves a warm instance folding at yesterday's rate (see `_as_of`). The pair
+    fills together and `_cache.clear()` drops it together, so no caller can split them."""
+    if "all" not in _cache:
+        with session_scope() as s:
+            rows, fx = compute(s), fx_map(s)
+        _cache["all"], _cache["fx"] = rows, fx
+    return _cache["all"]
+
+
+def perf_fx():
+    """The FX map `perf_all()`'s figures were converted at — the only rate anything may convert
+    one of them back with."""
+    perf_all()
+    return _cache["fx"]
 
 
 def perf():
@@ -339,13 +361,15 @@ def holding(ticker: str):
     assumption and its trigger."""
     # perf_all (not perf) so a fully CLOSED ticker still has legs to fold
     rows = [r for r in perf_all() if r["ticker"] == ticker]
-    with session_scope() as s:
-        txns, divs, fx = ticker_ledger(s, ticker)
-    # the ledger's own FX map, and the fold takes the rate rather than reading one off a row:
-    # every leg of a ticker is one currency, and no page has any use for a rate on the wire.
-    folded = rows and fold_ticker(rows, rate_to_sgd(rows[0]["currency"], fx))
+    # THE FOLD'S OWN RATE, not the ledger's read below. The fold takes it as a parameter rather
+    # than off a row (no page has any use for a rate on the wire), and every leg of a ticker is
+    # one currency — but it has to be the rate these rows' SGD figures were converted at, which
+    # is `perf_fx()` and never a fresher map.
+    folded = rows and fold_ticker(rows, rate_to_sgd(rows[0]["currency"], perf_fx()))
     if not folded:
         return JSONResponse({"detail": "not found"}, status_code=404)
+    with session_scope() as s:
+        txns, divs, fx = ticker_ledger(s, ticker)
     txns.sort(key=_date_key("trade_date"))
     bal = 0.0
     for t in txns:

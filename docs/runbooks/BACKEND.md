@@ -341,10 +341,17 @@ components it has to undo.
   move an SGD shortfall back into the native price it is quoted in, and `fold_ticker` is pure over
   rows; recovering the rate there by dividing a native/SGD pair would divide figures already
   rounded to the cent and would divide by zero on a closed leg's MV and a free lot's cost basis.
-  Both callers hold the FX map already — `/api/holding` via `ticker_ledger`, `audit_ledger` via
-  `_fx_and_price` — so the rate is passed in rather than shipped on every `/api/positions` row as
-  a permanent public field no page may read. Every leg of a ticker is one currency, so one rate
-  covers the fold.
+  Both callers hold the FX map already, so the rate is passed in rather than shipped on every
+  `/api/positions` row as a permanent public field no page may read. Every leg of a ticker is one
+  currency, so one rate covers the fold.
+  **It must be the rate the rows' own SGD figures were converted at, never a fresher read.** The
+  numerator is SGD and the answer is native, so a rate from a later reading returns the true price
+  scaled by the ratio between the two, and it stops zeroing the Net beside it — the one property
+  the field is defined by. `/api/positions`' fold is memoized with no TTL and `ticker_ledger`
+  re-reads FX per request, so `server/main.py` fills the map under `"fx"` in the same breath as
+  the rows (`perf_all`) and `/api/holding` reads it back through `perf_fx()`; the pair clears
+  together, so no caller can split them. `audit_ledger` passes `fetch()`'s own `_fx_and_price`
+  map, read in the same pass as the rows it folds.
 
 **`return_pct` divides the Net that ships** — `Σ net_pl_sgd` over the ticker — and #152's inline
 `Σ pl_sgd + Σ options_pl_sgd` is gone: one numerator, one definition. A refused Net beside real put

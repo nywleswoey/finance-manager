@@ -77,6 +77,9 @@ def _stub(monkeypatch):
     main._cache.clear()
     settings.dev_auth_bypass = True
     monkeypatch.setattr(main, "perf_all", lambda: [_row(), dict(CPF), dict(HUSK)])
+    # the fold generation's own FX map, which `perf_all` fills beside its rows. Stubbed here for
+    # the same reason the rows are: empty is SGD-only, which is what these rows are priced in.
+    main._cache["fx"] = {}
     monkeypatch.setattr(main, "session_scope", lambda *a, **k: _no_session())
     monkeypatch.setattr(main, "valuation_as_of", lambda s: D(2026, 7, 25))
     monkeypatch.setattr(main, "fx_as_of", lambda s: D(2026, 8, 5))
@@ -155,6 +158,35 @@ def test_an_emptied_predecessor_is_404_and_never_a_hero(client):
 
 def test_an_unknown_ticker_is_404(client):
     assert client.get("/api/holding?ticker=NOPE").status_code == 404
+
+
+def test_the_breakeven_is_solved_at_the_rate_its_own_figures_were_converted_at(client, monkeypatch):
+    """A foreign name whose fold was filled at one rate while the ledger's own read has moved.
+
+    The rows are memoized and their SGD figures carry the rate `compute()` saw; `ticker_ledger`
+    re-reads FX on every request. Solving the price out of those figures at the LIVE rate returns
+    the true price scaled by the ratio between the two readings — so the one property the field
+    is defined by, that revaluing at it zeroes the Net beside it, stops holding. Asserted by
+    reconstructing the SGD shortfall (`mv_sgd − net_pl_sgd`, which is the identity solved for
+    price) rather than by re-spelling the formula."""
+    fold, live = 1.30, 1.50                # the fold's rate, and a fresher one beside it
+    usd = _row(ticker="AAPL", name="Apple", market="US", currency="USD",
+               mv_sgd=round(92400.0 * fold, 2), cost_basis_sgd=round(80618.08 * fold, 2),
+               income_sgd=round(1200.0 * fold, 2))
+    usd["unrealised_pl_sgd"] = round(usd["mv_sgd"] - usd["cost_basis_sgd"], 2)
+    usd["stock_pl_sgd"] = usd["unrealised_pl_sgd"]
+    usd["net_pl_sgd"] = round(usd["stock_pl_sgd"] + usd["income_sgd"], 2)
+    monkeypatch.setattr(main, "perf_all", lambda: [usd])
+    main._cache["fx"] = {"USD": fold}
+    monkeypatch.setattr(main, "ticker_ledger",
+                        lambda s, tk: ([], [], {"USD": live}))
+
+    s = client.get("/api/holding?ticker=AAPL").json()["summary"]
+
+    shortfall = round(s["mv_sgd"] - s["net_pl_sgd"], 2)
+    # the 4dp the price is quoted at, spread over the units it multiplies
+    assert abs(s["breakeven_price"] * fold * s["units"] - shortfall) <= 5e-5 * fold * s["units"]
+    assert abs(s["breakeven_price"] * live * s["units"] - shortfall) > 1.0
 
 
 def test_every_ledger_row_carries_its_bucket_and_options_carry_none(client):
