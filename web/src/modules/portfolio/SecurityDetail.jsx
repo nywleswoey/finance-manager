@@ -137,16 +137,18 @@ const refusalSentence = (s) =>
  * THE SECOND SENTENCE READS THE SAME BOUND THE HERO'S GLYPH DOES. A bounded name's Net takes the
  * carry's direction, not the partition's — `net_verdict` says so — so a `lower` name prints `≥`
  * on the figure, and a sentence hardcoded to "upper bound" would put a ceiling and a floor on
- * one Net two lines apart. On `lower` both doubts point the same way and neither bounds the
- * ratio, which is the incomparability this sentence exists to state.
+ * one Net two lines apart. On `lower` the two doubts pull the DENOMINATOR opposite ways — the
+ * carried cost raises the peak, the units without one lower it — so that clause claims no
+ * direction either, which is exactly the incomparability this sentence exists to state.
  */
 const caveatNetSentence = (s) =>
   `${unitsUnknown(s.cost_partition)} entered without a recorded cost, and this Net counts ` +
   "them as free — so it is an upper bound.";
 const caveatReturnSentence = (bound) =>
   (bound === "lower"
-    ? "The doubts do not cancel in the percentage: the Net above is a lower bound while the " +
-      "peak capital counts costed lots only, a lower bound as well"
+    ? "Neither side of the percentage is a clean bound: the Net above is a lower bound while " +
+      "the peak capital is raised by the cost carried in and lowered by the units that entered " +
+      "without one"
     : "The same error runs both ways in the percentage: the Net above is an upper bound while " +
       "the peak capital counts costed lots only, a lower bound") +
   " — so it is not comparable to any other name on the site.";
@@ -173,7 +175,7 @@ function carrySentence(pv, refused) {
   }
   const sib = (pv.split_with || [])[0];
   if (pv.bound === "lower") {
-    return `${from}; the ${fmt(pv.carried_sgd, 0)} cost carried here on ${pv.carried_on}` +
+    return `${from}; the ${sgd(pv.carried_sgd)} cost carried here on ${pv.carried_on}` +
       (sib ? `, including the share belonging to the ${fmt(sib.units, 0)} units distributed to ${sib.ticker}` : "") +
       ", so this cost is too high and this Net too low.";
   }
@@ -182,7 +184,7 @@ function carrySentence(pv, refused) {
       (sib ? `${sib.ticker}, ${fmt(sib.units, 0)} units,` : "the other name") +
       " and none of it to the units received here, so this cost is too low and this Net too high.";
   }
-  return `${from}; the ${fmt(pv.carried_sgd, 0)} cost carried here on ${pv.carried_on} was paid ` +
+  return `${from}; the ${sgd(pv.carried_sgd)} cost carried here on ${pv.carried_on} was paid ` +
     "under that ticker, so the transactions below show only part of what this position cost.";
 }
 
@@ -231,7 +233,10 @@ export default function SecurityDetail({ ticker, onBack }) {
   const pv = s.provenance || null;
   const bound = s.net_verdict === "bounded" ? pv?.bound ?? null : null;
   const BOUND_GLYPHS = { lower: ["\u2265", "\u2264"], upper: ["\u2264", "\u2265"] };
-  const [figureBound, capitalBound] = BOUND_GLYPHS[bound] || [null, null];
+  const [figureBound, carryCapitalBound] = BOUND_GLYPHS[bound] || [null, null];
+  // A glyph on the denominator only where the page can claim that direction: under a `caveat`
+  // return the partition doubts the peak too, and the sentence below states that instead.
+  const capitalBound = s.return_verdict === "caveat" ? null : carryCapitalBound;
 
   return (
     <div>

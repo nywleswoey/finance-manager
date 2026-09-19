@@ -286,9 +286,11 @@ test.describe("bounded — the bound lands on the numbers", () => {
     await expect(note).toContainText(pv.split_with[0].ticker);
     await expect(note).toContainText(pv.carried_on);
     await expect(note).toContainText(fmt(pv.split_with[0].units, 0));
+    // The cost is money and the units are units: only one of the two reads as an amount.
+    await expect(note).toContainText(`${sgd(pv.carried_sgd)} cost`);
   });
 
-  test("an upper bound: \u2264 on the Net, \u2264 on the percentage, \u2265 on the capital", async ({ page, baseURL }) => {
+  test("an upper bound: \u2264 on the Net and on the percentage, none on a caveated capital", async ({ page, baseURL }) => {
     const p = upper();
     const s = p.summary;
     await open(page, baseURL, "C38U", p);
@@ -296,7 +298,12 @@ test.describe("bounded — the bound lands on the numbers", () => {
     expect(s.net_verdict).toBe("bounded");
     await expect(page.getByTestId("hero-bound")).toHaveText(/^\u2264/);
     await expect(heroReturn(page)).toContainText(/^\u2264 /);
-    await expect(heroReturn(page)).toContainText(new RegExp(`on peak capital of \u2265 ${escapeRe(fmt(s.peak_car_sgd, 2))}`));
+    // The partition doubts the peak as well as the carry does, so the denominator claims no
+    // direction — `caveat-return` states the compounding in prose instead.
+    expect(s.return_verdict).toBe("caveat");
+    await expect(heroReturn(page))
+      .toContainText(new RegExp(`on peak capital of ${escapeRe(fmt(s.peak_car_sgd, 2))}`));
+    expect(((await heroReturn(page).innerText()).match(/[\u2265\u2264]/g) ?? []).length).toBe(1);
 
     const pv = s.provenance;
     const note = page.getByTestId("carry-note");
@@ -326,6 +333,12 @@ test.describe("bounded — the bound lands on the numbers", () => {
     await expect(note).toContainText("not comparable to any other name");
     // The hero says floor; the sentence may not say ceiling two lines under it.
     expect(await note.innerText()).not.toMatch(/Net above is an upper bound/);
+    // Nor may the peak carry a ceiling above prose that refuses to bound it: the carried cost
+    // raises the peak and the uncosted units lower it, so no glyph on the denominator.
+    const line = await heroReturn(page).innerText();
+    expect(line).toContain(`on peak capital of ${fmt(p.summary.peak_car_sgd, 2)}`);
+    expect((line.match(/[\u2265\u2264]/g) ?? []).length).toBe(1);
+    expect(await note.innerText()).not.toMatch(/costed lots only/);
   });
 
   test("a caveat that also carries keeps its two sentences adjacent, the carry after both", async ({ page, baseURL }) => {
@@ -367,6 +380,7 @@ test.describe("bounded — the bound lands on the numbers", () => {
     const note = page.getByTestId("carry-note");
     await expect(note).toContainText(s.provenance.from_ticker);
     await expect(note).toContainText(s.provenance.carried_on);
+    await expect(note).toContainText(`${sgd(s.provenance.carried_sgd)} cost`);
     await expect(note).not.toContainText(/too high|too low/);
   });
 });
