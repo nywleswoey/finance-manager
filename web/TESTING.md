@@ -265,6 +265,23 @@ shape stay `pinned.spec.js`'s, because consolidated rows are ordinary data rows 
 gates already. Nor does it gate the detail page's own render — the hero, the reconciliation block,
 the tiles and the refusal layout belong to the tickets that build them.
 
+`tests/bucket-split.spec.js` — **the bucket split under the hero** (#157): one block, a column per
+bucket plus Total. The Total column is the hero's ledger, so the gate is that the columns add
+**across** to it and each adds **down** to its own Net, at zero tolerance, derived from the
+fixture. It also gates the closed bucket keeping its column, a single-bucket name rendering no
+header or second column, and units / avg cost / status riding as a return-free subheading. One
+viewport; phone layout is #160's. The **cross-page gate** (Holdings' ticker-mode Net equals the
+payload's `net_pl_sgd`) is not here: `ticker.spec.js` already states it on this same multi-bucket
+fixture and `hero.spec.js` states the detail half, so a third copy would be a second place to
+update rather than a second claim.
+
+`tests/split-width.spec.js` — the one thing about the split that **is** a claim about width, so it
+runs at every viewport rather than with the arithmetic: opening the multi-bucket ticker leaves
+`.main` nothing to scroll sideways, at every viewport where that criterion applies. It exists
+because `VIEWS`' `Portfolio › SecurityDetail` opens PLTR, which is single-bucket — so the baseline
+sweep measures that page with no split on it, which is how a phone-width overflow got in. #160
+replaces the phone layout; it does not get to reintroduce the scroll.
+
 `tests/hero.spec.js` — the **ticker detail page's hero Net, the reconciliation ledger that proves
 it, and the five position tiles** (#156). The page's whole claim is that the figure in the largest
 type is checkable, so the gate is that the lines directly under it add up to it at **zero

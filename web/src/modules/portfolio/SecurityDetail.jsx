@@ -58,17 +58,49 @@ const ledgerClass = (v) => (v == null || v === 0 ? "mut" : cls(v));
 function ledgerRows(d) {
   const s = d.summary;
   const rows = s.realised_pl_sgd == null && s.unrealised_pl_sgd == null
-    ? [["Stock P/L", s.stock_pl_sgd]]
-    : [["Realised", s.realised_pl_sgd], ["Unrealised", s.unrealised_pl_sgd]];
+    ? [["Stock P/L", s.stock_pl_sgd, "stock_pl_sgd"]]
+    : [["Realised", s.realised_pl_sgd, "realised_pl_sgd"],
+       ["Unrealised", s.unrealised_pl_sgd, "unrealised_pl_sgd"]];
   if (s.income_sgd != null && (d.dividends.length > 0 || s.income_sgd !== 0)) {
-    rows.push(["Dividends", s.income_sgd]);
+    rows.push(["Dividends", s.income_sgd, "income_sgd"]);
   }
   // Null with legs on screen is a measured zero, not an unknown: `realized_by_ticker()` keys
   // only on CLOSED trades, so a wheel whose every leg is still open has realised nothing yet.
   if (s.options_pl_sgd != null || d.options.length > 0) {
-    rows.push(["Options", s.options_pl_sgd ?? 0]);
+    rows.push(["Options", s.options_pl_sgd ?? 0, "options_pl_sgd"]);
   }
   return rows;
+}
+
+/**
+ * One bucket's cell in a split row (#143 §5). The row set is the TOTAL's — a bucket never adds or
+ * drops a line, or the columns would stop being the same statement — so a bucket cell is read off
+ * the same key the Total row was.
+ *
+ * Only Options can be absent per bucket: a null `options_pl_sgd` on a bucket means no premium
+ * landed in it, and reads `—` where the Total (which owns the row) reads its measured figure.
+ * Premiums are a bucket-level row inside this split, never a ticker-level line above it. A `—`
+ * adds as zero; every other null is `not known`, as in the ledger.
+ */
+const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "—" : ledgerAmount(b[key]));
+
+/**
+ * The muted subheading under a column header: units, avg cost and — for a bucket — status. It is
+ * deliberately not a row (the block's claim is that its rows add up) and deliberately carries no
+ * return figure of any kind: one page, one return vocabulary (#134 §2). The Total column's avg
+ * cost is the server's exact pooled weighted average, read off the summary and not re-derived.
+ */
+function ColumnHead({ name, o, status }) {
+  return (
+    <div className="ledger-col" data-testid="ledger-col">
+      <div className="ledger-colname">{name}</div>
+      <div className="ledger-sub mut" data-testid="ledger-sub">
+        <div>{fmt(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u</div>
+        <div>@ {o.avg_cost == null ? NOT_KNOWN : fmt(o.avg_cost, 4)}</div>
+        {status && <div>{status}</div>}
+      </div>
+    </div>
+  );
 }
 
 export default function SecurityDetail({ ticker, onBack }) {
@@ -109,6 +141,8 @@ export default function SecurityDetail({ ticker, onBack }) {
   const opts = d.options || [];
   const optPlSgd = Number(s.options_pl_sgd ?? 0);
   const rows = ledgerRows(d);
+  const bks = d.buckets || [];
+  const split = bks.length > 1;
 
   return (
     <div>
@@ -181,15 +215,39 @@ export default function SecurityDetail({ ticker, onBack }) {
 
       {/* A right-aligned label/amount statement with a rule above Net. It still reads as
           arithmetic with only two or three rows, which is what makes the omission rule free. */}
-      <div className="ledger" data-testid="ledger">
-        {rows.map(([lbl, v]) => (
+      {/* MULTI-BUCKET IS THE EXCEPTION AND LOOKS LIKE ONE (#143 §5). One block: the same rows,
+          one column per bucket plus Total, every column its own complete ledger. A closed bucket
+          keeps its column so the realised P/L already inside the hero has a visible origin.
+          Single-bucket is the plain vertical reconciliation — no header, no column label, no
+          empty second column. The Total column is the whole-ticker ledger (`.ledger-val`);
+          bucket cells are `.ledger-cell`, so nothing that reads the ledger sums a bucket twice. */}
+      <div className={"ledger" + (split ? " ledger-split" : "")} data-testid="ledger"
+           style={split ? { "--cols": bks.length + 1 } : undefined}>
+        {split && (
+          <div className="ledger-head" data-testid="ledger-head">
+            <span className="ledger-lbl" />
+            {bks.map((b) => (
+              <ColumnHead key={b.bucket} name={b.bucket} o={b} status={b.status} />
+            ))}
+            <ColumnHead name="Total" o={s} />
+          </div>
+        )}
+        {rows.map(([lbl, v, key]) => (
           <div className="ledger-row" key={lbl}>
             <span className="ledger-lbl">{lbl}</span>
+            {split && bks.map((b) => (
+              <span key={b.bucket} className={"ledger-cell " + ledgerClass(b[key])}>
+                {bucketCell(b, key)}</span>
+            ))}
             <span className={"ledger-val " + ledgerClass(v)}>{ledgerAmount(v)}</span>
           </div>
         ))}
         <div className="ledger-row ledger-total" data-testid="ledger-net">
           <span className="ledger-lbl">Net</span>
+          {split && bks.map((b) => (
+            <span key={b.bucket} className={"ledger-cell " + ledgerClass(b.net_pl_sgd)}>
+              {ledgerAmount(b.net_pl_sgd)}</span>
+          ))}
           <span className={"ledger-val " + ledgerClass(s.net_pl_sgd)}>
             {ledgerAmount(s.net_pl_sgd)}</span>
         </div>

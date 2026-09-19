@@ -148,6 +148,59 @@ body { margin: 0; background: var(--bg); color: var(--txt);
 .ledger-total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px;
   font-weight: 700; }
 .ledger-total .ledger-lbl { color: var(--txt); }
+/* THE BUCKET SPLIT (#157): the same statement with one column per bucket plus Total. Still divs,
+   not a table, for the reason above. The Total column keeps `.ledger-val`; bucket cells are
+   `.ledger-cell`. The head shares the rows' grid so each subheading sits over its own amounts. */
+.ledger-split { max-width: none; width: fit-content; min-width: 34ch; }
+.ledger-split .ledger-row, .ledger-head { display: grid; gap: 18px;
+  grid-template-columns: 10ch repeat(var(--cols), minmax(12ch, 1fr)); }
+.ledger-head { padding: 3px 0 6px; font-size: 14px; }
+.ledger-col { text-align: right; }
+.ledger-colname { font-weight: 600; }
+.ledger-sub { font-size: 12px; }
+.ledger-cell { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+/* THE SAME BLOCK AGAINST A PANE NARROWER THAN THE FLOOR IT ASKS FOR. `minmax(12ch, 1fr)` is a
+   hard minimum and `width: fit-content` cannot shrink a track below one, so a two-bucket name
+   asked for 10ch + 3x12ch + 3x18px whatever the pane was and the pane scrolled sideways —
+   measured 83px at 640 and 50 at the design width, which is criterion 1 and no view is allowed
+   to fail it. Only the FLOOR goes, and only below the tier: `minmax(0, 1fr)` still shares what
+   is left out evenly, and `.ledger-cell`'s `overflow-wrap: anywhere` wraps a column with no
+   room instead of handing the width to the pane.
+
+   THE LABEL TRACK STAYS 10ch, WHICH IS WHAT KEEPS THE COLUMNS COLUMNS. Every row is its own
+   grid — the head and the four lines are five grids sharing a width — so a track that sizes to
+   its own row's content lines nothing up: `auto` was tried and put the label column at 54px on
+   Realised, 69 on Unrealised and 25 on Net, with the amounts stepping sideways under each
+   other. A fixed label track and `1fr` amounts make every row resolve identically, which is the
+   only reason the block reads as a sum at all.
+
+   1023.98px FOR THE THIRD TIME IN THIS FILE — the third site, `.contained`'s and `.pinned`'s
+   being the other two, both further down — and still `PIN_TIER_BELOW` in
+   `tests/viewports.js` — the width below which the app stops promising the desktop layout, and
+   exactly where the horizontal-overflow gate starts applying. Above it nothing moves: the 12ch
+   floor is what gives desktop its even columns and it is untouched there.
+
+   NOT #160's PHONE LAYOUT, AND NOT A DOWN PAYMENT ON IT — the same block, the same columns, the
+   same rows, narrower. #160 replaces the whole of it. `tests/split-width.spec.js` is what keeps
+   the scroll from coming back with it. */
+@media (max-width: 1023.98px) {
+  .ledger-split .ledger-row, .ledger-split .ledger-head {
+    grid-template-columns: 10ch repeat(var(--cols), minmax(0, 1fr));
+  }
+}
+/* Two characters off the label and ten off the gap again on the phone tier, where the pane is
+   332px rather than 384 and losing the floor is not enough on its own: at 10ch and 18px the
+   bottom line — bold, so both its label track and its own figures measure wider than the lines
+   above — wrapped to two rows
+   at 360px. 8ch and 8px give every column 76px and the whole block 323, so the live two-bucket
+   name renders on four single lines with the columns still aligned under each other. `ch` is
+   read against each row's own weight, which is why 8 here and 10 above are the same decision at
+   two widths rather than a tightening for its own sake. The tablet tier needs none of it. */
+@media (max-width: 639.98px) {
+  .ledger-split .ledger-row, .ledger-split .ledger-head {
+    gap: 8px; grid-template-columns: 8ch repeat(var(--cols), minmax(0, 1fr));
+  }
+}
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 22px; }
 .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
 .tile .lbl { color: var(--mut); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
