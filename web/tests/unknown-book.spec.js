@@ -214,11 +214,11 @@ test.describe("caveat — the tiles refuse, the pair collapses, the block keeps 
       .toContainText(`${fmt(s.cost_partition.unknown, 0)} of ${fmt(s.cost_partition.units_in, 0)} units`);
     const ret = page.getByTestId("caveat-return");
     await expect(ret).toContainText("not comparable to any other name");
-    // The Net's sentence just named the doubt; this one adds the denominator rather than
-    // re-narrating the units clause above it.
+    // The Net's sentence named the units; this one names what each side of the ratio does, and
+    // does not re-narrate the paragraph immediately above it.
     await expect(ret).toContainText("peak capital");
     expect(await ret.innerText(), "the percentage restated the sentence above it")
-      .not.toMatch(/entered without a recorded cost/);
+      .not.toMatch(/entered without a recorded cost|counts them as free/);
     // Adjacent: no element sits between the two paragraphs.
     const gap = await page.getByTestId("caveat-net")
       .evaluate((el) => el.nextElementSibling?.dataset.testid);
@@ -310,12 +310,17 @@ test.describe("bounded — the bound lands on the numbers", () => {
     await expect(note).toContainText(pv.split_with[0].ticker);
   });
 
-  test("a name carrying both doubts states a self-contained percentage sentence, then the carry",
+  test("a name carrying both doubts states the same percentage sentence, alone, then the carry",
     async ({ page, baseURL }) => {
       // C38U is the one live name where the partition's return caveat and the split carry meet,
       // and the one whose Net is `bounded` while its return is `caveat` — so `caveat-net` is
-      // gated out and this sentence is the page's first line of prose. It names its own doubt
-      // rather than pointing back at one that never rendered.
+      // gated out and this sentence is the page's first line of prose. One wording serves both
+      // states: it names both sides of the ratio and points back at nothing.
+      // Q01 first, while no payload route is registered: the captured caveat, where this
+      // sentence renders SECOND, under the Net's.
+      await open(page, baseURL, "Q01");
+      const underTheNets = await page.getByTestId("caveat-return").innerText();
+
       const p = upper();
       expect(p.summary.net_verdict).toBe("bounded");
       expect(p.summary.return_verdict).toBe("caveat");
@@ -323,10 +328,12 @@ test.describe("bounded — the bound lands on the numbers", () => {
 
       expect(await noteIds(page)).toEqual(["caveat-return", "carry-note"]);
       const note = page.getByTestId("caveat-return");
-      await expect(note).toContainText("without a recorded cost");
+      const alone = await note.innerText();
       await expect(note).toContainText("not comparable to any other name");
-      expect(await note.innerText(), "the sentence points back at one that is not there")
-        .not.toMatch(/same error|those doubts|compounds it/);
+      expect(alone, "the sentence points back at one that is not there")
+        .not.toMatch(/same error|those doubts|compounds it:/);
+      // Word for word what Q01 renders: one wording, not one per state.
+      expect(alone).toBe(underTheNets);
     });
 
   test("a caveat that also carries keeps its two sentences adjacent, the carry after both", async ({ page, baseURL }) => {

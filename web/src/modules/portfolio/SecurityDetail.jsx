@@ -134,12 +134,13 @@ const refusalSentence = (s) =>
  * still owes the percentage's second sentence when the return axis is a caveat too — C38U.
  * Neither prints the Net a second time: the hero already carries the figure.
  *
- * THE PERCENTAGE'S SENTENCE READS WHETHER THE NET'S RENDERED ABOVE IT. The two are gated on
+ * ONE WORDING FOR THE PERCENTAGE, IN EVERY STATE IT RENDERS. The two sentences are gated on
  * different axes — `caveat-net` on the NET's verdict, this one on the RETURN's — and C38U ships
- * `bounded` on the first and `caveat` on the second, so there the percentage is the page's first
- * line of prose and names the doubt itself. On Q01 both render, and naming it twice in two
- * adjacent paragraphs is a sentence spent saying nothing new: there it says only what the
- * DENOMINATOR adds. Same claim either way; the difference is what the reader has already read.
+ * `bounded` on the first and `caveat` on the second, so the percentage is sometimes the page's
+ * first line of prose (C38U) and sometimes the second (Q01). It is written to need no
+ * antecedent and to echo none: it names what each SIDE of the ratio does, where the Net's
+ * sentence names the units. A per-state spelling would be a second rule to keep in step with
+ * an axis that is not its own.
  *
  * NEITHER SENTENCE CLAIMS A DIRECTION THE PAYLOAD CONTRADICTS. The partition's doubt is always
  * a ceiling, and `net_verdict` only ships `bounded` where the carry's own direction agrees with
@@ -150,14 +151,10 @@ const refusalSentence = (s) =>
 const caveatNetSentence = (s) =>
   `${unitsUnknown(s.cost_partition)} entered without a recorded cost, and this Net counts ` +
   "them as free — so it is an upper bound.";
-const caveatReturnSentence = (netStated) =>
-  (netStated
-    ? "The percentage compounds it: its denominator, the peak capital, counts costed lots " +
-      "only — a lower bound under that upper-bound Net"
-    : "The percentage compounds one doubt twice: units that entered without a recorded cost " +
-      "count as free in the Net above it, an upper bound, while the peak capital under it " +
-      "counts costed lots only, a lower bound") +
-  " — so it is not comparable to any other name on the site.";
+const caveatReturnSentence =
+  "The percentage compounds one doubt twice: its numerator is an upper bound while its " +
+  "denominator, the peak capital, counts costed lots only — a lower bound — so it is not " +
+  "comparable to any other name on the site.";
 
 /**
  * A carry's disclosure, last in the notes block (§12). Directional where the carry split, and it
@@ -345,7 +342,7 @@ export default function SecurityDetail({ ticker, onBack }) {
               <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
             )}
             {returnNote && (
-              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(netNote)}</p>
+              <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence}</p>
             )}
             {carryNote && (
               <p className="hero-note" data-testid="carry-note">
