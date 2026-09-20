@@ -27,7 +27,7 @@
   "return_pct": 0.3201,
   "return_verdict": "ok",
   "peak_car_sgd": 216124.17,
-  "return_span_days": 1982,
+  "return_span_days": 1983,
   "cost_partition": {
    "units_in": 3505.0,
    "costed": 3505.0,
@@ -38,7 +38,8 @@
   "invested_sgd": 158454.71,
   "invested_native": 125053.04,
   "fees_sgd": 13.62,
-  "cost_known": true
+  "cost_known": true,
+  "breakeven_price": -10752.6383
  },
  "buckets": [
   {
@@ -46,6 +47,7 @@
    "status": "open",
    "units": 5.0,
    "avg_cost": 35.6785,
+   "breakeven_price": -10752.6383,
    "realised_pl_sgd": 15997.58,
    "unrealised_pl_sgd": 833.44,
    "stock_pl_sgd": 16831.02,

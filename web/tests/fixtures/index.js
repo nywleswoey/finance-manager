@@ -74,20 +74,18 @@ export function capturedHoldings() {
 /**
  * A captured detail payload with a provenance object beside its summary.
  *
- * The `/api/holding` captures predate `summary.provenance` reaching the wire, so a carried name
- * arrives from them with no carry to state and no bound to print. Two specs need one attached —
- * `unknown-book.spec.js` for the copy and `phone-layout.spec.js` for the phone tier's
- * visible-claim / folded-explanation split — so the shaper lives here beside the route table
- * rather than in whichever spec was written first.
+ * The captures that CARRY a carry ship their own `summary.provenance` and need nothing from
+ * this — it exists for the shapes the book has no instance of: a written 1:1 carry, and one
+ * name's real object on another name's payload. `unknown-book.spec.js` is its only consumer.
  */
 export const withProvenance = (body, provenance) =>
   ({ ...body, summary: { ...body.summary, provenance } });
 
 /**
- * A name's REAL provenance, off the captured `/api/positions?closed=true` payload — which
- * carries the wire objects the holding captures predate. Read rather than rebuilt, so a
- * recapture propagates instead of being maintained by hand against a second copy of the same
- * four fields.
+ * A name's REAL provenance, off the captured `/api/positions?closed=true` payload. Read rather
+ * than rebuilt, so a recapture propagates instead of being maintained by hand against a second
+ * copy of the same four fields — which is what it is for: putting one name's true object on
+ * ANOTHER name's payload, the shape no capture can supply.
  *
  * Throws rather than returning null: a caller asks for this because it is about to gate a claim
  * the object is the only source of, and a missing one is a fixture that can no longer carry the

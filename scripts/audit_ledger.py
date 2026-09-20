@@ -64,6 +64,7 @@ from typing import Callable, NamedTuple
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from portfolio.money import rate_to_sgd  # noqa: E402
 from portfolio.performance import fold_ticker  # noqa: E402
 
 EPS = 1e-6
@@ -84,6 +85,7 @@ class Book:
       performance       — {by: /api/performance's response for that dimension}
       orphan_options    — {underlying: realised SGD} for option underlyings with no stock row
       counts            — table sizes, dates and rates, printed so a reader knows which book
+      fx                — {currency: rate_to_sgd}, latest — what `fold_ticker` converts at
     """
     rows: list
     corporate_actions: list
@@ -96,6 +98,7 @@ class Book:
     performance: dict
     orphan_options: dict
     counts: dict = dataclasses.field(default_factory=dict)
+    fx: dict = dataclasses.field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------- invariants
@@ -292,12 +295,15 @@ def cost_known_false(rows, corporate_actions):
     return sorted(out.items())
 
 
-def ticker_nets(rows):
+def ticker_nets(rows, fx):
     """{ticker: the detail page's hero Net} — `fold_ticker` over each ticker's legs, refusals
-    and tickers with no leg left out, because neither has a Net to add."""
+    and tickers with no leg left out, because neither has a Net to add.
+
+    `fx` is what the fold converts at: every leg of a ticker is one currency, so the rate is
+    looked up once per ticker and handed in rather than read off a row."""
     out = {}
     for tk, rs in _by_ticker(rows).items():
-        folded = fold_ticker(rs)
+        folded = fold_ticker(rs, rate_to_sgd(rs[0]["currency"], fx))
         if folded and folded["summary"]["net_pl_sgd"] is not None:
             out[tk] = folded["summary"]["net_pl_sgd"]
     return out
@@ -306,7 +312,7 @@ def ticker_nets(rows):
 def performance_identity(book):
     """{by: (Σ group Net, Σ ticker Net, Σ orphan underlyings, residual)} — #143 §15's stated
     identity, `Σ group = Σ ticker + Σ orphan + rounding`, measured on each dimension."""
-    tickers = round(sum(ticker_nets(book.rows).values()), 2)
+    tickers = round(sum(ticker_nets(book.rows, book.fx).values()), 2)
     orphans = round(sum(book.orphan_options.values()), 2)
     out = {}
     for by, groups in book.performance.items():
@@ -521,7 +527,7 @@ def fetch():
                     cost_lot_tickers=cost_lot_tickers, cdp_txn_tickers=cdp_txn_tickers, car=car,
                     performance={by: server_main.performance(by=by)
                                  for by in ("market", "bucket", "account")},
-                    orphan_options=orphan_options, counts=counts)
+                    orphan_options=orphan_options, counts=counts, fx=fx)
     finally:
         root.removeHandler(collect)
 

@@ -28,7 +28,7 @@
   "return_pct": 0.601,
   "return_verdict": "caveat",
   "peak_car_sgd": 11121.87,
-  "return_span_days": 2360,
+  "return_span_days": 2361,
   "cost_partition": {
    "units_in": 6700.0,
    "costed": 6200.0,
@@ -39,7 +39,22 @@
   "invested_sgd": 11121.87,
   "invested_native": 11121.87,
   "fees_sgd": 12.87,
-  "cost_known": true
+  "cost_known": true,
+  "provenance": {
+   "from_ticker": "C31",
+   "from_name": "CapitaLand Ltd",
+   "type": "distribution",
+   "carried_on": "2021-09-28",
+   "carried_sgd": 0.0,
+   "split_with": [
+    {
+     "ticker": "9CI",
+     "units": 2700.0
+    }
+   ],
+   "bound": "upper"
+  },
+  "breakeven_price": null
  },
  "buckets": [
   {
@@ -47,6 +62,7 @@
    "status": "open",
    "units": 6700.0,
    "avg_cost": null,
+   "breakeven_price": null,
    "realised_pl_sgd": null,
    "unrealised_pl_sgd": null,
    "stock_pl_sgd": 4154.13,

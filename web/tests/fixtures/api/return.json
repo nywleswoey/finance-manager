@@ -1,9 +1,9 @@
 {
- "xirr_annualised": 0.1302,
- "twr_annualised": 0.0764,
- "twr_cumulative": 0.9974,
+ "xirr_annualised": 0.1328,
+ "twr_annualised": 0.0778,
+ "twr_cumulative": 1.0228,
  "invested_sgd": 1775726.0,
- "value_plus_income_sgd": 2282648.0,
+ "value_plus_income_sgd": 2297514.0,
  "years": 9.4,
  "from": "2017-04-28",
  "as_of": "2026-09-18",

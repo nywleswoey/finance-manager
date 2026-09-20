@@ -31,14 +31,59 @@ const HOLDINGS = capturedHoldings();
 const MULTI = HOLDINGS.filter((h) => h.body.buckets.length > 1);
 const SINGLE = HOLDINGS.filter((h) => h.body.buckets.length === 1);
 const CLOSED_BUCKET = MULTI.filter((h) => h.body.buckets.some((b) => b.status === "closed"));
+// The shape the glyph gate needs, picked by shape and not by name: a bounded ticker that also
+// quotes a price, since a bound with no figure to sit on proves no direction.
+const BOUNDED_PRICED = HOLDINGS.filter(({ body }) =>
+  body.summary.net_verdict === "bounded" && body.summary.breakeven_price != null);
 
 test.beforeAll(() => {
   expect(MULTI.length, "no multi-bucket holding captured").toBeGreaterThan(0);
   expect(SINGLE.length, "no single-bucket holding captured").toBeGreaterThan(0);
   expect(CLOSED_BUCKET.length, "no closed bucket inside a multi-bucket holding").toBeGreaterThan(0);
+  // the three states the single-bucket breakeven subheading has to render, each captured
+  const single = (f) => SINGLE.filter(({ body }) => f(body.summary)).length;
+  expect(single((s) => holds(s) && s.breakeven_price != null),
+    "no priceable single-bucket holding").toBeGreaterThan(0);
+  expect(single((s) => holds(s) && s.breakeven_price == null),
+    "no single-bucket holding that cannot price its units").toBeGreaterThan(0);
+  expect(single((s) => !holds(s)), "no closed single-bucket holding").toBeGreaterThan(0);
+  // the arithmetic gate skips a name with no priced column, so pin that it cannot skip them all
+  // — and that a FOREIGN one survives, which is the only shape exercising its FX-error term
+  const priced = HOLDINGS.filter(({ body }) => [...body.buckets, body.summary]
+    .some((c) => holds(c) && c.breakeven_price != null && c.net_pl_sgd != null));
+  expect(priced.length, "no captured holding quotes a breakeven").toBeGreaterThan(0);
+  expect(priced.filter(({ body }) => body.summary.currency !== "SGD").length,
+    "no foreign captured holding quotes a breakeven — the rate term is untested").toBeGreaterThan(0);
+  expect(BOUNDED_PRICED.length,
+    "no captured bounded name quotes a price for the glyph gate").toBeGreaterThan(0);
 });
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const NOT_KNOWN_TEXT = "not known";   // the page's one word for an unmeasured figure
+// Whether a column has a breakeven to state at all, read off the payload at the threshold
+// the server holds positions to — the same one `_breakeven_price` nulls below.
+const holds = (o) => o.units > 1e-6;
+// The bound the PRICE takes. The pair IS restated here, deliberately: a test that looked the
+// glyph up the same way the component does would assert nothing, so this is the gate's own
+// oracle and only its SELECTION comes from the payload. The Net floors where the carry overstated
+// the cost, so the price solved from it caps — the inversion of what the hero prints.
+const PRICE_GLYPH = { lower: "\u2264", upper: "\u2265" };
+// Whole-ticker, so the direction is read off the SUMMARY whatever column is being checked, while
+// the figure it marks is that column's own — the coarse marking the component records as an open
+// call. A column with no price takes no bound, because `not known` has no direction.
+const priceBound = (col, s) => (col.breakeven_price != null && s.net_verdict === "bounded"
+  && s.provenance?.bound ? `${PRICE_GLYPH[s.provenance.bound]} ` : "");
+
+// The exact text one column's line renders — `fmt(n, 4)`'s quote behind whatever bound the
+// payload carries, anchored, either minus accepted. ONE rule: both layouts render the same
+// component, so both gates assert the same thing rather than one of them a prefix of it.
+const breakevenLine = (col, s) => {
+  if (col.breakeven_price == null) return new RegExp(`^be ${NOT_KNOWN_TEXT}$`);
+  const q = escapeRe(Number(col.breakeven_price).toLocaleString("en-US",
+    { minimumFractionDigits: 4, maximumFractionDigits: 4 })).replace(/-/g, "[-\u2212]");
+  return new RegExp(`^be ${priceBound(col, s)}${q}$`);
+};
 
 function amount(text) {
   const t = text.trim();
@@ -174,3 +219,150 @@ for (const { ticker, body } of SINGLE) {
       expect(body.buckets.length).toBe(1);
     });
 }
+
+
+// ---------------------------------------------------------------- the breakeven price (#143)
+// The column head's third line. It is a claim ABOUT the column, not a member of it, so it is
+// gated here beside the arithmetic it is solved from rather than in a layout project: the only
+// thing that can go wrong with it is that it stops being the price that zeroes the Net below it.
+
+// THE ARITHMETIC ITSELF TAKES NO BROWSER. It is a claim about the payload — revalue a column at
+// its own breakeven and the Net beside it lands on zero — so it takes no `page` fixture and
+// opens no page. Everything below this point renders.
+//
+// EVERY CAPTURED HOLDING, not just the multi-bucket ones. The tolerance's FX term is only real on
+// a foreign name and both of those (AAPL, PLTR) are single-bucket, so a loop over `MULTI` would
+// carry that term without ever exercising it — the sole multi-bucket capture is SGD, where the
+// recovered rate is exactly 1. A name that ships no priced column at all is skipped rather than
+// asserted; `beforeAll` pins that some name ships one and that some FOREIGN name does, so the
+// skip cannot quietly empty the gate.
+for (const { ticker, body } of HOLDINGS) {
+  test(`${ticker}: the price it quotes is the one that makes that column's Net zero`, () => {
+    // Derived from the payload, never a literal — including the FX rate, which this payload does
+    // NOT carry: `/api/positions` stopped shipping one on purpose, so the only route to it is the
+    // market-value pair, and BOTH halves of that pair are already rounded to the cent. The rate
+    // is therefore approximate, and the check has to carry that error rather than assume it away:
+    // it multiplies every SGD the revaluation moves. Recovering the rate from the breakeven
+    // instead would divide by the figure under test and blunt the gate, so it is the TOLERANCE
+    // that accounts for it, as an explicit sum of the three roundings that are really there:
+    //
+    //   the components' own cent-rounding, which the Net is a sum of ..... 0.02
+    //   the price's 4dp quote, over the units it multiplies .............. 5e-5 x units x rate
+    //   the recovered rate's error, over the SGD the move covers ......... |be - price| x units x e
+    //
+    // They ADD because the errors do. `e` bounds |mv_sgd/mv_native - rate| at half a cent on each
+    // half of the pair. On F34 (SGD) the middle term dominates; on a foreign name the last one
+    // does — PLTR's recovered 1.26710518 against a true 1.2671 moves 0.29 SGD over its 5 units,
+    // which a tolerance covering only the 4dp quote would fail with nothing wrong. That name is
+    // in this loop, so the term is exercised rather than merely argued for.
+    const s = body.summary;
+    const cols = [...body.buckets, s].filter(
+      (b) => holds(b) && b.breakeven_price != null && b.net_pl_sgd != null);
+    // a refusal, a name that cannot price its units, and one holding nothing all correctly quote
+    // no price — there is no identity to check, which is a different thing from failing one
+    test.skip(cols.length === 0, `${ticker} quotes no price to check`);
+    // No market value is no recoverable rate — asserted rather than defaulted to 1, which would
+    // pass a foreign name at the wrong rate in silence.
+    expect(Math.abs(s.mv_native), `${ticker} has no market value to recover a rate from`)
+      .toBeGreaterThan(0);
+    const rate = s.mv_sgd / s.mv_native;
+    const e = 0.005 * (1 + Math.abs(rate)) / Math.abs(s.mv_native);
+    for (const b of cols) {
+      const moved = (b.breakeven_price - s.price) * b.units * rate;
+      const tol = 0.02 + 5e-5 * b.units * rate
+        + Math.abs(b.breakeven_price - s.price) * b.units * e;
+      expect(Math.abs(b.net_pl_sgd + moved), `${ticker}: breakeven did not zero the Net`)
+        .toBeLessThanOrEqual(tol);
+    }
+  });
+}
+
+for (const { ticker, body } of MULTI) {
+  test.describe(`${ticker} breakeven`, () => {
+    test.beforeEach(async ({ page, baseURL }) => {
+      await openTicker(page, baseURL, ticker);
+    });
+
+    test("every open column quotes one, and a closed column quotes none", async ({ page }) => {
+      const subs = page.getByTestId("ledger-sub");
+      for (const [i, b] of body.buckets.entries()) {
+        const sub = subs.nth(i);
+        if (b.status === "closed") {
+          // nothing held is no price — and must not read as a doubted one
+          await expect(sub.getByTestId("ledger-breakeven")).toHaveCount(0);
+          continue;
+        }
+        await expect(sub.getByTestId("ledger-breakeven"))
+          .toHaveText(breakevenLine(b, body.summary));
+      }
+      // the Total column carries the ticker's own, which is not any bucket's — and drops it on
+      // the same rule the buckets do, so a name whose every bucket is closed states none
+      await expect(subs.last().getByTestId("ledger-breakeven"))
+        .toHaveCount(holds(body.summary) ? 1 : 0);
+    });
+  });
+}
+
+// A SINGLE-BUCKET PAGE STATES ONE TOO. It has no column head to put it in, so it is a
+// right-aligned subheading over the amounts with NO column label — the figure exists on every
+// priceable name rather than only the multi-bucket ones. Same figure, same three states.
+for (const { ticker, body } of SINGLE) {
+  test(`${ticker}: the breakeven is a subheading over the rows, with no column label`,
+    async ({ page, baseURL }) => {
+      await openTicker(page, baseURL, ticker);
+      const s = body.summary;
+      const line = page.getByTestId("ledger-breakeven");
+      // That #157 is untouched — no bucket header, no column label — is the loop above's claim
+      // (`one bucket is a plain vertical reconciliation`), over this same ticker list. What this
+      // one adds is that a subheading appears there anyway, and is not a column head.
+      if (!holds(s)) {
+        // nothing held is no price — and must not read as a doubted one
+        await expect(line).toHaveCount(0);
+        return;
+      }
+      await expect(line).toHaveCount(1);
+      // behind whatever bound the payload itself carries, so this gate stays about the LAYOUT and
+      // a name that starts carrying a carry does not fail it under the wrong message
+      await expect(line).toHaveText(breakevenLine(s, s));
+      // a claim ABOUT the column, not a member of it: it sits in the block and not in a row
+      await expect(ledger(page).locator(".ledger-row [data-testid='ledger-breakeven']"))
+        .toHaveCount(0);
+    });
+}
+
+// NO `title` GATE HERE. The line lives inside `[data-testid=ledger]`, and `hero.spec.js` already
+// asserts that block carries no `[title]` at all — over these same eight captured holdings. A
+// copy of it here would open eight more browsers to restate a rule that is already kept, and
+// give the rule a second place to drift. The presence-iff-units half is likewise already stated
+// per layout by the two loops above.
+
+// THE BOUND ON A REAL BOUNDED NAME, NOT A WRITTEN ONE — one gate, because there is one rule.
+// Nothing here is written or borrowed: the capture carries the real verdict, the real units, the
+// real price and the real `provenance` object the direction comes off. The glyph pair itself is
+// `PRICE_GLYPH` above — the gate's own oracle, because a test that looked it up the way the
+// component does would assert nothing. The claim is that the two disagree: the price takes the
+// opposite glyph to the one the hero prints, off the one object.
+test("a bounded Net bounds its price the other way", async ({ page, baseURL }) => {
+  const { ticker, body: served } = BOUNDED_PRICED[0];
+  expect(served.summary.provenance?.bound, `${ticker} carries no split direction`).toBeTruthy();
+  await openTicker(page, baseURL, ticker);
+  // EVERY column takes it, the bound being the ticker's rather than any one column's. The
+  // columns are the layout's: a split states its buckets then the Total, a single-bucket page
+  // states the ticker's own subheading and no bucket column at all (#157).
+  const cols = (served.buckets.length > 1
+    ? [...served.buckets, served.summary] : [served.summary]).filter(holds);
+  const lines = page.getByTestId("ledger-breakeven");
+  await expect(lines).toHaveCount(cols.length);
+  const glyph = PRICE_GLYPH[served.summary.provenance.bound];
+  for (const [i, col] of cols.entries()) {
+    await expect(lines.nth(i)).toHaveText(breakevenLine(col, served.summary));
+    // a column with no price states none, and takes no direction with it
+    if (col.breakeven_price == null) {
+      await expect(lines.nth(i)).not.toContainText(glyph);
+    } else {
+      await expect(lines.nth(i)).toContainText(`be ${glyph}`);
+    }
+  }
+  await expect(page.getByTestId("hero-bound"))
+    .toHaveText(served.summary.provenance.bound === "lower" ? "\u2265" : "\u2264");
+});

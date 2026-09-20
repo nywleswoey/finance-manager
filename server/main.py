@@ -24,10 +24,10 @@ from portfolio.config import settings
 
 from server import auth
 from portfolio.db import SessionLocal, fx_as_of, fx_map, session_scope, valuation_as_of
-from portfolio.money import to_sgd
+from portfolio.money import rate_to_sgd, to_sgd
 from portfolio.options import trades_for
-from portfolio.performance import (alloc_by_account, cdp_transactions, compute, empty_group,
-                                   fold_ticker, is_leg, rollup)
+from portfolio.performance import (alloc_by_account, cdp_transactions, compute_with_fx,
+                                   empty_group, fold_ticker, is_leg, rollup)
 from portfolio import spending
 from portfolio import dividends
 
@@ -171,8 +171,28 @@ def _as_of():
     return _iso(valuation_as_of)
 
 
+def perf_fold():
+    """`(rows, fx)` — the fold's rows and the rate their SGD figures were converted at.
+
+    ONE GENERATION, ONE RATE, AND **ONE CACHE KEY** SO NOTHING CAN HOLD HALF OF IT. Every SGD
+    figure on a row is a native amount times a rate `compute()` read when this key filled.
+    Anything that has to move one of those figures BACK into a native amount — the ticker fold
+    solving its breakeven price out of an SGD shortfall — must use THAT rate and not a fresher
+    one, or the price it returns is the true one scaled by the ratio between two readings and no
+    longer zeroes the Net it sits beside. A live `fx_map()` per request is exactly that bug:
+    `_cache` has no TTL, and a write that bypasses this process leaves a warm instance folding at
+    yesterday's rate (see `_as_of`).
+
+    THE PAIR IS ONE VALUE RATHER THAN TWO KEYS FILLED TOGETHER, and `compute_with_fx` hands it
+    over as one so the map is the one the rows were converted with rather than a second reading
+    of it. Two cache keys could be separated by a `_cache.clear()` landing between their fills;
+    one key cannot. `perf_all` is a projection of this value and never a second source of it."""
+    return _cached("all", compute_with_fx)
+
+
 def perf_all():
-    return _cached("all", compute)
+    """The fold's rows. The rate they were converted at rides with them — see `perf_fold`."""
+    return perf_fold()[0]
 
 
 def perf():
@@ -337,12 +357,19 @@ def holding(ticker: str):
     handler only fetches. `as_of` is `/api/positions`' valuation date verbatim; `fx_as_of` is what
     "at latest FX" is as of. The options table carries no bucket — see BACKEND.md for the stated
     assumption and its trigger."""
-    # perf_all (not perf) so a fully CLOSED ticker still has legs to fold
-    folded = fold_ticker([r for r in perf_all() if r["ticker"] == ticker])
-    if folded is None:
+    # perf_fold (not perf) so a fully CLOSED ticker still has legs to fold — and it hands over
+    # the rows WITH the rate their SGD figures were converted at. The fold takes that rate as a
+    # parameter rather than off a row (no page has any use for a rate on the wire), and every leg
+    # of a ticker is one currency. TWO MAPS, TWO NAMES, so neither can be reached for by accident:
+    # `fold_fx` is the generation these rows belong to and is the only rate the breakeven may be
+    # solved at; `ledger_fx` is the dividend rows' own fresher read and converts only those.
+    all_rows, fold_fx = perf_fold()
+    rows = [r for r in all_rows if r["ticker"] == ticker]
+    folded = rows and fold_ticker(rows, rate_to_sgd(rows[0]["currency"], fold_fx))
+    if not folded:
         return JSONResponse({"detail": "not found"}, status_code=404)
     with session_scope() as s:
-        txns, divs, fx = ticker_ledger(s, ticker)
+        txns, divs, ledger_fx = ticker_ledger(s, ticker)
     txns.sort(key=_date_key("trade_date"))
     bal = 0.0
     for t in txns:
@@ -364,7 +391,7 @@ def holding(ticker: str):
             rate = dividends.implied_rate(x["gross"], units)
         x["units"] = units
         x["rate"] = rate
-        x["gross_sgd"] = round(to_sgd(_f(x["gross"]) or 0, x["currency"], fx), 2)
+        x["gross_sgd"] = round(to_sgd(_f(x["gross"]) or 0, x["currency"], ledger_fx), 2)
     return {"as_of": _cached("as_of", _as_of), "fx_as_of": _cached("fx_as_of", _fx_as_of),
             **folded, "transactions": txns, "dividends": divs,
             "options": trades_for(ticker)}

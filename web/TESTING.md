@@ -265,15 +265,48 @@ shape stay `pinned.spec.js`'s, because consolidated rows are ordinary data rows 
 gates already. Nor does it gate the detail page's own render — the hero, the reconciliation block,
 the tiles and the refusal layout belong to the tickets that build them.
 
-`tests/bucket-split.spec.js` — **the bucket split under the hero** (#157): one block, a column per
-bucket plus Total. The Total column is the hero's ledger, so the gate is that the columns add
-**across** to it and each adds **down** to its own Net, at zero tolerance, derived from the
-fixture. It also gates the closed bucket keeping its column, a single-bucket name rendering no
-header or second column, and units / avg cost / status riding as a return-free subheading. One
-viewport; phone layout is #160's. The **cross-page gate** (Holdings' ticker-mode Net equals the
-payload's `net_pl_sgd`) is not here: `ticker.spec.js` already states it on this same multi-bucket
-fixture and `hero.spec.js` states the detail half, so a third copy would be a second place to
-update rather than a second claim.
+`tests/bucket-split.spec.js` — **the bucket split under the hero, and the breakeven price**
+(#157, #143 §5). The split half: one block, a column per bucket plus Total, where the Total column
+is the hero's ledger — so the gate is that the columns add **across** to it and each adds **down**
+to its own Net, at zero tolerance, derived from the fixture. It also gates the closed bucket
+keeping its column, a single-bucket name rendering no bucket header and no column label, and
+units / avg cost / status riding as a return-free subheading.
+
+The **breakeven** half is the larger one, and it spans BOTH layouts. A single-bucket page has no
+column head, so the figure renders there as a right-aligned subheading over the rows — a claim
+about the column below it and never a row in it — which is why that page's gate asserts the line
+**is** present and sits in no `.ledger-row`, while #157's no-header rule stays with the
+plain-ledger test above it over the same ticker list rather than being restated beside it. The
+rest: every open column quotes one and a closed column quotes none (the drop is one condition,
+the units, so the Total column and the single-bucket page decide it the same way); a column that
+cannot price its units reads the ledger's `not known`; a negative price renders as the negative
+number it is; and a **bounded** Net puts the OPPOSITE glyph on the price — a floor on the Net is
+a ceiling on the price. NOTHING HERE IS DRIVEN ON A WRITTEN PAYLOAD: the captures reach every one
+of those states themselves — the negative on the two foreign names, `not known` on the two that
+cannot price their units, the drop on the closed ones and on the multi-bucket name's closed
+bucket — so there is no second place for the same rule to drift.
+
+Its **no-`title`** rule is gated once, and not here: `hero.spec.js` asserts the whole ledger block
+carries no `[title]` over these same eight captured holdings, which covers this line the moment it
+renders. A copy here would be eight more browser opens restating a kept rule.
+
+Two gates there stand outside the render loops. The arithmetic gate is a claim about the
+**payload** — revalue a column at its own breakeven and the Net beside it lands on zero — so it
+takes no `page` fixture, and it runs over EVERY captured holding rather than the multi-bucket
+ones, because the only foreign names are single-bucket and the rate's error is the term that
+needs them. Its tolerance is the SUM of the three roundings really in that residual: the
+components' own cent-rounding (`0.02`), the 4dp the price is quoted at spread over the units it
+multiplies (`5e-5 × units × rate`), and the error in an FX rate the gate must RECOVER from the
+market-value pair because no endpoint ships one (`|be − price| × units × ε`). The same three
+are stated in `performance.py`'s `_breakeven_price` and in BACKEND.md; a name that ships no
+priced column is skipped rather than asserted. The glyph is gated ONCE, on a REAL bounded name
+rather than a written payload: the bounded captures carry their own `summary.provenance`, so the
+direction comes off the capture and nothing is borrowed or hand-edited.
+
+One viewport; phone layout is #160's. The **cross-page gate** (Holdings' ticker-mode Net equals
+the payload's `net_pl_sgd`) is not here: `ticker.spec.js` already states it on this same
+multi-bucket fixture and `hero.spec.js` states the detail half, so a third copy would be a second
+place to update rather than a second claim.
 
 `tests/split-width.spec.js` — the one thing about the split that **is** a claim about width, so it
 runs at every viewport rather than with the arithmetic: opening the multi-bucket ticker leaves
@@ -291,12 +324,12 @@ five tiles are five full-width rows at the 44px floor; the truth claims a captur
 `N qualifications on this figure` row that opens untruncated. On the multi-bucket name: the total
 block is first, every block sums to its own Net, the written across-sum ties to the hero, and each
 block head carries its own units, avg cost and status — the phone half of the one subheading rule
-`bucket-split.spec.js` gates at 1280. The remaining truth claim, the `≥`/`≤` bound prefix, has one
-gate and only one: the holding captures predate `summary.provenance` on the wire and the bound
-rides that object, so the bounded names are served the captured payload with the name's REAL
-provenance attached, read off `/api/positions?closed=true` by `capturedProvenance()` as
-`unknown-book.spec.js` does. That pair of tests is where both claims the tier splits on are
-proven — the glyph sits outside the disclosure, the carry sentence inside it.
+`bucket-split.spec.js` gates at 1280 — and the breakeven rides that head on a line of its own,
+present on every open block and dropped on a closed one, since a third item on the head's first
+line would push the subheading in off its right edge. The remaining truth claim, the `≥`/`≤`
+bound prefix, has one gate and only one: the bound rides `summary.provenance`, which only the
+bounded captures carry, so the `BOUNDED` loop at the foot of the file owns it and the carry
+sentence with it — the glyph sits outside the disclosure, the carry sentence inside it.
 
 `tests/hero.spec.js` — the **ticker detail page's hero Net, the reconciliation ledger that proves
 it, and the five position tiles** (#156). The page's whole claim is that the figure in the largest
@@ -325,10 +358,12 @@ from a fixture**; the one number written down is the tile count, which is a desi
 label), the caveat (tiles `not known`, one `Stock P/L` row, the bottom line kept, the Net's sentence
 then the percentage's, adjacent), no capital (percentage, span and peak absent together, no reason
 in the copy) and the bound in both directions plus the exact carry that still discloses. One
-viewport, one project; every expectation is read off the payload. The 9CI and C38U holding captures
-predate `summary.provenance`, so the spec borrows each name's REAL wire object from
-`positions-closed.json`, which carries both; only the exact 1:1 carry and the refusal that still
-locked collateral are written payloads, and the file says which. **Open calls, three of them, and
+viewport, one project; every expectation is read off the payload. The two bounded names carry their
+own `summary.provenance`, so their bound and carry sentence come off their own captures, opened
+directly with nothing attached; `capturedProvenance()` survives for the one shape no capture can
+be — one name's REAL wire object off `positions-closed.json` on ANOTHER name's payload, which is
+the refusal that carries. Only the exact 1:1 carry and the refusal that still locked collateral
+are written payloads, and the file says which. **Open calls, three of them, and
 none papered over.** The refusal's "what the book does know, below" clause — the one real refusal
 knows no dividends; trigger is the next un-annotated carry-in that also pays one. The bound's
 "tiles kept" on the CEILING direction: proven on the floor (9CI keeps its `avg_cost` and cost

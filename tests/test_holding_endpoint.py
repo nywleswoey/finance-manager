@@ -17,14 +17,15 @@ from fastapi.testclient import TestClient
 
 from portfolio import options
 from portfolio.config import settings
-from portfolio.performance import LEG_FIELDS
+from portfolio.performance import LEG_FIELDS, _breakeven_price
 
 from server import main
 
 D = dt.date
+SGD = 1.0     # every row here is an SGD name, so the fold's rate is 1.0
 
 
-def _row(**over):
+def _row(rate=SGD, **over):
     """A `fold_positions` row carrying every field `fold_ticker` reads."""
     r = {"bucket": "cash", "accounts": ["FSM"], "ticker": "D05", "name": "DBS", "market": "SG",
          "asset_type": "stock", "currency": "SGD", "units": 3080.0, "price": 30.0,
@@ -40,6 +41,11 @@ def _row(**over):
          "peak_car_sgd": 80618.08, "return_span_days": 2000, "return_pct": 0.161,
          "return_verdict": "ok"}
     r.update(over)
+    # derived AFTER the overrides and by the REAL helper, never passed in and never re-spelled:
+    # a breakeven hand-written beside the components it is solved from is a fixture that can
+    # disagree with itself or with the rule, and every override below moves at least one of
+    # those components. The arithmetic is gated in tests/test_fold_ticker.py.
+    r["breakeven_price"] = _breakeven_price(r, r["units"], rate)
     return r
 
 
@@ -70,7 +76,9 @@ def _stub(monkeypatch):
     """Two legs of D05 and C31's husk; the ledger and options book canned. No database."""
     main._cache.clear()
     settings.dev_auth_bypass = True
-    monkeypatch.setattr(main, "perf_all", lambda: [_row(), dict(CPF), dict(HUSK)])
+    # the fold generation: rows AND the rate their SGD figures were converted at, which the
+    # server hands out as one value. Empty is SGD-only, which is what these rows are priced in.
+    monkeypatch.setattr(main, "perf_fold", lambda: ([_row(), dict(CPF), dict(HUSK)], {}))
     monkeypatch.setattr(main, "session_scope", lambda *a, **k: _no_session())
     monkeypatch.setattr(main, "valuation_as_of", lambda s: D(2026, 7, 25))
     monkeypatch.setattr(main, "fx_as_of", lambda s: D(2026, 8, 5))
@@ -149,6 +157,39 @@ def test_an_emptied_predecessor_is_404_and_never_a_hero(client):
 
 def test_an_unknown_ticker_is_404(client):
     assert client.get("/api/holding?ticker=NOPE").status_code == 404
+
+
+def test_the_breakeven_is_solved_at_the_rate_its_own_figures_were_converted_at(client, monkeypatch):
+    """A foreign name whose fold was filled at one rate while the ledger's own read has moved.
+
+    The rows are memoized and their SGD figures carry the rate `compute()` saw; `ticker_ledger`
+    re-reads FX on every request. Solving the price out of those figures at the LIVE rate returns
+    the true price scaled by the ratio between the two readings — so the one property the field
+    is defined by, that revaluing at it zeroes the Net beside it, stops holding. Asserted by
+    reconstructing the SGD shortfall (`mv_sgd − net_pl_sgd`, which is the identity solved for
+    price) rather than by re-spelling the formula."""
+    fold, live = 1.30, 1.50                # the fold's rate, and a fresher one beside it
+    mv, cost = round(92400.0 * fold, 2), round(80618.08 * fold, 2)
+    income, unreal = round(1200.0 * fold, 2), round(92400.0 * fold - 80618.08 * fold, 2)
+    # every component handed in as an override, so the row derives its own breakeven ONCE, from
+    # the figures it ships and at its own rate
+    usd = _row(rate=fold, ticker="AAPL", name="Apple", market="US", currency="USD",
+               mv_sgd=mv, cost_basis_sgd=cost, income_sgd=income,
+               unrealised_pl_sgd=unreal, stock_pl_sgd=unreal,
+               net_pl_sgd=round(unreal + income, 2))
+    monkeypatch.setattr(main, "perf_fold", lambda: ([usd], {"USD": fold}))
+    monkeypatch.setattr(main, "ticker_ledger",
+                        lambda s, tk: ([], [], {"USD": live}))
+
+    s = client.get("/api/holding?ticker=AAPL").json()["summary"]
+
+    # a single-bucket ticker's column IS its summary: one price, not two
+    assert client.get("/api/holding?ticker=AAPL").json()["buckets"][0]["breakeven_price"] == \
+        s["breakeven_price"]
+    shortfall = round(s["mv_sgd"] - s["net_pl_sgd"], 2)
+    # the 4dp the price is quoted at, spread over the units it multiplies
+    assert abs(s["breakeven_price"] * fold * s["units"] - shortfall) <= 5e-5 * fold * s["units"]
+    assert abs(s["breakeven_price"] * live * s["units"] - shortfall) > 1.0
 
 
 def test_every_ledger_row_carries_its_bucket_and_options_carry_none(client):

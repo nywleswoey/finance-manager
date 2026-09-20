@@ -150,6 +150,10 @@ body { margin: 0; background: var(--bg); color: var(--txt);
 .ledger-total { border-top: 1px solid var(--line); margin-top: 4px; padding-top: 6px;
   font-weight: 700; }
 .ledger-total .ledger-lbl { color: var(--txt); }
+/* The single-bucket breakeven (#143 §5). A subheading over the amounts, not a row and not a
+   column head: right-aligned onto the same edge the figures below it sit on, at the split's
+   subheading size, and with no label track — one bucket shows no column label. */
+.ledger-be { text-align: right; font-size: 12px; padding-bottom: 6px; }
 /* THE BUCKET SPLIT (#157): the same statement with one column per bucket plus Total. Still divs,
    not a table, for the reason above. In this wide form the Total column keeps `.ledger-val` and
    bucket cells are `.ledger-cell`; the phone's stacked form (#160, below) has no bucket cells —
@@ -914,6 +918,10 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
   .ledger-blockhead { display: flex; align-items: baseline; justify-content: space-between;
     flex-wrap: wrap; gap: 2px 12px; padding: 3px 0 6px; border-bottom: 1px solid var(--line);
     margin-bottom: 3px; font-size: 14px; }
+  /* The breakeven takes a LINE OF ITS OWN in that head. As a third item on the head's first line
+     it would push the subheading in off the right edge `space-between` gives it, and its own
+     `text-align: right` would be inert on a content-sized flex item. */
+  .ledger-blockhead .ledger-be { flex: 0 0 100%; padding-bottom: 0; }
   .ledger-sum { padding: 8px 0 0; border-top: 1px solid var(--line); font-size: 14px;
     line-height: 1.5; overflow-wrap: anywhere; }
 

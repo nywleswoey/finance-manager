@@ -10,14 +10,14 @@
  * served (or off the provenance object this file attaches), so a recapture moves the numbers and
  * the gates keep meaning what they say.
  *
- * THE BOUNDED TWO BORROW A REAL PROVENANCE; ONLY TWO PAYLOADS ARE WRITTEN. `holding-9ci.json`
- * and `holding-c38u.json` predate `summary.provenance` reaching the wire, but
- * `positions-closed.json` does not: it carries both names' wire objects verbatim, so
- * `capturedProvenance()` reads them off it rather than restating four fields a recapture would
- * leave stale. Written,
- * and said so: the exact 1:1 carry (0P0001OOJG was never captured, so it is the plain PLTR hero
- * with an exact provenance beside it) and the refusal that still locked collateral — both
- * payloads written to reach a branch, as `hero.spec.js` does for the dividend line.
+ * THE BOUNDED TWO ARE THEIR OWN CAPTURES; ONLY TWO PAYLOADS ARE WRITTEN. `holding-9ci.json` and
+ * `holding-c38u.json` carry `summary.provenance` themselves, so the bound and the carry sentence
+ * come off the payload as shipped and nothing is attached to reach them. `capturedProvenance()`
+ * survives for the one shape no capture can be: one name's REAL wire object, read off
+ * `positions-closed.json`, on ANOTHER name's payload. Written, and said so: the exact 1:1 carry
+ * (0P0001OOJG was never captured, so it is the plain PLTR hero with an exact provenance beside
+ * it) and the refusal that still locked collateral — both payloads written to reach a branch,
+ * as `hero.spec.js` does for the dividend line.
  *
  * NOT HERE, ON PURPOSE: the refusal design says the page states what is missing *below the cash
  * streams it does know*, and the one real refusal (ASTREA6B) knows none. That clause is
@@ -40,10 +40,6 @@ const captured = (ticker) => {
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const NOT_KNOWN = "not known";
 
-/** 9CI's side of the split: the whole cost went here, so the figures are floors. */
-const lower = () => withProvenance(captured("9CI"), capturedProvenance("9CI"));
-/** The mirror of that split: units arrived with none of the cost, so the figures are ceilings. */
-const upper = () => withProvenance(captured("C38U"), capturedProvenance("C38U"));
 /** A 1:1 carry: every figure exact, and still owing its provenance. */
 const exactCarry = (b) => ({
   from_ticker: "OLD", from_name: "Predecessor Fund", type: "switch",
@@ -245,9 +241,8 @@ test.describe("no capital — the percentage, the span and the peak die together
 
 test.describe("bounded — the bound lands on the numbers", () => {
   test("a lower bound: \u2265 on the Net, \u2265 on the percentage, \u2264 on the capital", async ({ page, baseURL }) => {
-    const p = lower();
-    const s = p.summary;
-    await open(page, baseURL, "9CI", p);
+    const s = captured("9CI").summary;
+    await open(page, baseURL, "9CI");
 
     expect(s.net_verdict).toBe("bounded");
     await expect(page.getByTestId("hero-bound")).toHaveText(/^\u2265/);
@@ -274,9 +269,8 @@ test.describe("bounded — the bound lands on the numbers", () => {
   });
 
   test("an upper bound: \u2264 on the Net, \u2264 on the percentage, \u2265 on the capital", async ({ page, baseURL }) => {
-    const p = upper();
-    const s = p.summary;
-    await open(page, baseURL, "C38U", p);
+    const s = captured("C38U").summary;
+    await open(page, baseURL, "C38U");
 
     expect(s.net_verdict).toBe("bounded");
     await expect(page.getByTestId("hero-bound")).toHaveText(/^\u2264/);
@@ -302,15 +296,14 @@ test.describe("bounded — the bound lands on the numbers", () => {
       // and the one whose Net is `bounded` while its return is `caveat` — so `caveat-net` is
       // gated out and this sentence is the page's first line of prose. One wording serves both
       // states: it names both sides of the ratio and points back at nothing.
-      // Q01 first, while no payload route is registered: the captured caveat, where this
-      // sentence renders SECOND, under the Net's.
+      // Q01 first: the captured caveat, where this sentence renders SECOND, under the Net's.
       await open(page, baseURL, "Q01");
       const underTheNets = await page.getByTestId("caveat-return").innerText();
 
-      const p = upper();
-      expect(p.summary.net_verdict).toBe("bounded");
-      expect(p.summary.return_verdict).toBe("caveat");
-      await open(page, baseURL, "C38U", p);
+      const s = captured("C38U").summary;
+      expect(s.net_verdict).toBe("bounded");
+      expect(s.return_verdict).toBe("caveat");
+      await open(page, baseURL, "C38U");
 
       expect(await noteIds(page)).toEqual(["caveat-return", "carry-note"]);
       const note = page.getByTestId("caveat-return");

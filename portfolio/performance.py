@@ -913,6 +913,86 @@ def _net_pl(r):
     return round(r["stock_pl_sgd"] + r["income_sgd"] + (r["options_pl_sgd"] or 0.0), 2)
 
 
+def _breakeven_price(r, units, rate):
+    """The native-currency price at which the shipped Net reaches zero — `null` where there is
+    no such price (#143 §14):
+
+        breakeven_price  ==  (cost_basis_sgd − realised − income − options) / (rate × units)
+
+    **It is defined against Net, not against avg cost.** Avg cost answers "what price undoes the
+    unrealised column"; this answers "what price undoes the NAME", which is the question the hero
+    asks and the only one this page has a vocabulary for. The two are different money: on UD1U
+    they are 0.4166 and 0.3564, and the six cents between them are dividends and realised gains
+    already banked — a breakeven read off avg cost asks the market to pay for them a second time.
+    Setting this price into the fold reproduces `net_pl_sgd == 0` by construction, because it is
+    that identity solved for price and it undoes the components **as shipped**.
+
+    **THE TIE IS THE QUOTE'S, NOT A CENT'S.** The components tie to each other to the cent; this
+    does not, because it is quoted at 4dp — the way `avg_cost` and `price` are quoted, which is
+    the whole point of putting it under one of them. THIS FIELD'S OWN share of the drift when the
+    fold is revalued at it is `5e-5 × units × rate` SGD, half the last quoted decimal spread over
+    the position it multiplies: 0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700, and under a cent
+    on anything holding fewer than ~200. It scales with units and the FX rate and never tightens
+    to a constant.
+
+    **THAT TERM IS NOT THE WHOLE RESIDUAL, AND THE GATE THAT MEASURES IT SAYS SO.**
+    `bucket-split.spec.js` revalues each column off the shipped payload and checks the result
+    against a SUM of the three roundings really in it: the components' own cent-rounding, which
+    the Net is a sum of (`0.02`); this quote (`5e-5 × units × rate`); and the error in an FX rate
+    that gate has to RECOVER from the market-value pair, because no endpoint ships one
+    (`|be − price| × units × ε`). Only the middle term is this function's. `test_fold_ticker.py`
+    asserts an exact `== 0.0` instead, and can: it folds 60 units at a rate it passes in, so
+    neither of the other two terms exists there.
+
+    It lands here and not in `_build_row` for the reason Net does: the options stream is one of
+    the components it has to undo, and that is attached only just above (#143 §15).
+
+    **Three nulls, one meaning on the wire — there is no such price:**
+      - `refuse` nulls Net, so it nulls this. No partial breakeven under a second name.
+      - A **closed** leg has no units to divide by. Not a large price: not a price. Its money is
+        out and nothing the market does next moves its Net, which is why this takes `units`
+        rather than reading a `status` — the same `1e-6` the rest of the fold holds positions to.
+      - `cost_basis_sgd` carries the third without a test of its own: a leg holding units it
+        cannot price cannot say what price would make it whole, and `realised_pl_sgd` is null
+        exactly when it is, so the arithmetic refuses with it rather than beside it.
+
+    **A negative breakeven is a real answer, not an error to clamp.** Income and realised gains
+    exceeding cost basis means the name is already whole at any price including zero, and the
+    negative number says by how much — clamping it at zero would report `already even` of a
+    position that is ahead, and would be the only figure on this page that lies downward.
+
+    **A `bounded` Net bounds this price THE OTHER WAY, and the fourth state is that bound rather
+    than a null.** Substituting the components gives `price × rate × units == mv_sgd − Net`, and
+    `mv_sgd`, `rate` and `units` are all exact — only `cost_basis_sgd` carries the carry's
+    mis-attribution — so the Net and the price move in OPPOSITE directions: a `lower` carry
+    overstates the cost, which floors the Net (`≥`) and ceilings this price (`≤`). The direction
+    is therefore `carry_bound`'s, read once and inverted, which is exactly the direction peak
+    capital already takes; the renderer marks it with the same glyph it prints there rather than
+    deciding it again.
+
+    **WHAT MAKES THAT DIRECTION THE ONLY ONE ON A PRICE THAT SHIPS, PER COLUMN AND NOT PER
+    TICKER.** The two doubts on this page push opposite ways: a carry's mis-attribution moves
+    `cost_basis_sgd`, and the partition's unknown units read as free, which moves the Net the
+    other way. A figure carrying both could be bounded in neither direction — `net_verdict`'s own
+    recorded open call, which it does not guard. It cannot arise here, and the guard is the third
+    null above rather than anything about the ticker: `cost_basis_sgd` is null on **any column
+    holding unknown units** — a leg by `priceable` (`cost_known and unknown < 1e-6`), the summary
+    by `_sum_known` — so every column that ships a price has zero unknown units and the carry's
+    is the only doubt left on it. THE COLUMN IS THE UNIT OF THAT CLAIM. `net_verdict` sums its
+    counts across a ticker's legs, so `bounded` says nothing about any one of them.
+
+    WHOSE doubt it is, the wire cannot say: `provenance` is whole-ticker and names no bucket, so
+    a bucket the carry never touched is marked with it anyway. That is recorded on the renderer
+    (`SecurityDetail.jsx`, `Breakeven`), which is where the marking happens; nothing here refuses
+    it, and this docstring claims no unreachability it cannot point at a guard for.
+    """
+    if r["net_pl_sgd"] is None or r["cost_basis_sgd"] is None or units <= 1e-6:
+        return None
+    needed = (r["cost_basis_sgd"] - r["realised_pl_sgd"] - r["income_sgd"]
+              - (r["options_pl_sgd"] or 0.0))
+    return round(needed / (rate * units), 4)
+
+
 def _return_figures(car, rows):
     """The four fields the page's one percentage needs, from a ticker's peak CAR and its rows.
 
@@ -1228,6 +1308,9 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
         # its own and the columns add up to the name.
         r["net_verdict"] = verdicts[r["ticker"]]
         r["net_pl_sgd"] = _net_pl(r)
+        # solved from the Net one line above it, and therefore never from quantities beside it.
+        r["breakeven_price"] = _breakeven_price(r, r["units"],
+                                                rate_to_sgd(r["currency"], fx))
     # peak capital-at-risk and the one percentage (#143 §9). Whole-ticker: the peak is a max
     # over the SUM of a name's legs, which is not the sum of their maxima, and the percentage
     # answers "did I make money on this name" rather than on one funding pool of it. The four
@@ -1274,8 +1357,8 @@ def is_leg(r):
 # What one bucket column of the detail page carries (#143 §2). `bucket` and `status` label the
 # column; every other key is also a summary key, so a bucket column and the Total column are one
 # render path over N+1 objects. No cost basis — the tiles never split — and no return figure.
-LEG_FIELDS = ("bucket", "status", "units", "avg_cost", "realised_pl_sgd", "unrealised_pl_sgd",
-              "stock_pl_sgd", "income_sgd", "options_pl_sgd", "net_pl_sgd")
+LEG_FIELDS = ("bucket", "status", "units", "avg_cost", "breakeven_price", "realised_pl_sgd",
+              "unrealised_pl_sgd", "stock_pl_sgd", "income_sgd", "options_pl_sgd", "net_pl_sgd")
 
 
 def _sum(legs, k, n=2):
@@ -1298,9 +1381,18 @@ def _sum_stream(legs, k):
     return round(sum(vals), 2) if vals else None
 
 
-def fold_ticker(rows):
+def fold_ticker(rows, rate):
     """One ticker's `fold_positions` rows folded into the detail page's `summary` and its
     `buckets` split (#143 §2, §4). Pure: plain rows in, one dict out, no DB.
+
+    `rate` is the ticker's SGD-per-unit FX rate — the one thing here that is not on a row and
+    cannot be recovered from one. The summary's breakeven has to move an SGD shortfall back into
+    the native price it is quoted in, and dividing one of the native/SGD column pairs to get
+    there would divide two figures already rounded to the cent and would divide by ZERO on
+    exactly the legs this file is careful about (a closed leg's mv, a free lot's cost basis).
+    A parameter rather than a field on every row: both callers hold the FX map already, and a
+    rate on the row would be a permanent `/api/positions` field no page may read. Every leg of a
+    ticker is one currency, so one rate covers the fold.
 
     Returns `None` when `is_leg` keeps no leg — the caller's 404. A sum over nothing is `0`
     with nothing unknown, which reads `net_pl_sgd: 0, net_verdict: "hero"`: a lie that would
@@ -1362,6 +1454,15 @@ def fold_ticker(rows):
     # whole-ticker, so any leg's carries it; absent unless a carry reached the name (§12)
     if first.get("provenance"):
         summary["provenance"] = first["provenance"]
+    # The ticker's breakeven is solved from the SUMMARY's components, not weighted across the
+    # legs' own breakevens — the two are different prices whenever a leg is closed. A closed leg
+    # has no breakeven of its own (no units to divide by) but its realised gains and dividends
+    # are in the hero, so a weighted mean of the open legs would quote a price that zeroes only
+    # part of the number printed above it. Solving the summary spreads the closed legs' money
+    # over the units that are still there, which is the only reading under which the tile and
+    # the hero are about the same position. Every input is the column as shipped, so a null
+    # anywhere — a refusal, an unpriceable leg, or nothing held — refuses here too.
+    summary["breakeven_price"] = _breakeven_price(summary, units, rate)
     buckets = [{k: r[k] for k in LEG_FIELDS} for r in
                ({**r, "status": "open" if r["units"] > 1e-6 else "closed"} for r in legs)]
     return {"summary": summary, "buckets": buckets}
@@ -1370,6 +1471,22 @@ def fold_ticker(rows):
 def compute(session=None):
     """Fetch adapter: pull every input the fold needs from the DB, then hand off to the pure
     fold_positions(). The heavy SQL lives here; the cost-basis arithmetic lives in the fold."""
+    return compute_with_fx(session)[0]
+
+
+def compute_with_fx(session=None):
+    """`(rows, fx)` — the fold's rows and **the very map they were converted at**, not a second
+    reading of it.
+
+    Every SGD figure on a row is a native amount times a rate read once at the top of this
+    function. A caller that has to move one of those figures BACK into native — `fold_ticker`
+    solving a breakeven price out of an SGD shortfall — needs that object and not a fresh
+    `fx_map()`: a rate committed between the two reads makes the price the true one scaled by
+    the ratio, so it stops zeroing the Net beside it. Same session is not enough, because
+    Postgres takes a fresh snapshot per statement under READ COMMITTED and this function's SQL
+    runs for seconds. Returning it is the only way to hold the two together.
+
+    `compute()` is this with the map dropped — one projection, not a second fetch."""
     today = dt.date.today()
     with session_scope(session) as s:
         fx, price = _fx_and_price(s)
@@ -1397,7 +1514,7 @@ def compute(session=None):
     from .options import contracts_by_ticker, realized_by_ticker
     options = realized_by_ticker()
     return fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today,
-                          contracts=contracts_by_ticker())
+                          contracts=contracts_by_ticker()), fx
 
 
 def alloc_by_account(session=None):
