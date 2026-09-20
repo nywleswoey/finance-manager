@@ -202,6 +202,18 @@ would be doubted both ways at once; no live name is both, and the open call is r
 false on a caveat's all-unknown leg and on a refusal alike.
 _Avoid_: return verdict (a different axis — AAPL is hero-on-Net and no-capital-on-return at once)
 
+**Breakeven price**:
+The native-currency price at which a column's **Net** reaches zero, per leg and per ticker
+(`breakeven_price`, quoted at 4dp like `avg_cost`). Defined against the Net and **not** against
+avg cost: avg cost is the price that undoes the unrealised column alone, so reading a breakeven
+off it asks the market to pay a second time for dividends and realised gains already banked (on
+UD1U, a breakeven of 0.3564 under an avg cost of 0.4166). Null means there is no such price — a
+refused Net, nothing held, or units that cannot be costed — a negative one is a real answer and
+is never clamped, and a `bounded` Net bounds it the other way, since a floor on the Net is a
+ceiling on the price. The arithmetic, the three nulls and the FX rate it is solved at are
+`docs/runbooks/BACKEND.md`'s.
+_Avoid_: break-even (unqualified — it is read as avg cost, which is a different price), avg cost
+
 ### Returns
 
 **Peak capital-at-risk (CAR)**:
@@ -273,8 +285,11 @@ _Avoid_: dividends (the rows are dividends; this is their folded SGD total), yie
 **Native / SGD conversion**:
 Every value is computed in the security's native currency, then converted to SGD for
 aggregation. The single policy: SGD (or absent currency) is 1:1; a present foreign rate is used;
-a *missing* foreign rate fails loud rather than silently converting at 1.0.
-_Avoid_: currency conversion (name the direction — always native→SGD)
+a *missing* foreign rate fails loud rather than silently converting at 1.0. One figure runs the
+other way — the **breakeven price**, an SGD shortfall quoted back in native — and it must divide
+by the very rate its row's SGD figures were converted at, never a fresher read, or it stops
+zeroing the Net beside it (`docs/runbooks/BACKEND.md`).
+_Avoid_: currency conversion (name the direction — native→SGD everywhere but that one figure)
 
 ### Spending
 

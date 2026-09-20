@@ -275,21 +275,22 @@ units / avg cost / status riding as a return-free subheading.
 The **breakeven** half is the larger one, and it spans BOTH layouts. A single-bucket page has no
 column head, so the figure renders there as a right-aligned subheading over the rows — a claim
 about the column below it and never a row in it — which is why that page's gate asserts the line
-**is** present while still proving no column label appeared. The rest: every open column quotes
-one and a closed column quotes none (the drop is one condition, the units, so the Total column and
-the single-bucket page decide it the same way); a column that cannot price its units reads the
-ledger's `not known`; a negative price renders as the negative number it is; and a **bounded** Net
-puts the OPPOSITE glyph on the price — a floor on the Net is a ceiling on the price. NOTHING HERE
-IS DRIVEN ON A WRITTEN PAYLOAD: the captures reach every one of those states themselves — the
-negative on the two foreign names, `not known` on the two that cannot price their units, the drop
-on the closed ones and on the multi-bucket name's closed bucket — so there is no second place for
-the same rule to drift.
+**is** present and sits in no `.ledger-row`, while #157's no-header rule stays with the
+plain-ledger test above it over the same ticker list rather than being restated beside it. The
+rest: every open column quotes one and a closed column quotes none (the drop is one condition,
+the units, so the Total column and the single-bucket page decide it the same way); a column that
+cannot price its units reads the ledger's `not known`; a negative price renders as the negative
+number it is; and a **bounded** Net puts the OPPOSITE glyph on the price — a floor on the Net is
+a ceiling on the price. NOTHING HERE IS DRIVEN ON A WRITTEN PAYLOAD: the captures reach every one
+of those states themselves — the negative on the two foreign names, `not known` on the two that
+cannot price their units, the drop on the closed ones and on the multi-bucket name's closed
+bucket — so there is no second place for the same rule to drift.
 
 Its **no-`title`** rule is gated once, and not here: `hero.spec.js` asserts the whole ledger block
 carries no `[title]` over these same eight captured holdings, which covers this line the moment it
 renders. A copy here would be eight more browser opens restating a kept rule.
 
-Two gates there do not open a browser or borrow one. The arithmetic gate is a claim about the
+Two gates there stand outside the render loops. The arithmetic gate is a claim about the
 **payload** — revalue a column at its own breakeven and the Net beside it lands on zero — so it
 takes no `page` fixture, and it runs over EVERY captured holding rather than the multi-bucket
 ones, because the only foreign names are single-bucket and the rate's error is the term that
@@ -358,9 +359,11 @@ label), the caveat (tiles `not known`, one `Stock P/L` row, the bottom line kept
 then the percentage's, adjacent), no capital (percentage, span and peak absent together, no reason
 in the copy) and the bound in both directions plus the exact carry that still discloses. One
 viewport, one project; every expectation is read off the payload. The two bounded names carry their
-own `summary.provenance`, so their bound and carry sentence come off the capture as shipped; only
-the exact 1:1 carry and the refusal that still locked collateral are written payloads — the second
-borrowing one name's real wire object off `positions-closed.json` — and the file says which. **Open calls, three of them, and
+own `summary.provenance`, so their bound and carry sentence come off their own captures, opened
+directly with nothing attached; `capturedProvenance()` survives for the one shape no capture can
+be — one name's REAL wire object off `positions-closed.json` on ANOTHER name's payload, which is
+the refusal that carries. Only the exact 1:1 carry and the refusal that still locked collateral
+are written payloads, and the file says which. **Open calls, three of them, and
 none papered over.** The refusal's "what the book does know, below" clause — the one real refusal
 knows no dividends; trigger is the next un-annotated carry-in that also pays one. The bound's
 "tiles kept" on the CEILING direction: proven on the floor (9CI keeps its `avg_cost` and cost
