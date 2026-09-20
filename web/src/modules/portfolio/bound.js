@@ -12,16 +12,25 @@
  * provenance are whole-ticker and ride the summary alone (`LEG_FIELDS` carries neither), so a
  * bucket column cannot ask the question — the RESULT is passed down to it instead.
  *
- * THE SERVER GUARDS THE ONE STATE THIS FILE COULD NOT REPAIR: `net_verdict` never ships
- * `bounded` beside a `lower` carry that meets unknown units. That leaves exactly one pairing where
- * two doubts push opposite ways — (`caveat`, carry `lower`) — and it is read here as `conflict`:
- * a Net doubted both ways, which no glyph and no `upper bound` sentence may claim.
+ * THE SERVER GUARDS THE ONE STATE THIS FILE COULD NOT REPAIR: `net_verdict`
+ * (`portfolio/performance.py`) never ships `bounded` beside a `lower` carry that meets unknown
+ * units. That leaves exactly one pairing where two doubts push opposite ways — (`caveat`, carry
+ * `lower`) — and it is read here as `conflict`: a Net doubted both ways, which no glyph and no
+ * `upper bound` sentence may claim.
+ *
+ * THAT PAIRING IS THE WHOLE COUPLING, so it is pinned at both ends rather than left implicit.
+ * This side reads the pair; the wire promises to ship it. Neither end can move alone:
+ * `bound-direction.spec.js` gates this reading, `tests/test_bounded_carry.py` gates the wire.
+ * Note what this file does NOT do: `bounded` is taken at its word, because a verdict that
+ * promises a direction is the server's statement that the book can back one. A payload shipping
+ * `bounded` over a `lower` carry and unknown units would print a floor here — which is why the
+ * guard lives there, where the counts are, and not in a second copy of the rule here.
  */
 
 /** The glyph on the FIGURE first, on the CAPITAL (and the breakeven price) second. */
-export const BOUND_GLYPHS = { lower: ["≥", "≤"], upper: ["≤", "≥"] };
+const BOUND_GLYPHS = { lower: ["≥", "≤"], upper: ["≤", "≥"] };
 
-export const OPPOSITE = { lower: "upper", upper: "lower" };
+const OPPOSITE = { lower: "upper", upper: "lower" };
 
 /** "an upper bound" / "a lower bound" — the prose's one spelling of a direction. */
 export const boundPhrase = (dir) => (dir === "upper" ? "an upper bound" : "a lower bound");

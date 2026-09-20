@@ -134,8 +134,9 @@ const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "�
  * attribution at all and a renderer guessing one would be inventing it. Zero-instance today —
  * both bounded names (9CI, C38U) are single-bucket, where the ticker's bound IS the bucket's.
  * **Trigger:** the first multi-bucket bounded name whose carry touched only some of its buckets;
- * that needs a bucket on `provenance` before this can narrow. Recorded beside `net_verdict`'s own
- * open call, which this one sits next to.
+ * that needs a bucket on `provenance` before this can narrow. Recorded beside #158's other open
+ * calls in `web/TESTING.md`. `net_verdict`'s own is no longer one of them — a `lower` carry over
+ * unknown units is guarded there now — so this is the last one standing over this figure.
  */
 function Breakeven({ o, bound, className }) {
   if (!(o.units > 1e-6)) return null;

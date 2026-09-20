@@ -19,23 +19,13 @@
  * with nothing to disagree with, nor a state no payload here builds (a multi-bucket bounded name).
  */
 import { expect, test } from "@playwright/test";
-import { capturedHoldings, capturedProvenance, withProvenance } from "./fixtures/index.js";
-import { openView } from "./support/app.js";
+import { capturedProvenance, withProvenance } from "./fixtures/index.js";
+import { capturedHolding as captured, exactCarry, openTicker as open } from "./support/app.js";
+import { netDirection } from "../src/modules/portfolio/bound.js";
 
-const HOLDINGS = capturedHoldings();
-const captured = (ticker) => {
-  const h = HOLDINGS.find((x) => x.ticker === ticker);
-  expect(h, `${ticker} is no longer a captured holding`).toBeTruthy();
-  return h.body;
-};
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const GLYPH_NET = { "≥": "lower", "≤": "upper" };          // a glyph ON THE FIGURE
 const GLYPH_OPP = { "≤": "lower", "≥": "upper" };          // a glyph on capital / price
 
-const exactCarry = (b) => ({
-  from_ticker: "OLD", from_name: "Predecessor Fund", type: "switch",
-  carried_on: b.as_of, carried_sgd: b.summary.peak_car_sgd, split_with: [], bound: null,
-});
 const withSummary = (b, over) => ({ ...b, summary: { ...b.summary, ...over } });
 /** A priced, all-costed name written to carry the given bound (no capture is bounded `upper`
  *  over units that are all costed). */
@@ -61,22 +51,6 @@ const STATES = {
   "hero (PLTR)": captured("PLTR"),
   "hero + exact carry": withProvenance(captured("PLTR"), exactCarry(captured("PLTR"))),
 };
-
-async function open(page, baseURL, ticker, payload) {
-  await openView(page, baseURL, "Portfolio › Holdings");
-  await page.getByLabel("Show closed positions").check();
-  const row = () => page.locator("tbody tr")
-    .filter({ has: page.locator("span.pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) })
-    .first();
-  await row().click();
-  await expect(page.getByText("← Holdings")).toBeVisible();
-  await page.route("**/api/holding**", (route) => route.fulfill({
-    status: 200, contentType: "application/json", body: JSON.stringify(payload),
-  }));
-  await page.getByText("← Holdings").click();
-  await row().click();
-  await expect(page.getByText("← Holdings")).toBeVisible();
-}
 
 const text = async (page, id) => {
   const l = page.getByTestId(id);
@@ -115,6 +89,31 @@ async function claims(page) {
   }
   return out;
 }
+
+/**
+ * THE ONE PAIRING THIS SIDE AND THE WIRE SHARE, stated here so the two cannot drift apart.
+ *
+ * `net_verdict` (`portfolio/performance.py`) never ships `bounded` beside a `lower` carry that
+ * meets unknown units; it ships `caveat`, and this side reads exactly that pair as a Net doubted
+ * both ways. The wire's end is pinned by
+ * `tests/test_bounded_carry.py::test_bounded_never_ships_beside_unknown_units_unless_the_carry_is_upper`.
+ * This is the other end: change either alone and one of the two fails.
+ *
+ * The second assertion is the reason the guard belongs on the wire rather than here — `bounded`
+ * is taken at its word, so a payload that broke the promise would print a floor over a Net
+ * nothing can floor. That is a property of the client, not a gap in it: the counts the rule needs
+ * live on the server.
+ */
+test("only (caveat, lower) is read as a Net doubted both ways", () => {
+  const pairs = [];
+  for (const verdict of ["hero", "caveat", "bounded", "refuse"]) {
+    for (const carry of [null, "lower", "upper"]) {
+      if (netDirection(verdict, carry).conflict) pairs.push([verdict, carry]);
+    }
+  }
+  expect(pairs).toEqual([["caveat", "lower"]]);
+  expect(netDirection("bounded", "lower")).toEqual({ net: "lower", conflict: false });
+});
 
 for (const [name, payload] of Object.entries(STATES)) {
   test(`one direction: ${name}`, async ({ page, baseURL }) => {
