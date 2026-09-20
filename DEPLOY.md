@@ -254,7 +254,8 @@ the 300s function ceiling. It stays sequential and unretried — a failed run is
   its own built `web/dist` (`make build-web` first). `npm run dev` (Vite proxies `/api` **and**
   `/ingest` → 8000, so the same-origin cookie works and PostHog traffic takes the same proxy
   path as production) therefore goes with `make api`, not `api-local`. `reset`, `migrate` and
-  `api-local` refuse a non-localhost `DATABASE_URL` exported in the shell.
+  `api-local` refuse a non-localhost `DATABASE_URL` exported in the shell. Both APIs at once share
+  one `session` cookie (not port-scoped), so logging out of one logs out the other.
 - **Headers**: HTTP security headers (CSP/HSTS/X-Content-Type-Options/X-Frame-Options/
   Referrer-Policy) are set by the FastAPI middleware in `server/main.py`, which serves both
   the API and the static SPA. CSP allows `accounts.google.com` for Google Identity Services
