@@ -118,10 +118,11 @@ const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "�
  * A BOUNDED NET BOUNDS THIS PRICE THE OTHER WAY, and the glyph says so rather than the figure
  * shipping bare. `price × rate × units == mv_sgd − Net` with mv, rate and units all exact, so a
  * Net floor is a price CEILING — the same direction peak capital takes, which is why this takes
- * `boundOf().capital` — the glyph from the one place that decides direction (`bound.js`). IT HAS TO BE PASSED: `provenance` and `net_verdict` are whole-ticker and ride the
- * summary alone (`LEG_FIELDS` carries neither), so a bucket payload cannot answer the question
- * and a component reading only `o` would mark the Total and leave every bucket bare. Only a
- * figure is marked: `not known` has no direction.
+ * `boundOf().capital` — the glyph from the one place that decides direction (`bound.js`). IT HAS
+ * TO BE PASSED: `provenance` and `net_verdict` are whole-ticker and ride the summary alone
+ * (`LEG_FIELDS` carries neither), so a bucket payload cannot answer the question and a component
+ * reading only `o` would mark the Total and leave every bucket bare. Only a figure is marked:
+ * `not known` has no direction.
  *
  * OPEN CALL, RECORDED RATHER THAN GUARDED: A WHOLE-TICKER BOUND ON A PER-BUCKET FIGURE. This is
  * the first per-column figure on the page to take one, and the doubt is marked one bucket too

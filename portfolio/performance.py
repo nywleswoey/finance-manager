@@ -986,11 +986,11 @@ def _breakeven_price(r, units, rate):
     other way. A figure carrying both would be bounded in neither direction — the pairing
     `net_verdict` now guards, by shipping `caveat` rather than `bounded` for it. It cannot arise
     here either, and what rules it out is the third null above rather than anything about the
-    ticker: `cost_basis_sgd` is null on **any column
-    holding unknown units** — a leg by `priceable` (`cost_known and unknown < 1e-6`), the summary
-    by `_sum_known` — so every column that ships a price has zero unknown units and the carry's
-    is the only doubt left on it. THE COLUMN IS THE UNIT OF THAT CLAIM. `net_verdict` sums its
-    counts across a ticker's legs, so `bounded` says nothing about any one of them.
+    ticker: `cost_basis_sgd` is null on **any column holding unknown units** — a leg by
+    `priceable` (`cost_known and unknown < 1e-6`), the summary by `_sum_known` — so every column
+    that ships a price has zero unknown units and the carry's is the only doubt left on it. THE
+    COLUMN IS THE UNIT OF THAT CLAIM. `net_verdict` sums its counts across a ticker's legs, so
+    `bounded` says nothing about any one of them.
 
     WHOSE doubt it is, the wire cannot say: `provenance` is whole-ticker and names no bucket, so
     a bucket the carry never touched is marked with it anyway. That is recorded on the renderer
@@ -1027,8 +1027,11 @@ def _return_figures(car, rows):
 
     **`caveat`** where some entering units are unknown: the error compounds, because the
     numerator is an upper bound (unknown units assumed free) while the denominator is a lower
-    bound (costed lots only). It carries its own verdict rather than reusing the Net's, which
-    would leave it reading as merely optimistic instead of not comparable to any other name.
+    bound (costed lots only). The numerator's direction is the Net's and is never decided here:
+    where a `lower` carry meets those units `net_verdict` ships `caveat` and the Net is bounded
+    in neither direction, and the page says that of the percentage too. It carries its own
+    verdict rather than reusing the Net's, which would leave it reading as merely optimistic
+    instead of not comparable to any other name.
     """
     peak = car["peak_car_sgd"]
     unknown = sum(r["cost_partition"]["unknown"] for r in rows)

@@ -231,8 +231,9 @@ Six rules, each with its own gate in `tests/test_peak_car.py`:
 
 `return_verdict` is a second axis, independent of the Net's: `no_capital` where peak CAR is
 zero (the return does not *exist* — undefined, not unmeasured), `caveat` where some entering
-units are unknown (the numerator is an upper bound and the denominator a lower one, so the
-error compounds) **or where there is no Net to divide at all**, else `ok`. Never `ok` beside a
+units are unknown (the numerator takes the Net's doubt — an upper bound, or no direction at all
+where a `lower` carry meets those units — and the denominator is a lower one, so the error
+compounds) **or where there is no Net to divide at all**, else `ok`. Never `ok` beside a
 null percentage — that is the one pairing a renderer branching on the verdict cannot survive. **`peak_car_sgd` is always a number**, a measured zero where
 nothing was at risk; the verdict, not a null, is what a renderer branches on.
 
@@ -296,7 +297,7 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
 - **`refuse` ships `null`** on every leg — including a leg of a refusing ticker whose own components
   are known. There is no partial Net on the wire under any name.
 - **A caveat nets every leg.** A leg whose every unit is unknown, inside a ticker that does not
-  refuse, keeps `stock_pl_sgd` (its unknown units read as free — the upper bound the caveat already
+  refuse, keeps `stock_pl_sgd` (its unknown units read as free — the reading the caveat already
   declares, exactly as Q01's partly-unknown leg does). `stock_pl_sgd` is therefore null only where
   the leg is all-unknown *and* the name refuses.
 - **Known gap, zero-instance: `/api/performance`'s group `net_pl_sgd` is not this field.**

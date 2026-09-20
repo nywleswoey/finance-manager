@@ -259,8 +259,9 @@ carries renders with its own explanation — `~` twice over, once for an upper b
 per-unit and once for a Net doubted both ways under a `lower` carry, `≥`/`≤` for a split carry's
 floor or ceiling — with `n/a` where the book records no cost at all. The legend gate walks that
 table rather than a list of symbols, so a mark added with no sentence of its own fails it. One of
-the Net column's gates is a file check rather than a render one, and says so: the retired client-side rule differs from the server's field
-by a **cent**, which no whole-dollar column can show.
+the Net column's gates is a file check rather than a render one, and says so: the retired
+client-side rule differs from the server's field by a **cent**, which no whole-dollar column can
+show.
 
 What it deliberately does not check is anything responsive; the pin, the column count and the row
 shape stay `pinned.spec.js`'s, because consolidated rows are ordinary data rows and inherit those
