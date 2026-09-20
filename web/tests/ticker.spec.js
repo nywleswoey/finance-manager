@@ -330,7 +330,7 @@ test("the whole-ticker fields the fold passes through really are identical on ev
   }
 });
 
-test("three glyphs, three meanings, and a refusal that states no number", async ({ page }) => {
+test("three states, three distinct glyphs, and a refusal that states no number", async ({ page }) => {
   // The glyph vocabulary (#143 §12). `~` is a per-unit doubt — some units entered with no cost
   // at all, so the Net reads them as free; `≥` and `≤` are event-level, every unit priced and
   // the total mis-attributed by a split carry. Reusing `~` for a bound would put "cost basis
@@ -352,7 +352,7 @@ test("three glyphs, three meanings, and a refusal that states no number", async 
     await expect.soft(cell, ticker).toContainText(asSgd(net));
     await expect.soft(cell.locator("span[title]").first(), ticker).toHaveAttribute("title", title);
   }
-  // each glyph is used by exactly one meaning: no two of the three states share one
+  // these three states use three distinct glyphs, so none of them reads as another's meaning
   expect(new Set(cases.map((c) => c.glyph)).size).toBe(3);
 
   // The refusal states no number at all. `0` here would be a name the book cannot price

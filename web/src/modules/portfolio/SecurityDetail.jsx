@@ -252,13 +252,17 @@ const refusalSentence = (s) =>
  * still owes the percentage's second sentence when the return axis is a caveat too — C38U.
  * Neither prints the Net a second time: the hero already carries the figure.
  *
- * ONE WORDING FOR THE PERCENTAGE, IN EVERY STATE IT RENDERS. The two sentences are gated on
- * different axes — `caveat-net` on the NET's verdict, this one on the RETURN's — and C38U ships
- * `bounded` on the first and `caveat` on the second, so the percentage is sometimes the page's
- * first line of prose (C38U) and sometimes the second (Q01). It is written to need no
- * antecedent and to echo none: it names what each SIDE of the ratio does, where the Net's
- * sentence names the units. A per-state spelling would be a second rule to keep in step with
- * an axis that is not its own.
+ * ONE WORDING FOR THE PERCENTAGE IN EVERY STATE THAT NAMES A DIRECTION, AND ONE MORE FOR THE
+ * STATE THAT NAMES NONE. The two sentences are gated on different axes — `caveat-net` on the
+ * NET's verdict, this one on the RETURN's — and C38U ships `bounded` on the first and `caveat`
+ * on the second, so the percentage is sometimes the page's first line of prose (C38U) and
+ * sometimes the second (Q01). It is written to need no antecedent and to echo none: it names
+ * what each SIDE of the ratio does, where the Net's sentence names the units. There is no
+ * spelling per RETURN state, which would be a second rule to keep in step with an axis that is
+ * not its own. The one second wording is `b.conflict`'s, and that is the NET's axis, the same
+ * one `caveat-net` already follows: a numerator bounded in neither direction has no doubt to
+ * compound, so that arm cannot borrow the shared sentence without asserting the direction the
+ * hero withheld.
  *
  * NEITHER SENTENCE CHOOSES A DIRECTION: both take it from `boundOf` (`bound.js`), so they cannot
  * contradict the hero's glyph or each other. Where the page's Net is doubted both ways

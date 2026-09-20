@@ -254,10 +254,12 @@ Holdings reads the server's `net_pl_sgd` rather than rebuilding Net from compone
 are: the request is `?closed=true` **unconditionally**; the ticker fold covers every leg whether
 closed rows are listed or not, so ticking the box moves no number on any row; the rendered Net equals
 the matching `holding-*.json`'s `summary.net_pl_sgd` — the **cross-page** claim, on the multi-bucket
-ticker, since a single-bucket one makes it a sum over one element; and the three glyphs (`~` for an
-upper bound whose cause is per-unit, `≥`/`≤` for a split carry's floor or ceiling) each render with
-their own explanation, with `n/a` where the book records no cost at all. One of those is a file check
-rather than a render one, and says so: the retired client-side rule differs from the server's field
+ticker, since a single-bucket one makes it a sum over one element; and every meaning the mark table
+carries renders with its own explanation — `~` twice over, once for an upper bound whose cause is
+per-unit and once for a Net doubted both ways under a `lower` carry, `≥`/`≤` for a split carry's
+floor or ceiling — with `n/a` where the book records no cost at all. The legend gate walks that
+table rather than a list of symbols, so a mark added with no sentence of its own fails it. One of
+the Net column's gates is a file check rather than a render one, and says so: the retired client-side rule differs from the server's field
 by a **cent**, which no whole-dollar column can show.
 
 What it deliberately does not check is anything responsive; the pin, the column count and the row

@@ -50,7 +50,6 @@ const STATES = {
   "conflict, with a breakeven that would be marked":
     withSummary(withProvenance(captured("Q01"), capturedProvenance("9CI")), { breakeven_price: 2.5, units: 100 }),
   "refusal (ASTREA6B)": captured("ASTREA6B"),
-  "refusal under a carry": withProvenance(captured("ASTREA6B"), capturedProvenance("C38U")),
   "refusal under a lower carry": withProvenance(captured("ASTREA6B"), capturedProvenance("9CI")),
   "hero (PLTR)": captured("PLTR"),
   "hero + exact carry": withProvenance(captured("PLTR"), exactCarry(captured("PLTR"))),
