@@ -353,6 +353,12 @@ both fields. Its last test serves a payload whose `income_sgd` and `options_pl_s
 figure" apart from "re-derived it and got lucky". **No gate in the file states a numeric literal
 from a fixture**; the one number written down is the tile count, which is a design decision.
 
+`tests/bound-direction.spec.js` — **the page cannot contradict itself about which way a figure
+runs.** Renders every state where two direction-bearing clauses (hero glyph, caveat sentences,
+percentage glyphs and prose, carry note, breakeven) sit together, reads each claimed direction back
+off the screen and asserts they agree; the one decision lives in `src/modules/portfolio/bound.js`.
+One viewport. Not covered: a multi-bucket bounded name (no payload builds one).
+
 `tests/unknown-book.spec.js` — **what the ticker detail page says when the book does not know**
 (#158): the refusal (prose in the hero slot, no bottom line, five tiles, no subtotal under any
 label), the caveat (tiles `not known`, one `Stock P/L` row, the bottom line kept, the Net's sentence
@@ -369,10 +375,10 @@ knows no dividends; trigger is the next un-annotated carry-in that also pays one
 "tiles kept" on the CEILING direction: proven on the floor (9CI keeps its `avg_cost` and cost
 basis) and not provable on the ceiling, because the only `upper`-bounded name (C38U) still carries
 doubted units and #148's partition rule correctly nulls a cost basis pooled averaging would have
-invented; trigger is the first ceiling-bounded name whose units are all costed. And a `lower` carry
-meeting unknown-cost units, where the carry's floor and the partition's ceiling would leave the Net
-bounded in neither: no live name is both, so the page carries one rule for direction and no second
-vocabulary; trigger is the first name that is. The two that bear on the wire are stated in
+invented; trigger is the first ceiling-bounded name whose units are all costed. A `lower` carry
+meeting unknown-cost units is no longer an open call: the server ships `caveat` and `bound.js`
+reads it as doubted both ways, gated by `bound-direction.spec.js` on a written payload (no live
+name is both). The two that bear on the wire are stated in
 `docs/runbooks/BACKEND.md` as well; the refusal's is copy, so it lives here and in the spec
 header.
 

@@ -78,6 +78,13 @@ export default defineConfig({
       testMatch: /unknown-book\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // Which way a figure runs, across every clause that states it: the hero, the caveat, the
+    // percentage, the carry note and the breakeven. Copy, so one viewport.
+    {
+      name: "bound-direction",
+      testMatch: /bound-direction\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     // The bucket split under the hero (#157): columns that add across to the hero and down to
     // their own Net. Arithmetic, not layout, so one viewport — same reasoning as `hero`.
     {

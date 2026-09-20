@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import posthog from "posthog-js";
 import { get, fmt, sgd, money, pct, cls } from "../../api.js";
 import SecurityDetail from "./SecurityDetail.jsx";
+import { netDirection } from "./bound.js";
 
 const GROUPS = {                                   // group key -> label
   asset_type: "Asset class",
@@ -94,6 +95,12 @@ const netOf = (r) => ({ net: r.net_pl_sgd, verdict: r.net_verdict, bound: r.prov
  */
 const NET_TITLE = "total P/L incl dividends + option premiums";
 const netMark = ({ verdict, bound }) => {
+  // the direction is `bound.js`'s call, as on the detail page: a `lower` carry over unknown units
+  // is doubted both ways, and must not be titled an upper bound
+  if (netDirection(verdict, bound).conflict)
+    return { glyph: "~", pre: false,
+             title: "bounded in neither direction: some units entered with no known cost, and a "
+                  + "corporate action carried a whole event's cost here" };
   if (verdict === "caveat")
     return { glyph: "~", pre: false,
              title: "an upper bound: some units entered with no known cost, and this Net reads "

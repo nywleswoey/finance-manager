@@ -468,13 +468,16 @@ hero     ⟺  unknown == 0
   reclassifying the holding to evidence the criterion is rejected. **Trigger:** the first
   ceiling-bounded name whose units are all costed. Recorded beside #158's other open calls in
   `web/TESTING.md`.
-- **Open call (#158): a `lower` carry meeting unknown-cost units.** The partition's doubt is
-  always a ceiling and `upper` agrees with it, which is why C38U's bound stands over its caveat.
-  A `lower` carry does not: the whole event's cost landed on that name, so its Net is understated
-  while its uncosted units overstate it, and the page would print `≥` over a Net the book can
-  bound in neither direction. No live name is both — 9CI, the one `lower`, has zero unknown units
-  — so the rule above is left minimal and no second vocabulary exists for the combination.
-  **Trigger:** the first live name where a `lower` carry meets unknown-cost units.
+- **Guarded (was #158's open call): a `lower` carry meeting unknown-cost units** ships `caveat`,
+  not `bounded`. The partition's doubt is always a ceiling and `upper` agrees with it, which is
+  why C38U's bound stands over its caveat; a `lower` carry pushes the other way, so the Net is
+  bounded in neither direction and the wire no longer promises one. The client reads the pair
+  (`caveat`, provenance `lower`) as "doubted both ways" in `web/src/modules/portfolio/bound.js`,
+  the one place that decides direction. Zero-instance on the live book (9CI has no unknown
+  units); pinned by `tests/test_bounded_carry.py` and `web/tests/bound-direction.spec.js`.
+  **Per-column caveat:** in that state no breakeven price is marked either, even a column whose
+  only doubt is the carry — the ticker's Net has no direction, and a marked price beside an
+  unmarked Net is the disagreement this rework removes.
 
 **`provenance`** ships on every row — null unless a carry reached the name, and whole-ticker like
 the verdict, so it rides every leg:

@@ -842,7 +842,8 @@ def net_verdict(parts, bound=None):
         refuse   <=>  costed == 0 and unknown > 0
         caveat   <=>  costed > 0  and unknown > 0
         hero     <=>  unknown == 0
-        bounded  <=   a split carry applies (`bound`) — overrides hero AND caveat, not refuse
+        bounded  <=   a split carry applies (`bound`) — overrides hero AND caveat, not refuse,
+                 and not a caveat under a `lower` carry (opposite doubts, below)
 
     **The counts are SUMMED across the ticker's legs before the rule reads them.** #130's
     per-leg `every()` rule is superseded, and the two genuinely disagree: leg A costed-only
@@ -866,15 +867,15 @@ def net_verdict(parts, bound=None):
     and the return axis — the two point the same way there. It does NOT override `refuse`: a
     refusal has no Net, and `bounded` promises a Net with a direction on it.
 
-    **OPEN CALL, RECORDED RATHER THAN GUARDED: a `lower` carry meeting unknown units.** The
-    partition's doubt is always a ceiling — units without a cost read as free, so the Net is
-    overstated — and `upper` agrees with it, which is why C38U's bound stands. `lower` would
-    not: the whole event's cost landed on that name, so its Net is UNDERstated, and a page
-    printing `≥` over a Net two doubts push opposite ways would assert a floor the book cannot
-    back. The combination is unreachable on the live book — the one `lower` name, 9CI, has zero
-    unknown units — so no branch here guards it and no second vocabulary exists for it.
-    **Trigger:** the first live name where a `lower` carry meets unknown-cost units. Recorded
-    beside #158's other open calls in `docs/runbooks/BACKEND.md` and `web/TESTING.md`."""
+    **A `lower` carry meeting unknown units is `caveat`, not `bounded`** (guarded, was an open
+    call). The partition's doubt is always a ceiling — units without a cost read as free, so the
+    Net is overstated — and `upper` agrees with it, which is why C38U's bound stands. `lower`
+    does not: the whole event's cost landed on that name, so its Net is UNDERstated, and the two
+    doubts push opposite ways: a Net bounded in neither direction. `bounded` promises a Net with
+    one, so the wire never ships it beside unknown units unless the carry is `upper`. What the
+    page says of that state is decided once, in `web/src/modules/portfolio/bound.js`, which reads
+    the pair (`caveat`, provenance `lower`) as "doubted both ways". Zero-instance on the live
+    book — 9CI, the one `lower` name, has zero unknown units."""
     costed = sum(p["costed"] for p in parts)
     unknown = sum(p["unknown"] for p in parts)
     if unknown <= 1e-6:
@@ -882,6 +883,8 @@ def net_verdict(parts, bound=None):
     else:
         verdict = "caveat" if costed > 1e-6 else "refuse"
     if bound is None or verdict == "refuse":
+        return verdict
+    if bound == "lower" and verdict == "caveat":
         return verdict
     return "bounded"
 

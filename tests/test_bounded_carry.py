@@ -281,3 +281,28 @@ def test_the_detail_summary_carries_provenance_only_where_a_carry_reached_the_na
     plain = perf.fold_ticker([r for r in _fold([_c38u(account="FSM", qty_signed=10, price=1.0)],
                                                []) if r["ticker"] == "C38U"], 1.0)["summary"]
     assert "provenance" not in plain
+
+
+# ---------------------------------------------------------------- direction, one decision
+
+def _lower_over_unknown():
+    """9CI's whole-event floor (`lower`) meeting 100 units that entered with no cost anywhere."""
+    return [*_c31(), _nine_ci(),
+            _nine_ci(qty_signed=100, trade_date=D(2021, 10, 5))]
+
+
+def test_a_lower_carry_over_unknown_units_is_not_bounded():
+    """Two doubts pushing the Net opposite ways is bounded in neither, and `bounded` promises a
+    direction: the wire ships `caveat`, the carry's own direction still rides the provenance."""
+    nine = _row(_fold(_lower_over_unknown(), SPLIT), "9CI")
+    assert nine["provenance"]["bound"] == "lower"
+    assert nine["cost_partition"]["unknown"] == 100.0 and nine["cost_partition"]["costed"] > 0
+    assert nine["net_verdict"] == "caveat"
+
+
+def test_bounded_never_ships_beside_unknown_units_unless_the_carry_is_upper():
+    """The invariant `web/src/modules/portfolio/bound.js` leans on, over every shape here."""
+    for txns in (_capitaland(), _lower_over_unknown()):
+        for r in _fold(txns, SPLIT):
+            if r["net_verdict"] == "bounded" and r["cost_partition"]["unknown"] > 1e-6:
+                assert r["provenance"]["bound"] == "upper", r["ticker"]
