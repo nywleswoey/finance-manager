@@ -312,11 +312,9 @@ for (const { ticker, body } of SINGLE) {
       await openTicker(page, baseURL, ticker);
       const s = body.summary;
       const line = page.getByTestId("ledger-breakeven");
-      // #157 is untouched: one bucket still shows no bucket header and no column label, and a
-      // subheading is not a column head
-      await expect(page.getByTestId("ledger-head")).toHaveCount(0);
-      await expect(page.getByTestId("ledger-col")).toHaveCount(0);
-      await expect(page.getByTestId("ledger-sub")).toHaveCount(0);
+      // That #157 is untouched — no bucket header, no column label — is the loop above's claim
+      // (`one bucket is a plain vertical reconciliation`), over this same ticker list. What this
+      // one adds is that a subheading appears there anyway, and is not a column head.
       if (!holds(s)) {
         // nothing held is no price — and must not read as a doubted one
         await expect(line).toHaveCount(0);
