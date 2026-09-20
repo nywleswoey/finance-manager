@@ -370,7 +370,7 @@ test("the legend explains every meaning a mark can carry, and the refusal's", as
   // is worse: `~` carries two meanings and the footnote once described only one of them.
   //
   // So this walks `NET_MARKS` — the table the cell's own tooltip is built from — rather than a
-  // list of symbols: three of the four entries share two glyphs, so asserting `~ ≥ ≤` appear
+  // list of symbols: two of the four entries share a glyph, so asserting `~ ≥ ≤` appear
   // passes with a meaning undescribed. A mark added to that table with no legend sentence fails
   // here.
   //

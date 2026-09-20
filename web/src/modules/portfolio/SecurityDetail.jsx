@@ -270,10 +270,11 @@ const caveatNetSentence = (s, b) =>
     ? "them as free while the carry below pulls it the other way — so it is bounded in neither direction."
     : `them as free — so it is ${boundPhrase(b.net)}.`);
 const caveatReturnSentence = (b) =>
-  "The percentage compounds one doubt twice: " +
   (b.conflict
-    ? "its numerator is bounded in neither direction and so is its denominator, the peak capital"
-    : `its numerator is ${boundPhrase(b.net)} while its denominator, the peak capital, counts ` +
+    ? "The percentage carries two doubts that point opposite ways: its numerator is bounded in " +
+      "neither direction and so is its denominator, the peak capital"
+    : "The percentage compounds one doubt twice: " +
+      `its numerator is ${boundPhrase(b.net)} while its denominator, the peak capital, counts ` +
       `costed lots only — ${boundPhrase(b.denominator)}`) +
   " — so it is not comparable to any other name on the site.";
 

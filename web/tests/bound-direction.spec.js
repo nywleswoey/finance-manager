@@ -149,6 +149,8 @@ for (const [name, payload] of Object.entries(STATES)) {
       expect(await page.getByTestId("ledger").innerText()).not.toMatch(/[≥≤]/);
       expect(dirs.has("upper") || dirs.has("lower")).toBe(false);
       expect(await text(page, "caveat-net")).toMatch(/neither direction/);
+      expect(await text(page, "caveat-return"), "the percentage claimed a single doubt")
+        .not.toMatch(/one doubt/);
     } else if (s.net_verdict === "caveat") {
       expect([...dirs]).toEqual(["upper"]);
       await expect(page.getByTestId("hero-bound")).toHaveCount(0);

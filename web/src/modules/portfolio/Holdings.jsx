@@ -105,10 +105,10 @@ const NET_TITLE = "total P/L incl dividends + option premiums";
 const netMark = ({ verdict, bound }) => {
   // the direction is `bound.js`'s call, as on the detail page: a `lower` carry over unknown units
   // is doubted both ways, and must not be titled an upper bound
-  if (netDirection(verdict, bound).conflict) return NET_MARKS.conflict;
+  const { net, conflict } = netDirection(verdict, bound);
+  if (conflict) return NET_MARKS.conflict;
   if (verdict === "caveat") return NET_MARKS.caveat;
-  if (verdict === "bounded") return NET_MARKS[bound] || null;
-  return null;
+  return NET_MARKS[net] || null;
 };
 
 /**
