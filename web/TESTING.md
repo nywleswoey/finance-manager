@@ -279,9 +279,7 @@ about the column below it and never a row in it — which is why that page's gat
 one and a closed column quotes none (the drop is one condition, the units, so the Total column and
 the single-bucket page decide it the same way); a column that cannot price its units reads the
 ledger's `not known`; a negative price renders as the negative number it is; and a **bounded** Net
-puts the OPPOSITE glyph on the price —
-a floor on the Net is a ceiling on the price — with `not known` left bare, since there is no
-direction to bound where there is no figure.
+puts the OPPOSITE glyph on the price — a floor on the Net is a ceiling on the price.
 
 Its **no-`title`** rule is gated once, and not here: `hero.spec.js` asserts the whole ledger block
 carries no `[title]` over these same eight captured holdings, which covers this line the moment it
@@ -296,23 +294,16 @@ components' own cent-rounding (`0.02`), the 4dp the price is quoted at spread ov
 multiplies (`5e-5 × units × rate`), and the error in an FX rate the gate must RECOVER from the
 market-value pair because no endpoint ships one (`|be − price| × units × ε`). The same three
 are stated in `performance.py`'s `_breakeven_price` and in BACKEND.md; a name that ships no
-priced column is skipped rather than asserted. And the bounded glyph is gated on the two REAL bounded names (9CI, C38U) rather than only
-on a written payload: their holding captures predate `summary.provenance` reaching the wire and
-ship `bounded` with none, a shape the server cannot produce, so the object is read off
+priced column is skipped rather than asserted. The glyph is gated ONCE, on a REAL bounded name
+rather than a written payload: those holding captures predate `summary.provenance` reaching the
+wire and ship `bounded` with none, a shape the server cannot produce, so the object is read off
 `positions-closed.json` by `capturedProvenance` — the same mechanism `unknown-book.spec.js` uses
-for the hero's own bound, and the reason neither file hand-edits a capture. The multi-bucket
-bounded shape has no live instance, so it is driven, on 9CI's real carry with only its direction
-flipped.
+for the hero's own bound, and the reason neither file hand-edits a capture.
 
 One viewport; phone layout is #160's. The **cross-page gate** (Holdings' ticker-mode Net equals
 the payload's `net_pl_sgd`) is not here: `ticker.spec.js` already states it on this same
 multi-bucket fixture and `hero.spec.js` states the detail half, so a third copy would be a second
 place to update rather than a second claim.
-
-**What it cannot say:** whether a bucket the carry never touched deserves the bound it is marked
-with. `provenance` is whole-ticker on the wire and carries no bucket attribution, so on a
-multi-bucket bounded name every column takes the same glyph. Zero-instance — both bounded names
-are single-bucket — and recorded as an open call on `SecurityDetail`'s `Breakeven`.
 
 `tests/split-width.spec.js` — the one thing about the split that **is** a claim about width, so it
 runs at every viewport rather than with the arithmetic: opening the multi-bucket ticker leaves
@@ -330,7 +321,9 @@ five tiles are five full-width rows at the 44px floor; the truth claims a captur
 `N qualifications on this figure` row that opens untruncated. On the multi-bucket name: the total
 block is first, every block sums to its own Net, the written across-sum ties to the hero, and each
 block head carries its own units, avg cost and status — the phone half of the one subheading rule
-`bucket-split.spec.js` gates at 1280. The remaining truth claim, the `≥`/`≤` bound prefix, has one
+`bucket-split.spec.js` gates at 1280 — and the breakeven rides that head on a line of its own,
+present on every open block and dropped on a closed one, since a third item on the head's first
+line would push the subheading in off its right edge. The remaining truth claim, the `≥`/`≤` bound prefix, has one
 gate and only one: the holding captures predate `summary.provenance` on the wire and the bound
 rides that object, so the bounded names are served the captured payload with the name's REAL
 provenance attached, read off `/api/positions?closed=true` by `capturedProvenance()` as

@@ -981,16 +981,9 @@ def _breakeven_price(r, units, rate):
     is the only doubt left on it. THE COLUMN IS THE UNIT OF THAT CLAIM. `net_verdict` sums its
     counts across a ticker's legs, so `bounded` says nothing about any one of them.
 
-    **What each level does in the shape that reaches it** — a `lower` carry on a ticker whose
-    cash leg is fully costed and whose srs leg is all-unknown, which is `caveat` promoted to
-    `bounded`: the SUMMARY nulls (`_sum_known` takes the srs leg's null) and renders `not known`,
-    unmarked; the SRS COLUMN nulls for its own partition and renders `not known`, unmarked; the
-    CASH COLUMN ships a real price and is marked `≤`, which is honest about the direction because
-    that column holds no unknown units. What is left open there is not the direction but WHOSE
-    doubt it is: `provenance` is whole-ticker and names no bucket, so a bucket the carry never
-    touched is marked with it anyway. That is recorded on the renderer (`SecurityDetail.jsx`,
-    `Breakeven`), which is where the marking happens; nothing here refuses it, and this docstring
-    claims no unreachability it cannot point at a guard for.
+    WHOSE doubt it is, the wire cannot say: `provenance` is whole-ticker and names no bucket. The
+    renderer takes that literally and marks the whole-ticker column only (`SecurityDetail.jsx`,
+    `Breakeven`); nothing here decides it.
     """
     if r["net_pl_sgd"] is None or r["cost_basis_sgd"] is None or units <= 1e-6:
         return None

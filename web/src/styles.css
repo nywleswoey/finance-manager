@@ -918,6 +918,10 @@ input, select, textarea { background: var(--panel2); border: 1px solid var(--lin
   .ledger-blockhead { display: flex; align-items: baseline; justify-content: space-between;
     flex-wrap: wrap; gap: 2px 12px; padding: 3px 0 6px; border-bottom: 1px solid var(--line);
     margin-bottom: 3px; font-size: 14px; }
+  /* The breakeven takes a LINE OF ITS OWN in that head. As a third item on the head's first line
+     it would push the subheading in off the right edge `space-between` gives it, and its own
+     `text-align: right` would be inert on a content-sized flex item. */
+  .ledger-blockhead .ledger-be { flex: 0 0 100%; padding-bottom: 0; }
   .ledger-sum { padding: 8px 0 0; border-top: 1px solid var(--line); font-size: 14px;
     line-height: 1.5; overflow-wrap: anywhere; }
 

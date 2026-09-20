@@ -325,20 +325,15 @@ components it has to undo.
   must recover from the market-value pair since no endpoint ships one (`|be − price| × units × ε`).
 - **A `bounded` Net bounds it the OTHER way.** `price × rate × units ≡ mv_sgd − Net` with mv, rate
   and units exact, so a `lower` carry floors the Net (`≥`) and ceilings the price (`≤`) — the
-  direction peak capital already takes, and the detail page marks it with the same glyph.
-  **That direction is the only doubt on any price that ships, and the reason is per COLUMN, not
-  per ticker.** The partition's doubt pushes the other way, and a figure carrying both could be
-  bounded in neither — but `cost_basis_sgd` is null on any column holding unknown units (a leg by
-  `priceable`, the summary by `_sum_known`), so such a column has no price to bound in the first
-  place. `net_verdict` sums its counts across a ticker's legs, so `bounded` says nothing about any
-  one of them: on a `lower`-carried ticker with one fully costed leg and one all-unknown leg, the
-  summary and the unknown leg both ship `null` while the costed leg ships a marked price. Live,
-  9CI (`lower`, no unknown units) is the only name that ships a bounded price; C38U's `upper`
-  comes with unknown units and nulls.
+  direction peak capital already takes, which is the glyph the detail page marks the figure with.
+  `provenance` is whole-ticker and names no bucket, so the mark rides the whole-ticker column
+  only. The partition's opposite doubt never meets it: `cost_basis_sgd` is null on any column
+  holding unknown units, so such a column ships no price to bound.
 - **The ticker's is solved from the summary**, never a weighted mean of the legs': a closed leg has
   no breakeven of its own but its realised gains and dividends are in the hero, so averaging the
-  open legs would quote a price that zeroes only part of the number above it. `Holdings.jsx`'s
-  `mergeTicker` therefore ships `null` rather than folding one.
+  open legs would quote a price that zeroes only part of the number above it. Holdings' merged
+  ticker row therefore carries the largest leg's price, which is NOT the ticker's and which no
+  page reads; a ticker-level breakeven column there has to come off `/api/holding`'s summary.
 
 - **The FX rate is a `fold_ticker` PARAMETER, not a row field.** The summary's breakeven has to
   move an SGD shortfall back into the native price it is quoted in, and `fold_ticker` is pure over

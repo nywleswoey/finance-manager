@@ -181,14 +181,6 @@ function mergeTicker(rows) {
     avg_cost: costNative != null && units > 1e-6 ? costNative / units : null,
     cost_basis_native: costNative,
     cost_basis_sgd: sumOrNull(rs, (r) => r.cost_basis_sgd),
-    // NULL, BECAUSE NO MERGED BREAKEVEN EXISTS — the one figure on the row that does not fold.
-    // A single ticker-level price averages away the only thing a breakeven is for (the buckets
-    // bought at different averages and collected different dividends), and `first`'s would put
-    // the LARGEST LEG's price beside the whole ticker's Net — the leg-vs-ticker mismatch
-    // `fold_ticker`'s own note rejects. `/api/holding` solves the ticker's from the summary's
-    // components, at a rate the server passes into the fold; no row carries one, so nothing here
-    // could solve it even if there were a merged price to solve for.
-    breakeven_price: null,
     unrealised_pl_sgd: sumOrNull(rs, (r) => r.unrealised_pl_sgd),
     pl_folded: sumOrNull(rs, plBase),                        // what the P/L column shows — see plOf
     pl_mixed: new Set(rs.map((r) => r.status)).size > 1,     // …and whether that fold spans both
