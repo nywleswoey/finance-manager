@@ -80,12 +80,22 @@ test.beforeEach(({ viewport }, testInfo) => {
   testInfo.annotations.push({ type: "viewport", description: `${viewport.width}px` });
 });
 
-// The bounded names, picked by shape rather than by name, as everything else here is.
-const BOUNDED = HOLDINGS.filter(({ body }) => body.summary.net_verdict === "bounded");
+// The bounded names, picked by shape rather than by name, as everything else here is — and by
+// the WHOLE shape the loop below reads, the verdict plus the object the direction rides, so the
+// selector asks for exactly what the loop then dereferences.
+const bounded = ({ body }) => body.summary.net_verdict === "bounded";
+const BOUNDED = HOLDINGS.filter((h) => bounded(h) && h.body.summary.provenance?.bound);
 
 test.beforeAll(() => {
   expect(HOLDINGS.length, "no /api/holding fixtures in the manifest").toBeGreaterThan(0);
   expect(BOUNDED.length, "no bounded holding left to gate the bound prefix on").toBeGreaterThan(0);
+  // A bounded name that lost its provenance would otherwise fall out of the selector and take
+  // its two gates with it in silence — which is how a suite goes vacuous.
+  for (const { ticker, body } of HOLDINGS.filter(bounded)) {
+    expect(body.summary.provenance?.bound,
+      `${ticker} ships a bounded verdict with no provenance to read the direction off`)
+      .toBeTruthy();
+  }
 });
 
 for (const { ticker, body } of HOLDINGS) {
@@ -119,8 +129,8 @@ for (const { ticker, body } of HOLDINGS) {
       expect(new Set(tops.map(Math.round)).size).toBe(5);
     });
 
-    // The bound prefix is the one truth claim no captured payload reaches; the `BOUNDED` loop
-    // below serves a real provenance and owns it.
+    // The bound prefix rides `summary.provenance`, which only the bounded captures carry; the
+    // `BOUNDED` loop below owns it and this one states neither it nor the carry sentence.
     test("every truth claim stays visible; every explanation folds behind one row", async ({ page }) => {
       if (refused) {
         await expect(page.getByTestId("refusal-units")).toBeVisible();

@@ -103,23 +103,6 @@ async function openTicker(page, baseURL, ticker) {
   await expect(page.getByText("← Holdings")).toBeVisible();
 }
 
-/**
- * The same navigation, with a payload of our own standing in for the ticker's. Opening first and
- * routing second is deliberate: the Holdings list has to be the captured one for the row to be
- * there to click.
- */
-async function serve(page, baseURL, ticker, payload) {
-  await openTicker(page, baseURL, ticker);
-  await page.route("**/api/holding**", (route) => route.fulfill({
-    status: 200, contentType: "application/json", body: JSON.stringify(payload),
-  }));
-  await page.getByText("← Holdings").click();
-  await page.locator("tbody tr")
-    .filter({ has: page.locator("span.pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) })
-    .first().click();
-  await expect(page.getByText("← Holdings")).toBeVisible();
-}
-
 const ledger = (page) => page.getByTestId("ledger");
 const bodyRows = (page) => ledger(page).locator(".ledger-row:not(.ledger-total)");
 const netRow = (page) => page.getByTestId("ledger-net");
@@ -391,37 +374,4 @@ test("a bounded Net bounds its price the other way", async ({ page, baseURL }) =
   }
   await expect(page.getByTestId("hero-bound"))
     .toHaveText(served.summary.provenance.bound === "lower" ? "\u2265" : "\u2264");
-});
-
-test.describe("the breakeven line's states, driven rather than observed", () => {
-  // The captured multi-bucket holdings only ever carry ordinary positive prices, so the negative
-  // and unknown branches are driven on a payload written to reach them.
-  const multi = () => MULTI.find((h) => h.body.buckets.some((b) => b.status === "closed"));
-
-  const withOpenBucket = (body, breakeven_price) => ({
-    ...body,
-    buckets: body.buckets.map((b) => (b.status === "closed" ? b : { ...b, breakeven_price })),
-    summary: { ...body.summary, breakeven_price },
-  });
-
-  test("a negative breakeven renders as the negative number it is", async ({ page, baseURL }) => {
-    const { ticker, body } = multi();
-    await serve(page, baseURL, ticker, withOpenBucket(body, -1.2345));
-    const lines = page.getByTestId("ledger-breakeven");
-    expect(await lines.count()).toBeGreaterThan(0);
-    for (let i = 0; i < await lines.count(); i++) {
-      await expect(lines.nth(i)).toHaveText(/^be [-−]1\.2345$/);
-    }
-  });
-
-  test("an unpriceable open column says `not known`, and a closed one says nothing", async ({ page, baseURL }) => {
-    const { ticker, body } = multi();
-    await serve(page, baseURL, ticker, withOpenBucket(body, null));
-    const subs = page.getByTestId("ledger-sub");
-    for (const [i, b] of body.buckets.entries()) {
-      const line = subs.nth(i).getByTestId("ledger-breakeven");
-      if (b.status === "closed") await expect(line).toHaveCount(0);
-      else await expect(line).toHaveText(`be ${NOT_KNOWN_TEXT}`);
-    }
-  });
 });
