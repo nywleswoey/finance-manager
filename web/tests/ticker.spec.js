@@ -32,6 +32,7 @@
  */
 import { expect, test } from "@playwright/test";
 import { loadApp, mockApi, VIEWS } from "./support/app.js";
+import { NET_MARKS } from "../src/modules/portfolio/netMarks.js";
 import positionsFixture from "./fixtures/api/positions-closed.json" with { type: "json" };
 import holdingF34 from "./fixtures/api/holding-f34.json" with { type: "json" };
 import holdingQ01 from "./fixtures/api/holding-q01.json" with { type: "json" };
@@ -329,7 +330,7 @@ test("the whole-ticker fields the fold passes through really are identical on ev
   }
 });
 
-test("three glyphs, three meanings, and a refusal that states no number", async ({ page }) => {
+test("three states, three distinct glyphs, and a refusal that states no number", async ({ page }) => {
   // The glyph vocabulary (#143 §12). `~` is a per-unit doubt — some units entered with no cost
   // at all, so the Net reads them as free; `≥` and `≤` are event-level, every unit priced and
   // the total mis-attributed by a split carry. Reusing `~` for a bound would put "cost basis
@@ -351,7 +352,7 @@ test("three glyphs, three meanings, and a refusal that states no number", async 
     await expect.soft(cell, ticker).toContainText(asSgd(net));
     await expect.soft(cell.locator("span[title]").first(), ticker).toHaveAttribute("title", title);
   }
-  // each glyph is used by exactly one meaning: no two of the three states share one
+  // these three states use three distinct glyphs, so none of them reads as another's meaning
   expect(new Set(cases.map((c) => c.glyph)).size).toBe(3);
 
   // The refusal states no number at all. `0` here would be a name the book cannot price
@@ -364,15 +365,25 @@ test("three glyphs, three meanings, and a refusal that states no number", async 
   await expect.soft(cell.locator("span[title]")).toHaveAttribute("title", /not known/);
 });
 
-test("the legend carries all three marks and the refusal's", async ({ page }) => {
-  // A glyph nobody can look up is a glyph nobody can read. The footnote is the only place on
-  // this page that says what the marks mean, so it carries every one the table can render.
+test("the legend explains every meaning a mark can carry, and the refusal's", async ({ page }) => {
+  // A glyph nobody can look up is a glyph nobody can read, and a glyph the key explains WRONGLY
+  // is worse: `~` carries two meanings and the footnote once described only one of them.
+  //
+  // So this walks `NET_MARKS` — the table the cell's own tooltip is built from — rather than a
+  // list of symbols: two of the four entries share a glyph, so asserting `~ ≥ ≤` appear
+  // passes with a meaning undescribed. A mark added to that table with no legend sentence fails
+  // here.
   //
   // Read, not clicked. Above the phone tier the `<details>` renders open with its `summary`
   // hidden by the stylesheet, so a click would wait forever on an element that is not there —
   // and this spec runs at one viewport by design (see the header), which is that one.
-  const text = await holdingsCard(page).locator("details.tablenote p").innerText();
-  for (const mark of ["~", "≥", "≤", "n/a"]) {
-    expect.soft(text, `legend must explain ${mark}`).toContain(mark);
+  const text = (await holdingsCard(page).locator("details.tablenote p").innerText())
+    .replace(/\s+/g, " ");
+  const marks = Object.values(NET_MARKS);
+  expect(marks.length, "the mark vocabulary is empty, so this gate proves nothing").toBeGreaterThan(0);
+  for (const m of marks) {
+    expect.soft(text, `legend must explain ${m.glyph} meaning "${m.lede}"`)
+      .toContain(`${m.glyph} ${m.lede} — ${m.why}`);
   }
+  expect.soft(text, "legend must explain n/a").toContain("n/a");
 });

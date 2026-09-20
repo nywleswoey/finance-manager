@@ -254,11 +254,14 @@ Holdings reads the server's `net_pl_sgd` rather than rebuilding Net from compone
 are: the request is `?closed=true` **unconditionally**; the ticker fold covers every leg whether
 closed rows are listed or not, so ticking the box moves no number on any row; the rendered Net equals
 the matching `holding-*.json`'s `summary.net_pl_sgd` — the **cross-page** claim, on the multi-bucket
-ticker, since a single-bucket one makes it a sum over one element; and the three glyphs (`~` for an
-upper bound whose cause is per-unit, `≥`/`≤` for a split carry's floor or ceiling) each render with
-their own explanation, with `n/a` where the book records no cost at all. One of those is a file check
-rather than a render one, and says so: the retired client-side rule differs from the server's field
-by a **cent**, which no whole-dollar column can show.
+ticker, since a single-bucket one makes it a sum over one element; and every meaning the mark table
+carries renders with its own explanation — `~` twice over, once for an upper bound whose cause is
+per-unit and once for a Net doubted both ways under a `lower` carry, `≥`/`≤` for a split carry's
+floor or ceiling — with `n/a` where the book records no cost at all. The legend gate walks that
+table rather than a list of symbols, so a mark added with no sentence of its own fails it. One of
+the Net column's gates is a file check rather than a render one, and says so: the retired
+client-side rule differs from the server's field by a **cent**, which no whole-dollar column can
+show.
 
 What it deliberately does not check is anything responsive; the pin, the column count and the row
 shape stay `pinned.spec.js`'s, because consolidated rows are ordinary data rows and inherit those
@@ -353,6 +356,12 @@ both fields. Its last test serves a payload whose `income_sgd` and `options_pl_s
 figure" apart from "re-derived it and got lucky". **No gate in the file states a numeric literal
 from a fixture**; the one number written down is the tile count, which is a design decision.
 
+`tests/bound-direction.spec.js` — **the page cannot contradict itself about which way a figure
+runs.** Renders every state where two direction-bearing clauses (hero glyph, caveat sentences,
+percentage glyphs and prose, carry note, breakeven) sit together, reads each claimed direction back
+off the screen and asserts they agree; the one decision lives in `src/modules/portfolio/bound.js`.
+One viewport. Not covered: a multi-bucket bounded name (no payload builds one).
+
 `tests/unknown-book.spec.js` — **what the ticker detail page says when the book does not know**
 (#158): the refusal (prose in the hero slot, no bottom line, five tiles, no subtotal under any
 label), the caveat (tiles `not known`, one `Stock P/L` row, the bottom line kept, the Net's sentence
@@ -363,18 +372,18 @@ own `summary.provenance`, so their bound and carry sentence come off their own c
 directly with nothing attached; `capturedProvenance()` survives for the one shape no capture can
 be — one name's REAL wire object off `positions-closed.json` on ANOTHER name's payload, which is
 the refusal that carries. Only the exact 1:1 carry and the refusal that still locked collateral
-are written payloads, and the file says which. **Open calls, three of them, and
+are written payloads, and the file says which. **Open calls, two of them, and
 none papered over.** The refusal's "what the book does know, below" clause — the one real refusal
 knows no dividends; trigger is the next un-annotated carry-in that also pays one. The bound's
 "tiles kept" on the CEILING direction: proven on the floor (9CI keeps its `avg_cost` and cost
 basis) and not provable on the ceiling, because the only `upper`-bounded name (C38U) still carries
 doubted units and #148's partition rule correctly nulls a cost basis pooled averaging would have
-invented; trigger is the first ceiling-bounded name whose units are all costed. And a `lower` carry
-meeting unknown-cost units, where the carry's floor and the partition's ceiling would leave the Net
-bounded in neither: no live name is both, so the page carries one rule for direction and no second
-vocabulary; trigger is the first name that is. The two that bear on the wire are stated in
-`docs/runbooks/BACKEND.md` as well; the refusal's is copy, so it lives here and in the spec
-header.
+invented; trigger is the first ceiling-bounded name whose units are all costed. A `lower` carry
+meeting unknown-cost units is no longer an open call: the server ships `caveat` and `bound.js`
+reads it as doubted both ways, gated by `bound-direction.spec.js` on a written payload (no live
+name is both), so it is not one of the two above. The one of the two that bears on the wire is the
+bound's, stated in `docs/runbooks/BACKEND.md` as well; the refusal's is copy, so it lives here and
+in the spec header.
 
 `tests/security-detail-options.spec.js` — **SecurityDetail's Options P/L**, the same kind of
 subject as `ticker.spec.js` and there for the same reason: a folded total is the same number at

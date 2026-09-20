@@ -842,7 +842,8 @@ def net_verdict(parts, bound=None):
         refuse   <=>  costed == 0 and unknown > 0
         caveat   <=>  costed > 0  and unknown > 0
         hero     <=>  unknown == 0
-        bounded  <=   a split carry applies (`bound`) — overrides hero AND caveat, not refuse
+        bounded  <=   a split carry applies (`bound`) — overrides hero AND caveat, not refuse,
+                 and not a caveat under a `lower` carry (opposite doubts, below)
 
     **The counts are SUMMED across the ticker's legs before the rule reads them.** #130's
     per-leg `every()` rule is superseded, and the two genuinely disagree: leg A costed-only
@@ -866,15 +867,22 @@ def net_verdict(parts, bound=None):
     and the return axis — the two point the same way there. It does NOT override `refuse`: a
     refusal has no Net, and `bounded` promises a Net with a direction on it.
 
-    **OPEN CALL, RECORDED RATHER THAN GUARDED: a `lower` carry meeting unknown units.** The
-    partition's doubt is always a ceiling — units without a cost read as free, so the Net is
-    overstated — and `upper` agrees with it, which is why C38U's bound stands. `lower` would
-    not: the whole event's cost landed on that name, so its Net is UNDERstated, and a page
-    printing `≥` over a Net two doubts push opposite ways would assert a floor the book cannot
-    back. The combination is unreachable on the live book — the one `lower` name, 9CI, has zero
-    unknown units — so no branch here guards it and no second vocabulary exists for it.
-    **Trigger:** the first live name where a `lower` carry meets unknown-cost units. Recorded
-    beside #158's other open calls in `docs/runbooks/BACKEND.md` and `web/TESTING.md`."""
+    **A `lower` carry meeting unknown units is `caveat`, not `bounded`** (guarded, was an open
+    call). The partition's doubt is always a ceiling — units without a cost read as free, so the
+    Net is overstated — and `upper` agrees with it, which is why C38U's bound stands. `lower`
+    does not: the whole event's cost landed on that name, so its Net is UNDERstated, and the two
+    doubts push opposite ways: a Net bounded in neither direction. `bounded` promises a Net with
+    one, so the wire never ships it beside unknown units unless the carry is `upper`. What the
+    page says of that state is decided once, in `web/src/modules/portfolio/bound.js`, which reads
+    the pair (`caveat`, provenance `lower`) as "doubted both ways". Zero-instance on the live
+    book — 9CI, the one `lower` name, has zero unknown units.
+
+    **THE PAGE DEPENDS ON THAT PAIR, so it is pinned at BOTH ends and neither can move alone.**
+    This end: `test_bounded_never_ships_beside_unknown_units_unless_the_carry_is_upper`. The
+    other: `bound-direction.spec.js`'s "only (caveat, lower) is read as a Net doubted both ways",
+    which also states what the page would print if this guard regressed — `bounded` beside a
+    `lower` carry still reads as a floor there, because a verdict promising a direction is taken
+    at its word."""
     costed = sum(p["costed"] for p in parts)
     unknown = sum(p["unknown"] for p in parts)
     if unknown <= 1e-6:
@@ -882,6 +890,8 @@ def net_verdict(parts, bound=None):
     else:
         verdict = "caveat" if costed > 1e-6 else "refuse"
     if bound is None or verdict == "refuse":
+        return verdict
+    if bound == "lower" and verdict == "caveat":
         return verdict
     return "bounded"
 
@@ -973,13 +983,14 @@ def _breakeven_price(r, units, rate):
     **WHAT MAKES THAT DIRECTION THE ONLY ONE ON A PRICE THAT SHIPS, PER COLUMN AND NOT PER
     TICKER.** The two doubts on this page push opposite ways: a carry's mis-attribution moves
     `cost_basis_sgd`, and the partition's unknown units read as free, which moves the Net the
-    other way. A figure carrying both could be bounded in neither direction — `net_verdict`'s own
-    recorded open call, which it does not guard. It cannot arise here, and the guard is the third
-    null above rather than anything about the ticker: `cost_basis_sgd` is null on **any column
-    holding unknown units** — a leg by `priceable` (`cost_known and unknown < 1e-6`), the summary
-    by `_sum_known` — so every column that ships a price has zero unknown units and the carry's
-    is the only doubt left on it. THE COLUMN IS THE UNIT OF THAT CLAIM. `net_verdict` sums its
-    counts across a ticker's legs, so `bounded` says nothing about any one of them.
+    other way. A figure carrying both would be bounded in neither direction — the pairing
+    `net_verdict` now guards, by shipping `caveat` rather than `bounded` for it. It cannot arise
+    here either, and what rules it out is the third null above rather than anything about the
+    ticker: `cost_basis_sgd` is null on **any column holding unknown units** — a leg by
+    `priceable` (`cost_known and unknown < 1e-6`), the summary by `_sum_known` — so every column
+    that ships a price has zero unknown units and the carry's is the only doubt left on it. THE
+    COLUMN IS THE UNIT OF THAT CLAIM. `net_verdict` sums its counts across a ticker's legs, so
+    `bounded` says nothing about any one of them.
 
     WHOSE doubt it is, the wire cannot say: `provenance` is whole-ticker and names no bucket, so
     a bucket the carry never touched is marked with it anyway. That is recorded on the renderer
@@ -1016,8 +1027,11 @@ def _return_figures(car, rows):
 
     **`caveat`** where some entering units are unknown: the error compounds, because the
     numerator is an upper bound (unknown units assumed free) while the denominator is a lower
-    bound (costed lots only). It carries its own verdict rather than reusing the Net's, which
-    would leave it reading as merely optimistic instead of not comparable to any other name.
+    bound (costed lots only). The numerator's direction is the Net's and is never decided here:
+    where a `lower` carry meets those units `net_verdict` ships `caveat` and the Net is bounded
+    in neither direction, and the page says that of the percentage too. It carries its own
+    verdict rather than reusing the Net's, which would leave it reading as merely optimistic
+    instead of not comparable to any other name.
     """
     peak = car["peak_car_sgd"]
     unknown = sum(r["cost_partition"]["unknown"] for r in rows)

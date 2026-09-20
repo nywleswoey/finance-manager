@@ -2,6 +2,7 @@ import React, { Fragment, useEffect, useState } from "react";
 import { get, fmt, sgd, money, cls, signed, signedPct } from "../../api.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 import { ContractCell } from "./contract.jsx";
+import { boundOf, boundPhrase } from "./bound.js";
 
 /**
  * The words an unmeasurable cell reads — words, never a glyph and never a tooltip (#143 §6).
@@ -85,13 +86,6 @@ function ledgerRows(d) {
 const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "—" : ledgerAmount(b[key]));
 
 /**
- * A carry's direction as the page prints it: the glyph on the FIGURE first, the glyph on the
- * capital second. A `lower` carry floors the Net and the percentage over it, and ceilings the
- * capital the percentage divides by — and the breakeven, which is solved out of that same Net.
- */
-const BOUND_GLYPHS = { lower: ["≥", "≤"], upper: ["≤", "≥"] };
-
-/**
  * The breakeven price of whatever column it is handed — one component, both ledger layouts.
  *
  * **It belongs above the reconciliation and not in the tile strip.** The tiles are the five
@@ -124,11 +118,11 @@ const BOUND_GLYPHS = { lower: ["≥", "≤"], upper: ["≤", "≥"] };
  * A BOUNDED NET BOUNDS THIS PRICE THE OTHER WAY, and the glyph says so rather than the figure
  * shipping bare. `price × rate × units == mv_sgd − Net` with mv, rate and units all exact, so a
  * Net floor is a price CEILING — the same direction peak capital takes, which is why this takes
- * `BOUND_GLYPHS`' second element from the one place that decides it rather than deciding it
- * again. IT HAS TO BE PASSED: `provenance` and `net_verdict` are whole-ticker and ride the
- * summary alone (`LEG_FIELDS` carries neither), so a bucket payload cannot answer the question
- * and a component reading only `o` would mark the Total and leave every bucket bare. Only a
- * figure is marked: `not known` has no direction.
+ * `boundOf().capital` — the glyph from the one place that decides direction (`bound.js`). IT HAS
+ * TO BE PASSED: `provenance` and `net_verdict` are whole-ticker and ride the summary alone
+ * (`LEG_FIELDS` carries neither), so a bucket payload cannot answer the question and a component
+ * reading only `o` would mark the Total and leave every bucket bare. Only a figure is marked:
+ * `not known` has no direction.
  *
  * OPEN CALL, RECORDED RATHER THAN GUARDED: A WHOLE-TICKER BOUND ON A PER-BUCKET FIGURE. This is
  * the first per-column figure on the page to take one, and the doubt is marked one bucket too
@@ -141,8 +135,10 @@ const BOUND_GLYPHS = { lower: ["≥", "≤"], upper: ["≤", "≥"] };
  * attribution at all and a renderer guessing one would be inventing it. Zero-instance today —
  * both bounded names (9CI, C38U) are single-bucket, where the ticker's bound IS the bucket's.
  * **Trigger:** the first multi-bucket bounded name whose carry touched only some of its buckets;
- * that needs a bucket on `provenance` before this can narrow. Recorded beside `net_verdict`'s own
- * open call, which this one sits next to.
+ * that needs a bucket on `provenance` before this can narrow. Recorded where the rest of this
+ * figure's rules are, in `docs/runbooks/BACKEND.md` under the breakeven price. `net_verdict`'s
+ * own open call is gone — a `lower` carry over unknown units is guarded now — so this is the
+ * last one standing over this figure.
  */
 function Breakeven({ o, bound, className }) {
   if (!(o.units > 1e-6)) return null;
@@ -257,27 +253,35 @@ const refusalSentence = (s) =>
  * still owes the percentage's second sentence when the return axis is a caveat too — C38U.
  * Neither prints the Net a second time: the hero already carries the figure.
  *
- * ONE WORDING FOR THE PERCENTAGE, IN EVERY STATE IT RENDERS. The two sentences are gated on
- * different axes — `caveat-net` on the NET's verdict, this one on the RETURN's — and C38U ships
- * `bounded` on the first and `caveat` on the second, so the percentage is sometimes the page's
- * first line of prose (C38U) and sometimes the second (Q01). It is written to need no
- * antecedent and to echo none: it names what each SIDE of the ratio does, where the Net's
- * sentence names the units. A per-state spelling would be a second rule to keep in step with
- * an axis that is not its own.
+ * ONE WORDING FOR THE PERCENTAGE IN EVERY STATE THAT NAMES A DIRECTION, AND ONE MORE FOR THE
+ * STATE THAT NAMES NONE. The two sentences are gated on different axes — `caveat-net` on the
+ * NET's verdict, this one on the RETURN's — and C38U ships `bounded` on the first and `caveat`
+ * on the second, so the percentage is sometimes the page's first line of prose (C38U) and
+ * sometimes the second (Q01). It is written to need no antecedent and to echo none: it names
+ * what each SIDE of the ratio does, where the Net's sentence names the units. There is no
+ * spelling per RETURN state, which would be a second rule to keep in step with an axis that is
+ * not its own. The one second wording is `b.conflict`'s, and that is the NET's axis, the same
+ * one `caveat-net` already follows: a numerator bounded in neither direction has no doubt to
+ * compound, so that arm cannot borrow the shared sentence without asserting the direction the
+ * hero withheld.
  *
- * NEITHER SENTENCE CLAIMS A DIRECTION THE PAYLOAD CONTRADICTS. The partition's doubt is always
- * a ceiling, and `net_verdict` only ships `bounded` where the carry's own direction agrees with
- * one on the live book — so an upper bound in prose is never a floor in the hero. A `lower`
- * carry meeting unknown units would break that pairing; it is unreachable and recorded as an
- * open call in `performance.py:net_verdict` rather than given a second vocabulary here.
+ * NEITHER SENTENCE CHOOSES A DIRECTION: both take it from `boundOf` (`bound.js`), so they cannot
+ * contradict the hero's glyph or each other. Where the page's Net is doubted both ways
+ * (`b.conflict`: a `lower` carry meeting unknown units) each says so instead of naming one.
  */
-const caveatNetSentence = (s) =>
+const caveatNetSentence = (s, b) =>
   `${unitsUnknown(s.cost_partition)} entered without a recorded cost, and this Net counts ` +
-  "them as free — so it is an upper bound.";
-const caveatReturnSentence =
-  "The percentage compounds one doubt twice: its numerator is an upper bound while its " +
-  "denominator, the peak capital, counts costed lots only — a lower bound — so it is not " +
-  "comparable to any other name on the site.";
+  (b.conflict
+    ? "them as free while the carry below pulls it the other way — so it is bounded in neither direction."
+    : `them as free — so it is ${boundPhrase(b.net)}.`);
+const caveatReturnSentence = (b) =>
+  (b.conflict
+    ? "The percentage carries two doubts that point opposite ways: its numerator is bounded in " +
+      "neither direction and so is its denominator, the peak capital"
+    : "The percentage compounds one doubt twice: " +
+      `its numerator is ${boundPhrase(b.net)} while its denominator, the peak capital, counts ` +
+      `costed lots only — ${boundPhrase(b.denominator)}`) +
+  " — so it is not comparable to any other name on the site.";
 
 /**
  * A carry's disclosure, last in the notes block (§12). Directional where the carry split, and it
@@ -287,24 +291,27 @@ const caveatReturnSentence =
  * The exact 1:1 carry discloses too: an exact Net is not an accounted-for one when most of its
  * peak capital has no visible origin in the transactions table.
  *
- * THE SENTENCE TAKES THE DIRECTION THE PAGE IS RENDERING, not the one the wire carries:
- * `provenance` ships a `bound` on a split whoever holds it, including a refusal, and the hero
- * decides whether that direction survives. `lower` and `upper` carry it; the 1:1 carry has none
- * and discloses anyway, its figure right and its origin still off-page.
+ * THE SENTENCE TAKES THE CARRY'S DIRECTION FROM `boundOf` (`b.carry`), the event's own fact, and
+ * never falls back to the exact wording for a split whose Net is doubted both ways (`b.conflict`).
+ * `lower` and `upper` carry it; the 1:1 carry has none and discloses anyway, its figure right and
+ * its origin still off-page.
  *
  * A REFUSAL DOES NOT DISCLOSE. The refusal is one layout and three lines (§11), the last of
  * which hands the reader down to the block below; a fourth paragraph qualifying that handoff is
  * a disclosure about a Net that does not exist. The carry note is the bounded figure's, and a
  * refusal has no figure.
  */
-function carrySentence(pv, mode) {
+function carrySentence(pv, b) {
+  const mode = b.carry;
   const from = `Held as ${pv.from_ticker}${pv.from_name ? ` (${pv.from_name})` : ""}`;
   const sib = (pv.split_with || [])[0];
   if (mode === "lower") {
     return `${from}; the whole event's ${sgd(pv.carried_sgd)} cost carried here on ` +
       `${pv.carried_on}` +
       (sib ? `, including the share belonging to the ${fmt(sib.units, 0)} units distributed to ${sib.ticker}` : "") +
-      ", so this cost is too high and this Net too low.";
+      (b.conflict
+        ? ", so this cost is too high, pulling this Net down — against the units counted as free."
+        : ", so this cost is too high and this Net too low.");
   }
   if (mode === "upper") {
     return `${from}; on ${pv.carried_on} its cost carried to ` +
@@ -355,27 +362,27 @@ export default function SecurityDetail({ ticker, onBack }) {
   const rows = ledgerRows(d);
   const bks = d.buckets || [];
   const split = bks.length > 1;
-  const refused = s.net_verdict === "refuse";
-  // The bound rides the provenance, whole-ticker; `null` on a 1:1 carry, which is exact.
+  // WHICH WAY A FIGURE RUNS IS DECIDED ONCE (`bound.js`); every clause below reads `dir`.
+  const dir = boundOf(s);
+  const refused = dir.refused;
   const pv = s.provenance || null;
-  const bound = s.net_verdict === "bounded" ? pv?.bound ?? null : null;
   // Each paragraph reads its own axis, and the block exists only if one of them does — so a
   // wrapper cannot outlive its contents, and no combination renders an empty node.
   const netNote = s.net_verdict === "caveat";
   const returnNote = !refused && s.return_verdict === "caveat";
   const carryNote = !!pv && !refused;
   const noteCount = +netNote + +returnNote + +carryNote;
-  const [figureBound, capitalBound] = BOUND_GLYPHS[bound] || [null, null];
+  const { figure: figureBound, capital: capitalBound } = dir;
   const heroNotes = (
     <>
       {netNote && (
-        <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s)}</p>
+        <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s, dir)}</p>
       )}
       {returnNote && (
-        <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence}</p>
+        <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(dir)}</p>
       )}
       {carryNote && (
-        <p className="hero-note" data-testid="carry-note">{carrySentence(pv, bound)}</p>
+        <p className="hero-note" data-testid="carry-note">{carrySentence(pv, dir)}</p>
       )}
     </>
   );

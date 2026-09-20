@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import posthog from "posthog-js";
 import { get, fmt, sgd, money, pct, cls } from "../../api.js";
 import SecurityDetail from "./SecurityDetail.jsx";
+import { netDirection } from "./bound.js";
+import { NET_MARKS, markTitle } from "./netMarks.js";
 
 const GROUPS = {                                   // group key -> label
   asset_type: "Asset class",
@@ -76,37 +78,37 @@ const plOf = (r) => (r.pl_folded !== undefined ? r.pl_folded : plBase(r));
 const netOf = (r) => ({ net: r.net_pl_sgd, verdict: r.net_verdict, bound: r.provenance?.bound });
 
 /**
- * The glyph vocabulary: three values, three meanings, and the legend below carries all three.
+ * The glyph vocabulary: three marks and FOUR meanings — `~` carries two. What each one MEANS is
+ * `netMarks.js`, written once and read by both the tooltip and the legend; what this file adds
+ * is which meaning a row gets.
  *
  *   `~`  caveat  — some entering units have NO known cost, so this Net reads them as free. The
  *                  doubt is per-unit, the cost-basis family is `not known`, and the direction is
  *                  always upper.
+ *   `~`  caveat under a `lower` carry — that same doubt meeting a whole event's carried cost,
+ *                  which pushes the Net the other way: bounded in NEITHER direction, so the mark
+ *                  may not be titled an upper bound. The call is `bound.js`'s, as on the detail
+ *                  page, and never this file's.
  *   `≥`  bounded, lower — every unit is costed and the TOTAL is mis-attributed: a split carry put
  *   `≤`  bounded, upper   a sibling's share of one event's cost on this name, or took this name's
  *                         share away. The tiles are exact and stay.
  *
  * Reusing `~` for a bound is rejected outright: its explanation is about a cost that is unknown,
  * which is flatly false for a name whose every unit is priced, and that would put a wrong
- * explanation on a correct number.
+ * explanation on a correct number. The two `~` senses share that explanation, which is why one
+ * mark carries both.
  *
  * The bound is a PREFIX and `~` a suffix, deliberately. `≥ 839.70` is a claim about the number
  * that reads the way an inequality reads, left of the value; `~` qualifies the value it follows.
  */
 const NET_TITLE = "total P/L incl dividends + option premiums";
 const netMark = ({ verdict, bound }) => {
-  if (verdict === "caveat")
-    return { glyph: "~", pre: false,
-             title: "an upper bound: some units entered with no known cost, and this Net reads "
-                  + "them as free" };
-  if (verdict === "bounded")
-    return bound === "upper"
-      ? { glyph: "≤", pre: true,
-          title: "at most: a corporate action carried this name's share of one event's cost to a "
-               + "sibling, so this cost is too low and this Net too high" }
-      : { glyph: "≥", pre: true,
-          title: "at least: a corporate action carried a sibling's share of one event's cost "
-               + "here, so this cost is too high and this Net too low" };
-  return null;
+  // the direction is `bound.js`'s call, as on the detail page: a `lower` carry over unknown units
+  // is doubted both ways, and must not be titled an upper bound
+  const { net, conflict } = netDirection(verdict, bound);
+  if (conflict) return NET_MARKS.conflict;
+  if (verdict === "caveat") return NET_MARKS.caveat;
+  return NET_MARKS[net] || null;
 };
 
 /**
@@ -253,7 +255,7 @@ function NetCell({ net, verdict, bound, max }) {
       <div style={{ position: "relative", padding: "1px 4px" }}>
         <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: w + "%",
                       background: `rgba(${color},0.18)`, borderRadius: 3 }} />
-        <span className={cls(net)} title={mark ? mark.title : NET_TITLE}
+        <span className={cls(net)} title={mark ? markTitle(mark) : NET_TITLE}
               style={{ position: "relative", fontWeight: 700 }}>
           {mark && mark.pre && <span className="mut" style={{ fontWeight: 400 }}>{mark.glyph} </span>}
           {sgd(net)}
@@ -462,7 +464,7 @@ export default function Holdings() {
           </tbody>
         </table>
       </div>
-      {/* Five lines of prose above a table that wants every row it can get: collapsed on a
+      {/* A paragraph of prose above a table that wants every row it can get: collapsed on a
           phone, where it is worth two rows in portrait and two in landscape, and open with
           its summary hidden everywhere else, which is the paragraph this used to be.
           `open` is read once at mount rather than tracked, so a user's own toggle stands. */}
@@ -475,9 +477,10 @@ export default function Holdings() {
           XIRR is the money-weighted return incl. realised trades & dividends.
           <b>Net</b> = total P/L (realised + unrealised + dividends) + option premiums, computed on the
           server — the same figure the security's own page shows; the bar shows its size vs the biggest
-          mover. Three marks qualify it: <b>~</b> an upper bound, because some units entered with no known
-          cost and Net reads them as free; <b>≥</b> and <b>≤</b> a floor or a ceiling, where a corporate
-          action carried one event's cost between two successors and the total sits on the wrong one;
+          mover. The marks that qualify it:{" "}
+          {Object.values(NET_MARKS).map((m) => (
+            <React.Fragment key={m.lede}><b>{m.glyph}</b> {m.lede} — {m.why}; </React.Fragment>
+          ))}
           <b>n/a</b> where no unit of the name has a recorded cost and there is no Net to state. Grouped by
           Ticker, a row covers the <b>whole</b> name — every funding bucket, open legs and closed ones —
           whatever “Show closed positions” is set to, which only decides which rows are listed.

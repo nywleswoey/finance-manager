@@ -19,7 +19,7 @@
  * so the guard is exercised thirteen views deep rather than only where it is asserted.
  */
 import { expect } from "@playwright/test";
-import { fixtureFor } from "../fixtures/index.js";
+import { capturedHoldings, fixtureFor } from "../fixtures/index.js";
 import { onPhoneShell } from "../viewports.js";
 
 /**
@@ -257,6 +257,57 @@ export async function loadApp(page, baseURL) {
   await page.goto("/");
   await expect(page.locator(".app")).toBeVisible({ timeout: 20_000 });
   return seam;
+}
+
+/** A literal in a `RegExp`, so a ticker carrying a `.` or a `^` still matches itself. */
+export const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/**
+ * One captured `/api/holding` body, by ticker.
+ *
+ * Fails the test rather than returning undefined: a spec asks for a capture because it is about
+ * to gate a claim that payload is the only source of, and a recapture that drops the name would
+ * otherwise turn every gate built on it vacuous.
+ */
+export function capturedHolding(ticker) {
+  const h = capturedHoldings().find((x) => x.ticker === ticker);
+  expect(h, `${ticker} is no longer a captured holding`).toBeTruthy();
+  return h.body;
+}
+
+/** A 1:1 carry: every figure exact, and still owing its provenance. */
+export const exactCarry = (b) => ({
+  from_ticker: "OLD", from_name: "Predecessor Fund", type: "switch",
+  carried_on: b.as_of, carried_sgd: b.summary.peak_car_sgd, split_with: [], bound: null,
+});
+
+/**
+ * Open one ticker's detail page, optionally serving a WRITTEN payload for it.
+ *
+ * THE ROUTE IS REGISTERED AFTER THE FIRST VISIT, AND THAT IS THE WHOLE TRICK. `mockApi`'s
+ * catch-all is already installed, and Playwright matches routes in reverse registration order,
+ * so a `**\/api/holding**` override only wins once it is the later one — which means the page has
+ * to be opened, left and re-entered for the written body to be the one it renders. Registering
+ * it before the first navigation would race the catch-all and serve the capture instead, which
+ * fails as a *passing* test asserting the wrong state.
+ *
+ * Without a payload it is the plain visit, and the fixtures answer as captured.
+ */
+export async function openTicker(page, baseURL, ticker, payload) {
+  await openView(page, baseURL, "Portfolio › Holdings");
+  await page.getByLabel("Show closed positions").check();
+  const row = () => page.locator("tbody tr")
+    .filter({ has: page.locator("span.pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) })
+    .first();
+  await row().click();
+  await expect(page.getByText("← Holdings")).toBeVisible();
+  if (!payload) return;
+  await page.route("**/api/holding**", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(payload),
+  }));
+  await page.getByText("← Holdings").click();
+  await row().click();
+  await expect(page.getByText("← Holdings")).toBeVisible();
 }
 
 /** Every element in the document whose computed `position` is `fixed`, described. */

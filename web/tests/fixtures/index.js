@@ -76,7 +76,9 @@ export function capturedHoldings() {
  *
  * The captures that CARRY a carry ship their own `summary.provenance` and need nothing from
  * this — it exists for the shapes the book has no instance of: a written 1:1 carry, and one
- * name's real object on another name's payload. `unknown-book.spec.js` is its only consumer.
+ * name's real object on another name's payload. Two specs consume it, both for that second
+ * shape: `unknown-book.spec.js` (the refusal that still carries) and `bound-direction.spec.js`
+ * (the Net doubted both ways — a caveat's payload under another name's `lower` carry).
  */
 export const withProvenance = (body, provenance) =>
   ({ ...body, summary: { ...body.summary, provenance } });

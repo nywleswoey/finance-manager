@@ -130,7 +130,8 @@ pre-computed. The three:
   not only a count: their cost basis is `0.0`, never null.
 - **Unknown** — the book does not know. The polarity is to refuse rather than invent a free lot:
   the partition never counts one as free. Only a Net under a `caveat` verdict *reads* them as
-  free, and says so — that is what makes it an upper bound.
+  free, and says so — which is what gives that Net its direction (**Net verdict**): an upper
+  bound, unless a `lower` carry pushes the other way.
 
 `cost_known` is this partition read as a boolean: false only when *every* entering unit is
 unknown. Not "no unknown units" — a name with some cost still answers "did I make money on
@@ -179,7 +180,7 @@ which is what lets a name the partition doubts still show a Net that is arithmet
 Ships on every row (`stock_pl_sgd`), not only the doubtful ones — a field that appears only
 where the split fails is a field nobody can add up. Null only on a leg whose every unit is
 unknown *and* whose name refuses; under a caveat such a leg reads its unknown units as free, so
-there `stock_pl_sgd` is an upper bound, like the Net it feeds.
+there `stock_pl_sgd` carries the same doubt, and the same direction, as the Net it feeds.
 _Avoid_: total P/L (that is stock P/L *plus* dividends and premiums — the Net)
 
 **Net**:
@@ -192,14 +193,15 @@ _Avoid_: `pl_sgd` (the older, independently rounded spelling other endpoints sti
 
 **Net verdict**:
 What the Net can claim, read from a ticker's **summed** cost-partition counts: `refuse` (nothing
-costed, something unknown), `caveat` (some costed, some unknown — the Net is an upper bound, unknown
-units read as free) or `hero` (nothing unknown). Summed, not per-leg: a costed-only leg beside an
-unknown-only leg is a caveat, not a refusal. One input is not a count: a **split carry** makes it
-`bounded`, overriding `hero` and `caveat` but never `refuse` — `bounded` keeps the cost-basis tiles
-a caveat nulls, and its direction is the provenance's bound. A `lower` carry over unknown units
-would be doubted both ways at once; no live name is both, and the open call is recorded in
-`docs/runbooks/BACKEND.md` rather than guarded here. **Not `cost_known`** — that flag is
-false on a caveat's all-unknown leg and on a refusal alike.
+costed, something unknown), `caveat` (some costed, some unknown — the Net is an upper bound unless
+a `lower` carry meets it, unknown units read as free) or `hero` (nothing unknown). Summed, not
+per-leg: a costed-only leg beside an unknown-only leg is a caveat, not a refusal. One input is not
+a count: a **split carry** makes it `bounded`, overriding `hero`, and `caveat` unless the carry is
+`lower`, but never `refuse` — `bounded` keeps the cost-basis tiles a caveat nulls, and its
+direction is the provenance's bound. A `lower` carry over unknown units is doubted both ways at
+once and ships `caveat`, not `bounded` (`docs/runbooks/BACKEND.md`); the page's direction is
+decided once in `web/src/modules/portfolio/bound.js`. **Not `cost_known`** — that flag is false on
+a caveat's all-unknown leg and on a refusal alike.
 _Avoid_: return verdict (a different axis — AAPL is hero-on-Net and no-capital-on-return at once)
 
 **Breakeven price**:
@@ -243,8 +245,9 @@ activity" undercharges open ones.
 
 **Return verdict**:
 What the percentage can claim, on its own axis rather than the Net's: `ok`, `caveat` (some
-entering units are unknown, or no Net exists for the division, so the numerator is an upper bound
-and the denominator a lower one — the error compounds), or `no_capital` (peak CAR is zero, so the return does not exist —
+entering units are unknown, or no Net exists for the division, so the numerator takes the Net's
+doubt — an upper bound, or no direction at all where a `lower` carry meets those units
+(**Net verdict**) — and the denominator a lower one, so the error compounds), or `no_capital` (peak CAR is zero, so the return does not exist —
 undefined, not unmeasured). The **verdict**, not a null, is what decides how the figure renders.
 _Avoid_: net verdict (a different axis — one name can be hero-on-Net and no-capital-on-return
 at once)

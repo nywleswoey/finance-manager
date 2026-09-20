@@ -26,25 +26,12 @@
  * dividend.
  */
 import { expect, test } from "@playwright/test";
-import { capturedHoldings, capturedProvenance, withProvenance } from "./fixtures/index.js";
-import { openView } from "./support/app.js";
+import { capturedProvenance, withProvenance } from "./fixtures/index.js";
+import { capturedHolding as captured, escapeRe, exactCarry, openTicker as open } from "./support/app.js";
 import { fmt, sgd, money } from "../src/api.js";
 
-const HOLDINGS = capturedHoldings();
-const captured = (ticker) => {
-  const h = HOLDINGS.find((x) => x.ticker === ticker);
-  expect(h, `${ticker} is no longer a captured holding`).toBeTruthy();
-  return h.body;
-};
-
-const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const NOT_KNOWN = "not known";
 
-/** A 1:1 carry: every figure exact, and still owing its provenance. */
-const exactCarry = (b) => ({
-  from_ticker: "OLD", from_name: "Predecessor Fund", type: "switch",
-  carried_on: b.as_of, carried_sgd: b.summary.peak_car_sgd, split_with: [], bound: null,
-});
 const exact = () => {
   const b = captured("PLTR");
   return withProvenance(b, exactCarry(b));
@@ -71,23 +58,6 @@ const caveatWithExactCarry = () => {
   const b = captured("Q01");
   return withProvenance(b, exactCarry(b));
 };
-
-async function open(page, baseURL, ticker, payload) {
-  await openView(page, baseURL, "Portfolio › Holdings");
-  await page.getByLabel("Show closed positions").check();
-  const row = () => page.locator("tbody tr")
-    .filter({ has: page.locator("span.pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) })
-    .first();
-  await row().click();
-  await expect(page.getByText("← Holdings")).toBeVisible();
-  if (!payload) return;
-  await page.route("**/api/holding**", (route) => route.fulfill({
-    status: 200, contentType: "application/json", body: JSON.stringify(payload),
-  }));
-  await page.getByText("← Holdings").click();
-  await row().click();
-  await expect(page.getByText("← Holdings")).toBeVisible();
-}
 
 const hero = (page) => page.getByTestId("hero-net");
 const heroReturn = (page) => page.getByTestId("hero-return");

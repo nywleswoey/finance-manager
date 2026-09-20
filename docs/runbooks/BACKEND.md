@@ -231,8 +231,9 @@ Six rules, each with its own gate in `tests/test_peak_car.py`:
 
 `return_verdict` is a second axis, independent of the Net's: `no_capital` where peak CAR is
 zero (the return does not *exist* — undefined, not unmeasured), `caveat` where some entering
-units are unknown (the numerator is an upper bound and the denominator a lower one, so the
-error compounds) **or where there is no Net to divide at all**, else `ok`. Never `ok` beside a
+units are unknown (the numerator takes the Net's doubt — an upper bound, or no direction at all
+where a `lower` carry meets those units — and the denominator is a lower one, so the error
+compounds) **or where there is no Net to divide at all**, else `ok`. Never `ok` beside a
 null percentage — that is the one pairing a renderer branching on the verdict cannot survive. **`peak_car_sgd` is always a number**, a measured zero where
 nothing was at risk; the verdict, not a null, is what a renderer branches on.
 
@@ -296,7 +297,7 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
 - **`refuse` ships `null`** on every leg — including a leg of a refusing ticker whose own components
   are known. There is no partial Net on the wire under any name.
 - **A caveat nets every leg.** A leg whose every unit is unknown, inside a ticker that does not
-  refuse, keeps `stock_pl_sgd` (its unknown units read as free — the upper bound the caveat already
+  refuse, keeps `stock_pl_sgd` (its unknown units read as free — the reading the caveat already
   declares, exactly as Q01's partly-unknown leg does). `stock_pl_sgd` is therefore null only where
   the leg is all-unknown *and* the name refuses.
 - **Known gap, zero-instance: `/api/performance`'s group `net_pl_sgd` is not this field.**
@@ -446,14 +447,15 @@ pending after the leg stays `unknown`. No tolerance window, so no unargued N.
 
 ```text
 refuse   ⟺  costed == 0 ∧ unknown > 0
-bounded  ⟸  a split carry reached the name — overrides caveat and hero, never refuse
+bounded  ⟸  a split carry reached the name — overrides hero, and caveat unless the carry
+             is `lower` (opposite doubts, below); never refuse
 caveat   ⟺  costed > 0  ∧ unknown > 0
 hero     ⟺  unknown == 0
 ```
 
 | | cause | tiles | direction |
 |---|---|---|---|
-| `caveat` | some units have **no** cost | **null** | always upper |
+| `caveat` | some units have **no** cost | **null** | upper, or **neither** under a `lower` carry |
 | `bounded` | the **total is mis-attributed** | **kept** | lower *or* upper |
 
 - **Tiles follow the partition, not the verdict**, so 9CI keeps `avg_cost: 3.73` while C38U — the
@@ -468,13 +470,16 @@ hero     ⟺  unknown == 0
   reclassifying the holding to evidence the criterion is rejected. **Trigger:** the first
   ceiling-bounded name whose units are all costed. Recorded beside #158's other open calls in
   `web/TESTING.md`.
-- **Open call (#158): a `lower` carry meeting unknown-cost units.** The partition's doubt is
-  always a ceiling and `upper` agrees with it, which is why C38U's bound stands over its caveat.
-  A `lower` carry does not: the whole event's cost landed on that name, so its Net is understated
-  while its uncosted units overstate it, and the page would print `≥` over a Net the book can
-  bound in neither direction. No live name is both — 9CI, the one `lower`, has zero unknown units
-  — so the rule above is left minimal and no second vocabulary exists for the combination.
-  **Trigger:** the first live name where a `lower` carry meets unknown-cost units.
+- **Guarded (was #158's open call): a `lower` carry meeting unknown-cost units** ships `caveat`,
+  not `bounded`. The partition's doubt is always a ceiling and `upper` agrees with it, which is
+  why C38U's bound stands over its caveat; a `lower` carry pushes the other way, so the Net is
+  bounded in neither direction and the wire no longer promises one. The client reads the pair
+  (`caveat`, provenance `lower`) as "doubted both ways" in `web/src/modules/portfolio/bound.js`,
+  the one place that decides direction. Zero-instance on the live book (9CI has no unknown
+  units); pinned by `tests/test_bounded_carry.py` and `web/tests/bound-direction.spec.js`.
+  **Per-column caveat:** in that state no breakeven price is marked either, even a column whose
+  only doubt is the carry — the ticker's Net has no direction, and a marked price beside an
+  unmarked Net is the disagreement this rework removes.
 
 **`provenance`** ships on every row — null unless a carry reached the name, and whole-ticker like
 the verdict, so it rides every leg:
