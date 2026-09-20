@@ -1,7 +1,7 @@
 """Derive the Playwright suite's API fixtures from the live database — once.
 
-Run this against a locally-running API (`make api`, or uvicorn on any port) with the
-dev auth bypass on. It walks every GET endpoint the frontend calls and writes the
+Run this against the docker-DB API (`make api-local`, :8001) with the dev auth bypass on.
+NOT `make api` (:8000): that serves the deployed Neon DB, and this would capture production. It walks every GET endpoint the frontend calls and writes the
 response to `web/tests/fixtures/api/`. Those files are committed; the suite never
 talks to Postgres or the network.
 

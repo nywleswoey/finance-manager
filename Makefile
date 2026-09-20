@@ -76,7 +76,11 @@ schedule-test:      ## run the agent right now
 # it in prod.
 # The URL carries the password, so it is read inside the recipe's shell and never expanded by make:
 # `make -n` / `make -d` show only the sed, never the value.
-NEON_ENV = u=$$(sed -nE 's/^DATABASE_URL="?([^"]*)"?$$/\1/p' .env.local 2>/dev/null); test -n "$$u" || { echo "FATAL: no DATABASE_URL in .env.local (vercel env pull)"; exit 1; }
+# Last DATABASE_URL line wins; `export ` prefix, CRLF, and one surrounding pair of either quote style are
+# tolerated, and nothing inside the value is touched. A value that is bare or double-quoted (what
+# `vercel env pull` writes) resolves exactly as before. Anything odder still fails closed: an empty
+# result hits the FATAL, and a garbled URL is simply not a reachable database.
+NEON_ENV = u=$$(sed -nE 's/^(export +)?DATABASE_URL=//p' .env.local 2>/dev/null | tail -n 1 | tr -d '\r' | sed -E -e 's/^"(.*)"$$/\1/' -e "s/^'(.*)'$$/\1/"); test -n "$$u" || { echo "FATAL: no DATABASE_URL in .env.local (vercel env pull)"; exit 1; }
 # An exported DATABASE_URL beats .env, so it would reach reset/migrate/api-local. Refuse a
 # non-localhost one, as scripts/scheduled_run.sh does in the other direction. Unset is fine.
 LOCAL_GUARD = case "$$DATABASE_URL" in ""|*localhost*|*127.0.0.1*) ;; *) echo "FATAL: DATABASE_URL in the environment is not the local docker DB — refusing"; exit 1 ;; esac
@@ -90,6 +94,10 @@ api:          ## run the API against Neon (serves built web/ at /)
 # prod existing anywhere near it. Different port so it can run BESIDE `api`: the question is
 # usually "is the new statement in there", and that is answered by comparing the two.
 # Serves its own built web/dist (run `make build-web` first); the vite dev server proxies to 8000.
+# Running it beside `api`/`app` shares ONE session cookie between :8000 and :8001 (cookies are not
+# port-scoped; same name `session`, same SESSION_SECRET). Sign-in carries over, but logging out of
+# either logs out both. Known and left as is; not an auth bug.
+# This is also the base `capture-web-fixtures` reads: the committed fixtures come from the docker book.
 api-local:    ## run the API against the local docker DB (what a hand-run ingest wrote)
 	@$(LOCAL_GUARD)
 	$(PY) -m uvicorn server.main:app --reload --port 8001
@@ -104,10 +112,13 @@ test-web: build-web   ## Playwright viewport suite: 10 named viewports x 13 view
 	@# database, no network. First run on a machine needs `cd web && npx playwright install chromium`.
 	cd web && npx playwright test
 
-capture-web-fixtures:   ## re-derive the suite's fixtures from the live DB (needs the API running)
+capture-web-fixtures:   ## re-derive the suite's fixtures from the docker DB (needs `make api-local` running)
 	@# Rarely. Regenerating re-tethers every measured assertion to whatever the DB holds
 	@# today — read the docstring in the script before running it.
-	$(PY) scripts/capture_web_fixtures.py --base http://localhost:8000
+	@# It captures WHATEVER is serving --base. `make api` (:8000) now serves the DEPLOYED Neon DB,
+	@# so pointing this at :8000 would commit production data as fixtures. The committed fixtures
+	@# come from the docker book, i.e. `make api-local` on :8001, which is why that is the default.
+	$(PY) scripts/capture_web_fixtures.py --base http://localhost:8001
 
 sync-requirements:   ## re-pin requirements.txt from uv.lock (only when CI reports drift)
 	@# Two manifests, one resolver: uv.lock resolves everything, requirements.txt is the

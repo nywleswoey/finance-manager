@@ -27,6 +27,8 @@ make build-web && make api-local   # serve the docker DB on http://localhost:800
 (`vercel env pull`) — they fail without it. Those servers can write to it (refresh, snapshot
 delete, spending classify), so treat them as prod. `api-local` serves its own built `web/dist`;
 the vite dev server proxies to :8000, so it does not work with `api-local`.
+Running both ports side by side shares one session cookie (cookies are not port-scoped), so logging
+out of one logs out the other. `make capture-web-fixtures` reads `api-local` (:8001), never `api`.
 
 Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `make api-local`.
 
