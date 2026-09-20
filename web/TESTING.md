@@ -369,7 +369,7 @@ own `summary.provenance`, so their bound and carry sentence come off their own c
 directly with nothing attached; `capturedProvenance()` survives for the one shape no capture can
 be — one name's REAL wire object off `positions-closed.json` on ANOTHER name's payload, which is
 the refusal that carries. Only the exact 1:1 carry and the refusal that still locked collateral
-are written payloads, and the file says which. **Open calls, three of them, and
+are written payloads, and the file says which. **Open calls, two of them, and
 none papered over.** The refusal's "what the book does know, below" clause — the one real refusal
 knows no dividends; trigger is the next un-annotated carry-in that also pays one. The bound's
 "tiles kept" on the CEILING direction: proven on the floor (9CI keeps its `avg_cost` and cost
@@ -378,9 +378,9 @@ doubted units and #148's partition rule correctly nulls a cost basis pooled aver
 invented; trigger is the first ceiling-bounded name whose units are all costed. A `lower` carry
 meeting unknown-cost units is no longer an open call: the server ships `caveat` and `bound.js`
 reads it as doubted both ways, gated by `bound-direction.spec.js` on a written payload (no live
-name is both). The two that bear on the wire are stated in
-`docs/runbooks/BACKEND.md` as well; the refusal's is copy, so it lives here and in the spec
-header.
+name is both), so it is not one of the two above. The one of the two that bears on the wire is the
+bound's, stated in `docs/runbooks/BACKEND.md` as well; the refusal's is copy, so it lives here and
+in the spec header.
 
 `tests/security-detail-options.spec.js` — **SecurityDetail's Options P/L**, the same kind of
 subject as `ticker.spec.js` and there for the same reason: a folded total is the same number at

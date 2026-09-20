@@ -3,6 +3,7 @@ import posthog from "posthog-js";
 import { get, fmt, sgd, money, pct, cls } from "../../api.js";
 import SecurityDetail from "./SecurityDetail.jsx";
 import { netDirection } from "./bound.js";
+import { NET_MARKS, markTitle } from "./netMarks.js";
 
 const GROUPS = {                                   // group key -> label
   asset_type: "Asset class",
@@ -77,10 +78,9 @@ const plOf = (r) => (r.pl_folded !== undefined ? r.pl_folded : plBase(r));
 const netOf = (r) => ({ net: r.net_pl_sgd, verdict: r.net_verdict, bound: r.provenance?.bound });
 
 /**
- * The glyph vocabulary: three marks and FOUR meanings — `~` carries two — written once, so the
- * tooltip a mark shows and the legend below are the same sentence and cannot disagree about it.
- * They did: `~` gained its fourth meaning here and the legend went on describing three, which is
- * the contradiction the whole one-direction rework exists to make impossible.
+ * The glyph vocabulary: three marks and FOUR meanings — `~` carries two. What each one MEANS is
+ * `netMarks.js`, written once and read by both the tooltip and the legend; what this file adds
+ * is which meaning a row gets.
  *
  *   `~`  caveat  — some entering units have NO known cost, so this Net reads them as free. The
  *                  doubt is per-unit, the cost-basis family is `not known`, and the direction is
@@ -102,20 +102,6 @@ const netOf = (r) => ({ net: r.net_pl_sgd, verdict: r.net_verdict, bound: r.prov
  * that reads the way an inequality reads, left of the value; `~` qualifies the value it follows.
  */
 const NET_TITLE = "total P/L incl dividends + option premiums";
-const NET_MARKS = {
-  conflict: { glyph: "~", pre: false, lede: "bounded in neither direction",
-              why: "some units entered with no known cost, and a corporate action carried a "
-                 + "whole event's cost here" },
-  caveat:   { glyph: "~", pre: false, lede: "an upper bound",
-              why: "some units entered with no known cost, and this Net reads them as free" },
-  lower:    { glyph: "≥", pre: true, lede: "at least",
-              why: "a corporate action carried a sibling's share of one event's cost here, so "
-                 + "this cost is too high and this Net too low" },
-  upper:    { glyph: "≤", pre: true, lede: "at most",
-              why: "a corporate action carried this name's share of one event's cost to a "
-                 + "sibling, so this cost is too low and this Net too high" },
-};
-const markTitle = (m) => `${m.lede}: ${m.why}`;
 const netMark = ({ verdict, bound }) => {
   // the direction is `bound.js`'s call, as on the detail page: a `lower` carry over unknown units
   // is doubted both ways, and must not be titled an upper bound
@@ -492,7 +478,7 @@ export default function Holdings() {
           <b>Net</b> = total P/L (realised + unrealised + dividends) + option premiums, computed on the
           server — the same figure the security's own page shows; the bar shows its size vs the biggest
           mover. Three marks qualify it, <b>~</b> in two senses:{" "}
-          {[NET_MARKS.caveat, NET_MARKS.conflict, NET_MARKS.lower, NET_MARKS.upper].map((m) => (
+          {Object.values(NET_MARKS).map((m) => (
             <React.Fragment key={m.lede}><b>{m.glyph}</b> {m.lede} — {m.why}; </React.Fragment>
           ))}
           <b>n/a</b> where no unit of the name has a recorded cost and there is no Net to state. Grouped by

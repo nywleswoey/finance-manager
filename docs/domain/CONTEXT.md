@@ -192,11 +192,12 @@ _Avoid_: `pl_sgd` (the older, independently rounded spelling other endpoints sti
 
 **Net verdict**:
 What the Net can claim, read from a ticker's **summed** cost-partition counts: `refuse` (nothing
-costed, something unknown), `caveat` (some costed, some unknown — the Net is an upper bound, unknown
-units read as free) or `hero` (nothing unknown). Summed, not per-leg: a costed-only leg beside an
-unknown-only leg is a caveat, not a refusal. One input is not a count: a **split carry** makes it
-`bounded`, overriding `hero` and `caveat` but never `refuse` — `bounded` keeps the cost-basis tiles
-a caveat nulls, and its direction is the provenance's bound. A `lower` carry over unknown units
+costed, something unknown), `caveat` (some costed, some unknown — the Net is an upper bound unless
+a `lower` carry meets it, unknown units read as free) or `hero` (nothing unknown). Summed, not
+per-leg: a costed-only leg beside an unknown-only leg is a caveat, not a refusal. One input is not
+a count: a **split carry** makes it `bounded`, overriding `hero`, and `caveat` unless the carry is
+`lower`, but never `refuse` — `bounded` keeps the cost-basis tiles a caveat nulls, and its
+direction is the provenance's bound. A `lower` carry over unknown units
 is doubted both ways at once and ships `caveat`, not `bounded` (`docs/runbooks/BACKEND.md`); the
 page's direction is decided once in `web/src/modules/portfolio/bound.js`. **Not `cost_known`** — that flag is
 false on a caveat's all-unknown leg and on a refusal alike.

@@ -27,19 +27,23 @@ const GLYPH_NET = { "≥": "lower", "≤": "upper" };          // a glyph ON THE
 const GLYPH_OPP = { "≤": "lower", "≥": "upper" };          // a glyph on capital / price
 
 const withSummary = (b, over) => ({ ...b, summary: { ...b.summary, ...over } });
-/** A priced, all-costed name written to carry the given bound (no capture is bounded `upper`
- *  over units that are all costed). */
-const boundedOn = (dir) => {
+/**
+ * A priced, all-costed name written to carry a CEILING. The only exerciser of a marked breakeven
+ * in the upper direction: C38U is the one captured `upper` name and ships `breakeven_price: null`,
+ * so without this the "a bounded Net marks the price it is solved from" claim is proven on the
+ * floor alone. The floor needs no written twin — captured 9CI is bounded `lower` with a
+ * breakeven, units and a `split_with` sibling, and drives every clause this would.
+ */
+const boundedUpperAllCosted = () => {
   const b = captured("PLTR");
-  const pv = { ...capturedProvenance("C38U"), bound: dir };
+  const pv = { ...capturedProvenance("C38U"), bound: "upper" };
   return withSummary(withProvenance(b, pv), { net_verdict: "bounded", breakeven_price: 1.2345 });
 };
 
 const STATES = {
   "bounded lower (9CI)": captured("9CI"),
   "bounded upper + return caveat (C38U)": captured("C38U"),
-  "bounded upper, all costed (written)": boundedOn("upper"),
-  "bounded lower, all costed (written)": boundedOn("lower"),
+  "bounded upper, all costed (written)": boundedUpperAllCosted(),
   "caveat (Q01)": captured("Q01"),
   "caveat + exact carry": withProvenance(captured("Q01"), exactCarry(captured("Q01"))),
   "conflict: caveat under a lower carry": withProvenance(captured("Q01"), capturedProvenance("9CI")),
