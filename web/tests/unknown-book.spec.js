@@ -10,13 +10,14 @@
  * served (or off the provenance object this file attaches), so a recapture moves the numbers and
  * the gates keep meaning what they say.
  *
- * THE BOUNDED TWO READ A REAL PROVENANCE; ONLY TWO PAYLOADS ARE WRITTEN. `holding-9ci.json` and
- * `holding-c38u.json` now carry `summary.provenance` themselves, and `capturedProvenance()`
- * reads the same wire object off `positions-closed.json` rather than restating four fields a
- * recapture would leave stale — either source is read, never rebuilt. Written,
- * and said so: the exact 1:1 carry (0P0001OOJG was never captured, so it is the plain PLTR hero
- * with an exact provenance beside it) and the refusal that still locked collateral — both
- * payloads written to reach a branch, as `hero.spec.js` does for the dividend line.
+ * THE BOUNDED TWO ARE THEIR OWN CAPTURES; ONLY TWO PAYLOADS ARE WRITTEN. `holding-9ci.json` and
+ * `holding-c38u.json` carry `summary.provenance` themselves, so the bound and the carry sentence
+ * come off the payload as shipped and nothing is attached to reach them. `capturedProvenance()`
+ * survives for the one shape no capture can be: one name's REAL wire object, read off
+ * `positions-closed.json`, on ANOTHER name's payload. Written, and said so: the exact 1:1 carry
+ * (0P0001OOJG was never captured, so it is the plain PLTR hero with an exact provenance beside
+ * it) and the refusal that still locked collateral — both payloads written to reach a branch,
+ * as `hero.spec.js` does for the dividend line.
  *
  * NOT HERE, ON PURPOSE: the refusal design says the page states what is missing *below the cash
  * streams it does know*, and the one real refusal (ASTREA6B) knows none. That clause is
@@ -40,9 +41,9 @@ const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const NOT_KNOWN = "not known";
 
 /** 9CI's side of the split: the whole cost went here, so the figures are floors. */
-const lower = () => withProvenance(captured("9CI"), capturedProvenance("9CI"));
+const lower = () => captured("9CI");
 /** The mirror of that split: units arrived with none of the cost, so the figures are ceilings. */
-const upper = () => withProvenance(captured("C38U"), capturedProvenance("C38U"));
+const upper = () => captured("C38U");
 /** A 1:1 carry: every figure exact, and still owing its provenance. */
 const exactCarry = (b) => ({
   from_ticker: "OLD", from_name: "Predecessor Fund", type: "switch",

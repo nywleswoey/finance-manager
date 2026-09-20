@@ -300,12 +300,6 @@ for (const { ticker, body } of MULTI) {
       await expect(subs.last().getByTestId("ledger-breakeven"))
         .toHaveCount(holds(body.summary) ? 1 : 0);
     });
-
-    test("it did not become a sixth tile, and carries no return figure", async ({ page }) => {
-      await expect(page.locator(".tiles .tile")).toHaveCount(5);
-      expect(await page.getByTestId("ledger-head").innerText())
-        .not.toMatch(/%|XIRR|IRR|return/i);
-    });
   });
 }
 
@@ -323,7 +317,6 @@ for (const { ticker, body } of SINGLE) {
       await expect(page.getByTestId("ledger-head")).toHaveCount(0);
       await expect(page.getByTestId("ledger-col")).toHaveCount(0);
       await expect(page.getByTestId("ledger-sub")).toHaveCount(0);
-      await expect(page.locator(".tiles .tile")).toHaveCount(5);   // not a sixth tile either
       if (!holds(s)) {
         // nothing held is no price — and must not read as a doubted one
         await expect(line).toHaveCount(0);

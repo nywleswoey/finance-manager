@@ -56,20 +56,12 @@ function amount(text) {
   return n;
 }
 
-async function openTicker(page, baseURL, ticker, payload) {
+async function openTicker(page, baseURL, ticker) {
   await openView(page, baseURL, "Portfolio › Holdings");
   await page.getByLabel("Show closed positions").check();
-  const row = () => page.locator("tbody tr")
+  await page.locator("tbody tr")
     .filter({ has: page.locator("span.pill", { hasText: new RegExp(`^${escapeRe(ticker)}$`) }) })
-    .first();
-  await row().click();
-  await expect(page.getByText("← Holdings")).toBeVisible();
-  if (!payload) return;
-  await page.route("**/api/holding**", (route) => route.fulfill({
-    status: 200, contentType: "application/json", body: JSON.stringify(payload),
-  }));
-  await page.getByText("← Holdings").click();
-  await row().click();
+    .first().click();
   await expect(page.getByText("← Holdings")).toBeVisible();
 }
 

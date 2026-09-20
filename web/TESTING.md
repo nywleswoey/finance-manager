@@ -357,10 +357,10 @@ from a fixture**; the one number written down is the tile count, which is a desi
 label), the caveat (tiles `not known`, one `Stock P/L` row, the bottom line kept, the Net's sentence
 then the percentage's, adjacent), no capital (percentage, span and peak absent together, no reason
 in the copy) and the bound in both directions plus the exact carry that still discloses. One
-viewport, one project; every expectation is read off the payload. The 9CI and C38U wire objects are
-read — never rebuilt — off `positions-closed.json`, which carries both and which their own holding
-captures now agree with; only the exact 1:1 carry and the refusal that still locked collateral are
-written payloads, and the file says which. **Open calls, three of them, and
+viewport, one project; every expectation is read off the payload. The two bounded names carry their
+own `summary.provenance`, so their bound and carry sentence come off the capture as shipped; only
+the exact 1:1 carry and the refusal that still locked collateral are written payloads — the second
+borrowing one name's real wire object off `positions-closed.json` — and the file says which. **Open calls, three of them, and
 none papered over.** The refusal's "what the book does know, below" clause — the one real refusal
 knows no dividends; trigger is the next un-annotated carry-in that also pays one. The bound's
 "tiles kept" on the CEILING direction: proven on the floor (9CI keeps its `avg_cost` and cost
