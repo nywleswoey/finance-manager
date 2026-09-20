@@ -326,9 +326,10 @@ components it has to undo.
 - **A `bounded` Net bounds it the OTHER way.** `price × rate × units ≡ mv_sgd − Net` with mv, rate
   and units exact, so a `lower` carry floors the Net (`≥`) and ceilings the price (`≤`) — the
   direction peak capital already takes, which is the glyph the detail page marks the figure with.
-  `provenance` is whole-ticker and names no bucket, so the mark rides the whole-ticker column
-  only. The partition's opposite doubt never meets it: `cost_basis_sgd` is null on any column
-  holding unknown units, so such a column ships no price to bound.
+  `provenance` is whole-ticker and names no bucket, so every column of a bounded ticker takes the
+  mark — including a bucket the carry never touched, an open call recorded on the renderer rather
+  than guarded. The partition's opposite doubt never meets it: `cost_basis_sgd` is null on any
+  column holding unknown units, so such a column ships no price to bound.
 - **The ticker's is solved from the summary**, never a weighted mean of the legs': a closed leg has
   no breakeven of its own but its realised gains and dividends are in the hero, so averaging the
   open legs would quote a price that zeroes only part of the number above it. Holdings' merged

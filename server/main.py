@@ -26,8 +26,8 @@ from server import auth
 from portfolio.db import SessionLocal, fx_as_of, fx_map, session_scope, valuation_as_of
 from portfolio.money import rate_to_sgd, to_sgd
 from portfolio.options import trades_for
-from portfolio.performance import (alloc_by_account, cdp_transactions, compute,
-                                   compute_with_fx, empty_group, fold_ticker, is_leg, rollup)
+from portfolio.performance import (alloc_by_account, cdp_transactions, compute_with_fx,
+                                   empty_group, fold_ticker, is_leg, rollup)
 from portfolio import spending
 from portfolio import dividends
 

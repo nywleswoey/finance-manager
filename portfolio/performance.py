@@ -981,9 +981,10 @@ def _breakeven_price(r, units, rate):
     is the only doubt left on it. THE COLUMN IS THE UNIT OF THAT CLAIM. `net_verdict` sums its
     counts across a ticker's legs, so `bounded` says nothing about any one of them.
 
-    WHOSE doubt it is, the wire cannot say: `provenance` is whole-ticker and names no bucket. The
-    renderer takes that literally and marks the whole-ticker column only (`SecurityDetail.jsx`,
-    `Breakeven`); nothing here decides it.
+    WHOSE doubt it is, the wire cannot say: `provenance` is whole-ticker and names no bucket, so
+    a bucket the carry never touched is marked with it anyway. That is recorded on the renderer
+    (`SecurityDetail.jsx`, `Breakeven`), which is where the marking happens; nothing here refuses
+    it, and this docstring claims no unreachability it cannot point at a guard for.
     """
     if r["net_pl_sgd"] is None or r["cost_basis_sgd"] is None or units <= 1e-6:
         return None

@@ -295,10 +295,8 @@ multiplies (`5e-5 × units × rate`), and the error in an FX rate the gate must 
 market-value pair because no endpoint ships one (`|be − price| × units × ε`). The same three
 are stated in `performance.py`'s `_breakeven_price` and in BACKEND.md; a name that ships no
 priced column is skipped rather than asserted. The glyph is gated ONCE, on a REAL bounded name
-rather than a written payload: those holding captures predate `summary.provenance` reaching the
-wire and ship `bounded` with none, a shape the server cannot produce, so the object is read off
-`positions-closed.json` by `capturedProvenance` — the same mechanism `unknown-book.spec.js` uses
-for the hero's own bound, and the reason neither file hand-edits a capture.
+rather than a written payload: the bounded captures carry their own `summary.provenance`, so the
+direction comes off the capture and nothing is borrowed or hand-edited.
 
 One viewport; phone layout is #160's. The **cross-page gate** (Holdings' ticker-mode Net equals
 the payload's `net_pl_sgd`) is not here: `ticker.spec.js` already states it on this same
@@ -323,12 +321,10 @@ block is first, every block sums to its own Net, the written across-sum ties to 
 block head carries its own units, avg cost and status — the phone half of the one subheading rule
 `bucket-split.spec.js` gates at 1280 — and the breakeven rides that head on a line of its own,
 present on every open block and dropped on a closed one, since a third item on the head's first
-line would push the subheading in off its right edge. The remaining truth claim, the `≥`/`≤` bound prefix, has one
-gate and only one: the holding captures predate `summary.provenance` on the wire and the bound
-rides that object, so the bounded names are served the captured payload with the name's REAL
-provenance attached, read off `/api/positions?closed=true` by `capturedProvenance()` as
-`unknown-book.spec.js` does. That pair of tests is where both claims the tier splits on are
-proven — the glyph sits outside the disclosure, the carry sentence inside it.
+line would push the subheading in off its right edge. The remaining truth claim, the `≥`/`≤`
+bound prefix, has one gate and only one: the bound rides `summary.provenance`, which only the
+bounded captures carry, so the `BOUNDED` loop at the foot of the file owns it and the carry
+sentence with it — the glyph sits outside the disclosure, the carry sentence inside it.
 
 `tests/hero.spec.js` — the **ticker detail page's hero Net, the reconciliation ledger that proves
 it, and the five position tiles** (#156). The page's whole claim is that the figure in the largest
@@ -357,10 +353,10 @@ from a fixture**; the one number written down is the tile count, which is a desi
 label), the caveat (tiles `not known`, one `Stock P/L` row, the bottom line kept, the Net's sentence
 then the percentage's, adjacent), no capital (percentage, span and peak absent together, no reason
 in the copy) and the bound in both directions plus the exact carry that still discloses. One
-viewport, one project; every expectation is read off the payload. The 9CI and C38U holding captures
-predate `summary.provenance`, so the spec borrows each name's REAL wire object from
-`positions-closed.json`, which carries both; only the exact 1:1 carry and the refusal that still
-locked collateral are written payloads, and the file says which. **Open calls, three of them, and
+viewport, one project; every expectation is read off the payload. The 9CI and C38U wire objects are
+read — never rebuilt — off `positions-closed.json`, which carries both and which their own holding
+captures now agree with; only the exact 1:1 carry and the refusal that still locked collateral are
+written payloads, and the file says which. **Open calls, three of them, and
 none papered over.** The refusal's "what the book does know, below" clause — the one real refusal
 knows no dividends; trigger is the next un-annotated carry-in that also pays one. The bound's
 "tiles kept" on the CEILING direction: proven on the floor (9CI keeps its `avg_cost` and cost

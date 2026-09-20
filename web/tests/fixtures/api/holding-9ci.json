@@ -27,7 +27,7 @@
   "return_pct": 0.1129,
   "return_verdict": "ok",
   "peak_car_sgd": 10071.0,
-  "return_span_days": 1970,
+  "return_span_days": 1971,
   "cost_partition": {
    "units_in": 2700.0,
    "costed": 2700.0,
@@ -39,6 +39,20 @@
   "invested_native": 10071.0,
   "fees_sgd": 0.0,
   "cost_known": true,
+  "provenance": {
+   "from_ticker": "C31",
+   "from_name": "CapitaLand Ltd",
+   "type": "split",
+   "carried_on": "2021-09-28",
+   "carried_sgd": 10071.0,
+   "split_with": [
+    {
+     "ticker": "C38U",
+     "units": 417.0
+    }
+   ],
+   "bound": "lower"
+  },
   "breakeven_price": 2.179
  },
  "buckets": [

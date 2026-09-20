@@ -123,21 +123,33 @@ const BOUND_GLYPHS = { lower: ["≥", "≤"], upper: ["≤", "≥"] };
  *
  * A BOUNDED NET BOUNDS THIS PRICE THE OTHER WAY, and the glyph says so rather than the figure
  * shipping bare. `price × rate × units == mv_sgd − Net` with mv, rate and units all exact, so a
- * Net floor is a price CEILING — `BOUND_GLYPHS`' second element, the same direction peak capital
- * takes, read here off the column's OWN payload rather than threaded in. That derivation is the
- * marking's scope as well as its source: `provenance` is a whole-ticker object and names no
- * bucket, so it rides the whole-ticker column (the Total, and the single-bucket page where the
- * two are the same) and a bucket column, which the wire attributes nothing to, takes none. Only
- * a figure is marked either way: `not known` has no direction.
+ * Net floor is a price CEILING — the same direction peak capital takes, which is why this takes
+ * `BOUND_GLYPHS`' second element from the one place that decides it rather than deciding it
+ * again. IT HAS TO BE PASSED: `provenance` and `net_verdict` are whole-ticker and ride the
+ * summary alone (`LEG_FIELDS` carries neither), so a bucket payload cannot answer the question
+ * and a component reading only `o` would mark the Total and leave every bucket bare. Only a
+ * figure is marked: `not known` has no direction.
+ *
+ * OPEN CALL, RECORDED RATHER THAN GUARDED: A WHOLE-TICKER BOUND ON A PER-BUCKET FIGURE. This is
+ * the first per-column figure on the page to take one, and the doubt is marked one bucket too
+ * WIDE on purpose: `provenance` rides every leg of its ticker, so on a multi-bucket bounded name
+ * every column is marked, including a bucket the carry never touched, which then claims a doubt
+ * it does not have. The other direction — marking only the ticker's column — leaves the bucket
+ * the carry DID land on quoting a ceiling as if it were exact, which is the overclaim this glyph
+ * exists to prevent. No finer marking is available: `carries` is keyed per (bucket, security)
+ * server-side, but `provenance` ships only `carried_on`, so the wire carries no bucket
+ * attribution at all and a renderer guessing one would be inventing it. Zero-instance today —
+ * both bounded names (9CI, C38U) are single-bucket, where the ticker's bound IS the bucket's.
+ * **Trigger:** the first multi-bucket bounded name whose carry touched only some of its buckets;
+ * that needs a bucket on `provenance` before this can narrow. Recorded beside `net_verdict`'s own
+ * open call, which this one sits next to.
  */
-function Breakeven({ o, className }) {
+function Breakeven({ o, bound, className }) {
   if (!(o.units > 1e-6)) return null;
   const known = o.breakeven_price != null;
-  const bound = known && o.net_verdict === "bounded"
-    ? BOUND_GLYPHS[o.provenance?.bound]?.[1] : null;
   return (
     <div className={className} data-testid="ledger-breakeven">
-      be {bound ? `${bound} ` : ""}{known ? fmt(o.breakeven_price, 4) : NOT_KNOWN}
+      be {known && bound ? `${bound} ` : ""}{known ? fmt(o.breakeven_price, 4) : NOT_KNOWN}
     </div>
   );
 }
@@ -160,7 +172,7 @@ const columnSubheading = (o, status) => [
 ];
 
 /** The muted subheading under a wide column header, one line per part. */
-function ColumnHead({ name, o, status }) {
+function ColumnHead({ name, o, status, bound }) {
   return (
     <div className="ledger-col" data-testid="ledger-col">
       <div className="ledger-colname">{name}</div>
@@ -168,7 +180,7 @@ function ColumnHead({ name, o, status }) {
         {columnSubheading(o, status).map((line, i) => (
           <Fragment key={line}>
             <div>{line}</div>
-            {i === 1 && <Breakeven o={o} />}
+            {i === 1 && <Breakeven o={o} bound={bound} />}
           </Fragment>
         ))}
       </div>
@@ -186,7 +198,7 @@ function ColumnHead({ name, o, status }) {
  * The heading carries what the wide form's muted subheading carried, on one line, and no return
  * figure of any kind (#134 §2).
  */
-function LedgerBlock({ name, o, status, rows, net, testid }) {
+function LedgerBlock({ name, o, status, bound, rows, net, testid }) {
   return (
     <div className="ledger-block" data-testid={testid}>
       <div className="ledger-blockhead">
@@ -196,7 +208,7 @@ function LedgerBlock({ name, o, status, rows, net, testid }) {
         </span>
         {/* the breakeven rides the block head as its own line: it is a claim about this block's
             Net, not a member of the subheading string, and the head already wraps */}
-        <Breakeven o={o} className="ledger-be mut" />
+        <Breakeven o={o} bound={bound} className="ledger-be mut" />
       </div>
       {rows.map(([lbl, v, text]) => (
         <div className="ledger-row" key={lbl}>
@@ -504,11 +516,11 @@ export default function SecurityDetail({ ticker, onBack }) {
            sideways would hide the whole second bucket column at 360, making "reconciles down
            and across" true of the DOM and false of the screen. */
         <div className="ledger ledger-stack" data-testid="ledger">
-          <LedgerBlock name="Total" o={s} testid="ledger-block-total"
+          <LedgerBlock name="Total" o={s} bound={capitalBound} testid="ledger-block-total"
                        rows={rows.map(([lbl, v]) => [lbl, v, ledgerAmount(v)])}
                        net={refused ? undefined : s.net_pl_sgd} />
           {bks.map((b) => (
-            <LedgerBlock key={b.bucket} name={b.bucket} o={b} status={b.status}
+            <LedgerBlock key={b.bucket} name={b.bucket} o={b} status={b.status} bound={capitalBound}
                          rows={rows.map(([lbl, , key]) => [lbl, b[key], bucketCell(b, key)])}
                          net={refused ? undefined : b.net_pl_sgd} />
           ))}
@@ -532,9 +544,10 @@ export default function SecurityDetail({ ticker, onBack }) {
           <div className="ledger-head" data-testid="ledger-head">
             <span className="ledger-lbl" />
             {bks.map((b) => (
-              <ColumnHead key={b.bucket} name={b.bucket} o={b} status={b.status} />
+              <ColumnHead key={b.bucket} name={b.bucket} o={b} status={b.status}
+                          bound={capitalBound} />
             ))}
-            <ColumnHead name="Total" o={s} />
+            <ColumnHead name="Total" o={s} bound={capitalBound} />
           </div>
         ) : (
           /* The single-bucket page's breakeven: the same figure with no column head to sit in,
@@ -542,7 +555,7 @@ export default function SecurityDetail({ ticker, onBack }) {
              rule is that one bucket shows no bucket header and no column label, and a
              subheading is not a column head. The component owns the drop, so a closed name
              renders nothing at all here rather than an empty line. */
-          <Breakeven o={s} className="ledger-be mut" />
+          <Breakeven o={s} bound={capitalBound} className="ledger-be mut" />
         )}
         {rows.map(([lbl, v, key]) => (
           <div className="ledger-row" key={lbl}>

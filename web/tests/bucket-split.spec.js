@@ -24,8 +24,7 @@
  * and the history tables' bucket column (#159).
  */
 import { expect, test } from "@playwright/test";
-import { capturedHoldings, capturedProvenance, withProvenance }
-  from "./fixtures/index.js";
+import { capturedHoldings } from "./fixtures/index.js";
 import { openView } from "./support/app.js";
 
 const HOLDINGS = capturedHoldings();
@@ -70,20 +69,20 @@ const holds = (o) => o.units > 1e-6;
 // oracle and only its SELECTION comes from the payload. The Net floors where the carry overstated
 // the cost, so the price solved from it caps — the inversion of what the hero prints.
 const PRICE_GLYPH = { lower: "\u2264", upper: "\u2265" };
-// `provenance` is whole-ticker and names no bucket, so a column takes the bound only where the
-// column IS the ticker — its own payload carrying the verdict and the object. A column with no
-// price takes none either way, because `not known` has no direction.
-const priceBound = (col) => (col.breakeven_price != null && col.net_verdict === "bounded"
-  && col.provenance?.bound ? `${PRICE_GLYPH[col.provenance.bound]} ` : "");
+// Whole-ticker, so the direction is read off the SUMMARY whatever column is being checked, while
+// the figure it marks is that column's own — the coarse marking the component records as an open
+// call. A column with no price takes no bound, because `not known` has no direction.
+const priceBound = (col, s) => (col.breakeven_price != null && s.net_verdict === "bounded"
+  && s.provenance?.bound ? `${PRICE_GLYPH[s.provenance.bound]} ` : "");
 
 // The exact text one column's line renders — `fmt(n, 4)`'s quote behind whatever bound the
 // payload carries, anchored, either minus accepted. ONE rule: both layouts render the same
 // component, so both gates assert the same thing rather than one of them a prefix of it.
-const breakevenLine = (col) => {
+const breakevenLine = (col, s) => {
   if (col.breakeven_price == null) return new RegExp(`^be ${NOT_KNOWN_TEXT}$`);
   const q = escapeRe(Number(col.breakeven_price).toLocaleString("en-US",
     { minimumFractionDigits: 4, maximumFractionDigits: 4 })).replace(/-/g, "[-\u2212]");
-  return new RegExp(`^be ${priceBound(col)}${q}$`);
+  return new RegExp(`^be ${priceBound(col, s)}${q}$`);
 };
 
 function amount(text) {
@@ -311,7 +310,7 @@ for (const { ticker, body } of MULTI) {
           continue;
         }
         await expect(sub.getByTestId("ledger-breakeven"))
-          .toHaveText(breakevenLine(b));
+          .toHaveText(breakevenLine(b, body.summary));
       }
       // the Total column carries the ticker's own, which is not any bucket's — and drops it on
       // the same rule the buckets do, so a name whose every bucket is closed states none
@@ -350,7 +349,7 @@ for (const { ticker, body } of SINGLE) {
       await expect(line).toHaveCount(1);
       // behind whatever bound the payload itself carries, so this gate stays about the LAYOUT and
       // a name that starts carrying a carry does not fail it under the wrong message
-      await expect(line).toHaveText(breakevenLine(s));
+      await expect(line).toHaveText(breakevenLine(s, s));
       // a claim ABOUT the column, not a member of it: it sits in the block and not in a row
       await expect(ledger(page).locator(".ledger-row [data-testid='ledger-breakeven']"))
         .toHaveCount(0);
@@ -364,24 +363,32 @@ for (const { ticker, body } of SINGLE) {
 // per layout by the two loops above.
 
 // THE BOUND ON A REAL BOUNDED NAME, NOT A WRITTEN ONE — one gate, because there is one rule.
-// The holding captures predate `summary.provenance` reaching the wire and ship `bounded` with
-// none, a shape the server cannot produce, so the object is borrowed at READ time off
-// `positions-closed.json`, which carries the real wire objects (`capturedProvenance` — the
-// mechanism `unknown-book.spec.js` uses for the hero's own bound, and the reason neither file
-// hand-edits a capture). EVERYTHING ELSE IS THE CAPTURE: the real verdict, the real units, the
-// real price. What comes off the payload is WHICH direction; the glyph pair itself is
-// `PRICE_GLYPH` above. The claim is that the two disagree — the price takes the opposite glyph
-// to the one the hero prints, off the one object.
+// Nothing here is written or borrowed: the capture carries the real verdict, the real units, the
+// real price and the real `provenance` object the direction comes off. The glyph pair itself is
+// `PRICE_GLYPH` above — the gate's own oracle, because a test that looked it up the way the
+// component does would assert nothing. The claim is that the two disagree: the price takes the
+// opposite glyph to the one the hero prints, off the one object.
 test("a bounded Net bounds its price the other way", async ({ page, baseURL }) => {
-  const { ticker, body } = BOUNDED_PRICED[0];
-  const served = withProvenance(body, capturedProvenance(ticker));
-  expect(served.summary.provenance.bound, `${ticker} carries no split direction`).toBeTruthy();
-  await serve(page, baseURL, ticker, served);
-  // the ticker's own column is the last line the ledger states, in either layout — and the only
-  // one the bound reaches, `provenance` naming no bucket
-  const line = page.getByTestId("ledger-breakeven").last();
-  await expect(line).toHaveText(breakevenLine(served.summary));
-  await expect(line).toContainText(`be ${PRICE_GLYPH[served.summary.provenance.bound]}`);
+  const { ticker, body: served } = BOUNDED_PRICED[0];
+  expect(served.summary.provenance?.bound, `${ticker} carries no split direction`).toBeTruthy();
+  await openTicker(page, baseURL, ticker);
+  // EVERY column takes it, the bound being the ticker's rather than any one column's. The
+  // columns are the layout's: a split states its buckets then the Total, a single-bucket page
+  // states the ticker's own subheading and no bucket column at all (#157).
+  const cols = (served.buckets.length > 1
+    ? [...served.buckets, served.summary] : [served.summary]).filter(holds);
+  const lines = page.getByTestId("ledger-breakeven");
+  await expect(lines).toHaveCount(cols.length);
+  const glyph = PRICE_GLYPH[served.summary.provenance.bound];
+  for (const [i, col] of cols.entries()) {
+    await expect(lines.nth(i)).toHaveText(breakevenLine(col, served.summary));
+    // a column with no price states none, and takes no direction with it
+    if (col.breakeven_price == null) {
+      await expect(lines.nth(i)).not.toContainText(glyph);
+    } else {
+      await expect(lines.nth(i)).toContainText(`be ${glyph}`);
+    }
+  }
   await expect(page.getByTestId("hero-bound"))
     .toHaveText(served.summary.provenance.bound === "lower" ? "\u2265" : "\u2264");
 });

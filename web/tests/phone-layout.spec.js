@@ -9,17 +9,17 @@
  * name, two bounded names and the refusal), so 8 tickers x the phone-tier viewports covers the
  * "24 layout x state combinations" at 360 / 390 / 430 and adds the tier's last pixel.
  *
- * TWO LOOPS, AND THE SECOND EXISTS FOR ONE CLAIM. The captures reach every state this tier splits
- * on except the bound prefix and the carry sentence: `summary.provenance` postdates them, and both
- * ride that object. The `BOUNDED` loop at the foot of the file serves it and owns those two — the
- * per-ticker loop above states neither, so there is one gate per claim and not two.
+ * TWO LOOPS, AND THE SECOND EXISTS FOR ONE CLAIM. Both the bound prefix and the carry sentence
+ * ride `summary.provenance`, which only the bounded captures carry, so the `BOUNDED` loop at the
+ * foot of the file owns that pair — the per-ticker loop above states neither, so there is one
+ * gate per claim and not two.
  *
  * NO GATE STATES A NUMERIC LITERAL FROM A FIXTURE — every expectation is read off the payload the
  * page was served, so a recapture moves the numbers and the gates keep meaning what they say.
  */
 import { expect, test } from "@playwright/test";
 import { PHONE_TIER_BELOW } from "./viewports.js";
-import { capturedHoldings, capturedProvenance, withProvenance } from "./fixtures/index.js";
+import { capturedHoldings } from "./fixtures/index.js";
 import { mainPaneOverflow, openView } from "./support/app.js";
 
 const HOLDINGS = capturedHoldings();
@@ -40,12 +40,12 @@ const headLine = (o, status) => [
 ].join(" \u00b7 ");
 
 // The breakeven line, whole: the ledger's `not known` where the column cannot price its units,
-// otherwise the 4dp quote behind whatever bound the payload carries. `provenance` is whole-ticker
-// and names no bucket, so only the ticker's own column can take one.
-const breakevenLine = (o) => {
+// otherwise the 4dp quote behind whatever bound the payload carries. The bound is the TICKER's —
+// whole-ticker on the wire — so it is read off the summary whichever block is being checked.
+const breakevenLine = (o, s) => {
   if (o.breakeven_price == null) return /^be not known$/;
-  const bound = o.net_verdict === "bounded" && o.provenance?.bound
-    ? `${o.provenance.bound === "lower" ? "\u2264" : "\u2265"} ` : "";
+  const bound = s.net_verdict === "bounded" && s.provenance?.bound
+    ? `${s.provenance.bound === "lower" ? "\u2264" : "\u2265"} ` : "";
   return new RegExp(`^be ${escapeRe(bound + dec(o.breakeven_price, 4))}$`
     .replace(/-/g, "[-\u2212]"));
 };
@@ -220,7 +220,7 @@ for (const { ticker, body } of HOLDINGS) {
               await expect(line).toHaveCount(0);
               continue;
             }
-            await expect(line).toHaveText(breakevenLine(o));
+            await expect(line).toHaveText(breakevenLine(o, s));
             // a claim ABOUT the block, not a member of it: it is in the head and in no row
             await expect(block.locator(".ledger-row [data-testid='ledger-breakeven']"))
               .toHaveCount(0);
@@ -242,27 +242,22 @@ for (const { ticker, body } of HOLDINGS) {
 }
 
 /**
- * THE BOUND AND THE CARRY, THE ONE PAIR THE CAPTURES CANNOT REACH (#160). The bound prefix is a
- * truth claim and stays on the number; the provenance sentence is an explanation and folds — and
- * neither renders for any captured payload, because the `/api/holding` captures predate
- * `summary.provenance` on the wire and a bound rides that object.
- *
- * So the bounded names borrow their REAL provenance off `/api/positions?closed=true`, which
- * carries the wire objects verbatim — read, never rebuilt, exactly as `unknown-book.spec.js`
- * borrows them for the copy at 1280. What is new here is the tier: that the glyph is outside the
- * disclosure and the sentence is inside it is a claim about the phone and about nothing else.
+ * THE BOUND AND THE CARRY, ON THE CAPTURES THAT CARRY THEM (#160). The bound prefix is a truth
+ * claim and stays on the number; the provenance sentence is an explanation and folds. Both ride
+ * `summary.provenance`, which the bounded names' own captures carry — nothing is borrowed or
+ * written here. What is new at this tier: that the glyph is outside the disclosure and the
+ * sentence is inside it is a claim about the phone and about nothing else.
  */
-for (const { ticker, body } of BOUNDED) {
-  const provenance = capturedProvenance(ticker);
-  const served = withProvenance(body, provenance);
+for (const { ticker, body: served } of BOUNDED) {
   const s = served.summary;
+  const provenance = s.provenance;
   // The number takes the direction of the bound and the peak capital takes its mirror (§12).
   const [figure, capital] = provenance.bound === "lower" ? ["\u2265", "\u2264"] : ["\u2264", "\u2265"];
   const notes = 1 + +(s.return_verdict === "caveat");
 
   test.describe(`${ticker} (bounded ${provenance.bound}, carrying)`, () => {
     test.beforeEach(async ({ page, baseURL }) => {
-      await openTicker(page, baseURL, ticker, served);
+      await openTicker(page, baseURL, ticker);
     });
 
     test("the bound stays on the number and on the percentage, outside the fold", async ({ page }) => {
