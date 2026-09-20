@@ -477,7 +477,7 @@ export default function Holdings() {
           XIRR is the money-weighted return incl. realised trades & dividends.
           <b>Net</b> = total P/L (realised + unrealised + dividends) + option premiums, computed on the
           server — the same figure the security's own page shows; the bar shows its size vs the biggest
-          mover. Three marks qualify it, <b>~</b> in two senses:{" "}
+          mover. The marks that qualify it:{" "}
           {Object.values(NET_MARKS).map((m) => (
             <React.Fragment key={m.lede}><b>{m.glyph}</b> {m.lede} — {m.why}; </React.Fragment>
           ))}

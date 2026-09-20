@@ -134,9 +134,10 @@ const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "�
  * attribution at all and a renderer guessing one would be inventing it. Zero-instance today —
  * both bounded names (9CI, C38U) are single-bucket, where the ticker's bound IS the bucket's.
  * **Trigger:** the first multi-bucket bounded name whose carry touched only some of its buckets;
- * that needs a bucket on `provenance` before this can narrow. Recorded beside #158's other open
- * calls in `web/TESTING.md`. `net_verdict`'s own is no longer one of them — a `lower` carry over
- * unknown units is guarded there now — so this is the last one standing over this figure.
+ * that needs a bucket on `provenance` before this can narrow. Recorded where the rest of this
+ * figure's rules are, in `docs/runbooks/BACKEND.md` under the breakeven price. `net_verdict`'s
+ * own open call is gone — a `lower` carry over unknown units is guarded now — so this is the
+ * last one standing over this figure.
  */
 function Breakeven({ o, bound, className }) {
   if (!(o.units > 1e-6)) return null;
@@ -355,9 +356,9 @@ export default function SecurityDetail({ ticker, onBack }) {
   const rows = ledgerRows(d);
   const bks = d.buckets || [];
   const split = bks.length > 1;
-  // WHICH WAY A FIGURE RUNS IS DECIDED ONCE (`bound.js`); every clause below reads `b`.
-  const b = boundOf(s);
-  const refused = b.refused;
+  // WHICH WAY A FIGURE RUNS IS DECIDED ONCE (`bound.js`); every clause below reads `dir`.
+  const dir = boundOf(s);
+  const refused = dir.refused;
   const pv = s.provenance || null;
   // Each paragraph reads its own axis, and the block exists only if one of them does — so a
   // wrapper cannot outlive its contents, and no combination renders an empty node.
@@ -365,17 +366,17 @@ export default function SecurityDetail({ ticker, onBack }) {
   const returnNote = !refused && s.return_verdict === "caveat";
   const carryNote = !!pv && !refused;
   const noteCount = +netNote + +returnNote + +carryNote;
-  const { figure: figureBound, capital: capitalBound } = b;
+  const { figure: figureBound, capital: capitalBound } = dir;
   const heroNotes = (
     <>
       {netNote && (
-        <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s, b)}</p>
+        <p className="hero-note" data-testid="caveat-net">{caveatNetSentence(s, dir)}</p>
       )}
       {returnNote && (
-        <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(b)}</p>
+        <p className="hero-note" data-testid="caveat-return">{caveatReturnSentence(dir)}</p>
       )}
       {carryNote && (
-        <p className="hero-note" data-testid="carry-note">{carrySentence(pv, b)}</p>
+        <p className="hero-note" data-testid="carry-note">{carrySentence(pv, dir)}</p>
       )}
     </>
   );
