@@ -33,9 +33,17 @@ const dec = (n, d) =>
 // What a block head says, whole: fractional units to 4 places and whole ones to none, the avg
 // cost to 4 or the ledger's `not known`, and a bucket's status last. Stated exactly, so a
 // change to either precision fails here rather than passing on a substring.
-const headLine = (o, status) => [
+// The symbols the captured tickers' currencies take — this gate's own oracle, restated rather
+// than read off `api.js`'s table, which would agree with itself by construction. The currency is
+// the TICKER's, off the summary, whichever block is being checked: a bucket ships none.
+const SYMBOL = { SGD: "S$", USD: "US$" };
+const symbolOf = (s) => {
+  expect(SYMBOL[s.currency], `no symbol for ${s.ticker}'s ${s.currency}`).toBeTruthy();
+  return SYMBOL[s.currency];
+};
+const headLine = (o, status, s) => [
   `${dec(o.units, o.units < 10 && o.units !== 0 ? 4 : 0)} u`,
-  `@ ${o.avg_cost == null ? "not known" : dec(o.avg_cost, 4)}`,
+  `@ ${o.avg_cost == null ? "not known" : symbolOf(s) + dec(o.avg_cost, 4)}`,
   ...(status ? [status] : []),
 ].join(" \u00b7 ");
 
@@ -46,7 +54,7 @@ const breakevenLine = (o, s) => {
   if (o.breakeven_price == null) return /^be not known$/;
   const bound = s.net_verdict === "bounded" && s.provenance?.bound
     ? `${s.provenance.bound === "lower" ? "\u2264" : "\u2265"} ` : "";
-  return new RegExp(`^be ${escapeRe(bound + dec(o.breakeven_price, 4))}$`
+  return new RegExp(`^be ${escapeRe(bound + symbolOf(s) + dec(o.breakeven_price, 4))}$`
     .replace(/-/g, "[-\u2212]"));
 };
 
@@ -205,7 +213,7 @@ for (const { ticker, body } of HOLDINGS) {
           // The Total column is the whole ticker and carries no status; each bucket carries its own.
           const cols = [[s, undefined], ...bks.map((b) => [b, b.status])];
           for (const [i, [o, status]] of cols.entries()) {
-            await expect(heads.nth(i)).toHaveText(headLine(o, status));
+            await expect(heads.nth(i)).toHaveText(headLine(o, status, s));
           }
           expect(await page.getByTestId("ledger").innerText(),
             "a return figure rode the block head").not.toMatch(/%|XIRR|IRR/i);

@@ -284,10 +284,16 @@ rest: every open column quotes one and a closed column quotes none (the drop is 
 the units, so the Total column and the single-bucket page decide it the same way); a column that
 cannot price its units reads the ledger's `not known`; a negative price renders as the negative
 number it is; and a **bounded** Net puts the OPPOSITE glyph on the price — a floor on the Net is
-a ceiling on the price. NOTHING HERE IS DRIVEN ON A WRITTEN PAYLOAD: the captures reach every one
+a ceiling on the price. NONE OF THOSE IS DRIVEN ON A WRITTEN PAYLOAD: the captures reach every one
 of those states themselves — the negative on the two foreign names, `not known` on the two that
 cannot price their units, the drop on the closed ones and on the multi-bucket name's closed
 bucket — so there is no second place for the same rule to drift.
+
+The avg cost and the breakeven both carry the **ticker's currency symbol** (#208), in every
+column. The currency rides the summary alone (a bucket payload ships none), so the one gate
+driven on an edited payload is the one the captures cannot reach: every multi-bucket capture is
+SGD, so each is re-labelled USD — the label only, since the figures are native and nothing
+converts them — and every bucket column, not just the Total, must read `US$`.
 
 Its **no-`title`** rule is gated once, and not here: `hero.spec.js` asserts the whole ledger block
 carries no `[title]` over these same eight captured holdings, which covers this line the moment it

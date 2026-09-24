@@ -25,7 +25,7 @@
  */
 import { expect, test } from "@playwright/test";
 import { capturedHoldings } from "./fixtures/index.js";
-import { openView } from "./support/app.js";
+import { openView, openTicker as openWith } from "./support/app.js";
 
 const HOLDINGS = capturedHoldings();
 const MULTI = HOLDINGS.filter((h) => h.body.buckets.length > 1);
@@ -60,6 +60,14 @@ test.beforeAll(() => {
 
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// The symbols the captured tickers' currencies take — the gate's own oracle, restated rather
+// than read off `api.js`'s table, which would make the check agree with itself by construction.
+const SYMBOL = { SGD: "S$", USD: "US$" };
+const symbolOf = (s) => {
+  expect(SYMBOL[s.currency], `no symbol for ${s.ticker}'s ${s.currency}`).toBeTruthy();
+  return SYMBOL[s.currency];
+};
+
 const NOT_KNOWN_TEXT = "not known";   // the page's one word for an unmeasured figure
 // Whether a column has a breakeven to state at all, read off the payload at the threshold
 // the server holds positions to — the same one `_breakeven_price` nulls below.
@@ -82,7 +90,7 @@ const breakevenLine = (col, s) => {
   if (col.breakeven_price == null) return new RegExp(`^be ${NOT_KNOWN_TEXT}$`);
   const q = escapeRe(Number(col.breakeven_price).toLocaleString("en-US",
     { minimumFractionDigits: 4, maximumFractionDigits: 4 })).replace(/-/g, "[-\u2212]");
-  return new RegExp(`^be ${priceBound(col, s)}${q}$`);
+  return new RegExp(`^be ${priceBound(col, s)}${escapeRe(symbolOf(s))}${q}$`);
 };
 
 function amount(text) {
@@ -301,6 +309,32 @@ for (const { ticker, body } of MULTI) {
         .toHaveCount(holds(body.summary) ? 1 : 0);
     });
   });
+}
+
+// THE CURRENCY COMES OFF THE TICKER, NOT OFF EACH COLUMN. A bucket payload ships no `currency`
+// (`LEG_FIELDS`), and `money` renders a missing code as an empty prefix without complaining — so
+// a component reading `o.currency` would label the Total and leave every bucket bare. Every
+// multi-bucket capture is SGD, so no capture is a foreign split name — the shape the trap
+// needs — and each one's payload is re-labelled USD. Only the label moves — the figures are already native and nothing
+// converts them, so the digits asserted are the captured ones.
+for (const { ticker, body } of MULTI) {
+  test(`${ticker}: a foreign ticker's avg cost and breakeven carry its currency in every column`,
+    async ({ page, baseURL }) => {
+      const usd = { ...body, summary: { ...body.summary, currency: "USD" } };
+      await openWith(page, baseURL, ticker, usd);
+      const subs = page.getByTestId("ledger-sub");
+      const cols = [...body.buckets, usd.summary];
+      for (const [i, o] of cols.entries()) {
+        const sub = subs.nth(i);
+        if (o.avg_cost != null) {
+          await expect(sub).toContainText(`@ US$${Number(o.avg_cost).toLocaleString("en-US",
+            { minimumFractionDigits: 4, maximumFractionDigits: 4 })}`);
+        }
+        if (!holds(o)) continue;
+        await expect(sub.getByTestId("ledger-breakeven"))
+          .toHaveText(breakevenLine(o, usd.summary));
+      }
+    });
 }
 
 // A SINGLE-BUCKET PAGE STATES ONE TOO. It has no column head to put it in, so it is a
