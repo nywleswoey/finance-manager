@@ -199,7 +199,7 @@ position row as `peak_car_sgd`, `return_span_days`, `return_pct` and `return_ver
 CAR(t)       = costed stock basis at t
              + Σ strike × contracts × multiplier over short PUTS open at t,   at latest FX
 peak_car_sgd = max CAR(t) over the span
-span         = first event → today if still held, else → last resolution
+span         = union of held intervals (units > 0 or contract open); still held → today
 return_pct   = Net ÷ peak_car_sgd          — a LIFETIME total, never annualised
 ```
 
@@ -222,8 +222,11 @@ Six rules, each with its own gate in `tests/test_peak_car.py`:
    leg, and netting swallows the exit. Legs pair by size, and every unpaired leg is untouched.
    `cost_partition` deliberately still counts them: it answers "every unit that ever came
    through a door", which is what makes it sum to gross units in.
-5. **The span ends today only if the position is still held** — units remaining or a contract
-   open, the same test `options._is_open()` makes.
+5. **The span counts only the time something was held** — units remaining or a contract open,
+   the same test `options._is_open()` makes — as the union of those intervals, running to today
+   only while still held. CDP unit rows are re-dated to their matching `cdp_cost_lot` trade date
+   (`_trade_dated_units`), since a statement can list a sold position for years; the peak keeps
+   the statement dates.
 6. **Units nobody paid for contribute nothing** — the term carries the costed share,
    `costed(t) / units_in(t)`. Dated like every other term: an undated ratio lets a lot arriving
    uncosted in 2021 shrink capital that was at risk in 2020, which reads 25,096 on one name
