@@ -282,15 +282,19 @@ about the column below it and never a row in it — which is why that page's gat
 plain-ledger test above it over the same ticker list rather than being restated beside it. The
 rest: every open column quotes one and a closed column quotes none (the drop is one condition,
 the units, so the Total column and the single-bucket page decide it the same way); a column that
-cannot price its units reads the ledger's `not known`; a negative price renders as the negative
-number it is; and a **bounded** Net puts the OPPOSITE glyph on the price — a floor on the Net is
-a ceiling on the price. NONE OF THOSE IS DRIVEN ON A WRITTEN PAYLOAD: the captures reach every one
-of those states themselves — the negative on the two foreign names, `not known` on the two that
-cannot price their units, the drop on the closed ones and on the multi-bucket name's closed
-bucket — so there is no second place for the same rule to drift.
+cannot price its units reads the ledger's `not known`; a price at or below zero reads `free of
+cost` with no figure (#201); and a **bounded** Net puts the OPPOSITE glyph on the price — a floor
+on the Net is a ceiling on the price. NONE OF THOSE IS DRIVEN ON A WRITTEN PAYLOAD: the captures
+reach every one of those states themselves — the recovered negative on the two foreign names, `not
+known` on the two that cannot price their units, the drop on the closed ones and on the
+multi-bucket name's closed bucket — so there is no second place for the same rule to drift.
+
+The `free of cost` edges no capture reaches ARE written payloads, each on the captured recovered
+name: exactly zero, a `lower`-bounded (price ceiling) value `<= 0` — both still `free of cost` —
+and an `upper`-bounded (price floor) value `<= 0`, which proves nothing and reads `not known`.
 
 The avg cost and the breakeven both carry the **ticker's currency symbol** (#208), in every
-column. The currency rides the summary alone (a bucket payload ships none), so the one gate
+column. The currency rides the summary alone (a bucket payload ships none), so the one other gate
 driven on an edited payload is the one the captures cannot reach: every multi-bucket capture is
 SGD, so each is re-labelled USD — the label only, since the figures are native and nothing
 converts them — and every bucket column, not just the Total, must read `US$`.
