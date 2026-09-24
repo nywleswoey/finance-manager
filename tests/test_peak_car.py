@@ -339,7 +339,7 @@ def test_a_cdp_position_is_dated_by_its_trades_not_by_the_statement_that_dropped
     2024-06-28 and the span took that month-end diff as the day the last unit left. The peak and
     the percentage were right; only the duration read the statement date.
 
-    1,849 days is exactly 2019-06-06 to 2024-06-28: the start was always right."""
+    1,849 days is exactly 2019-06-06 to 2024-06-28: the start was right, only the exit moved."""
     rows = _fold(_adqu_statements(D(2024, 6, 28)), cdp={"ADQU": ADQU_LOTS}, price={10: 0.0})
     r = _row(rows, "ADQU")
     assert r["return_span_days"] == (D(2020, 10, 15) - D(2019, 6, 6)).days == 497
@@ -361,10 +361,10 @@ def test_a_cdp_sale_lot_written_with_a_positive_qty_still_dates_the_exit():
     assert _row(rows, "ADQU")["return_span_days"] == 497
 
 
-def test_an_aggregated_statement_row_no_lot_matches_keeps_its_statement_date():
-    """A CDP diff that sums several lots has no single trade to be dated by (LIW's 24,600 is
-    three). It is left on the month-end date rather than guessed at — the fix re-dates a row
-    only when one lot says exactly what it was."""
+def test_an_aggregated_statement_row_starts_at_its_earliest_lot():
+    """A CDP diff that sums several lots (LIW's 24,600 is three) matches no single lot, so it
+    keeps its month-end date for the matching — but the holding began on the first trade it
+    bundles, as the cost series always said. The exit still ends it."""
     txns = [_txn(account="CDP", action="buy", qty_signed=3000, price=None,
                  trade_date=D(2020, 1, 28)),
             _txn(account="CDP", action="sell/transfer_out", qty_signed=-3000, price=None,
@@ -372,7 +372,24 @@ def test_an_aggregated_statement_row_no_lot_matches_keeps_its_statement_date():
     cdp = {"D05": _cdp((D(2020, 1, 6), -3000.0, 1000), (D(2020, 1, 20), -3000.0, 1000),
                        (D(2020, 1, 22), -3000.0, 1000))}
     assert _row(_fold(txns, cdp=cdp, price={10: 0.0}))["return_span_days"] == (
-        D(2021, 1, 28) - D(2020, 1, 28)).days
+        D(2021, 1, 28) - D(2020, 1, 6)).days
+
+
+def test_only_the_first_holding_is_clamped_back_to_a_lot():
+    """A re-entry keeps its own date: the clamp reaches back from the first holding only, and a
+    lot after the first holding began cannot pull that start later."""
+    txns = [_txn(account="CDP", action="buy", qty_signed=2000, price=None,
+                 trade_date=D(2020, 1, 28)),
+            _txn(account="CDP", action="sell/transfer_out", qty_signed=-2000, price=None,
+                 trade_date=D(2020, 7, 28)),
+            _txn(account="CDP", action="buy", qty_signed=2000, price=None,
+                 trade_date=D(2022, 1, 28)),
+            _txn(account="CDP", action="sell/transfer_out", qty_signed=-2000, price=None,
+                 trade_date=D(2022, 7, 28))]
+    cdp = {"D05": _cdp((D(2020, 1, 6), -3000.0, 1000), (D(2020, 1, 20), -3000.0, 1000),
+                       (D(2022, 1, 6), -3000.0, 1000), (D(2022, 1, 20), -3000.0, 1000))}
+    assert _row(_fold(txns, cdp=cdp, price={10: 0.0}))["return_span_days"] == (
+        (D(2020, 7, 28) - D(2020, 1, 6)).days + (D(2022, 7, 28) - D(2022, 1, 28)).days)
 
 
 def test_a_zero_qty_row_after_the_exit_does_not_extend_the_span():

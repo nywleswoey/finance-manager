@@ -797,8 +797,10 @@ def _trade_dated_units(p):
     statements listed it as suspended until 2024, while the `cdp_cost_lot` sale is dated
     2020-10-15, and the span read the statement's date. The CDP `cost_lot` rows carry the trade
     date, so each CDP trade row is dated by the equal-sized lot nearest it, each lot claimed
-    once. A row no lot matches keeps its statement date: an aggregated diff (LIW's 24,600 is
-    three lots) has no single trade to be dated by, and a month-end date is the honest answer.
+    once. A row no lot matches keeps its statement date here: an aggregated diff (LIW's 24,600
+    is three lots) has no single trade to be dated by. `_held_days` clamps the start of a leg's
+    first holding back to its earliest buy lot on or before it, so such a row still starts on
+    the first trade it bundles.
 
     The statement diff spells a delisting exit `sell/transfer_out`, a stock-moving leg by
     `STOCK_MOVING_LEG`, so the re-dating cannot skip those rows: it is that spelling that ADQU's
@@ -834,12 +836,30 @@ def _held_days(legs, contracts, today):
     Balances are summed by DATE before they are read, so a same-day sell-and-rebuy or a matched
     pair straddling one date opens no interval. A contract is held from `open_date` to its
     resolution — `close_date or expiry_date`, or today while it is still open. A balance still
-    positive at the end runs to today."""
+    positive at the end runs to today.
+
+    A leg's first holding starts at its earliest CDP buy lot on or before the day its balance
+    first turned positive, as the cost series always started: an aggregated statement row or an
+    opening balance bought across several lots is dated by its first trade, not the month-end.
+    Only the first holding is clamped — a later re-entry keeps its own date — and a lot dated
+    after that day never moves the start later."""
     by_day = defaultdict(float)
+    spans = []
     for p, _ in legs:
-        for d, q in _trade_dated_units(p):
+        leg_units, first = 0.0, None
+        dated = _trade_dated_units(p)
+        for d, q in dated:
             by_day[d] += q
-    spans, units, since = [], 0.0, None
+        for d, q in sorted(dated):
+            leg_units += q
+            if leg_units > 1e-6:
+                first = d
+                break
+        if first is not None:
+            lot = min((d for d, q in p["cdp_lots"] if q > 0 and d < first), default=None)
+            if lot is not None:
+                spans.append((lot, first))
+    units, since = 0.0, None
     for d in sorted(by_day):
         units += by_day[d]
         if units > 1e-6 and since is None:
