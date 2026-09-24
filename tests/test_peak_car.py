@@ -58,10 +58,13 @@ def _row(rows, ticker="D05"):
 
 
 def _cdp(*legs):
-    """A cdp_cost()-shaped group: legs are (date, cash, qty), cash negative on a buy."""
-    g = {"flows": [], "invested": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "cost_events": []}
+    """A cdp_cost()-shaped group: legs are (date, cash, qty), cash negative on a buy and qty
+    signed (negative on a sale) — `unit_lots` records every leg's trade date, as `cdp_cost` does."""
+    g = {"flows": [], "invested": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "cost_events": [],
+         "unit_lots": []}
     for d, cash, qty in legs:
         g["flows"].append((d, cash))
+        g["unit_lots"].append((d, qty))
         if cash < 0:
             g["invested"] += -cash; g["buy_cost"] += -cash; g["buy_qty"] += qty
             g["cost_events"].append(perf.CostEvent(d, -cash, qty))
@@ -269,24 +272,101 @@ def test_a_closed_position_span_ends_when_the_last_unit_left():
     assert r["return_span_days"] == (D(2021, 1, 1) - D(2020, 1, 1)).days
 
 
-def test_a_closed_stock_with_an_open_contract_still_runs_to_today():
-    """`units > 0 OR a contract is open` — the same open/closed test `_is_open` already makes."""
+def test_a_closed_stock_with_an_open_contract_counts_the_stock_years_and_the_contract_years():
+    """`units > 0 OR a contract is open` — the same open/closed test `_is_open` already makes —
+    and the span is the time that was TRUE, not the distance between its ends. This test used to
+    assert `today - 2020`, i.e. that the four years in 2021-2025 when nothing was held were
+    part of the holding period. They were not: the return is over the time capital was at risk,
+    and none was. The open put still runs to today; the stock's year still counts."""
     txns = [_txn(action="buy", qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
             _txn(action="sell", qty_signed=-100, price=12.0, trade_date=D(2021, 1, 1))]
     rows = _fold(txns, price={10: 12.0},
                  contracts={"D05": [_put(open_date=D(2025, 1, 1), expiry_date=D(2026, 6, 1),
                                          close_date=None, open=True)]})
-    assert _row(rows)["return_span_days"] == (TODAY - D(2020, 1, 1)).days
+    assert _row(rows)["return_span_days"] == ((D(2021, 1, 1) - D(2020, 1, 1)).days
+                                              + (TODAY - D(2025, 1, 1)).days)
+
+
+def test_a_gap_where_nothing_was_held_is_not_counted():
+    """Sold out in 2021, bought back in 2023: the name was held two separate years."""
+    txns = [_txn(action="buy", qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
+            _txn(action="sell", qty_signed=-100, price=12.0, trade_date=D(2021, 1, 1)),
+            _txn(action="buy", qty_signed=100, price=10.0, trade_date=D(2023, 1, 1)),
+            _txn(action="sell", qty_signed=-100, price=12.0, trade_date=D(2024, 1, 1))]
+    assert _row(_fold(txns, price={10: 12.0}))["return_span_days"] == (
+        (D(2021, 1, 1) - D(2020, 1, 1)).days + (D(2024, 1, 1) - D(2023, 1, 1)).days)
+
+
+def test_overlapping_stock_and_contract_are_counted_once():
+    """A covered call over shares held all year is one year, not two."""
+    txns = [_txn(action="buy", qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
+            _txn(action="sell", qty_signed=-100, price=12.0, trade_date=D(2021, 1, 1))]
+    rows = _fold(txns, price={10: 12.0},
+                 contracts={"D05": [_call(open_date=D(2020, 3, 1), expiry_date=D(2020, 6, 1))]})
+    assert _row(rows)["return_span_days"] == (D(2021, 1, 1) - D(2020, 1, 1)).days
 
 
 def test_a_closed_position_span_ends_at_the_last_contract_resolution():
-    """Closed on both axes: the span ends at whichever resolved last, not at the stock exit."""
+    """Closed on both axes: the span ends at whichever resolved last, not at the stock exit. The
+    stock's year and the put's year are both counted; the five months between them are not."""
     txns = [_txn(action="buy", qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
             _txn(action="sell", qty_signed=-100, price=12.0, trade_date=D(2021, 1, 1))]
     rows = _fold(txns, price={10: 12.0},
                  contracts={"D05": [_put(open_date=D(2021, 6, 1), expiry_date=D(2022, 6, 1),
                                          close_date=None)]})
-    assert _row(rows)["return_span_days"] == (D(2022, 6, 1) - D(2020, 1, 1)).days
+    assert _row(rows)["return_span_days"] == ((D(2021, 1, 1) - D(2020, 1, 1)).days
+                                              + (D(2022, 6, 1) - D(2021, 6, 1)).days)
+
+
+def _adqu_statements(exit_day):
+    """ADQU as the ledger holds it: three CDP unit rows at MONTH-END statement dates, the last
+    of which is when the statements stopped listing the (suspended) counter."""
+    return [_txn(account="CDP", canonical_ticker="ADQU", action="buy", qty_signed=20000,
+                 price=None, trade_date=D(2019, 6, 28)),
+            _txn(account="CDP", canonical_ticker="ADQU", action="buy", qty_signed=20000,
+                 price=None, trade_date=D(2019, 9, 28)),
+            _txn(account="CDP", canonical_ticker="ADQU", action="sell/transfer_out",
+                 qty_signed=-40000, price=None, trade_date=exit_day)]
+
+
+ADQU_LOTS = _cdp((D(2019, 6, 6), -10600.0, 20000), (D(2019, 9, 13), -10500.0, 20000),
+                 (D(2020, 10, 15), 30668.0, -40000))
+
+
+def test_a_cdp_position_is_dated_by_its_trades_not_by_the_statement_that_dropped_it():
+    """#202. ADQU was bought 2019-06-06 and 2019-09-13 and sold 2020-10-15 — 497 days — and the
+    hero read 5.1 years, because the CDP statements kept listing the suspended counter until
+    2024-06-28 and the span took that month-end diff as the day the last unit left. The peak and
+    the percentage were right; only the duration read the statement date.
+
+    1,849 days is exactly 2019-06-06 to 2024-06-28: the start was always right."""
+    rows = _fold(_adqu_statements(D(2024, 6, 28)), cdp={"ADQU": ADQU_LOTS}, price={10: 0.0})
+    r = _row(rows, "ADQU")
+    assert r["return_span_days"] == (D(2020, 10, 15) - D(2019, 6, 6)).days == 497
+    assert r["peak_car_sgd"] == 21100.0                 # the peak never depended on it
+
+
+def test_an_aggregated_statement_row_no_lot_matches_keeps_its_statement_date():
+    """A CDP diff that sums several lots has no single trade to be dated by (LIW's 24,600 is
+    three). It is left on the month-end date rather than guessed at — the fix re-dates a row
+    only when one lot says exactly what it was."""
+    txns = [_txn(account="CDP", action="buy", qty_signed=3000, price=None,
+                 trade_date=D(2020, 1, 28)),
+            _txn(account="CDP", action="sell/transfer_out", qty_signed=-3000, price=None,
+                 trade_date=D(2021, 1, 28))]
+    cdp = {"D05": _cdp((D(2020, 1, 6), -3000.0, 1000), (D(2020, 1, 20), -3000.0, 1000),
+                       (D(2020, 1, 22), -3000.0, 1000))}
+    assert _row(_fold(txns, cdp=cdp, price={10: 0.0}))["return_span_days"] == (
+        D(2021, 1, 28) - D(2020, 1, 28)).days
+
+
+def test_a_zero_qty_row_after_the_exit_does_not_extend_the_span():
+    """A row that changes no units is not evidence the position was still there."""
+    txns = [_txn(action="buy", qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
+            _txn(action="sell", qty_signed=-100, price=12.0, trade_date=D(2021, 1, 1)),
+            _txn(qty_signed=0, price=None, action="stock dividend", trade_date=D(2024, 6, 28))]
+    assert _row(_fold(txns, price={10: 12.0}))["return_span_days"] == (
+        D(2021, 1, 1) - D(2020, 1, 1)).days
 
 
 # ---------------------------------------------------------------- rule 6: the costed share
@@ -508,7 +588,9 @@ def test_the_peak_is_whole_ticker_and_maxes_over_the_merged_series():
                  action="buy", qty_signed=50, price=10.0, trade_date=D(2022, 1, 1))]
     rows = _fold(txns, price={10: 10.0, 11: 10.0})
     assert {r["peak_car_sgd"] for r in rows} == {1000.0}
-    assert {r["return_span_days"] for r in rows} == {(TODAY - D(2020, 1, 1)).days}
+    # 2021 was held by nobody: the cash leg sold out and the cpf leg had not yet bought
+    assert {r["return_span_days"] for r in rows} == {(D(2021, 1, 1) - D(2020, 1, 1)).days
+                                                     + (TODAY - D(2022, 1, 1)).days}
 
 
 def test_overlapping_legs_sum_before_the_max_is_taken():

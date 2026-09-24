@@ -31,11 +31,14 @@ class UnitEvent(NamedTuple):
     the leg moved stock rather than trading it (STOCK_MOVING_LEG), which is what tells a
     stock-moving leg from a trade. `action` is the raw ledger string it was decided from — kept
     beside the decision because the fold retains no other copy of it (`meta` holds only the last
-    row per position), so dropping it would throw the evidence away."""
+    row per position), so dropping it would throw the evidence away. `account` is kept for the
+    same reason: a CDP row's date is a month-end statement diff, every other row's a trade date,
+    and `_trade_dated_units` needs to know which it is holding."""
     date: dt.date
     qty: float
     action: str
     moves_stock: bool
+    account: str = ""
 
 
 class CostEvent(NamedTuple):
@@ -106,7 +109,11 @@ def cdp_cost(session=None):
     don't carry them). Keyed by canonical ticker -> {flows:[(date,cash)], invested}.
 
     Transfers are skipped: the position is grouped per (funding_bucket, security), so a CDP->FSM
-    move keeps both legs in the same position and the cost carries across on its own."""
+    move keeps both legs in the same position and the cost carries across on its own.
+
+    `unit_lots` is every kept row's `(trade date, signed qty)`, sales included. The statements
+    give the custody balance and this gives the day the trade happened; `_trade_dated_units`
+    reads the two together."""
     with session_scope(session) as s:
         rows = s.execute(text(
             "SELECT ticker, trade_date, qty, amount, action FROM cdp_cost_lot")).all()
@@ -118,9 +125,10 @@ def cdp_cost(session=None):
         if abs(cash) < 1e-9:
             continue
         g = out.setdefault(ticker, {"flows": [], "invested": 0.0, "buy_cost": 0.0,
-                                    "buy_qty": 0.0, "cost_events": []})
+                                    "buy_qty": 0.0, "cost_events": [], "unit_lots": []})
         day = d or dt.date.today()
         g["flows"].append((day, cash))
+        g["unit_lots"].append((day, float(qty or 0)))   # buys AND sales: the trade dates
         if cash < 0:
             _book_buy(g, day, -cash, float(qty or 0))    # qty bought, for avg-cost
     return out
@@ -778,6 +786,83 @@ def legs_by_ticker(pos, meta):
     return out
 
 
+def _trade_dated_units(p):
+    """`(date, signed qty)` for every event that changed the units a leg HELD, on the day the
+    trade happened where the book knows it — the span's input, not the peak's.
+
+    A CDP unit row is a month-end statement diff, so its date is when the custody balance
+    changed, which is not when the trade did, and the two can be years apart: ADQU's CDP
+    statements listed it as suspended until 2024, while the `cdp_cost_lot` sale is dated
+    2020-10-15, and the span read the statement's date. The CDP `cost_lot` rows carry the trade
+    date, so each CDP trade row is dated by the equal-sized lot nearest it, each lot claimed
+    once. A row no lot matches keeps its statement date: an aggregated diff (LIW's 24,600 is
+    three lots) has no single trade to be dated by, and a month-end date is the honest answer.
+
+    The statement diff spells a delisting exit `sell/transfer_out`, a stock-moving leg by
+    `STOCK_MOVING_LEG`, so the re-dating cannot skip those rows: it is that spelling that ADQU's
+    sale arrives as. A real transfer is safe anyway — `cdp_cost` skips them, so no lot exists to
+    date one by. Matched internal pairs are dropped, as `_leg_car_series` drops them: an internal
+    move is not a change in what was held. Zero-qty rows are dropped because they change nothing.
+
+    Only the SPAN reads this. `_leg_car_series` keeps the statement dates: capital stayed in the
+    position until the custody balance said it left, and moving that would move the peak."""
+    drop, _ = _matched_transfer_pairs(p["unit_events"])
+    lots = defaultdict(list)
+    for d, q in p["cdp_lots"]:
+        lots[round(q, 6)].append(d)
+    out = []
+    for i, e in enumerate(p["unit_events"]):
+        if i in drop or abs(e.qty) < 1e-9:
+            continue
+        day = e.date
+        cands = lots.get(round(e.qty, 6)) if e.account == "CDP" else None
+        if cands:
+            day = min(cands, key=lambda d: abs((d - e.date).days))
+            cands.remove(day)
+        out.append((day, e.qty))
+    return out
+
+
+def _held_days(legs, contracts, today):
+    """Days on which the ticker was HELD, whole-ticker: some unit was in a leg, or a contract
+    was open. The union of those intervals, so a stretch where nothing was held is not counted
+    and two holdings that overlap are counted once.
+
+    Stock is held from the day the summed balance turns positive to the day it stops being.
+    Balances are summed by DATE before they are read, so a same-day sell-and-rebuy or a matched
+    pair straddling one date opens no interval. A contract is held from `open_date` to its
+    resolution — `close_date or expiry_date`, or today while it is still open. A balance still
+    positive at the end runs to today."""
+    by_day = defaultdict(float)
+    for p, _ in legs:
+        for d, q in _trade_dated_units(p):
+            by_day[d] += q
+    spans, units, since = [], 0.0, None
+    for d in sorted(by_day):
+        units += by_day[d]
+        if units > 1e-6 and since is None:
+            since = d
+        elif units <= 1e-6 and since is not None:
+            spans.append((since, d))
+            since = None
+    if since is not None:
+        spans.append((since, today))
+    for c in contracts:
+        start = c.get("open_date")
+        end = today if c.get("open") else (c.get("close_date") or c.get("expiry_date"))
+        if start is not None and end is not None and end > start:
+            spans.append((start, end))
+    days, edge = 0, None
+    for a, b in sorted(spans):
+        if edge is None or a > edge:
+            days += (b - a).days
+            edge = b
+        elif b > edge:
+            days += (b - edge).days
+            edge = b
+    return days
+
+
 def ticker_car(legs, contracts, fx, today):
     """Peak capital-at-risk and its span for ONE ticker, across every funding bucket.
 
@@ -790,10 +875,15 @@ def ticker_car(legs, contracts, fx, today):
     it collapses to peak stock cost basis — a differently-defined number wearing the same
     label as the hero, appearing exclusively where the difference is invisible.
 
-    **Rule 5 — the span ends today only if the position is still held**: `units > 0` or a
-    contract is open, the same open/closed test `_is_open()` already makes. Otherwise it ends
-    the day the last unit left or the last contract resolved. "Always today" overcharges 27 of
-    31 closed names; "always last activity" undercharges 17 open ones.
+    **Rule 5 — the span counts only the time something was held.** Held means `units > 0` in
+    some leg or a contract open, the same open/closed test `_is_open()` already makes; the span
+    is the union of those intervals, so a name closed in 2021 that wrote a put in 2025 counts
+    the stock's years and the put's, not the four years between. A still-held position runs to
+    today; a closed one stops the day the last unit left or the last contract resolved. "Always
+    today" overcharges 27 of 31 closed names; "always last activity" undercharges 17 open ones;
+    "first date to last date" bills the gaps. Unit dates are trade dates wherever a CDP cost lot
+    says what they were (`_trade_dated_units`), because a statement can list a sold position for
+    years — ADQU read 5.1 years for the 1.4 it was held.
 
     Returns `peak_car_sgd` (a measured **zero**, never null, when nothing was ever at risk),
     `peak_car_date` and `return_span_days`. Only the first and last reach the wire —
@@ -805,18 +895,6 @@ def ticker_car(legs, contracts, fx, today):
               for p, m in legs]
     steps = _put_collateral_steps(contracts, fx, today)
     dates = sorted({d for s in series for d, _ in s} | {d for d, _ in steps})
-    held = (any(p["units"] > 1e-6 for p, _ in legs)
-            or any(c.get("open") for c in contracts))
-    opened = [c["open_date"] for c in contracts if c.get("open_date")]
-    starts = [s[0][0] for s in series if s] + opened
-    start = min(starts) if starts else today
-    if held:
-        end = today
-    else:
-        resolved = [c.get("close_date") or c.get("expiry_date") for c in contracts
-                    if (c.get("close_date") or c.get("expiry_date"))]
-        ends = [s[-1][0] for s in series if s] + resolved
-        end = max(ends) if ends else start
     # one forward walk over the merged breakpoints: each leg holds its latest value and the
     # collateral its running total, so CAR(t) is read rather than recomputed at every date.
     peak, peak_date, collateral = 0.0, None, 0.0
@@ -833,7 +911,7 @@ def ticker_car(legs, contracts, fx, today):
         if car > peak + 1e-9:
             peak, peak_date = car, d
     return {"peak_car_sgd": round(peak, 2), "peak_car_date": peak_date,
-            "return_span_days": max((end - start).days, 0)}
+            "return_span_days": _held_days(legs, contracts, today)}
 
 
 def net_verdict(parts, bound=None):
@@ -1183,7 +1261,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
                                 "unknown_units": 0.0, "pending_units": 0.0,
                                 "pending_events": [], "carried_units": 0.0, "carry": None,
                                 "transfer_out_units": 0.0, "cdp_units_in": 0.0,
-                                "cdp_buy_qty": 0.0})
+                                "cdp_buy_qty": 0.0, "cdp_lots": []})
     meta = {}
     _unknown_actions = set()
     for r in txns:
@@ -1195,7 +1273,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
         # every row that moves units gets an event, CDP included: CDP units come from the txn
         # ledger even though their cost arrives from cdp_cost_lot below.
         p["unit_events"].append(UnitEvent(r["trade_date"] or today, qty, r["action"],
-                                          r["action"] in STOCK_MOVING_LEG))
+                                          r["action"] in STOCK_MOVING_LEG, r["account"]))
         p["accounts"].add(r["account"])
         kind = classify(r["action"], _f(r["price"]))   # classified once; both folds read it
         _apply_units(p, r, kind, today, annotations)
@@ -1227,6 +1305,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
         pos[k]["buy_qty"] += c["buy_qty"]
         pos[k]["cost_events"].extend(c["cost_events"])
         pos[k]["cdp_buy_qty"] += c["buy_qty"]
+        pos[k]["cdp_lots"].extend(c.get("unit_lots", ()))
         pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
 
     bucket_by_acct_id = {r["account_id"]: r["funding_bucket"] for r in txns}
@@ -1259,7 +1338,8 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
       txns  — mapping rows: account_id, account, funding_bucket, security_id, canonical_ticker,
               name, market, asset_type, currency, trade_date, action, qty_signed, price, fees.
       divs  — mapping rows: account_id, security_id, pay_date, gross.
-      cdp   — {ticker: {flows, invested, buy_cost, buy_qty, cost_events}} from cdp_cost().
+      cdp   — {ticker: {flows, invested, buy_cost, buy_qty, cost_events, unit_lots}} from
+              cdp_cost().
       corp_actions — iterable of (from_ticker, to_ticker, type), every `corporate_action` row;
               the fold moves cost along CARRY_TYPES and counts a split over all of them.
       options — {ticker: {pl_sgd, ...}} realized options income per underlying.
