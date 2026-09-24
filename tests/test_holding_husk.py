@@ -27,6 +27,7 @@ from fastapi.testclient import TestClient
 from portfolio import performance as perf
 from portfolio.config import settings
 from server import main
+from server.routes import portfolio as portfolio_routes
 
 D = dt.date
 
@@ -68,11 +69,11 @@ def _stub(monkeypatch):
     rows = _rows()
     # the fold generation: rows AND the rate their SGD figures were converted at. Stubbing
     # the pair is the only way to stub either — these rows are SGD, so the map is empty.
-    monkeypatch.setattr(main, "perf_fold", lambda: (rows, {}))
+    monkeypatch.setattr(portfolio_routes, "perf_fold", lambda: (rows, {}))
 
     def _tripwire(*a, **k):
         raise _Reached
-    monkeypatch.setattr(main, "session_scope", _tripwire)
+    monkeypatch.setattr(portfolio_routes, "session_scope", _tripwire)
     yield
     main._cache.clear()
 
@@ -130,8 +131,8 @@ def test_holding_and_positions_agree_on_what_a_leg_is(client, monkeypatch):
     """One listing rule, two endpoints: the husk Holdings never lists is the husk this 404s, and
     the refusal Holdings now lists is the refusal it now serves. Both directions, because a rule
     written twice is how the two endpoints came apart in the first place."""
-    monkeypatch.setattr(main, "session_scope", lambda *a, **k: _none())
-    monkeypatch.setattr(main, "valuation_as_of", lambda s: None)
+    monkeypatch.setattr(portfolio_routes, "session_scope", lambda *a, **k: _none())
+    monkeypatch.setattr(portfolio_routes, "valuation_as_of", lambda s: None)
     listed = {r["ticker"] for r in client.get("/api/positions?closed=true").json()["positions"]}
     assert listed == {"9CI", "ASTREA6B"}
 
@@ -139,8 +140,8 @@ def test_holding_and_positions_agree_on_what_a_leg_is(client, monkeypatch):
 def test_the_refusal_lists_with_no_net_rather_than_a_zero(client, monkeypatch):
     """What Holdings receives for it: a row, and no Net on it. A `0.0` here would be a name the
     book cannot price reporting that it broke even."""
-    monkeypatch.setattr(main, "session_scope", lambda *a, **k: _none())
-    monkeypatch.setattr(main, "valuation_as_of", lambda s: None)
+    monkeypatch.setattr(portfolio_routes, "session_scope", lambda *a, **k: _none())
+    monkeypatch.setattr(portfolio_routes, "valuation_as_of", lambda s: None)
     rows = client.get("/api/positions?closed=true").json()["positions"]
 
     astrea = next(r for r in rows if r["ticker"] == "ASTREA6B")

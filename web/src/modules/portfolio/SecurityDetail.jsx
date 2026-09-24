@@ -349,7 +349,7 @@ export default function SecurityDetail({ ticker, onBack }) {
   // WHAT THIS COSTS, WRITTEN DOWN BECAUSE THE REDUCE IT REPLACED WAS RIGHT ABOUT ONE THING.
   // `income_sgd` sums dividend `gross` in NATIVE amounts and converts the sum once at the
   // SECURITY's rate (`performance.py:1120`, `:1038`), while each row's `gross_sgd` converts at
-  // its OWN payment currency's rate (`server/main.py:367`). On a name paid in two currencies
+  // its OWN payment currency's rate (`server/routes/portfolio.py:243`). On a name paid in two currencies
   // those disagree by more than rounding: live, SET (EUR + SGD) is short by 307.08 and UD1U by
   // 5,134.49. Neither is a captured holding, so no gate here sees it. The dividends sum dies
   // anyway (#143 §1) — the whole page renders and never derives, and `income_sgd` is already

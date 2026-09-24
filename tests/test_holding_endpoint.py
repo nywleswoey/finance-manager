@@ -20,6 +20,7 @@ from portfolio.config import settings
 from portfolio.performance import LEG_FIELDS, _breakeven_price
 
 from server import main
+from server.routes import portfolio as portfolio_routes
 
 D = dt.date
 SGD = 1.0     # every row here is an SGD name, so the fold's rate is 1.0
@@ -78,13 +79,13 @@ def _stub(monkeypatch):
     settings.dev_auth_bypass = True
     # the fold generation: rows AND the rate their SGD figures were converted at, which the
     # server hands out as one value. Empty is SGD-only, which is what these rows are priced in.
-    monkeypatch.setattr(main, "perf_fold", lambda: ([_row(), dict(CPF), dict(HUSK)], {}))
-    monkeypatch.setattr(main, "session_scope", lambda *a, **k: _no_session())
-    monkeypatch.setattr(main, "valuation_as_of", lambda s: D(2026, 7, 25))
-    monkeypatch.setattr(main, "fx_as_of", lambda s: D(2026, 8, 5))
-    monkeypatch.setattr(main, "ticker_ledger",
+    monkeypatch.setattr(portfolio_routes, "perf_fold", lambda: ([_row(), dict(CPF), dict(HUSK)], {}))
+    monkeypatch.setattr(portfolio_routes, "session_scope", lambda *a, **k: _no_session())
+    monkeypatch.setattr(portfolio_routes, "valuation_as_of", lambda s: D(2026, 7, 25))
+    monkeypatch.setattr(portfolio_routes, "fx_as_of", lambda s: D(2026, 8, 5))
+    monkeypatch.setattr(portfolio_routes, "ticker_ledger",
                         lambda s, tk: ([dict(t) for t in TXNS], [dict(x) for x in DIVS], {}))
-    monkeypatch.setattr(main, "trades_for", lambda tk: [dict(t) for t in TRADES])
+    monkeypatch.setattr(portfolio_routes, "trades_for", lambda tk: [dict(t) for t in TRADES])
     yield
     main._cache.clear()
 
@@ -177,8 +178,8 @@ def test_the_breakeven_is_solved_at_the_rate_its_own_figures_were_converted_at(c
                mv_sgd=mv, cost_basis_sgd=cost, income_sgd=income,
                unrealised_pl_sgd=unreal, stock_pl_sgd=unreal,
                net_pl_sgd=round(unreal + income, 2))
-    monkeypatch.setattr(main, "perf_fold", lambda: ([usd], {"USD": fold}))
-    monkeypatch.setattr(main, "ticker_ledger",
+    monkeypatch.setattr(portfolio_routes, "perf_fold", lambda: ([usd], {"USD": fold}))
+    monkeypatch.setattr(portfolio_routes, "ticker_ledger",
                         lambda s, tk: ([], [], {"USD": live}))
 
     s = client.get("/api/holding?ticker=AAPL").json()["summary"]
@@ -210,7 +211,7 @@ def test_the_running_balance_runs_across_buckets(client):
 def test_option_trades_are_fetched_for_any_ticker(client, monkeypatch):
     """Unconditionally — the cash-bucket gate went with the bucket parameter."""
     seen = []
-    monkeypatch.setattr(main, "trades_for", lambda tk: seen.append(tk) or [])
+    monkeypatch.setattr(portfolio_routes, "trades_for", lambda tk: seen.append(tk) or [])
 
     client.get("/api/holding?ticker=D05")
 

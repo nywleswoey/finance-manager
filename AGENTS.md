@@ -16,10 +16,17 @@ plans.
   move `migrations/` or `portfolio.models`.
 - **`make ingest-all`** delta-ingests every source (brokers, spending, prices, net-worth
   snapshots); idempotent. See the README table for per-source commands.
-- **Frontend is already split by product**: `web/src/modules/{portfolio,networth,spending}/`.
-  Backend is not (one `portfolio/` package, one `server/main.py` with 51 routes) — see
-  [docs/runbooks/BACKEND.md](docs/runbooks/BACKEND.md) before proposing a backend split;
-  `server/main.py`'s lazy in-handler imports break real import cycles, not accidental ones.
+- **Frontend and HTTP routes are split by product; the domain package is not.**
+  `web/src/modules/{portfolio,networth,spending}/` and `server/routes/{portfolio,networth,
+  spending}.py` match; `portfolio/` stays one package (kernel + all three products) — see
+  [docs/runbooks/BACKEND.md](docs/runbooks/BACKEND.md) before proposing that split.
+  `server/main.py` is the composition root only: app object, middleware, `auth_gate`,
+  health/refresh/cron, PostHog proxy, StaticFiles mount (last). It re-exports symbols tests and
+  `scripts/audit_ledger.py` import from it (`_cache`, `ticker_ledger`, `NwValueIn`,
+  `performance`, `_is_spending`) — those live in `server/routes/`, not in `main.py`, and a
+  handler's monkeypatched dependency (e.g. `perf_all`, `session_scope`) must be patched on the
+  `server.routes.*` module that defines it, not on `server.main`. Lazy in-handler imports
+  (ruff E402, ignored repo-wide) break real import cycles, not accidental ones.
 - **ADR [0001](docs/adr/0001-do-not-unify-twr-and-performance.md): do not unify
   `performance.py` and `twr.py`.** They're deliberately separate engines.
 - **`docs/archive/`** holds historical/superseded docs (old plans). **`archive/`** at repo root

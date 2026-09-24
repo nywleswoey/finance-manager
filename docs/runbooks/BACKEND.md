@@ -350,7 +350,7 @@ components it has to undo.
   the field is defined by. `/api/positions`' fold is memoized with no TTL and `ticker_ledger`
   re-reads FX per request, so `performance.compute_with_fx` returns the rows **with the very map
   it converted them with** — not a second `fx_map()` beside it, which a rate committed during
-  compute's own SQL would already have moved — and `server/main.py` caches that pair as ONE value
+  compute's own SQL would already have moved — and `server/routes/portfolio.py` caches that pair as ONE value
   under one key (`perf_fold`), which `/api/holding` takes both halves from. One key rather than
   two filled together: two can be separated by a `_cache.clear()` landing between them.
   `compute()` is `compute_with_fx()` with the map dropped.
