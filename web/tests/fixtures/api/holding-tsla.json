@@ -27,7 +27,7 @@
   "return_pct": 0.0381,
   "return_verdict": "ok",
   "peak_car_sgd": 93448.62,
-  "return_span_days": 1345,
+  "return_span_days": 39,
   "cost_partition": {
    "units_in": 100.0,
    "costed": 100.0,

@@ -729,7 +729,7 @@
    "net_pl_sgd": 5565.15,
    "breakeven_price": 2.9371,
    "peak_car_sgd": 24041.85,
-   "return_span_days": 3225,
+   "return_span_days": 2652,
    "return_pct": 0.2706,
    "return_verdict": "ok",
    "status": "open"
@@ -1720,7 +1720,7 @@
    "net_pl_sgd": 69182.82,
    "breakeven_price": -10752.6383,
    "peak_car_sgd": 216124.17,
-   "return_span_days": 1983,
+   "return_span_days": 1718,
    "return_pct": 0.3201,
    "return_verdict": "ok",
    "status": "open"
@@ -2684,7 +2684,7 @@
    "net_pl_sgd": 11627.39,
    "breakeven_price": null,
    "peak_car_sgd": 110237.7,
-   "return_span_days": 1946,
+   "return_span_days": 580,
    "return_pct": 0.1055,
    "return_verdict": "ok",
    "status": "closed"
@@ -2732,7 +2732,7 @@
    "net_pl_sgd": 3641.75,
    "breakeven_price": null,
    "peak_car_sgd": 95666.05,
-   "return_span_days": 112,
+   "return_span_days": 43,
    "return_pct": 0.0381,
    "return_verdict": "ok",
    "status": "closed"
@@ -2780,7 +2780,7 @@
    "net_pl_sgd": 940.0,
    "breakeven_price": null,
    "peak_car_sgd": 24041.85,
-   "return_span_days": 3225,
+   "return_span_days": 2652,
    "return_pct": 0.2706,
    "return_verdict": "ok",
    "status": "closed"
@@ -3020,7 +3020,7 @@
    "net_pl_sgd": 3557.17,
    "breakeven_price": null,
    "peak_car_sgd": 93448.62,
-   "return_span_days": 1345,
+   "return_span_days": 39,
    "return_pct": 0.0381,
    "return_verdict": "ok",
    "status": "closed"
@@ -3359,7 +3359,7 @@
    "net_pl_sgd": -2614.78,
    "breakeven_price": null,
    "peak_car_sgd": 54485.3,
-   "return_span_days": 329,
+   "return_span_days": 327,
    "return_pct": -0.048,
    "return_verdict": "ok",
    "status": "closed"
@@ -3503,7 +3503,7 @@
    "net_pl_sgd": -15544.1,
    "breakeven_price": null,
    "peak_car_sgd": 45869.02,
-   "return_span_days": 340,
+   "return_span_days": 338,
    "return_pct": -0.3389,
    "return_verdict": "ok",
    "status": "closed"

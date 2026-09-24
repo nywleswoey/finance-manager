@@ -111,7 +111,8 @@ def cdp_cost(session=None):
     Transfers are skipped: the position is grouped per (funding_bucket, security), so a CDP->FSM
     move keeps both legs in the same position and the cost carries across on its own.
 
-    `unit_lots` is every kept row's `(trade date, signed qty)`, sales included. The statements
+    `unit_lots` is every kept row's `(trade date, signed qty)`, sales included, the sign taken
+    from `amount` because the CSV's Qty column carries none it can be trusted for. The statements
     give the custody balance and this gives the day the trade happened; `_trade_dated_units`
     reads the two together."""
     with session_scope(session) as s:
@@ -127,10 +128,11 @@ def cdp_cost(session=None):
         g = out.setdefault(ticker, {"flows": [], "invested": 0.0, "buy_cost": 0.0,
                                     "buy_qty": 0.0, "cost_events": [], "unit_lots": []})
         day = d or dt.date.today()
+        q = abs(float(qty or 0))
         g["flows"].append((day, cash))
-        g["unit_lots"].append((day, float(qty or 0)))   # buys AND sales: the trade dates
+        g["unit_lots"].append((day, -q if cash > 0 else q))   # buys AND sales: the trade dates
         if cash < 0:
-            _book_buy(g, day, -cash, float(qty or 0))    # qty bought, for avg-cost
+            _book_buy(g, day, -cash, q)                  # qty bought, for avg-cost
     return out
 
 # actions where qty*price is real cash paid/received (CPF/SRS CSVs use 'open market' etc.)

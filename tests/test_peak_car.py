@@ -346,6 +346,21 @@ def test_a_cdp_position_is_dated_by_its_trades_not_by_the_statement_that_dropped
     assert r["peak_car_sgd"] == 21100.0                 # the peak never depended on it
 
 
+def test_a_cdp_sale_lot_written_with_a_positive_qty_still_dates_the_exit():
+    """The CSV's Qty column is not a signed field — only Amount is — so ADQU's 40,000 sale may
+    arrive as +40000. `cdp_cost` signs each lot by its cash, so the exit is still 2020-10-15."""
+    class _Rows:
+        def execute(self, _):
+            return self
+        def all(self):
+            return [("ADQU", D(2019, 6, 6), 20000, -10600.0, "open market"),
+                    ("ADQU", D(2019, 9, 13), 20000, -10500.0, "open market"),
+                    ("ADQU", D(2020, 10, 15), 40000, 30668.0, "sell")]
+    cdp = perf.cdp_cost(_Rows())
+    rows = _fold(_adqu_statements(D(2024, 6, 28)), cdp=cdp, price={10: 0.0})
+    assert _row(rows, "ADQU")["return_span_days"] == 497
+
+
 def test_an_aggregated_statement_row_no_lot_matches_keeps_its_statement_date():
     """A CDP diff that sums several lots has no single trade to be dated by (LIW's 24,600 is
     three). It is left on the month-end date rather than guessed at — the fix re-dates a row
