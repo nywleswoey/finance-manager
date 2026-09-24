@@ -195,6 +195,8 @@ reconciliation unless marked otherwise.
   least-verified claim in the whole map.
 - **Holdings rows achieved — 10 portrait, 4 landscape. Re-measured after #47, and the portrait
   prediction is now MISSED by two.**
+  Measured on the asset-class grouping, which was the default until #206 (Holdings now opens flat,
+  by ticker, so its first screen has no group row).
   At **390×844**: **10** rows fully on screen (9 data + 1 group row), 11 counting the one cut by the
   fold — against a predicted 12–13. At **844×390**: **4** fully on screen (3 data + 1 group), 5
   counting the partial — against a predicted 4, unchanged. A data row is **60.5px** portrait and
