@@ -238,10 +238,12 @@ span and no materiality floor.
 _Avoid_: return (unqualified), annualised return (it is deliberately neither)
 
 **Span**:
-The window a peak-CAR return is measured over: the first event, to **today if the position is
-still held** — units remaining or a contract still open — and otherwise to the date the last
-unit left or the last contract resolved. "Always today" overcharges closed names; "always last
-activity" undercharges open ones.
+The time a peak-CAR return is measured over: the days the ticker was **held** — units in some
+leg or a contract open — counted once where holdings overlap and not at all in a gap between
+them. A still-held position runs to **today**; a closed one stops the date the last unit left
+or the last contract resolved. Units are dated by trade date wherever a CDP cost lot gives one,
+not by the month-end statement that reported them. "Always today" overcharges closed names;
+"always last activity" undercharges open ones; "first date to last date" bills the gaps.
 
 **Return verdict**:
 What the percentage can claim, on its own axis rather than the Net's: `ok`, `caveat` (some
