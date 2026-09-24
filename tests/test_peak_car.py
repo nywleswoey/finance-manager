@@ -392,6 +392,20 @@ def test_only_the_first_holding_is_clamped_back_to_a_lot():
         (D(2020, 7, 28) - D(2020, 1, 6)).days + (D(2022, 7, 28) - D(2022, 1, 28)).days)
 
 
+def test_the_clamp_does_not_reach_back_past_a_round_trip_that_netted_to_zero():
+    """A contra buy and sell in 2018 reach the cost lots but no statement, since the month-end
+    diff nets to zero. The real holding starts at its own buy lot in 2021, not at the contra
+    buy: the three dormant years between were not held."""
+    txns = [_txn(account="CDP", action="buy", qty_signed=2000, price=None,
+                 trade_date=D(2021, 5, 31)),
+            _txn(account="CDP", action="sell/transfer_out", qty_signed=-2000, price=None,
+                 trade_date=D(2022, 5, 31))]
+    cdp = {"D05": _cdp((D(2018, 3, 5), -3000.0, 1000), (D(2018, 3, 8), 3100.0, -1000),
+                       (D(2021, 5, 10), -6000.0, 2000))}
+    assert _row(_fold(txns, cdp=cdp, price={10: 0.0}))["return_span_days"] == (
+        D(2022, 5, 31) - D(2021, 5, 10)).days
+
+
 def test_a_zero_qty_row_after_the_exit_does_not_extend_the_span():
     """A row that changes no units is not evidence the position was still there."""
     txns = [_txn(action="buy", qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),

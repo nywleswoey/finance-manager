@@ -842,7 +842,10 @@ def _held_days(legs, contracts, today):
     first turned positive, as the cost series always started: an aggregated statement row or an
     opening balance bought across several lots is dated by its first trade, not the month-end.
     Only the first holding is clamped — a later re-entry keeps its own date — and a lot dated
-    after that day never moves the start later."""
+    after that day never moves the start later. The clamp reaches back only to the earliest buy
+    lot since the lots last netted to zero: the span counts only time actually held, and a
+    round trip that never reached a statement (a contra trade, a buy and sell inside one month)
+    would otherwise count the dormant years after it as held."""
     by_day = defaultdict(float)
     spans = []
     for p, _ in legs:
@@ -855,10 +858,18 @@ def _held_days(legs, contracts, today):
             if leg_units > 1e-6:
                 first = d
                 break
-        if first is not None:
-            lot = min((d for d, q in p["cdp_lots"] if q > 0 and d < first), default=None)
-            if lot is not None:
-                spans.append((lot, first))
+        if first is None:
+            continue
+        lot_units, lot = 0.0, None
+        for d, q in sorted(((d, q) for d, q in p["cdp_lots"] if d <= first),
+                           key=lambda e: (e[0], -e[1])):
+            lot_units += q
+            if lot_units <= 1e-6:
+                lot = None
+            elif q > 0 and lot is None:
+                lot = d
+        if lot is not None and lot < first:
+            spans.append((lot, first))
     units, since = 0.0, None
     for d in sorted(by_day):
         units += by_day[d]
