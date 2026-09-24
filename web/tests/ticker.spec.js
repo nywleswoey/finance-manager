@@ -119,6 +119,11 @@ test("one row per ticker, and the heading counts what is on screen", async ({ pa
   const tickers = byTicker(OPEN).size;
   expect(tickers).toBeLessThan(OPEN.length);          // the fixture must still carry a split
 
+  // Holdings ARRIVES grouped by ticker (#206), so the consolidated view is the default one and
+  // the per-leg count is what a deliberate switch to another grouping shows.
+  await expect(groupBy(page)).toHaveValue("ticker");
+  await expect(page.getByText(/^Holdings \(\d+\)$/)).toHaveText(`Holdings (${tickers})`);
+  await groupBy(page).selectOption("asset_type");
   await expect(page.getByText(/^Holdings \(\d+\)$/)).toHaveText(`Holdings (${OPEN.length})`);
   await groupBy(page).selectOption("ticker");
 

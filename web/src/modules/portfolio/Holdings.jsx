@@ -322,7 +322,7 @@ function DataRow({ r, onClick, max }) {
 export default function Holdings() {
   const [rows, setRows] = useState(null);
   const [sel, setSel] = useState(null);
-  const [by, setBy] = useState("asset_type");
+  const [by, setBy] = useState("ticker");
   const [showClosed, setShowClosed] = useState(false);
   const [collapsed, setCollapsed] = useState({});
   const [noteOpen, setNoteOpen] = useState(() => !startsCollapsed());

@@ -200,6 +200,12 @@ test.describe("every control clears 44px square below the phone tier", () => {
   for (const view of VIEWS.filter((v) => !EDITORS.has(v.name))) {
     test(view.name, async ({ page, baseURL }) => {
       await openView(page, baseURL, view.name);
+      if (view.name === "Portfolio › Holdings") {
+        // Holdings arrives flat, grouped by ticker (#206); asset class puts `tr.grouprow` on
+        // screen so the banner is swept rather than silently absent.
+        await page.locator(".main .card select").first().selectOption("asset_type");
+        await expect(page.locator(".main tr.grouprow").first()).toBeVisible();
+      }
       // No lower bound on the count, and that is a real property rather than a softening:
       // `Portfolio › Overview`, `Options` and `Spending › Overview` render no control at all
       // below the tier — the tab strip is in the app bar and the charts lose their chrome —
