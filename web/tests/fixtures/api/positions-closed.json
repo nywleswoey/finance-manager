@@ -2732,7 +2732,7 @@
    "net_pl_sgd": 3641.75,
    "breakeven_price": null,
    "peak_car_sgd": 95666.05,
-   "return_span_days": 43,
+   "return_span_days": 53,
    "return_pct": 0.0381,
    "return_verdict": "ok",
    "status": "closed"
