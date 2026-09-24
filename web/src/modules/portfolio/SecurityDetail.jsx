@@ -15,6 +15,7 @@ import { boundOf, boundPhrase } from "./bound.js";
  * A stream that never existed is omitted outright; one that measured zero renders its zero.
  */
 const NOT_KNOWN = "not known";
+const FREE_OF_COST = "free of cost";
 
 /**
  * A reconciliation line's amount. `0.00` for a measured zero rather than `+0.00`: a signed zero
@@ -115,6 +116,15 @@ const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "�
  * `status` is undefined on the Total column and on a single-bucket page, where the line still has
  * to decide.
  *
+ * A RECOVERED POSITION READS `free of cost`, NOT A PRICE. The server ships the breakeven
+ * UNCLAMPED on purpose (`_breakeven_price`: the negative number says how far ahead the name is,
+ * and clamping it would make "ahead" indistinguishable from "exactly even"), so the wire keeps
+ * its sign and the SCREEN drops the figure: `<= 0` — zero included — prints the words, with no
+ * magnitude, no tooltip, no currency and no bound glyph, since the Net already states the
+ * profit and words carry no direction (the same reason `not known` takes none). The words
+ * claim "already whole", which is what the Net says, so they do not understate a position that
+ * is ahead the way `already even` would.
+ *
  * A BOUNDED NET BOUNDS THIS PRICE THE OTHER WAY, and the glyph says so rather than the figure
  * shipping bare. `price × rate × units == mv_sgd − Net` with mv, rate and units all exact, so a
  * Net floor is a price CEILING — the same direction peak capital takes, which is why this takes
@@ -150,9 +160,14 @@ const bucketCell = (b, key) => (key === "options_pl_sgd" && b[key] == null ? "�
 function Breakeven({ o, bound, currency, className }) {
   if (!(o.units > 1e-6)) return null;
   const known = o.breakeven_price != null;
+  // recovered: income and realised gains already cover the cost, so no future price matters
+  const recovered = known && o.breakeven_price <= 0;
+  const text = !known ? NOT_KNOWN
+    : recovered ? FREE_OF_COST
+    : `${bound ? `${bound} ` : ""}${money(o.breakeven_price, currency, 4)}`;
   return (
     <div className={className} data-testid="ledger-breakeven">
-      be {known && bound ? `${bound} ` : ""}{known ? money(o.breakeven_price, currency, 4) : NOT_KNOWN}
+      be {text}
     </div>
   );
 }

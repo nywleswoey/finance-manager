@@ -317,7 +317,8 @@ components it has to undo.
   zero), a closed leg (no units to divide by — `units <= 1e-6`, not a `status` test), and a leg
   that cannot price its units (`cost_basis_sgd` null, which `realised_pl_sgd` is null with).
 - **Negative is a real answer** — income and realised gains past cost basis mean the name is
-  already whole at any price, including zero — and is never clamped.
+  already whole at any price, including zero — and is never clamped. The RENDERER is what turns
+  it into words: `Breakeven` prints `free of cost` for any value `<= 0` and no figure (#201).
 - **Tolerance is the quote's, not a cent's.** The field's own share of the drift when the fold is
   revalued at it is `5e-5 × units × rate` SGD (0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700);
   it scales with units and the FX rate and never tightens to a constant. It is not the whole
