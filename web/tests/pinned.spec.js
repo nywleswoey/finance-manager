@@ -77,7 +77,9 @@ const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName
  * inventing a row.
  */
 const PINNED = [
-  { view: "Portfolio › Holdings", tables: [{ pin: "Security", cols: 13 }] },
+  // Holdings arrives flat, grouped by ticker (#206); asset class is selected so the group
+  // banner is on screen to be measured.
+  { view: "Portfolio › Holdings", tables: [{ pin: "Security", cols: 13 }], groupBy: "asset_type" },
   { view: "Portfolio › Performance", tables: [{ pin: "market", cols: 9 }] },
   {
     // The crosstab, then the detail ledger — which the tablet tier reached and which had
@@ -178,6 +180,9 @@ for (const entry of PINNED) {
         const vp = viewportOf(testInfo.project.name);
         const tables = tablesAt(entry, vp);
         await openView(page, baseURL, view);
+        if (entry.groupBy) {
+          await page.locator(".main .card select").first().selectOption(entry.groupBy);
+        }
 
         for (const gap of unrendered ?? []) {
           testInfo.annotations.push({ type: "not-covered-by-fixtures", description: gap });
@@ -228,7 +233,7 @@ for (const entry of PINNED) {
           expect.soft(f.corner.top, "the header corner is not stuck to the top").toBe("0px");
           expect.soft(f.body.position, "the identity column is not pinned").toBe("sticky");
           expect.soft(f.body.left).toBe("0px");
-          if (f.bannerPosition !== null) {
+          if (entry.groupBy) {
             // Holdings only, and deliberate: pinning a seven-column `colSpan` banner would
             // park a subtotal over the numbers the sideways scroll exists to reach.
             expect.soft(f.bannerPosition, "the group banner got pinned").toBe("static");
