@@ -80,14 +80,20 @@ const PRICE_GLYPH = { lower: "\u2264", upper: "\u2265" };
 // Whole-ticker, so the direction is read off the SUMMARY whatever column is being checked, while
 // the figure it marks is that column's own — the coarse marking the component records as an open
 // call. A column with no price takes no bound, because `not known` has no direction.
-const priceBound = (col, s) => (col.breakeven_price != null && s.net_verdict === "bounded"
+const priceBound = (col, s) => (col.breakeven_price > 0 && s.net_verdict === "bounded"
   && s.provenance?.bound ? `${PRICE_GLYPH[s.provenance.bound]} ` : "");
 
 // The exact text one column's line renders — `fmt(n, 4)`'s quote behind whatever bound the
 // payload carries, anchored, either minus accepted. ONE rule: both layouts render the same
 // component, so both gates assert the same thing rather than one of them a prefix of it.
 const breakevenLine = (col, s) => {
-  if (col.breakeven_price == null) return new RegExp(`^be ${NOT_KNOWN_TEXT}$`);
+  // a floor at or below zero proves nothing: unknown, and its magnitude never shows
+  const floor = s.net_verdict === "bounded" && s.provenance?.bound === "upper";
+  if (col.breakeven_price == null || (col.breakeven_price <= 0 && floor)) {
+    return new RegExp(`^be ${NOT_KNOWN_TEXT}$`);
+  }
+  // a ceiling or an exact price at or below zero proves recovery: words, no figure, no bound
+  if (col.breakeven_price <= 0) return /^be free of cost$/;
   const q = escapeRe(Number(col.breakeven_price).toLocaleString("en-US",
     { minimumFractionDigits: 4, maximumFractionDigits: 4 })).replace(/-/g, "[-\u2212]");
   return new RegExp(`^be ${priceBound(col, s)}${escapeRe(symbolOf(s))}${q}$`);
@@ -399,4 +405,43 @@ test("a bounded Net bounds its price the other way", async ({ page, baseURL }) =
   }
   await expect(page.getByTestId("hero-bound"))
     .toHaveText(served.summary.provenance.bound === "lower" ? "\u2265" : "\u2264");
+});
+
+// A RECOVERED POSITION READS `free of cost`, NOT A PRICE (#201). The wire keeps the negative
+// breakeven (`_breakeven_price` does not clamp), so the captured AAPL payload — recovered at
+// -0.947 — is served as captured, then again at exactly zero, then re-labelled USD and bounded:
+// the words carry no figure, no currency, no bound glyph and no tooltip in any of those states.
+const RECOVERED = HOLDINGS.find(({ body }) => holds(body.summary) && body.summary.breakeven_price < 0);
+for (const [label, be, over] of [
+  ["negative", null, {}],
+  ["zero", 0, {}],
+  ["foreign and bounded", null, { currency: "USD", net_verdict: "bounded",
+    provenance: { ...RECOVERED?.body.summary.provenance, bound: "lower" } }],
+]) {
+  test(`a ${label} breakeven reads free of cost and prints no figure`, async ({ page, baseURL }) => {
+    expect(RECOVERED, "no captured holding is already recovered").toBeTruthy();
+    const { ticker, body } = RECOVERED;
+    const at = (o) => (be === null ? o : { ...o, breakeven_price: be });
+    const served = { ...body, summary: at({ ...body.summary, ...over }), buckets: body.buckets.map(at) };
+    await openWith(page, baseURL, ticker, served);
+    const lines = page.getByTestId("ledger-breakeven");
+    await expect(lines).toHaveCount(1);
+    await expect(lines).toHaveText(/^be free of cost$/);
+    await expect(lines).not.toHaveAttribute("title");
+  });
+}
+
+// A FLOOR AT OR BELOW ZERO PROVES NOTHING (#201). An `upper` Net is a ceiling, so the price solved
+// from it is a floor: `≥ -0.5` leaves the true breakeven free to be positive. It reads `not known`
+// — no words claiming recovery, no figure, no glyph.
+test("an upper-bounded breakeven at or below zero reads not known", async ({ page, baseURL }) => {
+  expect(RECOVERED, "no captured holding is already recovered").toBeTruthy();
+  const { ticker, body } = RECOVERED;
+  const at = (o) => ({ ...o, breakeven_price: -0.5 });
+  const served = { ...body, summary: at({ ...body.summary, net_verdict: "bounded",
+    provenance: { ...body.summary.provenance, bound: "upper" } }), buckets: body.buckets.map(at) };
+  await openWith(page, baseURL, ticker, served);
+  const lines = page.getByTestId("ledger-breakeven");
+  await expect(lines).toHaveCount(1);
+  await expect(lines).toHaveText(new RegExp(`^be ${NOT_KNOWN_TEXT}$`));
 });

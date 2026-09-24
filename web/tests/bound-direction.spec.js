@@ -139,7 +139,7 @@ for (const [name, payload] of Object.entries(STATES)) {
       await expect(page.getByTestId("hero-bound")).toHaveCount(1);
       // the breakeven, solved from that Net, is marked wherever it prints a figure
       for (const be of await page.getByTestId("ledger-breakeven").allTextContents()) {
-        if (!/not known/.test(be)) expect(be).toMatch(/be [≥≤] /);
+        if (!/not known|free of cost/.test(be)) expect(be).toMatch(/be [≥≤] /);
       }
     } else if (s.net_verdict === "caveat" && s.provenance?.bound === "lower") {
       // doubted both ways: no glyph anywhere, no single direction claimed
