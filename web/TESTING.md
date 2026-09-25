@@ -303,8 +303,8 @@ SGD, so each is re-labelled USD — the label only, since the figures are native
 converts them — and every bucket column, not just the Total, must read `US$`.
 
 Its **no-`title`** rule is gated once, and not here: `hero.spec.js` asserts the whole ledger block
-carries no `[title]` over these same eight captured holdings, which covers this line the moment it
-renders. A copy here would be eight more browser opens restating a kept rule.
+carries no `[title]` over these same captured holdings, which covers this line the moment it
+renders. A copy here would be one more browser open per holding restating a kept rule.
 
 Two gates there stand outside the render loops. The arithmetic gate is a claim about the
 **payload** — revalue a column at its own breakeven and the Net beside it lands on zero — so it
@@ -333,7 +333,7 @@ owns is the grid, so it stops at 640: below that the split is #160's stacked blo
 `phone-layout.spec.js` measures the same ticker at every phone viewport.
 
 `tests/phone-layout.spec.js` — **the ticker detail page's phone tier** (#160), at the phone
-viewports, over every captured holding (8 tickers x 360 / 390 / 430 / 639 — the "24 layout x state
+viewports, over every captured holding (each ticker x 360 / 390 / 430 / 639 — the "24 layout x state
 combinations" plus the tier's last pixel). Per ticker: `.main` has nothing to scroll sideways; the
 five tiles are five full-width rows at the 44px floor; the truth claims a captured payload reaches
 (the no-capital sentence, the refusal) are visible while the explanations sit behind one 44px
@@ -350,9 +350,9 @@ sentence with it — the glyph sits outside the disclosure, the carry sentence i
 `tests/hero.spec.js` — the **ticker detail page's hero Net, the reconciliation ledger that proves
 it, and the five position tiles** (#156). The page's whole claim is that the figure in the largest
 type is checkable, so the gate is that the lines directly under it add up to it at **zero
-tolerance** — and it runs over **every captured holding**, because the eight `holding-*.json`
-payloads are eight shapes of that claim: a wheel, a windfall, a caveat, a two-bucket name, a closed
-name, two carries and the one refusal. A block of lines either adds up or it does not, and it does
+tolerance** — and it runs over **every captured holding**, because the `holding-*.json`
+payloads are different shapes of that claim: a wheel, a windfall, a caveat, a two-bucket name, a closed
+name, two carries, the one refusal, and UD1U, paid in EUR and SGD. A block of lines either adds up or it does not, and it does
 the same at 360px as at 1440px, so this runs at **one viewport in a project of its own**, the
 reasoning `ticker.spec.js` already carries.
 
