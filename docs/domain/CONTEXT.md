@@ -119,7 +119,7 @@ already carries the cost — booking a cash outflow too would charge the fee twi
 **Cost partition**:
 The split of a position's **entering units** — gross units in, so a sale subtracts nothing —
 into exactly three **conditions**, summing to that total. A boolean cannot say the thing that is
-actually true of Q01: 17,000 of its 68,000 units entered with no recorded cost. Shipped nested
+actually true of C38U: 500 of its 6,700 units entered with no recorded cost. Shipped nested
 (`cost_partition`) so the counts cannot drift apart among ~25 flat siblings, with `unknown_pct`
 pre-computed. The three:
 

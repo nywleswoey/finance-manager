@@ -79,18 +79,18 @@ ticker in that shape.
 
 ## Cost truth is a partition of units
 
-A boolean cannot say the thing that is actually true of Q01: *17,000 of its 68,000 units
+A boolean cannot say the thing that is actually true of C38U: *500 of its 6,700 units
 entered with no recorded cost*. So every entering unit lands in exactly one of three
 conditions, computed after the corporate-action carry and the switch rebasing run and shipped
 as a nested `cost_partition` on every position row:
 
 ```json
-"cost_partition": { "units_in": 68000, "costed": 51000, "free": 0,
-                    "unknown": 17000, "unknown_pct": 0.25 }
+"cost_partition": { "units_in": 6700, "costed": 6200, "free": 0,
+                    "unknown": 500, "unknown_pct": 0.0746 }
 ```
 
 The three **sum to gross units in** on every position — 73 of 73 in the live book, which totals
-1,574,652 units in: 1,521,274 costed, 545 free, 52,833 unknown. Nested so the counts cannot
+1,574,652 units in: 1,538,274 costed, 545 free, 35,833 unknown. Nested so the counts cannot
 drift apart among ~25 flat siblings and the self-check is visible in one place.
 `tests/test_performance_live.py` holds those figures to the ledger they were measured against.
 
@@ -107,8 +107,7 @@ drift apart among ~25 flat siblings and the self-check is visible in one place.
   lot. `gifted stock in` and `bonus issuance` are mechanical and need no annotation.
 - **`cost_known` is the partition read as a boolean**: false only when *every* entering unit is
   unknown. Not `unknown == 0`, which would flip C38U to false and delete its 7,756.75 Net.
-  Live, the refusal set is ASTREA6B alone; the caveat set is S51 40.0%, SET 27.9%, Q01 25.0%,
-  C38U 7.5%.
+  Live, the refusal set is ASTREA6B alone; the caveat set is S51 40.0%, SET 27.9%, C38U 7.5%.
 
 ## The four cell states
 
@@ -229,8 +228,7 @@ Six rules, each with its own gate in `tests/test_peak_car.py`:
    the statement dates.
 6. **Units nobody paid for contribute nothing** — the term carries the costed share,
    `costed(t) / units_in(t)`. Dated like every other term: an undated ratio lets a lot arriving
-   uncosted in 2021 shrink capital that was at risk in 2020, which reads 25,096 on one name
-   against a measured 33,461.
+   uncosted in 2021 shrink capital that was at risk in 2020.
 
 `return_verdict` is a second axis, independent of the Net's: `no_capital` where peak CAR is
 zero (the return does not *exist* — undefined, not unmeasured), `caveat` where some entering
