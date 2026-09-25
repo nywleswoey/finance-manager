@@ -92,33 +92,28 @@ page answers the question off the dividend rows it already has — no rows and a
 that never existed — which is a render-side workaround for a wire-side gap, not a substitute for
 closing it: every other consumer still cannot tell *never paid* from *paid zero*.
 
-### `income_sgd` converts once, at the wrong rate, on a name paid in two currencies
+### `income_sgd` converts at the dividend's currency
 
-**Open defect, unfixed, and now on more surfaces than before.** `_accumulate_positions` adds each
-dividend's `gross` to `p["income"]` as a **native amount with its currency discarded**
-(`performance.py:1120`), and `_build_row` converts that sum once at the **security's** rate
-(`:1038`). A dividend paid in a currency other than the security's is therefore converted at the
-wrong rate — or, for an SGD-quoted security, not converted at all.
+Each dividend's `gross` still sums into `income` (`income_native` is that sum, currencies and
+all). `income_sgd` converts **per payment**, at that payment's currency, and the XIRR flow is
+the same amount restated into the security's currency. A same-currency book is unchanged: the
+SGD figure is still `income ×` the security's rate, one multiply in `_build_row`. A second
+currency adds only the spread (`income_fx_sgd`).
 
-Two names are live, and the error is not a rounding one:
+It used to convert the summed gross once, at the security's rate. On an SGD-quoted name that
+is 1:1, so a EUR payment was counted as SGD. Measured then, at that write-up's FX:
 
-| ticker | currencies | `income_sgd` ships | true SGD | short by |
+| ticker | currencies | `income_sgd` shipped | true SGD | short by |
 |---|---|---:|---:|---:|
 | UD1U | EUR + SGD | 12,735.80 | 17,870.29 | **5,134.49** |
 | SET | SGD + EUR | 10,653.40 | 10,960.48 | **307.08** |
 
-It reaches `net_pl_sgd`, so Holdings' Net, `/api/performance`'s groups, the Overview headline and
-the ticker detail page's hero are all understated on those two names by those amounts. The detail
-page used to be the one surface that escaped it, because it re-summed the rows' own `gross_sgd`
-client-side; #143 §1 kills that reduce ("the frontend renders and never derives"), and keeping it
-would have put a second dividend total in the app and left the reconciliation ledger not adding up
-to its own Net.
-
-**The fix is one place**: accumulate the SGD amount per dividend, at the dividend's own currency's
-rate, rather than converting the native sum. It is deliberately not made here — it moves
-`/api/positions`, `/api/performance` and `/api/holding` together and wants its own ticket with its
-own numbers. **Neither name is a captured fixture**, so no gate in either suite sees it; a capture
-that adds one would be the cheapest way to make this fail loudly.
+Those gaps moved `net_pl_sgd`, Holdings' Net, `/api/performance`'s groups, the Overview
+headline, the detail hero, `breakeven_price` and `return_pct`. The gate is a fold test with a EUR
+dividend on an SGD name (`tests/test_performance_fold.py`); UD1U's detail payload is a captured
+fixture. Tiger's flex file has its own currency column and the live SET/CWBU rows in it are SGD
+(the cash equals quantity times the SGD gross rate), so they were not part of this gap — the EUR on
+these two names arrives from CDP, FSM and SRS already tagged.
 
 - **`options_pl_sgd` null means no leg of this ticker has resolved yet** — a never-optioned ticker
   omits the row rather than carrying a permanent `Options 0` line (61 of 73 legs live). That is

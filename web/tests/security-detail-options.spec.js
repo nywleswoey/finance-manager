@@ -23,12 +23,12 @@
  *
  * THE DIVIDENDS HALF OF THIS FILE IS GONE, DELIBERATELY — AND IT WAS RIGHT ABOUT SOMETHING.
  * It used to assert that the dividend total summed the rows' own SGD rather than the summary's
- * figure, because `income_sgd` adds native amounts across payment currencies and converts once
- * at the security's rate: on UD1U that is 5,134.49 short and on SET 307.08. #143 §1 kills BOTH
- * of this page's client-side reductions anyway — the page renders and never derives, and a
- * second, better dividend total on this one surface would leave the reconciliation ledger not
- * adding up to its own Net. The defect did not go away with the test: it is written down in
- * `docs/runbooks/BACKEND.md` with its numbers and its fix, which is on the wire. `hero.spec.js`
+ * figure, because `income_sgd` added native amounts across payment currencies and converted once
+ * at the security's rate: on UD1U that was 5,134.49 short and on SET 307.08. The fold now
+ * converts each dividend at its own currency (`docs/runbooks/BACKEND.md`). #143 §1 still kills
+ * BOTH of this page's client-side reductions — the page renders and never derives, and a
+ * second dividend total on this one surface would leave the reconciliation ledger not
+ * adding up to its own Net. `hero.spec.js`
  * gates the replacement for both streams at once, against a payload whose components
  * deliberately disagree with the rows beneath them.
  *

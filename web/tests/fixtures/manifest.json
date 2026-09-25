@@ -83,6 +83,10 @@
   "file": "holding-astrea6b.json",
   "status": 200
  },
+ "/api/holding?ticker=UD1U": {
+  "file": "holding-ud1u.json",
+  "status": 200
+ },
  "/api/networth/items": {
   "file": "networth-items.json",
   "status": 200

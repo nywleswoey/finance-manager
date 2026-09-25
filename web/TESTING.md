@@ -412,9 +412,10 @@ Since #156 the figure is a reconciliation line rather than a tile and these gate
 the dividends half of the file is **gone**, because it asserted the dividend total summed the rows
 on screen and §1 of the spec kills both of this page's client-side reductions — `hero.spec.js`
 gates the replacement for both streams at once. That deleted test was right about something,
-though: `income_sgd` adds native amounts across payment currencies, so it is 5,134.49 short on
-UD1U and 307.08 on SET. The defect outlived the test and is written down in
-`docs/runbooks/BACKEND.md`, where the fix is — on the wire, not on this page. Every expectation is derived from the fixture,
+though: `income_sgd` used to add native amounts across payment currencies, 5,134.49 short on
+UD1U and 307.08 on SET at that write-up's FX. The fold now converts each dividend at its own
+currency (`docs/runbooks/BACKEND.md`); the page still renders that figure and does not
+re-sum the rows. Every expectation is derived from the fixture,
 including the guard that the fixture still carries enough expired-worthless legs to tell the two
 folds apart.
 
