@@ -4,10 +4,10 @@
  * captured ticker at every phone width.
  *
  * WHY IT RUNS AT THE PHONE VIEWPORTS. Every claim here is about width: whether a block fits, a
- * row is 44px, a sentence is on screen or behind a disclosure. The eight captured payloads are
- * eight different shapes of the hero (a wheel, a windfall, a caveat, a two-bucket name, a closed
- * name, two bounded names and the refusal), so 8 tickers x the phone-tier viewports covers the
- * "24 layout x state combinations" at 360 / 390 / 430 and adds the tier's last pixel.
+ * row is 44px, a sentence is on screen or behind a disclosure. The captured payloads are
+ * different shapes of the hero (a wheel, a windfall, a caveat, a two-bucket name, a closed
+ * name, two bounded names, the refusal, and UD1U paid in two currencies), so each ticker x
+ * the phone-tier viewports covers those shapes at 360 / 390 / 430 and adds the tier's last pixel.
  *
  * TWO LOOPS, AND THE SECOND EXISTS FOR ONE CLAIM. Both the bound prefix and the carry sentence
  * ride `summary.provenance`, which only the bounded captures carry, so the `BOUNDED` loop at the

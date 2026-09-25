@@ -493,7 +493,7 @@ def _live_ticker_car():
         cdp = cdp_cost(s)
         corp = s.execute(text(
             "SELECT from_ticker, to_ticker, type FROM corporate_action")).all()
-    pos, meta = _accumulate_positions(txns, divs, cdp, corp, today, annotation_map())
+    pos, meta = _accumulate_positions(txns, divs, cdp, corp, today, annotation_map(), fx)
     contracts = contracts_by_ticker()
     return {tk: ticker_car(ls, contracts.get(tk, ()), fx, today)
             for tk, ls in legs_by_ticker(pos, meta).items()}

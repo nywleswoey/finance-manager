@@ -30,7 +30,7 @@ def _fold(txns, *, divs=None, cdp=None, corp=None, options=None, fx=None, price=
     # Every shape this suite fabricates is also a gate on the dated series the fold keeps beside
     # its scalars (#147): the criterion is terminal equality on *every* shape, so it is asserted
     # here rather than only in the tests written for it. See _assert_terminal_equal below.
-    _assert_terminal_equal(_acc(txns, divs=divs, cdp=cdp, corp=corp))
+    _assert_terminal_equal(_acc(txns, divs=divs, cdp=cdp, corp=corp, fx=fx))
     return perf.fold_positions(txns, divs or [], cdp or {}, corp or [], options or {},
                                fx or {}, price or {}, TODAY)
 
@@ -102,6 +102,48 @@ def test_dividend_income_folds_in():
     assert r["income_sgd"] == 50.0
 
 
+def test_a_eur_dividend_on_an_sgd_name_converts_at_the_dividends_rate():
+    """UD1U and SET are quoted in SGD and also paid in EUR. Summing every gross and
+    converting once at the security's rate (1:1) drops the FX: the live book shipped
+    UD1U 5,134.49 short and SET 307.08 short. 100 SGD + 80 EUR at 1.50 is 220 SGD,
+    not 180."""
+    fx = {"EUR": 1.50}
+    common = dict(account_id=1, security_id=10)
+    divs = [{**common, "pay_date": D(2021, 6, 1), "gross": 100.0, "currency": "SGD"},
+            {**common, "pay_date": D(2022, 6, 1), "gross": 80.0, "currency": "EUR"}]
+    labelled_sgd = [{**d, "currency": "SGD"} for d in divs]
+    txns = [_txn(qty_signed=100, price=10.0)]
+    r = _only(_fold(txns, divs=divs, fx=fx, price={10: 10.0}))
+    wrong = _only(_fold(txns, divs=labelled_sgd, fx=fx, price={10: 10.0}))
+    assert r["income_native"] == 180.0          # grosses summed; currencies are not mixed in
+    assert wrong["income_sgd"] == 180.0         # the bug: EUR gross counted as SGD
+    assert r["income_sgd"] == 220.0             # 100 + 80 * 1.50
+    assert r["pl_sgd"] == 220.0                 # price == cost, so P/L is the income
+    assert r["net_pl_sgd"] == 220.0
+    assert r["breakeven_price"] == 7.8          # (1000 - 220) / 100; the bug quotes 8.2
+    assert wrong["breakeven_price"] == 8.2
+    assert r["xirr"] > wrong["xirr"]
+    assert r["return_pct"] > wrong["return_pct"]
+    flows = _acc(txns, divs=divs, fx=fx)[("cash", 10)]["flows"]
+    assert [fl for fl in flows if fl[1] > 0] == [(D(2021, 6, 1), 100.0), (D(2022, 6, 1), 120.0)]
+
+
+def test_xirr_flow_converts_a_foreign_dividend_into_the_security_currency():
+    """Flows are in the security's currency, same as -qty*price. 80 EUR on a USD name
+    at EUR 1.50 / USD 1.30 is 120 SGD of income and 80 * 1.50 / 1.30 USD in the flow."""
+    fx = {"USD": 1.30, "EUR": 1.50}
+    txns = [_txn(currency="USD", canonical_ticker="AAPL", market="US", qty_signed=100, price=10.0)]
+    divs = [{"account_id": 1, "security_id": 10, "pay_date": D(2022, 6, 1),
+             "gross": 80.0, "currency": "EUR"}]
+    r = _only(_fold(txns, divs=divs, fx=fx, price={10: 10.0}))
+    assert r["income_native"] == 80.0
+    assert r["income_sgd"] == 120.0
+    flows = _acc(txns, divs=divs, fx=fx)[("cash", 10)]["flows"]
+    # 80 EUR * 1.50 / 1.30 USD-per-SGD, worked out beside the fold.
+    assert [round(a, 10) for _, a in flows if a > 0] == [round(92.3076923077, 10)]
+    assert [d for d, a in flows if a > 0] == [D(2022, 6, 1)]
+
+
 def test_options_income_attaches_to_cash_bucket_only():
     rows = _fold([_txn(qty_signed=100, price=10.0)],
                  options={"D05": {"pl_sgd": 123.45}}, price={10: 10.0})
@@ -164,10 +206,11 @@ def test_foreign_currency_converts_at_fx():
 # and reach no endpoint.
 # ---------------------------------------------------------------------------
 
-def _acc(txns, *, divs=None, cdp=None, corp=None, annotations=None):
+def _acc(txns, *, divs=None, cdp=None, corp=None, annotations=None, fx=None):
     """The fold's accumulators, before _build_row flattens them into output rows."""
     return perf._accumulate_positions(txns, divs or [], cdp or {}, corp or [], TODAY,
-                                      {} if annotations is None else annotations)[0]
+                                      {} if annotations is None else annotations,
+                                      fx=fx or {})[0]
 
 
 def _cdp(*legs):

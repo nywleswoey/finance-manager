@@ -2,7 +2,8 @@
 """Parse cash dividends / distributions from every statement source -> dividends.csv.
 
 Sources:
-  Tiger flex  : 'Dividends' section, rows with status 'Paid' (HK/SG/US; ccy by market)
+  Tiger flex  : 'Dividends' section, rows with status 'Paid' (currency from the
+                flex column; market inference only when that cell is blank)
   FSM/iFast   : 'Stock Dividend' rows that are 'Cash Dividend' / 'Cash in Lieu' (SGD)
   CDP         : 'Summary of Payments' in the monthly PDFs (SG)
   Moomoo      : dividend lines in the monthly PDFs (SG/US)
@@ -28,6 +29,20 @@ def norm(sym, market):
 DIV = []
 def add(**k): DIV.append(k)
 
+def tiger_currency(sym, explicit):
+    """Payout currency for one Tiger flex dividend row.
+
+    The flex file's last column is the cash currency when it holds a 3-letter code
+    (HKD on Link, USD on a US name, SGD on an SGX name). A blank cell falls back to
+    the market. A ticker-wide EUR override is the wrong refinement: SET and CWBU
+    also pay SGD distributions, and those Tiger amounts equal quantity times the SGD
+    gross rate with this column set to SGD. Forcing EUR would convert cash that is
+    already SGD."""
+    code = (explicit or "").strip().upper()
+    if len(code) == 3 and code.isalpha():
+        return code
+    return MARKET_CCY[market_of(sym)]
+
 # ---------- Tiger ----------
 def tiger():
     for pat, acct in [("tiger-prime/*.csv", "Tiger Prime"),
@@ -39,9 +54,11 @@ def tiger():
                 if row[9].strip() != "Paid":            # only cash received; ignore accruals
                     continue
                 sym = row[6].strip(); mkt = market_of(sym)
+                explicit = row[14] if len(row) > 14 else ""
                 add(date=row[4], account=acct, market=mkt, ticker=norm(sym, mkt),
                     name=re.sub(r"\s*\(.*\)$", "", sym), kind="cash",
-                    gross=num(row[10]), currency=MARKET_CCY[mkt], source="tiger (dividends)")
+                    gross=num(row[10]), currency=tiger_currency(sym, explicit),
+                    source="tiger (dividends)")
 
 # ---------- FSM / iFast ----------
 def fsm():
@@ -204,20 +221,24 @@ def apply_corrections():
         if k in CORRECTIONS and not d.get("units") and not d.get("rate"):
             d["units"], d["rate"] = CORRECTIONS[k]
 
-# ---------- run all sources ----------
-tiger(); fsm(); moomoo(); cpf_srs(); cdp(); apply_corrections()   # cdp() last: dedups vs the rest
-out = os.path.join(HERE, "dividends.csv")
-cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "units", "rate", "currency", "source"]
-write_csv(out, cols, DIV, extrasaction="ignore")
+def main():
+    # cdp() last: dedups vs the rest
+    tiger(); fsm(); moomoo(); cpf_srs(); cdp(); apply_corrections()
+    out = os.path.join(HERE, "dividends.csv")
+    cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "units", "rate", "currency", "source"]
+    write_csv(out, cols, DIV, extrasaction="ignore")
 
-# ---------- summary ----------
-by_ccy = defaultdict(lambda: defaultdict(float))
-for d in DIV: by_ccy[d["currency"]][d["market"]] += d["gross"]
-print(f"dividend rows: {len(DIV)} -> {out}")
-print("\n=== total dividends by currency × market ===")
-for ccy in sorted(by_ccy):
-    for mkt, v in sorted(by_ccy[ccy].items()):
-        print(f"  {ccy} {mkt}: {v:>12,.2f}")
-bysrc = defaultdict(int)
-for d in DIV: bysrc[d["source"]] += 1
-print("\nby source:", dict(bysrc))
+    by_ccy = defaultdict(lambda: defaultdict(float))
+    for d in DIV: by_ccy[d["currency"]][d["market"]] += d["gross"]
+    print(f"dividend rows: {len(DIV)} -> {out}")
+    print("\n=== total dividends by currency × market ===")
+    for ccy in sorted(by_ccy):
+        for mkt, v in sorted(by_ccy[ccy].items()):
+            print(f"  {ccy} {mkt}: {v:>12,.2f}")
+    bysrc = defaultdict(int)
+    for d in DIV: bysrc[d["source"]] += 1
+    print("\nby source:", dict(bysrc))
+
+
+if __name__ == "__main__":
+    main()
