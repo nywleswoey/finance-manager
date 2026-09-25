@@ -54,7 +54,7 @@ ingest-all:   ## delta-ingest EVERY source: brokers + spending + prices + net-wo
 	$(MAKE) ingest        # tiger-prime, tiger-cash-boost, moomoo, fsm, cdp-statements, endowus -> txn/dividend
 	$(MAKE) spending      # dbs-cc, trust-cc, dbs-consolidated -> spending ledger
 	-$(MAKE) prices       # endowus NAV + FX (needs network; non-fatal if offline)
-	$(MAKE) snapshot-commit   # new DBS months (+ tiger-prime) -> net-worth snapshots
+	$(MAKE) snapshot-commit   # one new DBS month (+ tiger-prime) -> net-worth snapshot; refuses a mis-dated catch-up
 
 schedule-install:   ## install the launchd agent: ingest-all daily 06:15
 	@# Runs against the DEPLOYED (Neon) database, not the local docker one — the point of
