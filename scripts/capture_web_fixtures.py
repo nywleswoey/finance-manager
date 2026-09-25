@@ -103,11 +103,11 @@ current code disagree on the same book and pinned date, the change is behaviour.
 behaviour, and every other value was clock, input, or both.
 
 Should capture be checked rather than left to memory? Yes. Recommended, but not built: drift is
-silent, #213 was found by accident, and hand-edited values (#211 edited its spans by hand) mix captured
-and derived numbers in one file. A possible follow-up is a `--check` mode that captures into a
-temp directory, runs the sort above, and fails on any behaviour change or unexplained value. It
-needs the docker book, so it is a local pre-merge step, not a CI one. Until then, recapture
-rather than hand-edit when a change moves a fixture value.
+silent, #213 was found by accident, and hand-edited values (#211 edited its spans by hand) mix
+captured and derived numbers in one file. A possible follow-up is a `--check` mode that
+captures into a temp directory, runs the sort above, and fails on any behaviour change or
+unexplained value. It needs the docker book, so it is a local pre-merge step, not a CI one.
+Until then, recapture rather than hand-edit when a change moves a fixture value.
 
     PYTHONPATH=. .venv/bin/python -m uvicorn server.main:app --port 8123 &
     .venv/bin/python scripts/capture_web_fixtures.py --base http://localhost:8123
