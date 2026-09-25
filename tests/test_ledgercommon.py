@@ -83,6 +83,14 @@ def test_market_of_sgx_alnum_without_si_is_sg_not_us():
     assert market_of("DBS (D05.SI)") == "SG"
 
 
+def test_tiger_dividend_symbol_currency():
+    """A Tiger dividend's currency is MARKET_CCY[market_of(symbol)]. An SGX code
+    without `.SI` is SGD; a bare display name with no code stays USD as before."""
+    assert MARKET_CCY[market_of("DBS (D05)")] == "SGD"
+    assert MARKET_CCY[market_of("Apple Inc")] == "USD"
+    assert MARKET_CCY[market_of("Apple Inc (AAPL)")] == "USD"
+
+
 def test_market_of_letters_are_us_and_digits_are_hk():
     """The Tiger-transfer and viewer spellings. A letters-only SGX code is
     indistinguishable from a US ticker; seed keeps the ledger's market when it

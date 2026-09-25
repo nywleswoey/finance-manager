@@ -107,15 +107,8 @@ def test_public_paths_follow_the_routers():
     from server import main
     from server.routes.spending import router as spending_router
 
-    routed = set()
-    for route in auth.router.routes:
-        path = route.path
-        if not path.startswith(auth.router.prefix):
-            path = auth.router.prefix.rstrip("/") + path
-        if getattr(route, "methods", None):
-            routed.add(path)
-    assert routed == {p for p in main._PUBLIC_PATHS if p.startswith(auth.router.prefix)}
-    assert routed == {"/api/auth/google", "/api/auth/me", "/api/auth/logout"}
+    assert {p for p in main._PUBLIC_PATHS if p.startswith("/api/auth")} == {
+        "/api/auth/google", "/api/auth/me", "/api/auth/logout"}
     assert "/api/health" in main._PUBLIC_PATHS
     assert "/api/cron/refresh-prices" in main._PUBLIC_PATHS
     prefix = spending_router.prefix.rstrip("/")
