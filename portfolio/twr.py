@@ -23,6 +23,8 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
+from ingestion.prices import yahoo_symbol
+
 from .db import SessionLocal, latest_close
 
 UA = {"User-Agent": "Mozilla/5.0"}
@@ -30,14 +32,6 @@ UA = {"User-Agent": "Mozilla/5.0"}
 
 def _r4(x):
     return round(x, 4) if x is not None else None
-
-
-def ysym(tk, market):
-    if market == "SG":
-        return f"{tk}.SI"
-    if market == "HK":
-        return f"{int(tk):04d}.HK"
-    return tk
 
 
 def daily(sym, rng="10y"):
@@ -235,7 +229,7 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
         if atype == "fund":
             continue  # fund: no daily series (Endowus monthly) -> skip from TWR
         try:
-            series = fetch(ysym(tk, market))
+            series = fetch(yahoo_symbol(tk, market))
             prices[sid] = ffill(series, days)
         except Exception:
             series, prices[sid] = {}, {}
@@ -243,11 +237,22 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
         if printed:
             newest_close = max(printed + ([newest_close] if newest_close else []))
     fx = {"SGD": {d: 1.0 for d in days}}
-    for c in ("USD", "HKD", "EUR"):
+    # Whatever the book holds, not a fixed USD/HKD/EUR list. MYR had no series, so
+    # fx_on returned None and every amount in that currency was skipped.
+    for c in sorted(set(ccy_of.values()) - {"SGD"}):
         try:
             fx[c] = ffill(fetch(f"{c}SGD=X"), days)
         except Exception:
             fx[c] = {}
+    # No daily Yahoo series (a fund is skipped on purpose; see the note), or no FX
+    # series for its currency. Either one used to drop the name with nothing on the response.
+    unpriced = [
+        {"ticker": tk, "market": market, "currency": ccy_of[sid]}
+        for sid, tk, market, atype, _ccy in held
+        if (atype != "fund" and not prices.get(sid))
+        or (ccy_of[sid] != "SGD" and not fx.get(ccy_of[sid]))
+    ]
+    unpriced.sort(key=lambda r: (r["ticker"] or "", r["market"] or ""))
     price_sids = [sid for sid, p in prices.items() if p]
 
     # traded price per (security, day), for securities Yahoo has no daily series for
@@ -333,6 +338,7 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
             # cover. None when no security has a daily series at all, i.e. nothing came from
             # Yahoo and the terminal value is the stored close instead.
             "as_of": str(newest_close) if newest_close else None,
+            "unpriced": unpriced,
             "note": "money-weighted (XIRR, pay-date dividends) + time-weighted (TWR, ex-date "
                     "dividends); fund excluded from the daily series but not from XIRR"}
 
