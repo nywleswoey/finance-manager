@@ -510,7 +510,7 @@ def fetch():
         # `compute()`'s carry filter, over the rows already read
         corp = [c for c in corporate_actions
                 if c[2] in ("rename", "split", "consolidation", "merger", "switch")]
-        pos, meta = _accumulate_positions(txns, divs, cdp, corp, today, annotation_map())
+        pos, meta = _accumulate_positions(txns, divs, cdp, corp, today, annotation_map(), fx)
         contracts = contracts_by_ticker()
         car = {}
         for tk, legs in legs_by_ticker(pos, meta).items():
