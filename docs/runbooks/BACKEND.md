@@ -144,11 +144,12 @@ Two names are live, and the error is not a rounding one:
 | UD1U | EUR + SGD | 12,735.80 | 17,870.29 | **5,134.49** |
 | SET | SGD + EUR | 10,653.40 | 10,960.48 | **307.08** |
 
-It reaches `net_pl_sgd`, so Holdings' Net, `/api/performance`'s groups and the ticker detail
-page's hero are all understated on those two names by those amounts. The detail page used to be
-the one surface that escaped it, because it re-summed the rows' own `gross_sgd` client-side; #143
-§1 kills that reduce ("the frontend renders and never derives"), and keeping it would have put a
-second dividend total in the app and left the reconciliation ledger not adding up to its own Net.
+It reaches `net_pl_sgd`, so Holdings' Net, `/api/performance`'s groups, the Overview headline and
+the ticker detail page's hero are all understated on those two names by those amounts. The detail
+page used to be the one surface that escaped it, because it re-summed the rows' own `gross_sgd`
+client-side; #143 §1 kills that reduce ("the frontend renders and never derives"), and keeping it
+would have put a second dividend total in the app and left the reconciliation ledger not adding up
+to its own Net.
 
 **The fix is one place**: accumulate the SGD amount per dividend, at the dividend's own currency's
 rate, rather than converting the native sum. It is deliberately not made here — it moves

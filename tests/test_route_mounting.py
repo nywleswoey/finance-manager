@@ -44,6 +44,7 @@ def client():
 
 def test_portfolio_router_is_mounted(client, monkeypatch):
     monkeypatch.setattr(portfolio_routes, "perf", lambda: [])
+    monkeypatch.setattr(portfolio_routes, "perf_all", lambda: [])
     monkeypatch.setattr(portfolio_routes, "alloc_by_account", lambda: [])
     r = client.get("/api/overview")
     assert r.status_code == 200

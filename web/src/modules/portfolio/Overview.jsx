@@ -25,7 +25,7 @@ export default function Overview() {
         <Tile lbl="Time-weighted Return (p.a.)"
               val={ret == null ? "…" : ret.twr_annualised == null ? "—" : pct(ret.twr_annualised)}
               cls={ret && cls(ret.twr_annualised)} />
-        <Tile lbl="Total P/L (cost-known)" val={sgd(d.pl_sgd)} cls={cls(d.pl_sgd)} />
+        <Tile lbl="Net P/L" val={sgd(d.pl_sgd)} cls={cls(d.pl_sgd)} />
         <Tile lbl="Dividends (held)" val={sgd(d.dividends_sgd)} cls="pos" />
         <Tile lbl="Options Realized P/L"
               val={opt == null ? "…" : opt.total_pl_sgd == null ? "—" : sgd(opt.total_pl_sgd)}
