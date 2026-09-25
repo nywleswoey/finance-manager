@@ -31,9 +31,10 @@ Options:
   --all-new            ingest the one DBS month that closes after the latest snapshot,
                        dated to its month-end, when that month-end is at most
                        CATCHUP_MAX_LAG_DAYS before today. Two pending months, or one
-                       older than that, are refused: portfolio and Tiger cash are read
-                       on the run day and would be stamped statement-sourced on the
-                       wrong date. The snapshot note records that valuation date.
+                       older than that, are refused: the portfolio is valued on the
+                       run day and Tiger cash comes from the newest Tiger file, and both
+                       would be stamped statement-sourced on the wrong date. The
+                       snapshot note records the portfolio valuation date.
                        Ignores --date/--dbs. Older months are not backfilled
                        (tiger/FX/portfolio can't be reconstructed historically).
   --commit             persist the snapshot(s) (otherwise dry-run)
@@ -170,8 +171,8 @@ def plan_values(items: dict, statement_vals: dict, carry: dict) -> list[dict]:
 
 
 # One new DBS month is the nightly case: the statement usually lands during the
-# next month, and the portfolio plus the newest Tiger file are valued that run
-# day on purpose. Further back than this, the run-day book is a different month.
+# next month, and the portfolio is valued that run day (beside the newest Tiger
+# file) on purpose. Further back than this, the run-day book is a different month.
 CATCHUP_MAX_LAG_DAYS = 40
 
 
@@ -189,10 +190,11 @@ def catchup_misdate(pending_yyyymm: list[str], today: dt.date,
                     max_lag_days: int = CATCHUP_MAX_LAG_DAYS) -> str | None:
     """None when --all-new may write these months. Otherwise the refusal text.
 
-    A pending month closes after the latest snapshot. Portfolio value and Tiger
-    cash are read on `today`. Dating more than one of them, or one whose month-end
-    is more than `max_lag_days` before `today`, stamps that run-day book onto the
-    month-end and marks the rows statement-sourced.
+    A pending month closes after the latest snapshot. The portfolio is valued on
+    `today` and Tiger cash comes from the newest Tiger file, whatever its month.
+    Dating more than one of them, or one whose month-end is more than
+    `max_lag_days` before `today`, stamps that book onto the month-end and marks
+    the rows statement-sourced.
     """
     if not pending_yyyymm:
         return None
@@ -202,13 +204,13 @@ def catchup_misdate(pending_yyyymm: list[str], today: dt.date,
     if not too_many and not too_old:
         return None
     lines = [
-        "REFUSING --all-new: portfolio and Tiger cash are valued on "
-        f"{today.isoformat()} (run day) and would be stamped source=statement "
-        "on a DBS month-end that is not that day.",
+        f"REFUSING --all-new: the portfolio is valued on {today.isoformat()} (run day) "
+        "and Tiger cash comes from the newest Tiger file; both would be stamped "
+        "source=statement on a DBS month-end they do not describe.",
     ]
     if too_many:
         lines.append(
-            f"{len(lags)} DBS months are pending; each would carry that same run-day book:")
+            f"{len(lags)} DBS months are pending; each would carry that same book:")
     elif too_old:
         lines.append(
             f"The month-end is more than {max_lag_days} days before the run day.")
@@ -221,12 +223,13 @@ def catchup_misdate(pending_yyyymm: list[str], today: dt.date,
 
 
 def snapshot_note(tiger_path: str, dbs_path: str, dbs_asat: str, valued_on: dt.date) -> str:
-    """Note stored on the snapshot. The row's date is the DBS month-end; portfolio
-    and Tiger cash were valued on `valued_on`. `nw_snapshot.note` is varchar(256)."""
+    """Note stored on the snapshot. The row's date is the DBS month-end; the portfolio
+    was valued on `valued_on` and Tiger cash is as of the named Tiger file.
+    `nw_snapshot.note` is varchar(256)."""
     note = (
         f"statements: tiger {os.path.basename(tiger_path)} + "
         f"dbs {os.path.basename(dbs_path)} (as at {dbs_asat}); "
-        f"portfolio and tiger valued {valued_on.isoformat()}"
+        f"portfolio valued {valued_on.isoformat()}"
     )
     # Raising here beats a driver error after ensure_fx has already committed.
     if len(note) > 256:
@@ -269,8 +272,8 @@ def build_snapshot(s, snap_date: dt.date, dbs_path: str, tiger_path: str, commit
                    valued_on: dt.date | None = None) -> int:
     """Preview (and optionally commit) one snapshot. Returns 0 ok, 1 skipped/error.
 
-    `valued_on` is the day portfolio value and Tiger cash were read. It is the run
-    day, which is not `snap_date` when the row is dated to a DBS month-end.
+    `valued_on` is the day the portfolio was valued. It is the run day, which is
+    not `snap_date` when the row is dated to a DBS month-end.
     """
     if valued_on is None:
         valued_on = dt.date.today()

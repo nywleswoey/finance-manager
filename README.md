@@ -44,7 +44,7 @@ lands. Per-source commands below if you want to run just one pipeline.
 | `data/` broker statements (Tiger / Moomoo / FSM / CDP / Endowus) | `make ingest` | re-parse → `txn` + `dividend` (only net-new rows land) |
 | `data/*-cc`, bank/card statements | `make spending` | parse → classify → spending ledger |
 | — (market data) | `make prices` | refresh latest prices + FX (needs network) |
-| `data/dbs-consolidated-statements/dbs_YYYYMM.pdf` (+ latest `data/tiger-prime/`) | `make snapshot` → `make snapshot-commit` | preview, then write a net-worth snapshot per DBS month newer than the latest one (month-end dated) |
+| `data/dbs-consolidated-statements/dbs_YYYYMM.pdf` (+ latest `data/tiger-prime/`) | `make snapshot` → `make snapshot-commit` | preview, then write a net-worth snapshot for the one DBS month newer than the latest one (month-end dated); refuses a multi-month or stale catch-up |
 
 Unattended, against the **deployed** database: `make schedule-install` loads a launchd agent
 that runs `make ingest-all` daily at 06:15, plus a Vercel Cron that refreshes prices in the
@@ -78,8 +78,9 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
   broker/bank statements by `scripts/snapshot_from_statements.py` (Tiger Prime CSV cash +
   MMF, DBS consolidated PDF Multiplier + SRS cash; other items carried forward; FX
   auto-backfilled). Dry-run by default; `--commit` writes; `--all-new --commit` ingests
-  one new DBS month (month-end dated) and refuses a catch-up that would stamp run-day
-  portfolio and Tiger cash onto an older month. The snapshot note records the valuation date.
+  one new DBS month (month-end dated) and refuses a catch-up that would stamp the run-day
+  portfolio and newest Tiger cash onto an older month. The snapshot note records the
+  portfolio valuation date and the Tiger file.
 - **App** (`web/`) — three modules behind a shared shell: **Portfolio** (Overview with tiles +
   allocation donuts, Holdings, Performance, Dividends, Options, Transactions), **Net Worth**
   (snapshots + trend), and **Spending** (Overview, By Category, Classify, Recurring,

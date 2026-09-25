@@ -110,9 +110,9 @@ class PlanReachesTheColumnTest(unittest.TestCase):
 
 
 class CatchupGuardTest(unittest.TestCase):
-    """--all-new dates each pending DBS month to its month-end, but portfolio value and
-    the Tiger file are whatever is on disk on the run day. Two pending months (or one
-    month-end further back than CATCHUP_MAX_LAG_DAYS) would stamp that run-day book onto
+    """--all-new dates each pending DBS month to its month-end, but the portfolio is
+    valued on the run day and the Tiger file is the newest on disk. Two pending months (or
+    one month-end further back than CATCHUP_MAX_LAG_DAYS) would stamp that book onto
     every month-end and mark it statement-sourced. The guard refuses before any write
     and names the dates that would have been wrong."""
 
@@ -172,8 +172,9 @@ class CatchupGuardTest(unittest.TestCase):
 
 
 class ValuationNoteTest(unittest.TestCase):
-    """The month-end date stays. The note says which day the portfolio and Tiger cash
-    were actually valued, because that day is not the month-end."""
+    """The month-end date stays. The note says which day the portfolio was actually
+    valued, because that day is not the month-end, and names the Tiger file whose
+    statement the Tiger cash comes from."""
 
     def setUp(self):
         self.s = make_session()
@@ -202,16 +203,17 @@ class ValuationNoteTest(unittest.TestCase):
             rc = ingest.build_snapshot(
                 self.s, dt.date(2026, 7, 31),
                 "data/dbs-consolidated-statements/dbs_202607.pdf",
-                "data/tiger-prime/tiger_prime_20260926.csv",
+                "data/tiger-prime/tiger_prime_20260910.csv",
                 True, valued_on=dt.date(2026, 9, 26))
         self.assertEqual(rc, 0)
         snap = self.s.query(NwSnapshot).one()
         self.assertEqual(snap.date, dt.date(2026, 7, 31))
-        self.assertIn("portfolio and tiger valued 2026-09-26", snap.note)
-        self.assertIn("tiger_prime_20260926.csv", snap.note)
+        self.assertIn("portfolio valued 2026-09-26", snap.note)
+        self.assertIn("tiger_prime_20260910.csv", snap.note)
+        self.assertNotIn("tiger valued", snap.note)
         self.assertIn("dbs_202607.pdf", snap.note)
         self.assertLessEqual(len(snap.note), 256)
-        self.assertIn("portfolio and tiger valued 2026-09-26", buf.getvalue())
+        self.assertIn("portfolio valued 2026-09-26", buf.getvalue())
         got = {v.item.code: v.source for v in
                self.s.query(NwValue).filter(NwValue.snapshot_id == snap.id).all()}
         self.assertEqual(got["tiger_usd"], "statement")
