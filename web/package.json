@@ -9,7 +9,7 @@
     "test": "playwright test"
   },
   "dependencies": {
-    "posthog-js": "^1.430.3",
+    "posthog-js": "^1.434.9",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "recharts": "^3.10.1"
