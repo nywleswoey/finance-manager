@@ -235,7 +235,8 @@ Six rules, each with its own gate in `tests/test_peak_car.py`:
 `return_verdict` is a second axis, independent of the Net's: `no_capital` where peak CAR is
 zero (the return does not *exist* — undefined, not unmeasured), `caveat` where some entering
 units are unknown **or where there is no Net to divide at all** (direction: `net_verdict` in
-`portfolio/performance.py`), else `ok`. Never `ok` beside a
+`portfolio/performance.py`, read for both sides of the ratio in
+`web/src/modules/portfolio/bound.js`), else `ok`. Never `ok` beside a
 null percentage — that is the one pairing a renderer branching on the verdict cannot survive. **`peak_car_sgd` is always a number**, a measured zero where
 nothing was at risk; the verdict, not a null, is what a renderer branches on.
 

@@ -245,7 +245,8 @@ not by the month-end statement that reported them. "Always today" overcharges cl
 **Return verdict**:
 What the percentage can claim, on its own axis rather than the Net's: `ok`, `caveat` (some
 entering units are unknown, or no Net exists for the division; direction: `net_verdict` in
-`portfolio/performance.py`), or `no_capital` (peak CAR is zero, so the return does not exist —
+`portfolio/performance.py`, read for both sides of the ratio in
+`web/src/modules/portfolio/bound.js`), or `no_capital` (peak CAR is zero, so the return does not exist —
 undefined, not unmeasured). The **verdict**, not a null, is what decides how the figure renders.
 _Avoid_: net verdict (a different axis — one name can be hero-on-Net and no-capital-on-return
 at once)

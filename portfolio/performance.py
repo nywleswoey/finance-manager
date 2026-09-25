@@ -1133,7 +1133,8 @@ def _return_figures(car, rows):
     null, is what gates the render**.
 
     **`caveat`** where some entering units are unknown. The direction of either side of the
-    ratio is `net_verdict`'s, above, and is never decided here. The percentage carries its own
+    ratio is never decided here: the Net's is `net_verdict`'s, above, and the page reads both in
+    `web/src/modules/portfolio/bound.js`. The percentage carries its own
     verdict rather than reusing the Net's, which would leave it reading as merely optimistic
     instead of not comparable to any other name.
     """
