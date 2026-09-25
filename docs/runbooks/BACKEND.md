@@ -94,11 +94,10 @@ closing it: every other consumer still cannot tell *never paid* from *paid zero*
 
 ### `income_sgd` converts at the dividend's currency
 
-Each dividend's `gross` still sums into `income` (`income_native` is that sum, currencies and
-all). `income_sgd` converts **per payment**, at that payment's currency, and the XIRR flow is
-the same amount restated into the security's currency. A same-currency book is unchanged: the
-SGD figure is still `income ×` the security's rate, one multiply in `_build_row`. A second
-currency adds only the spread (`income_fx_sgd`).
+Each dividend is restated **per payment** into the security's currency, at that payment's
+currency, before it sums into `income` and the XIRR flows. `income_native` is that one-currency
+sum, so `total_pl_native == mv + proceeds + income_native - invested_native` holds, and
+`income_sgd` is still `income ×` the security's rate. A same-currency book is unchanged.
 
 It used to convert the summed gross once, at the security's rate. On an SGD-quoted name that
 is 1:1, so a EUR payment was counted as SGD. Measured then, at that write-up's FX:
