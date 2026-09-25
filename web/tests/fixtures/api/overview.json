@@ -1,119 +1,119 @@
 {
- "market_value_sgd": 1276109.99,
- "dividends_sgd": 167504.84,
- "pl_sgd": 376400.92,
- "cost_sgd": 1777650.31,
- "return_pct": 0.2117,
+ "market_value_sgd": 1291335.31,
+ "dividends_sgd": 167695.02,
+ "pl_sgd": 387847.16,
+ "cost_sgd": 1786091.54,
+ "return_pct": 0.2171,
  "positions": 41,
  "by_market": {
   "SG": {
-   "mv_sgd": 715261.49,
+   "mv_sgd": 710670.83,
    "income_sgd": 139575.12,
-   "pl_sgd": 375658.0,
+   "pl_sgd": 371067.34,
    "cost_sgd": 531286.25,
    "capital_sgd": 418702.32,
    "invested_sgd": 531286.25,
    "realised_pl_sgd": 3241.58,
-   "unrealised_pl_sgd": 242898.17,
-   "stock_pl_sgd": 236082.88,
-   "unsplit_pl_sgd": -10056.87
+   "unrealised_pl_sgd": 238930.51,
+   "stock_pl_sgd": 231492.22,
+   "unsplit_pl_sgd": -10679.87
   },
   "HK": {
-   "mv_sgd": 157250.14,
-   "income_sgd": 26133.41,
-   "pl_sgd": 45245.45,
-   "cost_sgd": 294125.1,
-   "capital_sgd": 155209.27,
-   "invested_sgd": 294125.1,
-   "realised_pl_sgd": 17071.16,
-   "unrealised_pl_sgd": 2040.86,
-   "stock_pl_sgd": 19112.02,
+   "mv_sgd": 156836.64,
+   "income_sgd": 26311.4,
+   "pl_sgd": 44069.05,
+   "cost_sgd": 296128.43,
+   "capital_sgd": 156266.43,
+   "invested_sgd": 296128.43,
+   "realised_pl_sgd": 17187.45,
+   "unrealised_pl_sgd": 570.22,
+   "stock_pl_sgd": 17757.67,
    "unsplit_pl_sgd": 0.0
   },
   "US": {
-   "mv_sgd": 396387.8,
-   "income_sgd": 1796.31,
-   "pl_sgd": -42073.66,
-   "cost_sgd": 942599.53,
-   "capital_sgd": 413133.7,
-   "invested_sgd": 942599.53,
-   "realised_pl_sgd": -27124.03,
-   "unrealised_pl_sgd": -16745.93,
-   "stock_pl_sgd": -43869.96,
+   "mv_sgd": 416766.89,
+   "income_sgd": 1808.5,
+   "pl_sgd": -24670.43,
+   "cost_sgd": 948997.11,
+   "capital_sgd": 415937.72,
+   "invested_sgd": 948997.11,
+   "realised_pl_sgd": -27308.13,
+   "unrealised_pl_sgd": 829.19,
+   "stock_pl_sgd": -26478.94,
    "unsplit_pl_sgd": 0.0
   },
   "MY": {
-   "mv_sgd": 7210.56,
+   "mv_sgd": 7060.95,
    "income_sgd": 0.0,
-   "pl_sgd": -2428.87,
-   "cost_sgd": 9639.43,
-   "capital_sgd": 9639.43,
-   "invested_sgd": 9639.43,
+   "pl_sgd": -2618.8,
+   "cost_sgd": 9679.75,
+   "capital_sgd": 9679.75,
+   "invested_sgd": 9679.75,
    "realised_pl_sgd": 0.0,
-   "unrealised_pl_sgd": -2428.87,
-   "stock_pl_sgd": -2428.87,
+   "unrealised_pl_sgd": -2618.8,
+   "stock_pl_sgd": -2618.8,
    "unsplit_pl_sgd": 0.0
   }
  },
  "by_bucket": {
   "cash": {
-   "mv_sgd": 1004245.5,
-   "income_sgd": 134710.92,
-   "pl_sgd": 266244.22,
-   "cost_sgd": 1575378.6,
-   "capital_sgd": 798898.4,
-   "invested_sgd": 1575378.6,
-   "realised_pl_sgd": -10095.9,
-   "unrealised_pl_sgd": 151686.06,
-   "stock_pl_sgd": 131533.29,
-   "unsplit_pl_sgd": -10056.87
-  },
-  "cpf": {
-   "mv_sgd": 200397.49,
-   "income_sgd": 16370.62,
-   "pl_sgd": 130652.45,
-   "cost_sgd": 86115.66,
-   "capital_sgd": 86115.66,
-   "invested_sgd": 86115.66,
-   "realised_pl_sgd": 0.0,
-   "unrealised_pl_sgd": 114281.83,
-   "stock_pl_sgd": 114281.83,
-   "unsplit_pl_sgd": 0.0
+   "mv_sgd": 1022124.47,
+   "income_sgd": 134901.1,
+   "pl_sgd": 280344.11,
+   "cost_sgd": 1583819.83,
+   "capital_sgd": 802799.9,
+   "invested_sgd": 1583819.83,
+   "realised_pl_sgd": -10163.71,
+   "unrealised_pl_sgd": 166286.6,
+   "stock_pl_sgd": 145443.02,
+   "unsplit_pl_sgd": -10679.87
   },
   "srs": {
-   "mv_sgd": 71467.0,
+   "mv_sgd": 69126.75,
    "income_sgd": 16423.3,
-   "pl_sgd": -20495.75,
+   "pl_sgd": -22836.0,
    "cost_sgd": 116156.05,
    "capital_sgd": 111670.66,
    "invested_sgd": 116156.05,
    "realised_pl_sgd": 3284.61,
-   "unrealised_pl_sgd": -40203.66,
-   "stock_pl_sgd": -36919.05,
+   "unrealised_pl_sgd": -42543.91,
+   "stock_pl_sgd": -39259.3,
+   "unsplit_pl_sgd": 0.0
+  },
+  "cpf": {
+   "mv_sgd": 200084.09,
+   "income_sgd": 16370.62,
+   "pl_sgd": 130339.05,
+   "cost_sgd": 86115.66,
+   "capital_sgd": 86115.66,
+   "invested_sgd": 86115.66,
+   "realised_pl_sgd": 0.0,
+   "unrealised_pl_sgd": 113968.43,
+   "stock_pl_sgd": 113968.43,
    "unsplit_pl_sgd": 0.0
   }
  },
  "by_account": {
   "Tiger Prime": {
-   "mv_sgd": 580885.41
+   "mv_sgd": 599949.98
   },
   "SRS": {
-   "mv_sgd": 71467.0
+   "mv_sgd": 69126.74
   },
   "FSM": {
-   "mv_sgd": 332378.21
+   "mv_sgd": 331780.97
   },
   "Tiger Cash Boost": {
-   "mv_sgd": 28418.68
+   "mv_sgd": 28302.76
   },
   "CDP": {
-   "mv_sgd": 53854.4
+   "mv_sgd": 53369.22
   },
   "CPF": {
-   "mv_sgd": 200397.49
+   "mv_sgd": 200084.09
   },
   "Moomoo": {
-   "mv_sgd": 8708.77
+   "mv_sgd": 8721.56
   }
  }
 }

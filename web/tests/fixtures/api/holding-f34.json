@@ -1,6 +1,6 @@
 {
- "as_of": "2026-09-13",
- "fx_as_of": "2026-09-13",
+ "as_of": "2026-09-20",
+ "fx_as_of": "2026-09-20",
  "summary": {
   "ticker": "F34",
   "name": "Wilmar",
@@ -14,23 +14,23 @@
    "Tiger Prime"
   ],
   "units": 7200.0,
-  "price": 3.71,
+  "price": 3.68,
   "avg_cost": 3.3391,
   "cost_basis_native": 24041.85,
   "cost_basis_sgd": 24041.85,
-  "mv_native": 26712.0,
-  "mv_sgd": 26712.0,
+  "mv_native": 26496.0,
+  "mv_sgd": 26496.0,
   "realised_pl_sgd": 520.0,
-  "unrealised_pl_sgd": 2670.15,
-  "stock_pl_sgd": 3190.15,
+  "unrealised_pl_sgd": 2454.15,
+  "stock_pl_sgd": 2974.15,
   "income_sgd": 3315.0,
   "options_pl_sgd": null,
-  "net_pl_sgd": 6505.15,
+  "net_pl_sgd": 6289.15,
   "net_verdict": "hero",
-  "return_pct": 0.2706,
+  "return_pct": 0.2616,
   "return_verdict": "ok",
   "peak_car_sgd": 24041.85,
-  "return_span_days": 2652,
+  "return_span_days": 2657,
   "cost_partition": {
    "units_in": 11200.0,
    "costed": 11200.0,
@@ -52,11 +52,11 @@
    "avg_cost": 3.3391,
    "breakeven_price": 2.9371,
    "realised_pl_sgd": 0.0,
-   "unrealised_pl_sgd": 2670.15,
-   "stock_pl_sgd": 2670.15,
+   "unrealised_pl_sgd": 2454.15,
+   "stock_pl_sgd": 2454.15,
    "income_sgd": 2895.0,
    "options_pl_sgd": null,
-   "net_pl_sgd": 5565.15
+   "net_pl_sgd": 5349.15
   },
   {
    "bucket": "cpf",
@@ -161,18 +161,6 @@
   },
   {
    "pay_date": "2021-05-06",
-   "account": "Tiger Prime",
-   "bucket": "cash",
-   "gross": 170.5,
-   "currency": "SGD",
-   "kind": "cash",
-   "units": 1100.0,
-   "amount_per_unit": null,
-   "rate": 0.155,
-   "gross_sgd": 170.5
-  },
-  {
-   "pay_date": "2021-05-06",
    "account": "FSM",
    "bucket": "cash",
    "gross": 71.5,
@@ -196,8 +184,20 @@
    "gross_sgd": 99.0
   },
   {
-   "pay_date": "2021-08-27",
+   "pay_date": "2021-05-06",
    "account": "Tiger Prime",
+   "bucket": "cash",
+   "gross": 170.5,
+   "currency": "SGD",
+   "kind": "cash",
+   "units": 1100.0,
+   "amount_per_unit": null,
+   "rate": 0.155,
+   "gross_sgd": 170.5
+  },
+  {
+   "pay_date": "2021-08-27",
+   "account": "FSM",
    "bucket": "cash",
    "gross": 55.0,
    "currency": "SGD",
@@ -209,7 +209,7 @@
   },
   {
    "pay_date": "2021-08-27",
-   "account": "FSM",
+   "account": "Tiger Prime",
    "bucket": "cash",
    "gross": 55.0,
    "currency": "SGD",
@@ -317,7 +317,7 @@
   },
   {
    "pay_date": "2024-05-14",
-   "account": "Tiger Prime",
+   "account": "FSM",
    "bucket": "cash",
    "gross": 121.0,
    "currency": "SGD",
@@ -329,7 +329,7 @@
   },
   {
    "pay_date": "2024-05-14",
-   "account": "FSM",
+   "account": "Tiger Prime",
    "bucket": "cash",
    "gross": 121.0,
    "currency": "SGD",
@@ -414,6 +414,18 @@
   {
    "pay_date": "2026-05-14",
    "account": "FSM",
+   "bucket": "cash",
+   "gross": 110.0,
+   "currency": "SGD",
+   "kind": "cash",
+   "units": 1100.0,
+   "amount_per_unit": null,
+   "rate": 0.1,
+   "gross_sgd": 110.0
+  },
+  {
+   "pay_date": "2026-05-14",
+   "account": "Tiger Prime",
    "bucket": "cash",
    "gross": 110.0,
    "currency": "SGD",
@@ -434,18 +446,6 @@
    "amount_per_unit": null,
    "rate": 0.1,
    "gross_sgd": 500.0
-  },
-  {
-   "pay_date": "2026-05-14",
-   "account": "Tiger Prime",
-   "bucket": "cash",
-   "gross": 110.0,
-   "currency": "SGD",
-   "kind": "cash",
-   "units": 1100.0,
-   "amount_per_unit": null,
-   "rate": 0.1,
-   "gross_sgd": 110.0
   },
   {
    "pay_date": "2026-09-02",

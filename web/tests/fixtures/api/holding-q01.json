@@ -1,6 +1,6 @@
 {
- "as_of": "2026-09-13",
- "fx_as_of": "2026-09-13",
+ "as_of": "2026-09-20",
+ "fx_as_of": "2026-09-20",
  "summary": {
   "ticker": "Q01",
   "name": "QAF",
@@ -12,23 +12,23 @@
    "FSM"
   ],
   "units": 17000.0,
-  "price": 0.97,
+  "price": 0.955,
   "avg_cost": null,
   "cost_basis_native": null,
   "cost_basis_sgd": null,
-  "mv_native": 16490.0,
-  "mv_sgd": 16490.0,
+  "mv_native": 16235.0,
+  "mv_sgd": 16235.0,
   "realised_pl_sgd": null,
   "unrealised_pl_sgd": null,
-  "stock_pl_sgd": -11800.17,
+  "stock_pl_sgd": -12055.17,
   "income_sgd": 5440.0,
   "options_pl_sgd": null,
-  "net_pl_sgd": -6360.17,
+  "net_pl_sgd": -6615.17,
   "net_verdict": "caveat",
-  "return_pct": -0.1901,
+  "return_pct": -0.1977,
   "return_verdict": "caveat",
   "peak_car_sgd": 33461.35,
-  "return_span_days": 2815,
+  "return_span_days": 2820,
   "cost_partition": {
    "units_in": 68000.0,
    "costed": 51000.0,
@@ -51,10 +51,10 @@
    "breakeven_price": null,
    "realised_pl_sgd": null,
    "unrealised_pl_sgd": null,
-   "stock_pl_sgd": -11800.17,
+   "stock_pl_sgd": -12055.17,
    "income_sgd": 5440.0,
    "options_pl_sgd": null,
-   "net_pl_sgd": -6360.17
+   "net_pl_sgd": -6615.17
   }
  ],
  "transactions": [

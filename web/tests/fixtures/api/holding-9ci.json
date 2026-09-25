@@ -1,6 +1,6 @@
 {
- "as_of": "2026-09-13",
- "fx_as_of": "2026-09-13",
+ "as_of": "2026-09-20",
+ "fx_as_of": "2026-09-20",
  "summary": {
   "ticker": "9CI",
   "name": "CapitaLandInvest",
@@ -27,7 +27,7 @@
   "return_pct": 0.1129,
   "return_verdict": "ok",
   "peak_car_sgd": 10071.0,
-  "return_span_days": 1818,
+  "return_span_days": 1823,
   "cost_partition": {
    "units_in": 2700.0,
    "costed": 2700.0,
