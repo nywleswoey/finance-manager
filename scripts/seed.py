@@ -134,6 +134,15 @@ def load_symbols():
     return out
 
 
+def fallback_market(c, syms):
+    """Market for a ticker neither the ledger nor an option leg has seen.
+    symbols.csv lists only SGX/HK counters, so its codes never fall to market_of's
+    letters-are-US shape rule."""
+    if c in syms:
+        return "HK" if c.isdigit() else "SG"
+    return market_of(c)
+
+
 def upsert(session, model, by, **vals):
     obj = session.scalar(select(model).filter_by(**by))
     if obj:
@@ -159,9 +168,7 @@ def main():
     canon = {c for c in canon if is_security(c) and not c.startswith("SGXZ")}  # skip options + T-bills
 
     for c in sorted(canon):
-        # The ledger (then an option leg) is the market. market_of is only the
-        # shape fallback for a ticker neither of those has seen.
-        market = mkt.get(c) or opt_mkt.get(c) or market_of(c)
+        market = mkt.get(c) or opt_mkt.get(c) or fallback_market(c, syms)
         name = NAME.get(c) or (syms.get(c, {}).get("name")) or raw_names.get(c) or c
         atype = ASSET_TYPE.get(c) or ("reit" if c in REITS else "stock")
         sec = upsert(s, Security, {"canonical_ticker": c},

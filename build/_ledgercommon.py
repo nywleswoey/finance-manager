@@ -4,7 +4,7 @@
 Holds the parse-layer primitives that every statement parser reimplemented inline:
 the `ALIAS`/`canon` counter-rename map, the `num` money parser, the
 `norm_ticker` symbol normaliser, `name_to_ticker` (display name to ticker, from
-symbols.csv), `market_of` (ticker shape to market), `MARKET_CCY`, and
+symbols.csv), `cdp_dividend_ticker`, `market_of` (ticker shape to market), `MARKET_CCY`, and
 `TIGER_FEE_COLS`. Stdlib only, so it loads cleanly whether imported as a bare
 sibling (`python3 build/x.py`, build/ on sys.path[0]) or as a package member
 (`-m ingestion.x`, repo root on path).
@@ -94,6 +94,26 @@ def name_to_ticker(name):
     if not name:
         return None
     return _symbol_names().get(str(name).strip().casefold())
+
+
+# CDP dividend-sheet names that are booked as cash dividends. The sheet also
+# carries T-bills and holdings a broker statement already books; those stay
+# skipped even though symbols.csv can resolve them.
+CDP_DIVIDEND_NAMES = frozenset({
+    "AIMS APAC Reit", "Accordia Golf Tr", "Advancer Global", "Asian Pay Tv Tr",
+    "CapitaLandInvest", "Centurion", "Capitaland Integrated Commercial Trust",
+    "Comfort Delgro", "DBS", "Eagle Htrust USD", "GuocoLand", "HRnetGroup",
+    "Hock Lian Seng", "Hongkong Land Holdings", "Hyphens Pharma", "IREIT Global",
+    "Jumbo", "Keppel Pacific Oak US Reit", "Manulife US Reit", "Mapletree PanAsia Com Tr",
+    "Nordic", "OCBC", "QAF", "SBS Transit", "Sasseur Reit", "Sembcorp Industries",
+    "Silverlake Axis", "SingTel", "Soibuild Biz Reit", "Starhill Global Reit",
+    "Stoneweg European Trust EUR", "Top Glove", "UMS", "Wilmar",
+})
+
+
+def cdp_dividend_ticker(name):
+    """Ticker for a CDP dividend-sheet name, or None when the row is not booked."""
+    return name_to_ticker(name) if name in CDP_DIVIDEND_NAMES else None
 
 
 def num(s):

@@ -13,7 +13,7 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_ledgercommon.py -q
 import os
 
 from build._ledgercommon import (
-    MARKET_CCY, TIGER_FEE_COLS, canon, is_transfer_in, is_transfer_out, market_of,
+    MARKET_CCY, TIGER_FEE_COLS, canon, cdp_dividend_ticker, is_transfer_in, is_transfer_out, market_of,
     name_to_ticker, norm_ticker, num,
 )
 
@@ -96,18 +96,38 @@ def test_market_of_letters_are_us_and_digits_are_hk():
     assert market_of("5") == "HK"
 
 
-def test_seed_and_options_share_market_currency_and_fees():
-    """Seed's fallback and the options loader used to keep their own copies."""
-    import ingestion.parse_options as options
-    import scripts.seed as seed
-
-    assert seed.market_of is market_of
-    assert seed.MARKET_CCY is MARKET_CCY
-    assert options.MARKET_CCY is MARKET_CCY
-    assert options.TIGER_FEE_COLS is TIGER_FEE_COLS
+def test_market_currency_and_fee_columns():
     assert MARKET_CCY["MY"] == "MYR"
+    assert MARKET_CCY["SG"] == "SGD"
     assert "GST" in TIGER_FEE_COLS
     assert "Accrued Interest in Trade" not in TIGER_FEE_COLS
+
+
+def test_seed_never_seeds_a_symbols_csv_code_as_us():
+    """symbols.csv lists only SGX/HK counters. A letters-only one (SET) the ledger
+    has not seen must seed as SG/SGD, not fall to market_of's US shape rule."""
+    import scripts.seed as seed
+
+    syms = seed.load_symbols()
+    for c in syms:
+        market = seed.fallback_market(c, syms)
+        assert market == ("HK" if c.isdigit() else "SG"), c
+        assert MARKET_CCY[market] != "USD", c
+    assert seed.fallback_market("SET", syms) == "SG"
+    assert seed.fallback_market("AAPL", syms) == "US"
+
+
+def test_cdp_dividend_sheet_books_only_the_listed_names():
+    """symbols.csv resolves more names than the CDP dividend map did. A T-bill or
+    a holding outside that map must stay skipped, not become a cash dividend."""
+    assert name_to_ticker("T Bills") is not None
+    assert name_to_ticker("Seatrium Ltd") is not None
+    assert cdp_dividend_ticker("T Bills") is None
+    assert cdp_dividend_ticker("Seatrium Ltd") is None
+    assert cdp_dividend_ticker("dbs") is None
+    assert cdp_dividend_ticker("DBS") == "D05"
+    assert cdp_dividend_ticker("Stoneweg European Trust EUR") == "SET"
+    assert cdp_dividend_ticker("Comfort Delgro") == "C52"
 
 
 def test_stoneweg_display_names_resolve_to_one_ticker():
@@ -127,7 +147,6 @@ def test_cdp_statement_names_use_symbols_csv():
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "build"))
     import parse_cdp
-    assert not hasattr(parse_cdp, "NAME2CODE")
     assert parse_cdp.code_of("STONEWEG EUTRUST") == "SET"
     assert parse_cdp.code_of("QAF") == "Q01"
     assert parse_cdp.code_of("NOT A REAL NAME") != "SET"

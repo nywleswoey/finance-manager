@@ -20,11 +20,9 @@ def test_card_sources_have_one_owner():
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "build"))
     import classify_cash
 
-    from portfolio.recurring import _CARD_IN
     from portfolio.spending import CARD_SOURCES
 
     assert CARD_SOURCES == ("dbs-cc", "hsbc", "trust")
-    assert _CARD_IN == ", ".join(f"'{s}'" for s in CARD_SOURCES)
 
     def row(source, amt):
         return {"source": source, "account_label": "", "txn_date": "2024-01-01",

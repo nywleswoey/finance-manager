@@ -16,7 +16,7 @@ from collections import defaultdict
 from _pdf import raw_text
 from _csvout import write_csv
 from _dates import try_date
-from _ledgercommon import MARKET_CCY, canon, market_of, name_to_ticker, norm_ticker, num
+from _ledgercommon import MARKET_CCY, canon, cdp_dividend_ticker, market_of, norm_ticker, num
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -116,7 +116,7 @@ def cdp():
         natg, sgdg = num(nat), num(sgd)
         if natg == 0 and sgdg == 0:                       # declared but no amount -> skip
             continue
-        tk = name_to_ticker(name)
+        tk = cdp_dividend_ticker(name)
         date = _cdp_date(d)
         if tk is None or date is None:
             continue

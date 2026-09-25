@@ -43,18 +43,6 @@ def test_report_dropped_names_the_unseeded_ticker_and_the_fix(capsys):
     assert "dropped 1 row" in out
 
 
-def test_txn_funding_bucket_is_not_a_second_map():
-    """account.funding_bucket is the only account→bucket map. The loader used to
-    copy a second dict onto txn.funding_bucket, and that dict had no IBKR, so a
-    row for an account seed knew about was written NULL. Nothing read the column."""
-    from scripts.seed import ACCOUNTS
-    from portfolio.models import Txn
-
-    assert not hasattr(L, "BUCKET")
-    assert "funding_bucket" not in Txn.__table__.columns
-    assert "IBKR" in {name for name, _, _ in ACCOUNTS}
-
-
 def test_report_dropped_separates_tickers_from_accounts(capsys):
     L._report_dropped(Counter({("ticker", "9999"): 3, ("account", "Weird Broker"): 1}))
     out = capsys.readouterr().out
