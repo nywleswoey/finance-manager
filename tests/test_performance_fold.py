@@ -541,10 +541,91 @@ def test_switched_units_are_costed_by_the_carry_not_by_their_action():
     assert (p["units_in"], p["costed"], p["unknown"]) == (90.0, 90.0, 0.0)
 
 
+def test_qaf_return_after_cdp_transfer_out_is_costed():
+    """Q01 left CDP on 2019-12-28 (`sell/transfer_out` 17,000) and the statement brought the
+    same 17,000 back on 2021-03-28 as a `buy` with no price. That is the transfer's return
+    leg — D05's CDP->FSM move, recorded on the CDP statement because FSM never wrote a
+    `transfer in` — not a second purchase. The cost log holds only the original 17,000.
+    The FSM 34,000 round trip is a real trade in the same position. The return is costed,
+    so avg cost, cost basis and breakeven are known."""
+    txns = [
+        _txn(canonical_ticker="Q01", name="QAF", account="CDP", action="open",
+             qty_signed=17000, price=None, trade_date=D(2017, 11, 28)),
+        _txn(canonical_ticker="Q01", name="QAF", account="CDP", action="sell/transfer_out",
+             qty_signed=-17000, price=None, trade_date=D(2019, 12, 28)),
+        _txn(canonical_ticker="Q01", name="QAF", account="FSM", action="buy",
+             qty_signed=34000, price=0.875, trade_date=D(2020, 2, 27)),
+        _txn(canonical_ticker="Q01", name="QAF", account="FSM", action="sell",
+             qty_signed=-34000, price=0.645, trade_date=D(2020, 3, 19)),
+        _txn(canonical_ticker="Q01", name="QAF", account="CDP", action="buy",
+             qty_signed=17000, price=None, trade_date=D(2021, 3, 28)),
+    ]
+    cdp = {"Q01": _cdp((D(2017, 10, 27), -10033.71, 8000.0),
+                       (D(2017, 11, 13), -10384.88, 9000.0))}
+    r = _only(_fold(txns, cdp=cdp, price={10: 0.97}))
+    assert r["units"] == 17000.0
+    assert r["cost_partition"]["units_in"] == 68000.0
+    assert r["cost_partition"]["unknown"] == 0.0
+    assert r["cost_partition"]["costed"] == 68000.0
+    paid = 10033.71 + 10384.88 + 34000 * 0.875
+    assert r["avg_cost"] == round(paid / 51000, 4)
+    assert r["cost_basis_native"] == round(paid / 51000 * 17000, 2)
+    assert r["cost_basis_sgd"] == r["cost_basis_native"]
+    assert r["breakeven_price"] is not None
+
+
+def test_a_later_transfer_out_does_not_cost_the_units_it_removed():
+    """SET: 7,000 entered, the cost log prices 1,400, and 5,600 later leave. The exit is
+    not a return. Those 5,600 stay unknown."""
+    txns = [
+        _txn(canonical_ticker="SET", account="CDP", action="open", qty_signed=7000,
+             price=None, trade_date=D(2019, 8, 28)),
+        _txn(canonical_ticker="SET", account="CDP", action="sell/transfer_out",
+             qty_signed=-5600, price=None, trade_date=D(2024, 6, 28)),
+    ]
+    cdp = {"SET": _cdp((D(2019, 8, 19), -3290.0, 1400.0))}
+    p = _sums(_part(_fold(txns, cdp=cdp, price={10: 2.0})))
+    assert p["unknown"] == 5600.0
+    assert p["costed"] == 1400.0
+
+
+def test_a_full_exit_does_not_cost_the_lot_that_left():
+    """ASTREA6B opens and later leaves. No return, no cost log. The open stays unknown."""
+    txns = [
+        _txn(canonical_ticker="ASTREA6B", account="CDP", action="open", qty_signed=15000,
+             price=None, trade_date=D(2021, 3, 28)),
+        _txn(canonical_ticker="ASTREA6B", account="CDP", action="sell/transfer_out",
+             qty_signed=-15000, price=None, trade_date=D(2025, 10, 28)),
+    ]
+    r = _only(_fold(txns, price={10: 1.0}))
+    assert r["cost_partition"]["unknown"] == 15000.0
+    assert r["cost_known"] is False
+
+
+def test_an_fsm_transfer_in_spends_the_out_a_later_cdp_buy_cannot():
+    """D05's out is the FSM transfer in's pair. A later unpriced CDP buy is a new lot the
+    cost log does not have, and the out cannot pay for it a second time."""
+    txns = [
+        _txn(account="CDP", action="open", qty_signed=2800, price=None,
+             trade_date=D(2018, 2, 28)),
+        _txn(account="FSM", action="transfer in", qty_signed=2800, price=None,
+             trade_date=D(2020, 3, 19)),
+        _txn(account="CDP", action="sell/transfer_out", qty_signed=-2800, price=None,
+             trade_date=D(2020, 3, 28)),
+        _txn(account="CDP", action="buy", qty_signed=100, price=None,
+             trade_date=D(2021, 1, 1)),
+    ]
+    cdp = {"D05": _cdp((D(2018, 2, 12), -73289.20, 2800.0))}
+    p = _sums(_part(_fold(txns, cdp=cdp, price={10: 30.0})))
+    assert p["units_in"] == 5700.0
+    assert (p["costed"], p["unknown"]) == (5600.0, 100.0)
+
+
 def test_cdp_cost_is_matched_at_position_level_not_per_row():
     """A CDP txn row is a month-end statement diff and routinely aggregates several
-    trade-dated cost lots. Q01: two CDP rows of 17,000 against one 17,000-unit cost pool —
-    17,000 costed and 17,000 unknown, not a shortfall on each row."""
+    trade-dated cost lots. Two CDP rows of 17,000 against one 17,000-unit cost pool, and
+    no transfer out between them: 17,000 costed and 17,000 unknown, not a shortfall on
+    each row. The return that IS a transfer is `test_qaf_return_after_cdp_transfer_out_is_costed`."""
     txns = [_txn(canonical_ticker="Q01", account="CDP", action="open", qty_signed=17000,
                  price=None),
             _txn(canonical_ticker="Q01", account="CDP", action="buy", qty_signed=17000,

@@ -79,14 +79,14 @@ ticker in that shape.
 
 ## Cost truth is a partition of units
 
-A boolean cannot say the thing that is actually true of Q01: *17,000 of its 68,000 units
+A boolean cannot say the thing that is actually true of C38U: *500 of its 6,700 units
 entered with no recorded cost*. So every entering unit lands in exactly one of three
 conditions, computed after the corporate-action carry and the switch rebasing run and shipped
 as a nested `cost_partition` on every position row:
 
 ```json
-"cost_partition": { "units_in": 68000, "costed": 51000, "free": 0,
-                    "unknown": 17000, "unknown_pct": 0.25 }
+"cost_partition": { "units_in": 6700, "costed": 6200, "free": 0,
+                    "unknown": 500, "unknown_pct": 0.0746 }
 ```
 
 The three **sum to gross units in** on every position — 73 of 73 in the live book, which totals

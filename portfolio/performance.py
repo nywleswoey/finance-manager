@@ -528,6 +528,43 @@ def _apply_txn(p, r, kind, today):
     return None
 
 
+def _draw_out_qty(outs, qty, day=None):
+    """Take `qty` from dated transfer-outs `outs` (mutable `[date, qty]` pairs, date order).
+
+    `day` set means only an out on or before that day — a return can draw on a departure
+    that already happened, not on one that has not. Returns the qty actually taken."""
+    got = 0.0
+    for o in outs:
+        if qty <= 1e-9:
+            break
+        if day is not None and o[0] > day:
+            break
+        take = min(o[1], qty)
+        if take <= 1e-9:
+            continue
+        o[1] -= take
+        qty -= take
+        got += take
+    return got
+
+
+def _release_paired_outs(outs, arrivals):
+    """Zero the out whose size matches each excluded arrival, the same size-pairing
+    `_matched_transfer_pairs` uses. An arrival the peak dropped already gave its departure
+    back; leaving that out in the dated list would let a later row spend it again."""
+    by_size = defaultdict(list)
+    for o in outs:
+        if o[1] > 1e-9:
+            by_size[round(o[1], 6)].append(o)
+    for a in arrivals:
+        bucket = by_size.get(round(a.qty, 6)) or []
+        hit = next((o for o in bucket if o[1] > 1e-9), None)
+        if hit is not None:
+            hit[1] = 0.0
+        else:
+            _draw_out_qty(outs, a.qty)
+
+
 def _resolved_entries(p, exclude=frozenset()):
     """Every entering lot, dated, with its cost condition finally resolved.
 
@@ -536,7 +573,13 @@ def _resolved_entries(p, exclude=frozenset()):
       - **Transfer cover.** A transfer in whose paired transfer out sits in the same position is
         an internal move; the cost never left, so those units are costed. Anything beyond the
         cover entered from outside with nothing behind it, and is unknown. Paired by SIZE, not by
-        identity — the ledger carries nothing linking the two legs.
+        identity — the ledger carries nothing linking the two legs. A CDP statement cannot say
+        transfer in: the return of units that already left is a later unpriced `buy` (Q01 left
+        on 2019-12-28 and came back on 2021-03-28). That row is a `cdp` entry, so the cost pool
+        is spent on it first; only the part the pool cannot pay draws on transfer-out qty the
+        pending arrivals did not already take, and only from an out dated on or before the row.
+        An out that is the departure of the uncosted lot itself (SET's 5,600, ASTREA6B's exit)
+        is later than that lot and covers nothing.
       - **CDP cost is matched at POSITION level.** A CDP txn row is a month-end statement diff
         and routinely aggregates several trade-dated `cdp_cost_lot` rows (LIW's 24,600 is three
         lots; Z74's 8,500 is 4,000 + 4,500). Matching per row invents shortfalls on LIW, S7OU,
@@ -549,10 +592,11 @@ def _resolved_entries(p, exclude=frozenset()):
     spending them is what gives a resolved unit a DATE as well as a condition. They are spent
     **earliest-first**, because a budget is evidence and evidence attaches to the oldest claim
     on it: the CDP cost pool's lots *are* the early rows, and a transfer out covers the arrival
-    it paired with, which is the one nearest it in time. The order changes nothing about the
-    totals — it only matters where a budget runs out mid-position, and every ordering sums the
-    same — so `cost_partition` reads this list rather than keeping its own arithmetic, and the
-    dated share peak capital-at-risk needs (#143 §9 rule 6) reads the same one.
+    it paired with, which is the one nearest it in time. Pool and pending-cover totals do not
+    depend on order — only which lot is costed when a budget runs out mid-position does. The
+    dated return cover is the exception: an out cannot pay a row that landed before it left.
+    `cost_partition` reads this list rather than keeping its own arithmetic, and the dated
+    share peak capital-at-risk needs (#143 §9 rule 6) reads the same one.
 
     `exclude` — indices into `p["entries"]` that rule 4 has ruled an internal move's ARRIVAL,
     which peak capital-at-risk passes and `cost_partition` does not. The two are asking
@@ -578,14 +622,28 @@ def _resolved_entries(p, exclude=frozenset()):
             entries.append(e)
     cover = min(pending, transfer_out)
     carried = min(pending - cover, p["carried_units"])
-    budget = {"pending": cover + carried, "cdp": min(p["cdp_buy_qty"], cdp_in)}
+    # Dated outs left after pending arrivals have spent `cover` and excluded arrivals have
+    # released their own departures. Sum of what remains is `transfer_out - cover`.
+    outs = [[e.date, -e.qty] for e in p["unit_events"] if e.moves_stock and e.qty < -1e-9]
+    _release_paired_outs(outs, [p["entries"][i] for i in exclude])
+    leftover = max(0.0, transfer_out - cover)
+    over = sum(o[1] for o in outs) - leftover
+    if over > 1e-9:
+        _draw_out_qty(outs, over)
+    pending_budget = cover + carried
+    pool = min(p["cdp_buy_qty"], cdp_in)
     out = []
     for e in entries:
-        if e.condition not in budget:
+        if e.condition == "pending":
+            take = min(e.qty, pending_budget)
+            pending_budget -= take
+        elif e.condition == "cdp":
+            take = min(e.qty, pool)
+            pool -= take
+            take += _draw_out_qty(outs, e.qty - take, e.date)
+        else:
             out.append(e)
             continue
-        take = min(e.qty, budget[e.condition])
-        budget[e.condition] -= take
         if take > 1e-9:
             out.append(EntryLot(e.date, take, "costed"))
         if e.qty - take > 1e-9:
@@ -701,10 +759,11 @@ def _leg_car_series(p):
         average, and sits outside `costed`, shrinking the multiplier.
 
     **The share is dated like everything else**, and that is load-bearing rather than tidy: an
-    undated ratio lets a lot that arrives uncosted in 2021 retroactively shrink capital that
-    was genuinely at risk in 2020. One name's 17,000-unit unpriced re-entry in 2021 is the live
-    case — it reads 25,096 against a measured 33,461 if the share is taken whole-history, and
-    the peak it shrinks was set fourteen months before those units existed.
+    undated ratio lets a lot that arrives later and uncosted shrink capital that was already
+    at risk. The fabricated shape in `test_the_costed_share_is_read_at_t_not_over_the_whole_history`
+    is that case: a 2021 unpriced buy after a 2020 round trip keeps the peak at 1,000, and an
+    undated share would shave it to 500. Q01's 2021 CDP row is the return of the 2019 transfer
+    out, so this partition costs it; it is not that lot.
 
     Where nothing has been sold and the costed lots are the ones that booked the cost, the
     three factors cancel to `buy_cost` — the term is simply the money actually paid and still
@@ -1231,7 +1290,7 @@ def _build_row(k, p, m, fx, price, today, part, verdict):
     # Null only where the whole TICKER refuses (#143 §8). A leg whose every unit is unknown,
     # beside a leg with real cost, belongs to a caveat, and a caveat's Net stands — so that leg
     # reads its unknown units as free, which is the upper bound the caveat already declares and
-    # exactly what a partly-unknown leg (Q01) does with its own unknown units. Nulling it on
+    # exactly what a partly-unknown leg (C38U) does with its own unknown units. Nulling it on
     # `cost_known` instead would leave the name's Net short by a whole bucket.
     stock_pl = ((p["proceeds"] - p["buy_cost"] + mv)
                 if cost_known or verdict != "refuse" else None)

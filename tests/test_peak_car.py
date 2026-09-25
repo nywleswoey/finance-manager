@@ -445,11 +445,9 @@ def test_free_units_are_units_nobody_paid_for():
 
 
 def test_the_costed_share_is_read_at_t_not_over_the_whole_history():
-    """The live case this rule exists for: 17,000 unpriced units re-enter one name in 2021 and
-    the peak was set fourteen months earlier. An undated share reads 25,096 against a measured
-    33,461 — it charges 2020's capital for a doubt that did not exist until 2021.
-
-    Here the peak is 1,000 either way; what an undated share would do is shave it to 500."""
+    """A later unpriced buy must not shrink capital that was already at risk. An undated share
+    of this shape would shave the peak from 1,000 to 500. Q01's 2021 row is a transfer return
+    and is costed; this buy is not, and the peak stays on the 2020 purchase."""
     txns = [_txn(action="buy", qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
             _txn(action="sell", qty_signed=-100, price=10.0, trade_date=D(2020, 6, 1)),
             _txn(action="buy", qty_signed=100, price=None, trade_date=D(2021, 1, 1))]
