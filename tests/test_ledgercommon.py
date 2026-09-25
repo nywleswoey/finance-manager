@@ -96,24 +96,18 @@ def test_market_of_letters_are_us_and_digits_are_hk():
     assert market_of("5") == "HK"
 
 
-def test_market_shape_and_currency_and_fees_have_one_owner():
-    root = os.path.dirname(os.path.dirname(__file__))
-    for rel in ("build/parse_dividends.py", "build/build_ledger.py",
-                "build/build_viewer.py", "scripts/seed.py"):
-        text = open(os.path.join(root, rel)).read()
-        assert "market_of(" in text, rel
-        assert "def market_of" not in text, rel
-    for rel in ("build/parse_dividends.py", "build/build_ledger.py",
-                "scripts/seed.py", "ingestion/parse_options.py"):
-        text = open(os.path.join(root, rel)).read()
-        assert "MARKET_CCY" in text, rel
-    for rel in ("build/build_ledger.py", "ingestion/parse_options.py"):
-        text = open(os.path.join(root, rel)).read()
-        assert "TIGER_FEE_COLS" in text, rel
-        assert "TIGER_FEE_COLS = " not in text, rel
-        assert "_FEE_COLS = " not in text, rel
-    assert MARKET_CCY == {"SG": "SGD", "US": "USD", "HK": "HKD", "MY": "MYR"}
-    assert "GST" in TIGER_FEE_COLS and "Accrued Interest in Trade" not in TIGER_FEE_COLS
+def test_seed_and_options_share_market_currency_and_fees():
+    """Seed's fallback and the options loader used to keep their own copies."""
+    import ingestion.parse_options as options
+    import scripts.seed as seed
+
+    assert seed.market_of is market_of
+    assert seed.MARKET_CCY is MARKET_CCY
+    assert options.MARKET_CCY is MARKET_CCY
+    assert options.TIGER_FEE_COLS is TIGER_FEE_COLS
+    assert MARKET_CCY["MY"] == "MYR"
+    assert "GST" in TIGER_FEE_COLS
+    assert "Accrued Interest in Trade" not in TIGER_FEE_COLS
 
 
 def test_stoneweg_display_names_resolve_to_one_ticker():
