@@ -321,7 +321,8 @@ components it has to undo.
   already whole at any price, including zero — and is never clamped. The RENDERER is what turns
   it into words: `Breakeven` prints `free of cost` for a value `<= 0` and no figure (#201) —
   unless the Net is `bounded` `upper`, where `<= 0` reads `not known` instead. Which way that
-  price runs: `net_verdict` in `portfolio/performance.py`.
+  price runs: `net_verdict` in `portfolio/performance.py`, read on the page by `boundOf` in
+  `web/src/modules/portfolio/bound.js`.
 - **Tolerance is the quote's, not a cent's.** The field's own share of the drift when the fold is
   revalued at it is `5e-5 × units × rate` SGD (0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700);
   it scales with units and the FX rate and never tightens to a constant. It is not the whole

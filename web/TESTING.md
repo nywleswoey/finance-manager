@@ -293,7 +293,8 @@ multi-bucket name's closed bucket — so there is no second place for the same r
 The `free of cost` edges no capture reaches ARE written payloads, each on the captured recovered
 name: exactly zero, a `lower`-bounded value `<= 0` — both still `free of cost` —
 and an `upper`-bounded value `<= 0`, which proves nothing and reads `not known`.
-Which way those bounds run: `net_verdict` in `portfolio/performance.py`.
+Which way those bounds run: `net_verdict` in `portfolio/performance.py`, read by `boundOf` in
+`src/modules/portfolio/bound.js`.
 
 The avg cost and the breakeven both carry the **ticker's currency symbol** (#208), in every
 column. The currency rides the summary alone (a bucket payload ships none), so the one other gate
