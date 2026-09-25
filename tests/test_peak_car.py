@@ -598,7 +598,8 @@ def test_a_refusal_reads_no_capital_too():
 
 def test_the_percentage_caveats_when_some_entering_units_are_unknown():
     """Some entering units are unknown, so the percentage carries its own verdict rather than
-    reusing the Net's. Direction of either side: `net_verdict`."""
+    reusing the Net's. Direction of the Net (numerator): `net_verdict`; of the denominator:
+    `boundOf` in `web/src/modules/portfolio/bound.js`."""
     txns = [_txn(action="buy", qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
             _txn(action="buy", qty_signed=100, price=None, trade_date=D(2021, 1, 1))]
     r = _row(_fold(txns, price={10: 10.0}))
