@@ -28,10 +28,15 @@ Usage:
 Options:
   --date YYYY-MM-DD    snapshot date (default 2026-06-18, the tiger statement end date)
   --dbs YYYYMM         DBS statement month (default: latest available)
-  --all-new            ingest every DBS month that closes after the latest existing snapshot,
-                       each dated to its month-end. Forward-delta only: older un-ingested
-                       statements are skipped (tiger/FX/portfolio can't be reconstructed
-                       historically). Ignores --date/--dbs.
+  --all-new            ingest the one DBS month that closes after the latest snapshot,
+                       dated to its month-end, when that month-end is at most
+                       CATCHUP_MAX_LAG_DAYS before today. Two pending months, or one
+                       older than that, are refused: the portfolio is valued on the
+                       run day and Tiger cash comes from the newest Tiger file, and both
+                       would be stamped statement-sourced on the wrong date. The
+                       snapshot note records the portfolio valuation date.
+                       Ignores --date/--dbs. Older months are not backfilled
+                       (tiger/FX/portfolio can't be reconstructed historically).
   --commit             persist the snapshot(s) (otherwise dry-run)
 """
 from __future__ import annotations
@@ -165,6 +170,12 @@ def plan_values(items: dict, statement_vals: dict, carry: dict) -> list[dict]:
     return out
 
 
+# One new DBS month is the nightly case: the statement usually lands during the
+# next month, and the portfolio is valued that run day (beside the newest Tiger
+# file) on purpose. Further back than this, the run-day book is a different month.
+CATCHUP_MAX_LAG_DAYS = 40
+
+
 def month_end(yyyymm: str) -> dt.date:
     y, m = int(yyyymm[:4]), int(yyyymm[4:6])
     return dt.date(y, m, calendar.monthrange(y, m)[1])
@@ -173,6 +184,76 @@ def month_end(yyyymm: str) -> dt.date:
 def dbs_month(path: str) -> str:
     """'.../dbs_202606.pdf' -> '202606'."""
     return re.search(r"dbs_(\d{6})", os.path.basename(path)).group(1)
+
+
+def catchup_misdate(pending_yyyymm: list[str], today: dt.date,
+                    max_lag_days: int = CATCHUP_MAX_LAG_DAYS) -> str | None:
+    """None when --all-new may write these months. Otherwise the refusal text.
+
+    A pending month closes after the latest snapshot. The portfolio is valued on
+    `today` and Tiger cash comes from the newest Tiger file, whatever its month.
+    Dating more than one of them, or one whose month-end is more than
+    `max_lag_days` before `today`, stamps that book onto the month-end and marks
+    the rows statement-sourced.
+    """
+    if not pending_yyyymm:
+        return None
+    lags = [(ym, month_end(ym), (today - month_end(ym)).days) for ym in pending_yyyymm]
+    too_many = len(lags) > 1
+    too_old = [row for row in lags if row[2] > max_lag_days]
+    if not too_many and not too_old:
+        return None
+    lines = [
+        f"REFUSING --all-new: the portfolio is valued on {today.isoformat()} (run day) "
+        "and Tiger cash comes from the newest Tiger file; both would be stamped "
+        "source=statement on a DBS month-end they do not describe.",
+    ]
+    if too_many:
+        lines.append(
+            f"{len(lags)} DBS months are pending; each would carry that same book:")
+    elif too_old:
+        lines.append(
+            f"The month-end is more than {max_lag_days} days before the run day.")
+    for ym, end, lag in lags:
+        lines.append(f"  {ym} -> {end.isoformat()} ({lag} days before {today.isoformat()})")
+    lines.append(
+        "Nothing written. To accept a run-day valuation on one month: "
+        "--dbs YYYYMM --date YYYY-MM-DD")
+    return "\n".join(lines)
+
+
+def snapshot_note(tiger_path: str, dbs_path: str, dbs_asat: str, valued_on: dt.date) -> str:
+    """Note stored on the snapshot. The row's date is the DBS month-end; the portfolio
+    was valued on `valued_on` and Tiger cash is as of the named Tiger file.
+    `nw_snapshot.note` is varchar(256)."""
+    note = (
+        f"statements: tiger {os.path.basename(tiger_path)} + "
+        f"dbs {os.path.basename(dbs_path)} (as at {dbs_asat}); "
+        f"portfolio valued {valued_on.isoformat()}"
+    )
+    # Raising here beats a driver error after ensure_fx has already committed.
+    if len(note) > 256:
+        raise ValueError(f"snapshot note is {len(note)} chars; nw_snapshot.note holds 256")
+    return note
+
+
+def ingest_all_new(pending_paths: list[str], today: dt.date, build) -> int:
+    """Write each pending DBS month, or refuse before `build` when that would mis-date.
+
+    `build(path)` returns a process status for one month. `pending_paths` are already
+    the forward delta (month-end after the latest snapshot).
+    """
+    months = [dbs_month(p) for p in pending_paths]
+    refusal = catchup_misdate(months, today)
+    if refusal:
+        print(refusal)
+        return 1
+    print(f"delta: {len(pending_paths)} new DBS month(s) -> {months}\n")
+    rc = 0
+    for p in pending_paths:
+        print("=" * 64)
+        rc |= build(p)
+    return rc
 
 
 def latest_snapshot_date(s) -> dt.date | None:
@@ -187,8 +268,15 @@ def latest_snapshot_date(s) -> dt.date | None:
     return s.scalar(select(NwSnapshot.date).order_by(NwSnapshot.date.desc()).limit(1))
 
 
-def build_snapshot(s, snap_date: dt.date, dbs_path: str, tiger_path: str, commit: bool) -> int:
-    """Preview (and optionally commit) one snapshot. Returns 0 ok, 1 skipped/error."""
+def build_snapshot(s, snap_date: dt.date, dbs_path: str, tiger_path: str, commit: bool,
+                   valued_on: dt.date | None = None) -> int:
+    """Preview (and optionally commit) one snapshot. Returns 0 ok, 1 skipped/error.
+
+    `valued_on` is the day the portfolio was valued. It is the run day, which is
+    not `snap_date` when the row is dated to a DBS month-end.
+    """
+    if valued_on is None:
+        valued_on = dt.date.today()
     if s.scalar(select(NwSnapshot).where(NwSnapshot.date == snap_date)):
         print(f"SKIP {snap_date}: snapshot already exists for that date (BR1).")
         return 1
@@ -210,9 +298,11 @@ def build_snapshot(s, snap_date: dt.date, dbs_path: str, tiger_path: str, commit
 
     fx_notes = ensure_fx(s, {v["currency"] for v in values}, snap_date)
 
+    note = snapshot_note(tiger_path, dbs_path, dbs_asat, valued_on)
     print(f"tiger source : {tiger_path}")
     print(f"dbs source   : {dbs_path}  (as at {dbs_asat})")
     print(f"snapshot date: {snap_date}")
+    print(f"note         : {note}")
     if prev:
         print(f"carry-forward base: snapshot {prev.date}")
     for n in fx_notes:
@@ -231,7 +321,6 @@ def build_snapshot(s, snap_date: dt.date, dbs_path: str, tiger_path: str, commit
         return 0
 
     s.commit()  # persist any fx backfill before create_snapshot opens its own work
-    note = f"statements: tiger {os.path.basename(tiger_path)} + dbs {os.path.basename(dbs_path)} (as at {dbs_asat})"
     # `values` is passed straight through rather than re-projected: the projection that used to
     # sit here existed only to strip a display-only key, and it is exactly the shape that dropped
     # the provenance on the floor for as long as this script has run.
@@ -248,11 +337,14 @@ def main(argv):
     ap.add_argument("--date", default="2026-06-18")
     ap.add_argument("--dbs", default=None, help="DBS statement YYYYMM (default latest)")
     ap.add_argument("--all-new", action="store_true",
-                    help="ingest every DBS month with no snapshot yet, each dated to its month-end")
+                    help="ingest the one DBS month newer than the latest snapshot, dated to its "
+                         f"month-end, if that month-end is within {CATCHUP_MAX_LAG_DAYS} days. "
+                         "Refuses a multi-month or older catch-up.")
     ap.add_argument("--commit", action="store_true")
     args = ap.parse_args(argv)
 
     tiger_path = sorted(glob.glob(TIGER_GLOB))[-1]
+    today = dt.date.today()
     s = SessionLocal()
     try:
         if args.all_new:
@@ -263,23 +355,25 @@ def main(argv):
                 return 1
             # forward delta only: months whose month-end falls after the latest snapshot.
             # (Older un-ingested statements are NOT backfilled — tiger/FX/portfolio can't be
-            # reconstructed historically, so they'd be garbage.)
+            # reconstructed historically, so they'd be garbage.) A gap of more than one
+            # month, or one month-end older than CATCHUP_MAX_LAG_DAYS, is refused rather
+            # than written: those rows would all carry today's book.
             pending = [p for p in sorted(glob.glob(os.path.join(DBS_DIR, "dbs_*.pdf")))
                        if month_end(dbs_month(p)) > latest]
             if not pending:
                 print(f"Nothing new: latest snapshot is {latest}, "
                       "no DBS statement closes after it.")
                 return 0
-            print(f"delta: {len(pending)} new DBS month(s) -> {[dbs_month(p) for p in pending]}\n")
-            rc = 0
-            for p in pending:
-                print("=" * 64)
-                rc |= build_snapshot(s, month_end(dbs_month(p)), p, tiger_path, args.commit)
-            return rc
+            return ingest_all_new(
+                pending, today,
+                lambda p: build_snapshot(
+                    s, month_end(dbs_month(p)), p, tiger_path, args.commit, valued_on=today))
 
         dbs_path = (os.path.join(DBS_DIR, f"dbs_{args.dbs}.pdf") if args.dbs
                     else sorted(glob.glob(os.path.join(DBS_DIR, "dbs_*.pdf")))[-1])
-        return build_snapshot(s, dt.date.fromisoformat(args.date), dbs_path, tiger_path, args.commit)
+        return build_snapshot(
+            s, dt.date.fromisoformat(args.date), dbs_path, tiger_path, args.commit,
+            valued_on=today)
     finally:
         s.close()
 
