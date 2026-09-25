@@ -90,7 +90,7 @@ as a nested `cost_partition` on every position row:
 ```
 
 The three **sum to gross units in** on every position — 73 of 73 in the live book, which totals
-1,574,652 units in: 1,521,274 costed, 545 free, 52,833 unknown. Nested so the counts cannot
+1,574,652 units in: 1,538,274 costed, 545 free, 35,833 unknown. Nested so the counts cannot
 drift apart among ~25 flat siblings and the self-check is visible in one place.
 `tests/test_performance_live.py` holds those figures to the ledger they were measured against.
 
@@ -107,8 +107,7 @@ drift apart among ~25 flat siblings and the self-check is visible in one place.
   lot. `gifted stock in` and `bonus issuance` are mechanical and need no annotation.
 - **`cost_known` is the partition read as a boolean**: false only when *every* entering unit is
   unknown. Not `unknown == 0`, which would flip C38U to false and delete its 7,756.75 Net.
-  Live, the refusal set is ASTREA6B alone; the caveat set is S51 40.0%, SET 27.9%, Q01 25.0%,
-  C38U 7.5%.
+  Live, the refusal set is ASTREA6B alone; the caveat set is S51 40.0%, SET 27.9%, C38U 7.5%.
 
 ## The four cell states
 
