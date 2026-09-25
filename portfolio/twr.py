@@ -240,20 +240,27 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
     # Every currency converted below, not a fixed USD/HKD/EUR list. MYR had no series, so
     # fx_on returned None and every amount in that currency was skipped. Dividends and fees
     # carry their own currency: an SGD REIT can pay in EUR.
-    ccys = (set(ccy_of.values()) | {d["currency"] for d in divs}
-            | {t["currency"] for t in txns if t["fees"]})
-    for c in sorted(ccys - {None, "", "SGD"}):
+    ccys_of = defaultdict(set)
+    for sid, c in ccy_of.items():
+        ccys_of[sid].add(c)
+    for d in divs:
+        ccys_of[d["security_id"]].add(d["currency"])
+    for t in txns:
+        if t["fees"]:
+            ccys_of[t["security_id"]].add(t["currency"])
+    for c in sorted(set().union(*ccys_of.values()) - {None, "", "SGD"}):
         try:
             fx[c] = ffill(fetch(f"{c}SGD=X"), days)
         except Exception:
             fx[c] = {}
-    # No daily Yahoo series (a fund is skipped on purpose; see the note), or no FX
-    # series for its currency. Either one used to drop the name with nothing on the response.
+    # No daily Yahoo series (a fund is skipped on purpose; see the note), or no FX series for
+    # its currency or for a dividend or fee on it. Either one used to drop the amount with
+    # nothing on the response.
     unpriced = [
         {"ticker": tk, "market": market, "currency": ccy_of[sid]}
         for sid, tk, market, atype, _ccy in held
         if (atype != "fund" and not prices.get(sid))
-        or (ccy_of[sid] != "SGD" and not fx.get(ccy_of[sid]))
+        or any(not fx.get(c or "SGD") for c in ccys_of[sid])
     ]
     unpriced.sort(key=lambda r: (r["ticker"] or "", r["market"] or ""))
     price_sids = [sid for sid, p in prices.items() if p]

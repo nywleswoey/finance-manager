@@ -356,3 +356,18 @@ def test_an_eur_dividend_on_an_sgd_security_is_in_the_money_figures():
     assert "EURSGD=X" in calls
     assert paid["value_plus_income_sgd"] - bare["value_plus_income_sgd"] == 15
     assert paid["unpriced"] == []
+
+
+def test_a_failed_eur_fetch_names_the_sgd_security_whose_dividend_it_dropped():
+    """An SGD name paying EUR has its own price series, so only its dividend currency can
+    fail. That failure must still name the security."""
+    def fetch(sym):
+        if sym == "EURSGD=X":
+            raise RuntimeError("yahoo down")
+        return _priced_book(sym)
+
+    eur_div = [{"security_id": 1, "ex_date": D(2024, 6, 1), "pay_date": D(2024, 6, 1),
+                "gross": 10.0, "currency": "EUR"}]
+    dropped = _returns(HELD, TXNS, eur_div, {}, D(2026, 1, 1), fetch=fetch)
+
+    assert dropped["unpriced"] == [{"ticker": "AAA", "market": "SG", "currency": "SGD"}]
