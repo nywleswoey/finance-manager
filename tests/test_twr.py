@@ -266,3 +266,108 @@ def test_a_security_yahoo_cannot_price_falls_back_to_the_stored_close():
 
     assert a["value_plus_income_sgd"] == b["value_plus_income_sgd"] == 450   # 50 units @ 9.00
     assert a["twr_cumulative"] is None and b["twr_cumulative"] is None       # no daily sleeve
+
+
+# ------------------------------------------------------- _returns: MYR and a failed fetch
+#
+# A Bursa holding is market MY / currency MYR (scripts/seed.py, build/build_ledger.py).
+# `_returns` asked Yahoo for FX only on USD, HKD and EUR, and built the symbol with `ysym`,
+# which has no MY branch, so the position left every money figure and the response had no
+# field naming it. The same `except Exception` swallowed a failed fetch.
+
+MYR_HELD = [(2, "3255", "MY", "equity", "MYR")]
+MYR_TXN = [{"security_id": 2, "trade_date": D(2024, 1, 1), "action": "buy",
+            "qty_signed": 100.0, "price": 10.0, "fees": 10.0, "currency": "MYR"}]
+MYR_DIV = [{"security_id": 2, "ex_date": D(2024, 6, 1), "pay_date": D(2024, 6, 1),
+            "gross": 10.0, "currency": "MYR"}]
+# 100 units, 10 -> 12 MYR, MYR fixed at 0.30 SGD. Fee 10 MYR and a 10 MYR dividend are 3 SGD each.
+MYR_INVESTED = 303          # 100 * 10 * 0.30 + 10 * 0.30
+MYR_VALUE = 363             # 100 * 12 * 0.30 + the dividend
+
+
+def _priced_book(sym):
+    """AAA.SI and 3255.KL plus MYR/SGD. Nothing else — a bare Bursa code or USD/HKD/EUR is a bug."""
+    if sym == "AAA.SI":
+        return {D(2024, 1, 1): 10.0, D(2024, 6, 1): 12.0}
+    if sym == "3255.KL":
+        return {D(2024, 1, 1): 10.0, D(2024, 6, 1): 12.0}
+    if sym == "MYRSGD=X":
+        return {D(2024, 1, 1): 0.30, D(2024, 6, 1): 0.30}
+    raise AssertionError(sym)
+
+
+def test_a_myr_position_is_in_the_money_figures():
+    """Regression: the same book without the MYR row is short the converted cost, the fee,
+    the dividend and the terminal value, and the response never said the row was missing."""
+    calls = []
+
+    def fetch(sym):
+        calls.append(sym)
+        return _priced_book(sym)
+
+    as_of = D(2026, 1, 1)
+    sgd = _returns(HELD, TXNS, [], {}, as_of, fetch=fetch)
+    both = _returns(HELD + MYR_HELD, TXNS + MYR_TXN, MYR_DIV, {}, as_of, fetch=fetch)
+
+    assert both["invested_sgd"] - sgd["invested_sgd"] == MYR_INVESTED
+    assert both["value_plus_income_sgd"] - sgd["value_plus_income_sgd"] == MYR_VALUE
+    # (1560 + 3) / 1300 - 1 = 0.202307..., rounded to 4dp on the response.
+    assert both["twr_cumulative"] == 0.2023
+    assert both["unpriced"] == []
+    assert sgd["unpriced"] == []
+    # SGD needs no FX pair. The Bursa code is 3255.KL, owned by ingestion.prices.yahoo_symbol.
+    assert calls == ["AAA.SI", "AAA.SI", "3255.KL", "MYRSGD=X"]
+
+
+def test_a_failed_yahoo_fetch_names_the_position_it_dropped():
+    """The old handler caught Exception and continued, so a dead fetch looked like a book
+    that had never held the name."""
+    def fetch(sym):
+        if sym in ("3255.KL", "MYRSGD=X"):
+            raise RuntimeError("yahoo down")
+        return _priced_book(sym)
+
+    as_of = D(2026, 1, 1)
+    sgd = _returns(HELD, TXNS, [], {}, as_of, fetch=_priced_book)
+    dropped = _returns(HELD + MYR_HELD, TXNS + MYR_TXN, MYR_DIV, {}, as_of, fetch=fetch)
+
+    assert dropped["invested_sgd"] == sgd["invested_sgd"]
+    assert dropped["value_plus_income_sgd"] == sgd["value_plus_income_sgd"]
+    assert dropped["unpriced"] == [{"ticker": "3255", "market": "MY", "currency": "MYR"}]
+
+
+def test_an_eur_dividend_on_an_sgd_security_is_in_the_money_figures():
+    """Regression: SET and UD1U are SGD securities paying EUR. With the FX list built from
+    security currencies alone, no EURSGD=X series was fetched and the dividend fell out."""
+    calls = []
+
+    def fetch(sym):
+        calls.append(sym)
+        if sym == "EURSGD=X":
+            return {D(2024, 1, 1): 1.5, D(2024, 6, 1): 1.5}
+        return _priced_book(sym)
+
+    eur_div = [{"security_id": 1, "ex_date": D(2024, 6, 1), "pay_date": D(2024, 6, 1),
+                "gross": 10.0, "currency": "EUR"}]
+    as_of = D(2026, 1, 1)
+    bare = _returns(HELD, TXNS, [], {}, as_of, fetch=_priced_book)
+    paid = _returns(HELD, TXNS, eur_div, {}, as_of, fetch=fetch)
+
+    assert "EURSGD=X" in calls
+    assert paid["value_plus_income_sgd"] - bare["value_plus_income_sgd"] == 15
+    assert paid["unpriced"] == []
+
+
+def test_a_failed_eur_fetch_names_the_sgd_security_whose_dividend_it_dropped():
+    """An SGD name paying EUR has its own price series, so only its dividend currency can
+    fail. That failure must still name the security."""
+    def fetch(sym):
+        if sym == "EURSGD=X":
+            raise RuntimeError("yahoo down")
+        return _priced_book(sym)
+
+    eur_div = [{"security_id": 1, "ex_date": D(2024, 6, 1), "pay_date": D(2024, 6, 1),
+                "gross": 10.0, "currency": "EUR"}]
+    dropped = _returns(HELD, TXNS, eur_div, {}, D(2026, 1, 1), fetch=fetch)
+
+    assert dropped["unpriced"] == [{"ticker": "AAA", "market": "SG", "currency": "SGD"}]
