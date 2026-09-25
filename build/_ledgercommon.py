@@ -46,7 +46,7 @@ def market_of(sym):
 
     `.SI` is SG. An all-digit code, including one pulled out of a trailing
     `(00823)`, is HK. A letters-and-dots code (`AAPL`, `BRK.B`), or a bare
-    display name with no code (`Apple Inc`), is US. Anything
+    display name with no code in parentheses (`Apple Inc`, `AT&T Inc`), is US. Anything
     else (`D05`, `C38U`, `9CI`) is SG — an SGX counter that arrived without `.SI`.
 
     A letters-only SGX code (`SET`) is indistinguishable from a US ticker by
@@ -56,11 +56,13 @@ def market_of(sym):
     s = "" if sym is None else str(sym).strip()
     if re.search(r"\.SI\b", s, re.I):
         return "SG"
+    if "(" not in s and re.search(r"[^A-Za-z0-9.]", s):
+        return "US"
     inner = s.split("(")[-1].strip(") ").strip()
     code = re.sub(r"\.(US|HK)$", "", inner or s, flags=re.I).strip()
     if code.isdigit():
         return "HK"
-    if re.fullmatch(r"[A-Za-z. ]+", code):
+    if re.fullmatch(r"[A-Za-z.]+", code):
         return "US"
     return "SG"
 

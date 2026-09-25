@@ -87,7 +87,9 @@ def test_tiger_dividend_symbol_currency():
     """A Tiger dividend's currency is MARKET_CCY[market_of(symbol)]. An SGX code
     without `.SI` is SGD; a bare display name with no code stays USD as before."""
     assert MARKET_CCY[market_of("DBS (D05)")] == "SGD"
-    assert MARKET_CCY[market_of("Apple Inc")] == "USD"
+    for name in ("Apple Inc", "Coca-Cola Co", "AT&T Inc", "McDonald's Corp", "3M Co",
+                 "Alphabet Inc, Class A"):
+        assert MARKET_CCY[market_of(name)] == "USD", name
     assert MARKET_CCY[market_of("Apple Inc (AAPL)")] == "USD"
 
 
