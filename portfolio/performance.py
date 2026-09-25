@@ -550,7 +550,8 @@ def _draw_out_qty(outs, qty, day=None):
 
 def _release_paired_outs(outs, arrivals, qty=float("inf")):
     """Spend each arrival's own departure — the out whose size matches it, the same
-    size-pairing `_matched_transfer_pairs` uses — up to `qty` in total, earliest arrival first.
+    size-pairing `_matched_transfer_pairs` uses, and of equal sizes the one nearest the
+    arrival's date — up to `qty` in total, earliest arrival first.
     Only what no out of matching size pays is then drawn earliest-first. A transfer in pairs
     with the out nearest it, often a later one; drawing its share from the earliest out would
     spend the departure an earlier CDP return needs, and the date limit keeps that return from
@@ -566,7 +567,8 @@ def _release_paired_outs(outs, arrivals, qty=float("inf")):
         take = min(a.qty, qty)
         qty -= take
         bucket = by_size.get(round(take, 6)) or []
-        hit = next((o for o in bucket if o[1] > 1e-9), None)
+        hit = min((o for o in bucket if o[1] > 1e-9),
+                  key=lambda o: abs((o[0] - a.date).days), default=None)
         if hit is not None:
             hit[1] = 0.0
         else:

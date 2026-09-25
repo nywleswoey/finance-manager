@@ -645,6 +645,15 @@ def test_a_transfer_in_takes_its_own_out_not_the_one_an_earlier_return_needs():
     assert r["cost_partition"]["costed"] == 2500.0
     assert r["cost_known"] is True
 
+    same_size = [t if t["qty_signed"] not in (-500, 500)
+                 else {**t, "qty_signed": 1000 if t["qty_signed"] > 0 else -1000}
+                 for t in txns]
+    r = _only(_fold(same_size, cdp=cdp, price={10: 2.0}))
+    assert r["cost_partition"]["units_in"] == 3000.0
+    assert r["cost_partition"]["unknown"] == 0.0
+    assert r["cost_partition"]["costed"] == 3000.0
+    assert r["cost_known"] is True
+
 
 def test_cdp_cost_is_matched_at_position_level_not_per_row():
     """A CDP txn row is a month-end statement diff and routinely aggregates several
