@@ -26,8 +26,8 @@ from portfolio.config import settings
 from server import auth
 # NwValueIn, ticker_ledger and performance are re-exported: tests and scripts/audit_ledger.py
 # import them from server.main (they moved with their routes). _cache likewise:
-# server.main._cache must stay the object /api/refresh clears and the one the portfolio routes
-# memoize into — not a private main.py global.
+# server.main._cache must stay the object /api/refresh-prices and the cron handler clear
+# and the one the portfolio routes memoize into — not a private main.py global.
 from server.routes.networth import NwValueIn, router as networth_router  # noqa: F401
 from server.routes.portfolio import (_cache, performance, router as portfolio_router,  # noqa: F401
                                      ticker_ledger)
@@ -130,12 +130,6 @@ async def _unhandled(request: Request, exc: Exception):
     traces or internals to the client (SECURITY-09, SECURITY-15)."""
     log.exception("unhandled error path=%s", request.url.path)
     return JSONResponse({"detail": "internal error"}, status_code=500)
-
-
-@app.post("/api/refresh")
-def refresh():
-    _cache.clear()
-    return {"ok": True}
 
 
 def _refresh_prices():

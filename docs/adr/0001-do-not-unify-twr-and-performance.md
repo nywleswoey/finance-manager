@@ -8,8 +8,9 @@ accepted
 
 `portfolio/performance.py` (`compute` → pure `fold_positions`) and `portfolio/twr.py`
 (`compute_twr` → pure `_twr`) both build the same conceptual pipeline —
-transactions → positions → dated cashflows → a return number — and `twr.py` already
-imports `_xirr` from `performance.py`. That surface similarity invites a merge into one
+transactions → positions → dated cashflows → a return number — and `twr.py` imports
+`_xirr` from `performance.py` lazily, inside `compute_twr`, rather than at module
+level. It is still that module's private. That surface similarity invites a merge into one
 "return ledger" module. Before writing any code we ran a design-it-twice exercise: three
 independent designs for a unified interface, each under a different constraint (minimise
 the interface / maximise flexibility / optimise for the common caller).

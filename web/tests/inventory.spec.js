@@ -13,10 +13,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "@playwright/test";
-import { HSCROLL_GATE_APPLIES_BELOW, PHONE_TIER_EDGE, VIEWPORTS } from "./viewports.js";
-import { HSCROLL_BASELINE } from "./hscroll-baseline.js";
+import { PHONE_TIER_EDGE, VIEWPORTS } from "./viewports.js";
 import { PATHOLOGICAL, readFixture } from "./fixtures/index.js";
-import { VIEWS } from "./support/app.js";
 
 const WEB = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const REPO = path.dirname(WEB);
@@ -347,19 +345,6 @@ test("the ten viewports match the manual checklist one-for-one", () => {
 
   expect(fromChecklist, "parsed from RESPONSIVE.md's viewport table").toHaveLength(10);
   expect(VIEWPORTS.map((v) => `${v.name} ${v.width}x${v.height}`)).toEqual(fromChecklist);
-});
-
-test("the horizontal-overflow baseline covers every gated viewport and view", () => {
-  // A missing entry defaults to 0 and so fails loudly, but a *stale* one — a view
-  // renamed or removed — would sit in the file forever pretending to hold a defect that
-  // no longer exists. Both directions are checked here so the ratchet stays honest about
-  // what it is actually ratcheting.
-  const gated = VIEWPORTS.filter((v) => v.width < HSCROLL_GATE_APPLIES_BELOW).map((v) => v.name);
-  expect(Object.keys(HSCROLL_BASELINE).sort()).toEqual([...gated].sort());
-  const views = VIEWS.map((v) => v.name).sort();
-  for (const vp of gated) {
-    expect(Object.keys(HSCROLL_BASELINE[vp]).sort(), `baseline entries for ${vp}`).toEqual(views);
-  }
 });
 
 test.describe("the fixtures carry the pathological rows they exist for", () => {

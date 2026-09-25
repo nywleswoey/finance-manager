@@ -134,10 +134,9 @@ def fx_row_for(s: Session, ccy: str, on_date: dt.date) -> FxRate | None:
     """The fx_rate row a freeze at `on_date` reads from — newest with date <= on_date, or None.
 
     The freeze rule itself, held once. `rate_for` wraps it for the "what rate" question and
-    raises on None (BR4); scripts/promote_networth_snapshots.py needs the *row* — to carry it
-    into a store that has no rate that early — and needs to report a miss across every currency
-    rather than abort on the first, so it takes the None. Two callers, one definition of which
-    row wins; a second copy would be free to drift from this one."""
+    raises on None (BR4). Returning the row, and None on a miss, is what a caller reporting
+    every missing currency needs. The finished one-shot that did is
+    `archive/one-shots/promote_networth_snapshots.py`. One definition of which row wins."""
     return s.execute(select(FxRate).where(FxRate.currency == ccy, FxRate.date <= on_date)
                      .order_by(FxRate.date.desc()).limit(1)).scalar_one_or_none()
 

@@ -123,14 +123,6 @@ def main():
     print("\n=== Moomoo timeline (snapshot-diff) ===")
     for e in ev:
         print(f"  {e['date']}  {e['ticker']:5} {e['action']:16} {e['qty_signed']:>+10.4f}")
-    print("\n=== latest statement ending position vs Holdings.md ===")
-    HOLD = {"9CI": 6912, "C38U": 1175, "HMN": 136.94, "AAPL": 1}
-    for t in sorted(set(list(HOLD) + tickers)):
-        last = max((m for (m, tk) in snap if tk == t), default=None)
-        end = snap.get((last, t)) if last else 0.0
-        h = HOLD.get(t)
-        flag = "" if (h is not None and abs((h or 0) - (end or 0)) < 1e-6) else "  <-- GAP"
-        print(f"  {t:5} last-stmt({last})={end!s:>10}  Holdings={h}{flag}")
     out = os.path.join(os.path.dirname(__file__), "moomoo_events.csv")
     cols = ["date","account","market","ticker","asset_type","action","qty_signed","price","amount","source","raw"]
     write_csv(out, cols, ev, extrasaction="ignore")

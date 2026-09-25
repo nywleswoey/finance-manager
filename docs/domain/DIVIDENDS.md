@@ -1,20 +1,20 @@
 # Dividend Income
 
 Cash dividends / distributions parsed from every statement source by
-`build/parse_dividends.py` → `build/dividends.csv` (549 records, 2017–2026). These were
-**always in the statements** — the position parsers just didn't extract them. Now shown
-per security in the viewer header.
+`build/parse_dividends.py` → `build/dividends.csv`. These were
+**always in the statements** — the position parsers just didn't extract them. Shown
+per security in the web app (the Dividends tab and the security page).
 
 ## Sources
 
-| Source | Section parsed | Rows | Markets |
-|---|---|---|---|
-| Tiger flex | `Dividends` (status = `Paid` only; accruals skipped) | 113 | HK, SG, US |
-| FSM / iFast | `Stock Dividend` rows that are `Cash Dividend` / `Cash in Lieu` | 242 | SG (+ USD/EUR REITs) |
-| CDP | `Summary of Payments` (2017-18 3-line block + 2019+ layout) | 102 | SG |
-| Moomoo | `… CASH DIVIDEND` lines | 11 | SG, US |
-| CPF / SRS | backfilled (no dividend lines in their transaction files) | 81 | SG (+ EUR REIT) |
-| Endowus | — (Amundi fund accumulates; no distributions) | 0 | — |
+| Source | Section parsed | Markets |
+|---|---|---|
+| Tiger flex | `Dividends` (status = `Paid` only; accruals skipped) | HK, SG, US |
+| FSM / iFast | `Stock Dividend` rows that are `Cash Dividend` / `Cash in Lieu` | SG (+ USD/EUR REITs) |
+| CDP | `Summary of Payments` (2017-18 3-line block + 2019+ layout) | SG |
+| Moomoo | `… CASH DIVIDEND` lines | SG, US |
+| CPF / SRS | backfilled (no dividend lines in their transaction files) | SG (+ EUR REIT) |
+| Endowus | — (Amundi fund accumulates; no distributions) | — |
 
 ### CPF / SRS backfill
 
@@ -32,7 +32,6 @@ gaps:
 4. **Yahoo** — last resort (its amounts are split/bonus/rights-adjusted; currently unused).
 
 Units held at each ex-date are replayed from the CPF/SRS ledger; `gross = units × rate`.
-Totals: **CPF SGD 17,648**; **SRS SGD 8,620 + EUR 7,803**.
 
 ## Display currency
 
@@ -45,26 +44,12 @@ Dividends detail + security history, and as the row tooltip in Holdings — so a
 still be reconciled against the statement. Per-unit rates (declared and implied) stay
 **native**: a declared rate is a statement fact, not a converted one.
 
-Latest FX is applied to all years (historical FX is not stored), so prior-year SGD figures are
-an approximation — the `SGD · latest FX` pill in the UI says so. A currency with no row in
+The dividend read path converts every year at the latest `fx_rate` for that currency, so
+prior-year SGD figures are an approximation — the `SGD · latest FX` pill in the UI says so.
+Dated FX is stored (`fx_rate` is keyed on `(date, currency)` and `ingestion/prices.py` writes
+those rows); this path does not read the rate on the pay date. A currency with no row in
 `fx_rate` is never passed through at 1:1: `/api/dividend-details` returns `gross_sgd: null` and
 flags the row `no FX rate for <CCY>`; the other endpoints raise (BR4, no silent fallback).
-
-## Totals (native currency, as paid)
-
-**By market**
-- **HK: HKD ~199,877** (the dividend engine — HK REITs/telcos: 01310 51k, 01523 49k, 00010 31k, 01038 22k, 00101 19k …)
-- SG: SGD ~136,334 · EUR ~3,137 · USD ~500
-- US: USD ~803
-
-**By account**
-| Account | Dividends |
-|---|---|
-| Tiger Prime | HKD 198,837 · SGD 14,827 · USD 786 |
-| FSM | SGD 60,684 · EUR 3,137 · USD 500 |
-| CDP | SGD 58,963 |
-| Moomoo | SGD 1,360 · USD 17 |
-| Tiger Cash Boost | HKD 1,040 · SGD 500 |
 
 ## Per-dividend detail (qty held + declared rate)
 
@@ -83,8 +68,8 @@ flags the row `no FX rate for <CCY>`; the other endpoints raise (BR4, no silent 
 - **flags** — `"qty unknown — needs manual input"` when neither a declared rate nor a
   ledger qty can be determined; `"no date"` (old CDP layout omits the pay date so qty
   can't be replayed); `"unmapped ticker"`. The Dividends tab surfaces a flagged count
-  and a "flagged only" filter for manual entry. ~34 of 466 rows currently need input
-  (mostly the dateless 2017-18 CDP payments).
+  and a "flagged only" filter for manual entry. The count moves with the book; the tab is
+  where it is read.
 
 ## Notes / caveats (for the DB Phase-2 cleanup)
 
@@ -109,7 +94,7 @@ a build cache (`build/dividends.csv`) and a derived reference (`data/dividends-m
 ```
 data/**  (broker statements: tiger-prime, fsm, cdp-stocks, moomoo, cpf/srs …)
   │
-  ├─ make flat   build/parse_dividends.py  ──►  build/dividends.csv   (549 rows, all sources merged + deduped)
+  ├─ make flat   build/parse_dividends.py  ──►  build/dividends.csv   (all sources merged + deduped)
   │              (also parse_moomoo / parse_cdp / parse_endowus / build_ledger)
   │
   ├─ make load   ingestion.load  →  load_dividends()  ──►  Postgres `dividend` table
@@ -120,7 +105,7 @@ data/**  (broker statements: tiger-prime, fsm, cdp-stocks, moomoo, cpf/srs …)
   │                  (one row per distinct dividend event: date, ex_date, ticker, rate_per_unit, currency;
   │                   rate = gross / qty-at-ex-date, account-independent, deduped across accounts)
   │
-  └─ server/routes/portfolio.py   /api/dividends · /api/dividend-details · /api/dividends-annual
+  └─ server/routes/portfolio.py   /api/dividend-details · /api/dividends-annual
                                   web/src/modules/portfolio/Dividends.jsx  (annual matrix + per-payment detail table)
 ```
 
@@ -154,7 +139,7 @@ overwrites (same dedup_hash) — do **not** hand-edit `data/dividends-master.csv
 
 `/api/dividend-details` flags rows that need a human: **qty unknown** (no declared rate and no
 replayable ledger qty), **no date** (old CDP layout), **unmapped ticker**. The Dividends tab
-has a "flagged only" filter. ~34 of 466 rows currently need input (mostly dateless 2017-18 CDP).
+has a "flagged only" filter. Dateless 2017-18 CDP payments are the usual case.
 Resolve by adding the missing rate/date/units to the source tracker row and re-ingesting.
 
 This is **Phase 2 (dividends) of [PLAN.md](../archive/PLAN.md) front-loaded** — `dividends.csv` maps
