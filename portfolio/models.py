@@ -1,4 +1,4 @@
-"""SQLAlchemy 2.0 models — mirrors the schema in PLAN.md.
+"""SQLAlchemy 2.0 models — the schema Alembic migrates (`migrations/`).
 
 Money/qty use Numeric for exactness. Enum-like fields are String (broker formats vary);
 constrained in app code, not DB enums, to stay flexible as new statement types appear.
@@ -36,8 +36,8 @@ class Account(Base):
     broker: Mapped[str | None] = mapped_column(String(64))
     funding_bucket: Mapped[str] = mapped_column(String(8))           # cash | cpf | srs
     base_currency: Mapped[str] = mapped_column(String(3), default="SGD")
-    opened: Mapped[dt.date | None] = mapped_column(Date)
-    closed: Mapped[dt.date | None] = mapped_column(Date)
+    opened: Mapped[dt.date | None] = mapped_column(Date)   # stored, no reader
+    closed: Mapped[dt.date | None] = mapped_column(Date)   # stored, no reader
     __table_args__ = (CheckConstraint("funding_bucket in ('cash','cpf','srs')"),)
 
 
@@ -49,7 +49,7 @@ class Security(Base):
     market: Mapped[str | None] = mapped_column(String(4))            # US | HK | SG
     asset_type: Mapped[str] = mapped_column(String(16), default="stock")  # stock|fund|reit|etf|bond
     currency: Mapped[str | None] = mapped_column(String(3))
-    isin: Mapped[str | None] = mapped_column(String(16))
+    isin: Mapped[str | None] = mapped_column(String(16))             # stored, no reader
     active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     aliases: Mapped[list[SecurityAlias]] = relationship(back_populates="security", cascade="all, delete-orphan")
@@ -66,15 +66,20 @@ class SecurityAlias(Base):
 
 
 class CorporateAction(Base):
+    """The carry reads `from_ticker`, `to_ticker`, and `type` only.
+
+    `date`, `security_id`, `ratio_num`, and `ratio_den` are written by `scripts/seed.py`
+    and not read. The S51→5E2 20:1 is applied in `build/build_ledger.py`.
+    """
     __tablename__ = "corporate_action"
     id: Mapped[int] = mapped_column(primary_key=True)
-    security_id: Mapped[int | None] = mapped_column(ForeignKey("security.id"))
-    date: Mapped[dt.date | None] = mapped_column(Date)
+    security_id: Mapped[int | None] = mapped_column(ForeignKey("security.id"))  # informational
+    date: Mapped[dt.date | None] = mapped_column(Date)                          # informational
     type: Mapped[str] = mapped_column(String(16))                    # rename|split|consolidation|merger|distribution
     from_ticker: Mapped[str | None] = mapped_column(String(24))
     to_ticker: Mapped[str | None] = mapped_column(String(24))
-    ratio_num: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
-    ratio_den: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
+    ratio_num: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))  # informational
+    ratio_den: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))  # informational
     notes: Mapped[str | None] = mapped_column(Text)
 
 
@@ -98,7 +103,7 @@ class Txn(Base):
     account_id: Mapped[int] = mapped_column(ForeignKey("account.id"))
     security_id: Mapped[int | None] = mapped_column(ForeignKey("security.id"))
     trade_date: Mapped[dt.date | None] = mapped_column(Date, index=True)
-    settle_date: Mapped[dt.date | None] = mapped_column(Date)
+    settle_date: Mapped[dt.date | None] = mapped_column(Date)        # stored, no reader
     action: Mapped[str] = mapped_column(String(24))                  # buy|sell|gift_in|rights|bonus|scrip|corp_action|transfer_in|transfer_out|fee|subscription
     qty_signed: Mapped[Decimal] = mapped_column(QTY, default=0)
     price: Mapped[Decimal | None] = mapped_column(MONEY)
@@ -124,7 +129,7 @@ class Dividend(Base):
     amount_per_unit: Mapped[Decimal | None] = mapped_column(RATE)
     units: Mapped[Decimal | None] = mapped_column(QTY)
     gross: Mapped[Decimal | None] = mapped_column(MONEY)
-    withholding_tax: Mapped[Decimal | None] = mapped_column(MONEY)
+    withholding_tax: Mapped[Decimal | None] = mapped_column(MONEY)   # stored, no reader
     net: Mapped[Decimal | None] = mapped_column(MONEY)
     currency: Mapped[str | None] = mapped_column(String(3))
     source_file: Mapped[str | None] = mapped_column(String(256))
@@ -311,18 +316,6 @@ class FxRate(Base):
     date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
     currency: Mapped[str] = mapped_column(String(3), primary_key=True)
     rate_to_sgd: Mapped[Decimal] = mapped_column(RATE)
-
-
-class PositionSnapshot(Base):
-    __tablename__ = "position_snapshot"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    account_id: Mapped[int] = mapped_column(ForeignKey("account.id"))
-    security_id: Mapped[int] = mapped_column(ForeignKey("security.id"))
-    date: Mapped[dt.date] = mapped_column(Date, index=True)
-    units: Mapped[Decimal] = mapped_column(QTY)
-    market_value: Mapped[Decimal | None] = mapped_column(MONEY)
-    source: Mapped[str | None] = mapped_column(String(32))
-    __table_args__ = (UniqueConstraint("account_id", "security_id", "date", "source", name="uq_snapshot"),)
 
 
 # ---------------- net worth ----------------

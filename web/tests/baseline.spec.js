@@ -47,20 +47,17 @@
  * observations, and the open calls — and nothing else. The sweep reconciled it against
  * this suite, so a gate written there is one a person genuinely has to run.
  *
- * ONE GATE IS SCOPED, AND IT IS STILL A RATCHET RATHER THAN A LINE. The horizontal-scroll
- * gate applies only below 1024px — `HSCROLL_GATE_APPLIES_BELOW` says why the wider two are
- * exempt. Below it the gate now **does** hold: `HSCROLL_BASELINE` was a table of measured
- * defects the ratchet lowered over eight slices, and since #44 every number in it is zero,
- * so the lookup is `<= 0` written the long way. It stays a lookup for one more ticket —
- * that file's header says what removing it costs and names this line as one of the edits.
- * Until then, read it for what those numbers are and are not.
+ * ONE GATE IS SCOPED. The horizontal-scroll gate applies only below 1024px —
+ * `HSCROLL_GATE_APPLIES_BELOW` says why the wider two are exempt. Below it the gate is
+ * `expect(overflow).toBeLessThanOrEqual(0)`. It used to be a table of measured defects
+ * (`hscroll-baseline.js`) that the ratchet lowered over eight slices; since #44 every
+ * number was zero, and the table is gone.
  *
  * NO SCREENSHOTS. Geometry and structure only, nowhere in this suite. `inventory.spec.js`
  * asserts that.
  */
 import { expect, test } from "@playwright/test";
 import { HSCROLL_GATE_APPLIES_BELOW, VIEWPORTS } from "./viewports.js";
-import { HSCROLL_BASELINE } from "./hscroll-baseline.js";
 import { VIEWS, fixedPositionedElements, loadApp, mainPaneOverflow } from "./support/app.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
@@ -123,13 +120,11 @@ for (const view of VIEWS) {
         });
         if (vp.width >= HSCROLL_GATE_APPLIES_BELOW) return;   // exempt, see the header
 
-        const allowed = HSCROLL_BASELINE[vp.name]?.[view.name] ?? 0;
         expect.soft(
           overflow,
-          `.main overflows by ${overflow}px at ${vp.name}; the recorded baseline allows ` +
-          `${allowed}px. If this is the responsive work landing, lower the number in ` +
-          `hscroll-baseline.js. If it went up, something got wider.`
-        ).toBeLessThanOrEqual(allowed);
+          `.main overflows by ${overflow}px at ${vp.name}. The gate is <= 0. ` +
+          `If it went up, something got wider.`
+        ).toBeLessThanOrEqual(0);
       });
   });
 }

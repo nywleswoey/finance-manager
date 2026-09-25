@@ -3,7 +3,7 @@
 Split out of server/main.py (Slice 3 of the codebase reorg) to match web/src/modules/portfolio.
 server.main stays the composition root: app, middleware, auth_gate, health/refresh/cron,
 PostHog proxy, StaticFiles. This module owns the portfolio-specific memoization cache (`_cache`)
-that /api/refresh and /api/refresh-prices in server.main clear — server.main re-exports it so
+that /api/refresh-prices and the cron handler in server.main clear — server.main re-exports it so
 `server.main._cache` (imported by tests and scripts/audit_ledger.py) stays the same object.
 """
 from fastapi import APIRouter, Query
@@ -23,7 +23,7 @@ _cache: dict = {}
 
 
 def _cached(key, fn):
-    """Memoize fn()'s result in the process-wide _cache under key (cleared by /refresh)."""
+    """Memoize fn()'s result in the process-wide _cache under key (cleared by /refresh-prices)."""
     if key not in _cache:
         _cache[key] = fn()
     return _cache[key]
@@ -244,11 +244,6 @@ def holding(ticker: str):
     return {"as_of": _cached("as_of", _as_of), "fx_as_of": _cached("fx_as_of", _fx_as_of),
             **folded, "transactions": txns, "dividends": divs,
             "options": trades_for(ticker)}
-
-
-@router.get("/api/dividends")
-def dividends_by_market():
-    return dividends.summary()
 
 
 @router.get("/api/dividend-details")

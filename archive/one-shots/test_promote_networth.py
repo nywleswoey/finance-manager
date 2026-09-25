@@ -7,7 +7,9 @@ has neither the FX nor the prices that produced them. `create_snapshot` cannot b
 exactly that reason — it stamps today's live portfolio value and recomputes `value_sgd` from
 native x rate.
 
-Run: PYTHONPATH=. .venv/bin/python tests/test_promote_networth.py
+Run: PYTHONPATH=. .venv/bin/python archive/one-shots/test_promote_networth.py
+
+Not collected by `pytest` (archive/ is in norecursedirs). The one-shot is finished.
 """
 import datetime as dt
 import os
@@ -15,12 +17,13 @@ import sys
 import unittest
 from decimal import Decimal
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+sys.path.insert(0, os.path.dirname(__file__))
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from portfolio.models import Base, FxRate, NwItem, NwSnapshot, NwValue
-from scripts import promote_networth_snapshots as promote
+import promote_networth_snapshots as promote
 
 # code, kind, ccy, liquid, housing, cpf — the shape of the real catalogue, four items deep.
 CATALOGUE = [

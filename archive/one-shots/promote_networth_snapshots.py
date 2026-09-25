@@ -1,4 +1,8 @@
-"""Promote net-worth snapshots from one store to another, frozen money intact.
+"""ARCHIVED one-shot (#86, #93). Finished; not part of the live toolset.
+
+Kept so the copy can be re-read. A new snapshot column does not have to update it.
+
+Promote net-worth snapshots from one store to another, frozen money intact.
 
 Two databases hold different halves of the net-worth history (#86): the deployed Neon store holds
 2026-07-10 / 07-25 / 08-05, local dev holds **two earlier** snapshots, 2026-06-21 and 06-30, on
@@ -41,7 +45,7 @@ Two integrity checks gate every promotion, the two the map ran on the June pair 
     on or before the snapshot date, so nothing was valued at a later month's rate.
 
 Usage (SOURCE is read-only; TARGET is the store being written):
-  PYTHONPATH=. .venv/bin/python scripts/promote_networth_snapshots.py \
+  PYTHONPATH=. .venv/bin/python archive/one-shots/promote_networth_snapshots.py \
       --source postgresql+psycopg://... --target postgresql+psycopg://...            # dry-run
   ... --commit                                                                        # write
   ... --verify                          # both checks over the target's whole series, plus a
@@ -66,7 +70,7 @@ import datetime as dt
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker

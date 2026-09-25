@@ -1,14 +1,9 @@
-# Backend — Phase 0/1 (DB foundation + load)
+# Cost basis, Net, breakeven, and the holding contract
 
-> **Live vs historical**: this file is a Phase 0/1 build write-up from early in the project.
-> The stack description and cost-partition notes below are still accurate; the "Quick start"
-> command has been corrected to match the current `Makefile`. For current setup/ingest
-> instructions, see the root [README.md](../../README.md).
+Rules for cost basis, the Net on the wire, breakeven, and `GET /api/holding`.
+Setup and ingest: the root [README.md](../../README.md).
 
-Implements [PLAN.md](../archive/PLAN.md) Phase 0 (Postgres + schema + seed) and the first half of
-Phase 1 (load the existing `build/*.csv` into the DB, idempotently).
-
-## Stack in place
+## Stack
 
 - **Postgres 16** via `docker-compose.yml` (host port **5544**).
 - **SQLAlchemy 2.0** models (`portfolio/models.py`) + **Alembic** migrations (`migrations/`).
@@ -18,43 +13,11 @@ Phase 1 (load the existing `build/*.csv` into the DB, idempotently).
 ## Quick start
 
 ```bash
-uv venv .venv && uv pip install --python .venv/bin/python \
-    sqlalchemy alembic "psycopg[binary]" pydantic-settings python-dotenv
+uv sync --extra dev
 cp .env.example .env
 make setup          # db-up + migrate + seed + ingest + prices  (idempotent; see `make ingest` for load-only)
 make psql           # poke around
 ```
-
-## What's in the DB now
-
-| Table | Rows | Notes |
-|---|---|---|
-| `account` | 7 | Tiger Prime/Cash Boost, Moomoo, FSM, CDP, CPF, SRS (with funding_bucket) |
-| `security` | 79 | canonical ticker + name + market + asset_type + currency |
-| `security_alias` | 197 | every name/code variant → security (from `symbols.csv`) |
-| `corporate_action` | 4 | CWBU→SET rename, S51→5E2 20:1, C31→9CI/C38U split |
-| `txn` | 525 | all share-affecting events (stocks + Amundi fund) |
-| `dividend` | 485 | cash dividends, all sources |
-
-Views: `current_position` (units per account+security), `dividend_summary` (by
-bucket/market/currency). Verified vs Holdings — e.g. SRS UD1U = 222,205, Tiger HK all match.
-
-## Idempotency
-
-Each row gets a `dedup_hash` = `sha256(account, ticker, date, action, qty, amount, occurrence)`.
-The **occurrence** counter (nth identical row within a file) keeps two genuinely-identical
-lots distinct (e.g. the two `2-Sep-20 UD1U 11100` SRS buys) while re-ingesting the same
-file inserts nothing new (`ON CONFLICT (dedup_hash) DO NOTHING`).
-
-## Next (rest of Phase 1 → Phase 4)
-
-- Rewrite parsers to write **directly** to the DB + record `import_batch` per file —
-  currently we load the pre-built `ledger.csv`/`dividends.csv` as the bridge.
-- Load `position_snapshot` from statement holdings tables (Moomoo/CDP/Endowus parsers
-  already produce these).
-- Phase 3: `price` + `fx_rate` loaders (yfinance + statement NAVs).
-- Phase 4: performance engine (avg cost, valuation, XIRR + TWR, dividends) as SQL views +
-  a thin Python layer.
 
 ## Cost basis sources
 
@@ -300,10 +263,11 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
 - **A caveat nets every leg.** A leg whose every unit is unknown, inside a ticker that does not
   refuse, keeps `stock_pl_sgd`. Direction: `net_verdict` in `portfolio/performance.py`.
   `stock_pl_sgd` is therefore null only where the leg is all-unknown *and* the name refuses.
-- **Known gap, zero-instance: `/api/performance`'s group `net_pl_sgd` is not this field.**
-  `rollup()` is untouched and still adds a leg's `stock_pl_sgd` only where `cost_known` is true,
-  so in the divergence case the group Net drops leg B while the row Nets include it. No live
-  ticker has that shape; the group-vs-ticker identity belongs to #155, which should close it.
+- **Known gap, zero-instance: `/api/performance`'s group `net_pl_sgd` is not the row Net.**
+  `rollup()` adds a leg's `stock_pl_sgd` only where `cost_known` is true, and the route sums
+  that into the group Net. A caveat leg whose every entering unit is unknown still ships a
+  row Net (`stock_pl` is kept when the ticker's verdict is not `refuse`) and is left out of
+  the group. No live ticker has that shape.
 
 **`breakeven_price`** ships beside the Net on every position row and every bucket column: the
 native-currency price at which THAT column's Net reaches zero — `(cost_basis_sgd − realised −

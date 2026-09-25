@@ -23,9 +23,10 @@ plans.
   `server/main.py` is the composition root only: app object, middleware, `auth_gate`,
   health/refresh/cron, PostHog proxy, StaticFiles mount (last). It re-exports symbols tests and
   `scripts/audit_ledger.py` import from it (`_cache`, `ticker_ledger`, `NwValueIn`,
-  `performance`, `_is_spending`) — those live in `server/routes/`, not in `main.py`, and a
-  handler's monkeypatched dependency (e.g. `perf_all`, `session_scope`) must be patched on the
-  `server.routes.*` module that defines it, not on `server.main`. Lazy in-handler imports
+  `performance`); those live in `server/routes/`, not in `main.py`. `_is_spending` is defined
+  in `server/main.py`. A handler's monkeypatched dependency (e.g. `perf_all`, `session_scope`)
+  must be patched on the `server.routes.*` module that defines it, not on `server.main`. Lazy
+  in-handler imports
   (ruff E402, ignored repo-wide) break real import cycles, not accidental ones.
 - **ADR [0001](docs/adr/0001-do-not-unify-twr-and-performance.md): do not unify
   `performance.py` and `twr.py`.** They're deliberately separate engines.

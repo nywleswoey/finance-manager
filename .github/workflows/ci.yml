@@ -2,7 +2,7 @@
 # the only ones that arrive with nobody having run anything locally — but it gates every PR.
 #
 # Two jobs, split by what they can tell you and how fast: `python` answers in ~2 minutes,
-# `web` runs the whole Playwright suite — over 1,700 tests since #160 — and takes ~10. Neither
+# `web` runs the whole Playwright suite and takes ~10. Neither
 # needs a secret; the
 # suite serves every API call from web/tests/fixtures and the Python tests build their own
 # throwaway database.
@@ -29,7 +29,7 @@ jobs:
       # tests/pgtest.py derives its URL from portfolio.config's default
       # (postgresql+psycopg://portfolio:portfolio@localhost:5544/portfolio), appends `_test`
       # to the database name and CREATEs it itself. Matching docker-compose.yml here — same
-      # image, same credentials, same host port 5544 — is what makes the 33 `pg`-marked
+      # image, same credentials, same host port 5544 — is what makes the `pg`-marked
       # tests run in CI instead of skipping, so no env var is needed or wanted.
       postgres:
         image: postgres:16-alpine

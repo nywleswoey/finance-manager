@@ -31,7 +31,7 @@ instead of hiding in a gate**: a rule that was decided and never built. It is no
 is outstanding work, and a checklist that lists unbuilt rules as things to eyeball is how they stay
 unbuilt for another five tickets. **That section held two entries and holds none** — the 44px tap
 floor and 16px form controls landed as #47, which is what took universal gate 4 from one control to
-every control, and `.grid2`'s track floor landed as #44, which took `hscroll-baseline.js` to zero.
+every control, and `.grid2`'s track floor landed as #44, which took the pane-overflow gate to zero.
 An empty section is the point of the section; the moment a rule is decided and not built, it goes
 back.
 
@@ -173,7 +173,7 @@ person still looks at, and "—" means the suite has all of it.
 | Spending › Classify | editor floor · `.fillpane`/`.grow` become blocks below 640 so the page scrolls as one, `.scroll` deliberately untouched · ⇅ Reorder `display: none`, so the reorder modal is unreachable below the tier by design · `RuleModal` on `svh`, its control rows wrap, `CatSelect` capped at `max-width: 100%`, `MatchTable` `.contained` | readable · `MatchTable` renders only after a POST the GET-captured fixtures do not carry — `editors.spec.js` annotates that gap |
 | Spending › Recurring | monitor **A** · candidates **A** | the monitor never mounts — the owner tracks nothing, so `/api/spending/recurring` is `[]` and its pin is eyes-only (`pinned.spec.js` annotates it) · the **two nested scroll regions**, which is the feel check |
 | Spending › Transactions | **B** below 640 — six fields, merchant, one amount, four muted on a second line, no key/value block · **A** on `Date` from 640 to 1024, a *choice* rather than the default: `Merchant` measures **561px** of unbounded free text against a 440px window | excluded rows keep their dimming but **no fixture holds one**, so both renderings are unexercised — `cards.spec.js` asserts the two agree on 0.55 rather than observing either |
-| Sign-in | `100svh` at `auth.jsx:50` and `:125` · the box fills the screen and centres optically · **no phone rule at all** · the GSI button is **untouched by** the 44px floor rather than carved out of it — it is a `div[role="button"]` Google injects, and this screen has no form control of its own, so no selector reaches it | whether a **40px** button (measured) looks right beside a 44px world |
+| Sign-in | `100svh` in `LoginScreen` and in `AuthGate`'s loading return (`auth.jsx`) · the box fills the screen and centres optically · **no phone rule at all** · the GSI button is **untouched by** the 44px floor rather than carved out of it — it is a `div[role="button"]` Google injects, and this screen has no form control of its own, so no selector reaches it | whether a **40px** button (measured) looks right beside a 44px world |
 
 ## Observations
 
@@ -268,11 +268,11 @@ which is what the spec assumed when it kept 16px inputs phone-only.
 
 Failing these **changes a decision**, rather than reporting a bug.
 
-- `Recurring.jsx:94` monitor assigned **A** — the map suspects Recurring wants a different
+- `Recurring`'s tracked-spends table assigned **A** — the map suspects Recurring wants a different
   information design entirely, not a reflow.
 - Recurring's two nested scroll regions — geometry is fine; whether it *feels* confusing is not
   measurable from here.
-- ~~`SecurityDetail.jsx:49` txn history~~ — **closed by #160: stays B, measured.** 19 rows (PLTR)
+- ~~`SecurityDetail`'s transaction history~~ — **closed by #160: stays B, measured.** 19 rows (PLTR)
   is 2,569px of cards at 390 against a table capped at `60svh`, and the page is 3,987px against
   ~11,600 if the options table were cards too. It stays on the reading job (a trade, not a
   column) and on the bound: 19 rows is the security's own history, where 73 option legs are not.
@@ -302,7 +302,7 @@ Failing these **changes a decision**, rather than reporting a bug.
   hand at the tier's landing — but that measurement is a moment in time and the suite is what makes
   a fact durable. Adding them is two more projects on a suite that is already ten deep and 8.5
   minutes per full run, which is the cost side. That figure is measured, not estimated: `cd web &&
-  npx playwright test` (what `make test-web` runs after the build) reported `1734 passed (8.5m)` on
+  npx playwright test` (what `make test-web` runs after the build) reported a passing suite in 8.5m on
   2026-09-19 on a macOS (Darwin 25.6.0) developer laptop, including #160's new per-viewport
   `phone-layout.spec.js` and its narrowed `split-width.spec.js`. It is a single run, not an
   average, and it was taken while #160 was still in review, before its last rounds moved those
@@ -310,7 +310,7 @@ Failing these **changes a decision**, rather than reporting a bug.
   re-measure with `make test-web` before deciding the call on it. Decide it once, here, rather than
   each time someone notices.
 
-*(`Options.jsx:71` left this list: resolved to **A**, on the measurement that a 9-field card is 4
+*(`Options`' contract ledger left this list: resolved to **A**, on the measurement that a 9-field card is 4
 rows per screen against A's 12 — the same reasoning that rejected B for Holdings at 3. A's 12 was a
 forecast at 44px; the one A row measured is Holdings' at 60.5px, so read it as nearer 8. Four is on
 the rejected side either way, so the resolution stands — see [Observations](#observations).)*
@@ -332,9 +332,9 @@ them. What each view carried before it landed is in that issue; the numbers are 
 since a checklist that keeps its own history stops being a checklist.
 
 `.grid2`'s `minmax(420px, 1fr)` track floor — the last horizontal overflow below 640, shared to the
-pixel by five views — **landed as #44** as `minmax(min(420px, 100%), 1fr)`, and `hscroll-baseline.js`
-is now zero at every gated viewport and every view. Its header says what deleting it costs and why
-that is a separate ticket. What the five identical rows turned out to be hiding is in Traps below.
+pixel by five views — **landed as #44** as `minmax(min(420px, 100%), 1fr)`, and the
+pane-overflow gate in `baseline.spec.js` is `<= 0` at every gated viewport and every view.
+What the five identical rows turned out to be hiding is in Traps below.
 
 *(The section is empty and is meant to stay readable that way. Add an entry the moment a rule is
 decided and not built.)*
@@ -343,7 +343,7 @@ decided and not built.)*
 
 Things the build session must be told, not left to discover.
 
-- `spending/Transactions.jsx:40` carries an inline `fontSize: 13` — **CSS cannot reach it**; a rule
+- `SpendTransactions`' "show excluded" label carries an inline `fontSize: 13` — **CSS cannot reach it**; a rule
   targeting it silently no-ops until that style moves to a class. **Narrower than it reads, and #47
   is the proof**: only the *declared* property is out of reach. That label now carries `.taplabel`
   and takes its `min-height` and its `display` from the stylesheet perfectly well; what an inline
@@ -365,10 +365,10 @@ Things the build session must be told, not left to discover.
   labelling ancestor before measuring, so a *new* checkbox with no label fails there — which is
   correct, since nothing would be enlarging its target. A `<label>` is inline and has no box to
   size, so the rule carries `display: inline-flex` with it; the same is true of `a.backlink`.
-- `Classify.jsx:126` carries an inline `maxHeight: 232` — same problem, accepted as-is, and it is
+- `Classify`'s rules list carries an inline `maxHeight: 232` — same problem, accepted as-is, and it is
   **the one nested scroll region left in the app below 640**: the `.fillpane` machinery around it is
   neutralised there, so the rules list is the only thing on that screen that scrolls inside the page.
-- `ByCategory.jsx:186` carries an inline `paddingLeft: 26` — same family. It is what makes that
+- `SpendByCategory`'s subcategory name cell carries an inline `paddingLeft: 26` — same family. It is what makes that
   table's pinned column 212px rather than ~186px.
 - **A pinned column is only useful if its column is an identity.** `SecurityDetail`'s options table
   used to lead with `Type` (`Put`/`Put`/`Call`); the merged `Contract` cell that replaced it has
@@ -402,14 +402,14 @@ Things the build session must be told, not left to discover.
   in the pane's scroll space; built against the rejected layout, that is the difference between a
   27px failure and a green run.
 - `.grid2`'s 420px is **~100px optimistic against real data**, and **#44 did not change that** —
-  `spending/Overview.jsx:36`'s card needs **519px** with the live DB's longest subcategory name.
+  `SpendOverview`'s Top Line Items card needs **519px** with the live DB's longest subcategory name.
   `auto-fit` still behaves; the column just spills inside itself between 1024 and ~1256. The floor
   is `min(420px, 100%)` now, which is a claim about the *pane* and reads as if it fixed this: it
   does not, because 100% is never the binding term above the collapse. Content spilling inside a
   track and a track spilling out of a pane are two problems, and only the second one has landed.
   #44 was filed expecting this to be worth 40px at 640 on `Spending › Overview` and asked for it to
   be measured rather than assumed — measured, it is **zero**, and has been since the tablet tier;
-  `hscroll-baseline.js`'s entry 7 is where it went. Nothing below 1024 carries it.
+  `baseline.spec.js`'s pane-overflow gate is where it went. Nothing below 1024 carries it.
 - **`640` is a literal in four places, and the charts did not make it five**: `styles.css`'s
   `max-width: 639.98px`, `tests/viewports.js`'s `PHONE_TIER_BELOW` / `PHONE_TIER_EDGE`,
   `Holdings.jsx`'s `startsCollapsed` — the app's first `matchMedia` read — and `cards.jsx`'s
@@ -518,7 +518,7 @@ Things the build session must be told, not left to discover.
 - **The app bar is `box-sizing: content-box`** against the app-wide `border-box`, so the top inset
   adds to its 48px instead of eating it. 48px is the number the whole drawer-versus-bottom-bar trade
   was decided on; under `border-box` a 47px inset would crush the bar to a line.
-- **`.tabs` is not only the navigation strip.** `ByCategory.jsx:132` borrows the class for its own
+- **`.tabs` is not only the navigation strip.** `SpendByCategory` borrows the class for its own
   view header — an `<h3>` and a year `<select>` — with the border overridden inline. That is why the
   phone rule that hides the strip is `.main > .tabs`; a bare `.tabs` deletes that heading and the
   year picker with it, and the view still renders, so nothing fails loudly.
@@ -535,7 +535,7 @@ Things the build session must be told, not left to discover.
   wrapper flex-derived — with no error anywhere. Both carry explicit pixel heights now. **Never put
   a percentage height on a `ResponsiveContainer`.**
 - **A recharts bar with a negative value has a NEGATIVE `height`**, and that inverts `position`:
-  `LabelList position="top"` prints the label *below* the bar (`Label.js:161` — `verticalSign`). The
+  `LabelList position="top"` prints the label *below* the bar (recharts `Label.js`, `verticalSign`). The
   fix is `<YAxis padding={{ bottom }}>`, which shrinks the scale's *range* rather than its domain
   and so reserves a strip no bar can enter. Not phone-only — a negative bar reaches the bottom at
   every width. **Apply it only when the data actually holds a negative**: shrinking the range lifts

@@ -93,13 +93,6 @@ def main():
     print("\n=== CDP timeline (snapshot-diff, by canonical code) ===")
     for mo, c, act, q in ev:
         print(f"  {mo}  {c:8} {label.get(c,''):20} {act:18} {q:>+9.0f}")
-    # latest snapshot vs Holdings.md CDP (SET==CWBU)
-    last = months[-1]
-    HOLD = {"J2T":700,"1J5":3000,"42R":3000,"O39":919,"Q01":17000,"CRPU":6500,"CWBU":1400}
-    print(f"\n=== latest CDP snapshot ({last}) vs Holdings.md ===")
-    for c in sorted(set(list(HOLD) + list(snaps[last]))):
-        h, v = HOLD.get(c), snaps[last].get(c)
-        print(f"  {c:8} statement={v!s:>8}  Holdings={h}  {'OK' if h==v else ('—' if h is None else 'CHECK')}")
     out = os.path.join(os.path.dirname(__file__), "cdp_events.csv")
     write_rows(out, ["date", "name", "code", "action", "qty_signed"],
                [[mo + "-28", label.get(c, ""), c, act, q] for mo, c, act, q in ev])

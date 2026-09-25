@@ -38,7 +38,9 @@ NAME = {
     "0P0001OOJG": "Amundi Prime USA Fund", "AMZN": "Amazon.com, Inc.",
 }
 ASSET_TYPE = {"0P0001OOJG": "fund", "0P00006FYT": "fund"}
-REITS = {"O5RU", "C38U", "UD1U", "N2IU", "CRPU", "SET", "CWBU", "BTOU", "S7OU", "P40U",
+# CWBU is not a canonical ticker: `_ledgercommon.canon` rewrites it to SET, and
+# symbols.csv records it as an alias of SET. Membership is tested against canonicals.
+REITS = {"O5RU", "C38U", "UD1U", "N2IU", "CRPU", "SET", "BTOU", "S7OU", "P40U",
          "SV3U", "ADQU", "HMN", "9CI", "CMOU", "LIW", "H78", "CJLU"}
 CCY = {"US": "USD", "HK": "HKD", "SG": "SGD", "MY": "MYR"}
 

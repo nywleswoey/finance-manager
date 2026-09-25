@@ -61,29 +61,6 @@ def implied_rate(gross, qty):
 
 # ---------------- read shapes (formerly the /api/dividend* handlers) ----------------
 
-def summary(s=None):
-    """Gross by market/currency, plus the 50 most recent payments — the /api/dividends view.
-
-    Each row carries `gross` (native) and `gross_sgd` (latest FX)."""
-    with session_scope(s) as s:
-        fx = fx_map(s)
-        by = _rows(s,
-            "SELECT s.market, d.currency, round(sum(d.gross)) gross, count(*) n "
-            "FROM dividend d LEFT JOIN security s ON s.id=d.security_id "
-            "GROUP BY s.market, d.currency ORDER BY gross DESC NULLS LAST")
-        recent = _rows(s,
-            "SELECT d.pay_date, a.name account, COALESCE(s.name,'?') name, "
-            "s.canonical_ticker ticker, d.gross, d.currency "
-            "FROM dividend d JOIN account a ON a.id=d.account_id "
-            "LEFT JOIN security s ON s.id=d.security_id "
-            "WHERE d.pay_date IS NOT NULL ORDER BY d.pay_date DESC LIMIT 50")
-    for r in by + recent:
-        r["gross"] = _f(r["gross"])
-        r["gross_sgd"] = round(to_sgd(r["gross"] or 0, r["currency"], fx), 2)
-    by.sort(key=lambda r: -r["gross_sgd"])              # SGD-comparable ordering
-    return {"by_market": by, "recent": recent}
-
-
 def details(s=None):
     """Per-dividend detail: declared per-share rate + units held at pay date (replayed from
     the ledger) + implied rate (gross/units). Flags rows where the rate can't be determined

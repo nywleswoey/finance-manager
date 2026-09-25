@@ -17,7 +17,6 @@ web/blob-report/
 
 # generated outputs
 build/*.csv
-portfolio.html
 
 # raw personal statements (account numbers / addresses) — keep local, not in git
 # (data/* not data/ so the one tracked file below can be re-included)

@@ -500,19 +500,16 @@ render, and a row with no payload behind it is a click that 404s.
 
 `RESPONSIVE.md` checks the decisions; it does not restate them. The argued detail — every
 measurement, every rejected alternative — is in `archive/.wayfinder/map-mobile-responsive.md` and its
-tickets. Three prototypes live in `web/prototypes/`.
+tickets.
 
 ## Two things to know before you touch the suite
 
-**`tests/hscroll-baseline.js` was a list of defects, not a specification.** The suite ratchets
-against the measured numbers so it could run green on day one and still catch a regression. Lower
-them as the work lands; never raise one to make a test pass. **It is done**: eight lowerings in,
-`.grid2`'s track floor became `minmax(min(420px, 100%), 1fr)` under #44 and **every number in the
-file is zero** — all thirteen views, all seven gated viewports. It is now a table of zeroes
-standing in for `<= 0`, and its own header says what deleting it costs and why that is its own
-ticket. Until then a raise is a plain regression, not a defect getting worse. `tablet.spec.js`
-still asserts the table-shaped half separately, because the ratchet would go green on a build that
-swapped one table's overflow for another's.
+**The pane-overflow gate is `<= 0`.** It used to be `tests/hscroll-baseline.js`, a list of
+defects the suite ratcheted down so it could run green on day one. Eight lowerings in,
+`.grid2`'s track floor became `minmax(min(420px, 100%), 1fr)` under #44 and every number
+was zero, so the table is gone and `baseline.spec.js` asserts `<= 0` directly. A raise is
+a regression. `tablet.spec.js` still asserts the table-shaped half separately, because the
+gate would go green on a build that swapped one table's overflow for another's.
 
 **No screenshots, ever.** Geometry and structure only. Visual-regression diffing is out of
 scope by decision, and a test asserts that no `toHaveScreenshot` creeps in.

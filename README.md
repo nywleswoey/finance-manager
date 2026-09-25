@@ -14,9 +14,8 @@ statements (data/) ──▶ parsers (build/, ingestion/) ──▶ Postgres ─
 ## Run it
 
 ```bash
-# deps (once)
-uv venv .venv && uv pip install --python .venv/bin/python \
-  sqlalchemy alembic "psycopg[binary]" pydantic-settings python-dotenv fastapi uvicorn
+# deps (once) — runtime imports plus pytest/ruff
+uv sync --extra dev
 cp .env.example .env
 
 make setup     # db + schema + seed + ingest statements + fetch prices/FX (local docker DB)
@@ -107,5 +106,6 @@ time-weighted return (`portfolio/twr.py`, served by `/api/return`). Known limita
 units entered the book without a recorded cost, so P/L and XIRR speak only for the units whose
 cost is known — every position carries a `cost_partition` (costed / free / unknown) saying how
 much of it that is. [docs/runbooks/BACKEND.md](docs/runbooks/BACKEND.md) owns the cost-basis
-rules, including where CDP cost comes from and when it attaches. Next: direct-to-DB parsers +
-`import_batch` per file, scheduled ingest.
+rules, including where CDP cost comes from and when it attaches. `ingestion/load.py` records
+an `import_batch` per loaded file. Unattended ingest is the launchd agent and the Vercel cron
+described above. Parsers still write the CSV bridge that the loader reads.
