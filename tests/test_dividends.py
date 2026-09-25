@@ -1,7 +1,7 @@
 """portfolio.dividends — the shared pay_date attribution primitives and details().
 
-Stdlib unittest + in-memory SQLite (no pg), matching tests/test_networth.py. summary() and
-annual() lean on Postgres (ORDER BY ... NULLS LAST / EXTRACT), so they aren't exercised here;
+Stdlib unittest + in-memory SQLite (no pg), matching tests/test_networth.py. annual() leans
+on Postgres (EXTRACT), so it isn't exercised here;
 details() is portable (plain SELECT + Python fold) and carries the qty-replay logic.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_dividends.py -q
