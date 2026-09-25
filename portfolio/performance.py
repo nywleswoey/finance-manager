@@ -1266,12 +1266,7 @@ def _build_row(k, p, m, fx, price, today, part, verdict):
     span = (max(d for d, _ in flows) - min(d for d, _ in flows)).days if flows else 0
     xirr_ok = cost_known and part["unknown"] < 1e-6 and span >= MIN_XIRR_DAYS
     xirr = _xirr(flows) if xirr_ok else None
-    # `income` is the sum of gross amounts, whatever currency each was paid in, and
-    # that is what `income_native` ships. P/L is in the security's currency, so a
-    # dividend paid in another currency adds its FX spread (`income_fx_sgd`) rather
-    # than being counted as units of the quote. Zero when every payment matches.
-    income_for_pl = p["income"] + (p["income_fx_sgd"] / rate if rate else 0.0)
-    total_pl = (mv + p["proceeds"] + income_for_pl - p["invested"]) if cost_known else None
+    total_pl = (mv + p["proceeds"] + p["income"] - p["invested"]) if cost_known else None
     # a free lot has a cost of zero, so it has no denominator — a percentage return on nothing
     # is not a smaller number, it is not a number.
     simple = (total_pl / p["invested"]) if (cost_known and p["invested"] > 1e-6) else None
@@ -1332,8 +1327,7 @@ def _build_row(k, p, m, fx, price, today, part, verdict):
         "cost_partition": part,
         "total_pl_native": round(total_pl, 2) if cost_known else None,
         "invested_sgd": round(p["invested"] * rate, 2) if cost_known else None,
-        "mv_sgd": round(mv * rate, 2),
-        "income_sgd": round(p["income"] * rate + p["income_fx_sgd"], 2),
+        "mv_sgd": round(mv * rate, 2), "income_sgd": round(p["income"] * rate, 2),
         "pl_sgd": round(total_pl * rate, 2) if cost_known else None,
         "xirr": _rn(xirr, 4),
         "simple_return": _rn(simple, 4),
@@ -1344,9 +1338,8 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=
     """Accumulate per-(funding_bucket, security) positions from the fold's inputs. Returns
     `(pos, meta)` — the raw accumulators and the last-seen metadata row per position.
 
-    `fx` converts a dividend paid in a currency other than the security's. The gross
-    still sums into `income` (that is `income_native`); the SGD spread lands in
-    `income_fx_sgd` and the XIRR flow is restated into the security's currency.
+    `fx` restates a dividend paid in a currency other than the security's into the
+    security's currency, so `income` and the XIRR flow are both in one currency.
 
     Split out of fold_positions() so the accumulators are reachable without going through
     _build_row(): each one carries a dated `unit_events` / `cost_events` series beside the
@@ -1362,7 +1355,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=
     # to `units_in` exactly once and to exactly one condition, so the two can only disagree if
     # this loop does — which is what cost_partition's self-check watches for.
     pos = defaultdict(lambda: {"units": 0.0, "flows": [], "invested": 0.0, "proceeds": 0.0,
-                                "income": 0.0, "income_fx_sgd": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
+                                "income": 0.0, "buy_cost": 0.0, "buy_qty": 0.0, "fees": 0.0,
                                 "accounts": set(), "unit_events": [], "cost_events": [],
                                 "entries": [],
                                 "units_in": 0.0, "costed_units": 0.0, "free_units": 0.0,
@@ -1427,16 +1420,11 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=
         # the fold was written against never carried one, and treating the absence as
         # SGD would convert a USD dividend at 1:1.
         div_ccy = d.get("currency") or sec_ccy
-        pos[k]["income"] += amt
         if div_ccy != sec_ccy:
-            div_rate = rate_to_sgd(div_ccy, fx)
-            sec_rate = rate_to_sgd(sec_ccy, fx)
-            # spread only, so a same-currency book still ships `income * security rate`
-            # from one multiply in `_build_row` and does not move by a per-row product.
-            pos[k]["income_fx_sgd"] += amt * (div_rate - sec_rate)
-            # XIRR flows are in the security's currency, same as -qty*price. Leaving the
-            # gross unconverted counts a euro as a dollar.
-            amt = amt * div_rate / sec_rate
+            # income and XIRR flows are in the security's currency, same as -qty*price.
+            # Leaving the gross unconverted counts a euro as a dollar.
+            amt = amt * rate_to_sgd(div_ccy, fx) / rate_to_sgd(sec_ccy, fx)
+        pos[k]["income"] += amt
         pos[k]["flows"].append((d["pay_date"] or today, amt))
 
     _carry_corporate_actions(corp_actions, pos, meta)

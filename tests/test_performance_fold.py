@@ -96,7 +96,7 @@ def test_a_eur_dividend_on_an_sgd_name_converts_at_the_dividends_rate():
     txns = [_txn(qty_signed=100, price=10.0)]
     r = _only(_fold(txns, divs=divs, fx=fx, price={10: 10.0}))
     wrong = _only(_fold(txns, divs=labelled_sgd, fx=fx, price={10: 10.0}))
-    assert r["income_native"] == 180.0          # grosses summed; currencies are not mixed in
+    assert r["income_native"] == 220.0          # EUR restated into SGD, not summed as SGD
     assert wrong["income_sgd"] == 180.0         # the bug: EUR gross counted as SGD
     assert r["income_sgd"] == 220.0             # 100 + 80 * 1.50
     assert r["pl_sgd"] == 220.0                 # price == cost, so P/L is the income
@@ -109,6 +109,25 @@ def test_a_eur_dividend_on_an_sgd_name_converts_at_the_dividends_rate():
     assert [fl for fl in flows if fl[1] > 0] == [(D(2021, 6, 1), 100.0), (D(2022, 6, 1), 120.0)]
 
 
+def test_native_fields_reconcile_on_a_mixed_currency_holding():
+    """UD1U: SGD-quoted, paid in SGD and EUR. `income_native` must be in the holding's
+    currency, the same income `total_pl_native` uses, so the native identity holds and
+    the Holdings tooltip is one currency."""
+    fx = {"EUR": 1.50}
+    common = dict(account_id=1, security_id=10, currency="SGD")
+    txns = [_txn(canonical_ticker="UD1U", qty_signed=100, price=10.0),
+            _txn(canonical_ticker="UD1U", action="sell", qty_signed=-40, price=12.0,
+                 trade_date=D(2021, 1, 1))]
+    divs = [{**common, "pay_date": D(2021, 6, 1), "gross": 100.0},
+            {**common, "pay_date": D(2022, 6, 1), "gross": 80.0, "currency": "EUR"}]
+    r = _only(_fold(txns, divs=divs, fx=fx, price={10: 11.0}))
+    proceeds = 40 * 12.0
+    assert r["income_native"] == 220.0
+    assert r["total_pl_native"] == round(
+        r["mv_native"] + proceeds + r["income_native"] - r["invested_native"], 2)
+    assert r["income_sgd"] == r["income_native"]
+
+
 def test_xirr_flow_converts_a_foreign_dividend_into_the_security_currency():
     """Flows are in the security's currency, same as -qty*price. 80 EUR on a USD name
     at EUR 1.50 / USD 1.30 is 120 SGD of income and 80 * 1.50 / 1.30 USD in the flow."""
@@ -117,7 +136,7 @@ def test_xirr_flow_converts_a_foreign_dividend_into_the_security_currency():
     divs = [{"account_id": 1, "security_id": 10, "pay_date": D(2022, 6, 1),
              "gross": 80.0, "currency": "EUR"}]
     r = _only(_fold(txns, divs=divs, fx=fx, price={10: 10.0}))
-    assert r["income_native"] == 80.0
+    assert r["income_native"] == 92.31          # 80 EUR * 1.50 / 1.30, in USD
     assert r["income_sgd"] == 120.0
     flows = _acc(txns, divs=divs, fx=fx)[("cash", 10)]["flows"]
     # 80 EUR * 1.50 / 1.30 USD-per-SGD, worked out beside the fold.
