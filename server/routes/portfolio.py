@@ -93,11 +93,22 @@ def perf():
 
 @router.get("/api/overview")
 def overview():
+    """Open-book market value and dividends, plus the book's Net.
+
+    The Net is Σ `net_pl_sgd` over `perf_all()` where the verdict is not
+    `refuse` — closed legs included, option premiums included, a refusal
+    omitted. `pl_sgd` on a row is the older figure (cost-known, options
+    excluded, rounded on its own). The response key is still named `pl_sgd`;
+    renaming it waits until Holdings' P/L column stops reading the row field.
+    `cost_sgd` is the invested amount on those same rows, so `return_pct`
+    divides the Net it sits beside. Market value, dividends and the rollups
+    stay the open book."""
     rows = perf()
+    counted = [r for r in perf_all() if r["net_verdict"] != "refuse"]
     mv = sum(r["mv_sgd"] for r in rows)
     income = sum(r["income_sgd"] for r in rows)
-    pl = sum(r["pl_sgd"] or 0 for r in rows if r["cost_known"])
-    cost = sum(r["invested_sgd"] for r in rows if r["cost_known"])
+    pl = sum(r["net_pl_sgd"] or 0 for r in counted)
+    cost = sum(r["invested_sgd"] or 0 for r in counted)
     return {
         "market_value_sgd": round(mv, 2),
         "dividends_sgd": round(income, 2),
@@ -133,9 +144,9 @@ def positions(closed: bool = False):
         if not is_open and not (closed and is_leg(r)):   # is_leg drops noise: never really held
             continue
         out.append({**r, "status": "open" if is_open else "closed"})
-    # open first (by market value desc), then closed (by realised P/L desc)
+    # open first (by market value desc), then closed (by Net desc)
     out.sort(key=lambda r: (r["status"] != "open", -(r["mv_sgd"] if r["status"] == "open"
-                                                      else (r["pl_sgd"] or 0))))
+                                                      else (r["net_pl_sgd"] or 0))))
     return {"as_of": _cached("as_of", _as_of), "positions": out}
 
 

@@ -221,7 +221,7 @@ function mergeTicker(rows) {
 
 /**
  * One row per ticker, ordered the way `/api/positions` orders positions: open first by market
- * value, then closed by realised P/L. Re-sorting rather than keeping first-appearance order is
+ * value, then closed by Net. Re-sorting rather than keeping first-appearance order is
  * what keeps the biggest holding at the top once two of its rows have become one.
  */
 function consolidate(rows) {
@@ -234,7 +234,7 @@ function consolidate(rows) {
     (a, b) =>
       (a.status !== "open") - (b.status !== "open") ||
       (a.status === "open" ? (b.mv_sgd || 0) - (a.mv_sgd || 0)
-                           : (b.pl_sgd || 0) - (a.pl_sgd || 0)));
+                           : (b.net_pl_sgd || 0) - (a.net_pl_sgd || 0)));
 }
 
 function NetCell({ net, verdict, bound, max }) {
