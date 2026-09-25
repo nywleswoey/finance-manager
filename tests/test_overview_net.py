@@ -16,6 +16,9 @@ including when the row still received a dividend.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_overview_net.py -q
 """
+import datetime as dt
+from contextlib import contextmanager
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -76,8 +79,16 @@ def _stub(monkeypatch):
     settings.dev_auth_bypass = True
     monkeypatch.setattr(portfolio_routes, "perf_all", lambda: [dict(r) for r in ROWS])
     monkeypatch.setattr(portfolio_routes, "alloc_by_account", lambda: {})
+    # /api/positions reads its as-of date from the database; neither test has one.
+    monkeypatch.setattr(portfolio_routes, "session_scope", lambda *a, **k: _no_session())
+    monkeypatch.setattr(portfolio_routes, "valuation_as_of", lambda s: dt.date(2026, 9, 26))
     yield
     main._cache.clear()
+
+
+@contextmanager
+def _no_session():
+    yield None
 
 
 @pytest.fixture
