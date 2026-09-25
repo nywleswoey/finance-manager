@@ -509,7 +509,7 @@ def fetch():
         # every row, not only the carry types: a split is counted over all of them,
         # the same rows compute_with_fx hands the fold.
         pos, meta = _accumulate_positions(
-            txns, divs, cdp, corporate_actions, today, annotation_map())
+            txns, divs, cdp, corporate_actions, today, annotation_map(), fx)
         contracts = contracts_by_ticker()
         car = {}
         for tk, legs in legs_by_ticker(pos, meta).items():
