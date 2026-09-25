@@ -228,8 +228,7 @@ Six rules, each with its own gate in `tests/test_peak_car.py`:
    the statement dates.
 6. **Units nobody paid for contribute nothing** — the term carries the costed share,
    `costed(t) / units_in(t)`. Dated like every other term: an undated ratio lets a lot arriving
-   uncosted in 2021 shrink capital that was at risk in 2020, which reads 25,096 on one name
-   against a measured 33,461.
+   uncosted in 2021 shrink capital that was at risk in 2020.
 
 `return_verdict` is a second axis, independent of the Net's: `no_capital` where peak CAR is
 zero (the return does not *exist* — undefined, not unmeasured), `caveat` where some entering

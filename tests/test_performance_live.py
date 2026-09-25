@@ -6,7 +6,7 @@ Two claims, deliberately gated differently:
   - **The invariant** — `costed + free + unknown == units_in` on every position — is true of any
     book, so it runs against whatever ledger is loaded. This is the one that must never drift:
     `cost_partition`'s own self-check only logs, so without a test a mis-assignment ships.
-  - **The measured totals** — 1,574,652 in / 1,521,274 costed / 545 free / 52,833 unknown, the
+  - **The measured totals** — 1,574,652 in / 1,538,274 costed / 545 free / 35,833 unknown, the
     caveat set, the refusal set — are a point-in-time reading of a 548-row ledger, so they are
     asserted only while the book is still that book. A ledger that has grown skips them rather
     than failing; re-measuring is a deliberate act, the way `capture_web_fixtures` is.
@@ -36,8 +36,10 @@ from portfolio.performance import (_accumulate_positions, _fx_and_price, cdp_cos
 # The ledger #148 was measured against: 548 txn rows / 73 positions. The totals below are
 # readings of THAT book and nothing else.
 MEASURED_TXN_ROWS = 548
-MEASURED = {"units_in": 1_574_652, "costed": 1_521_274, "free": 545, "unknown": 52_833}
-MEASURED_CAVEAT = [("S51", 0.4), ("SET", 0.2786), ("Q01", 0.25), ("C38U", 0.0746)]
+# The 548-row reading adjusted for #199 moving Q01's 17,000 units from unknown to costed, not a
+# fresh measurement.
+MEASURED = {"units_in": 1_574_652, "costed": 1_538_274, "free": 545, "unknown": 35_833}
+MEASURED_CAVEAT = [("S51", 0.4), ("SET", 0.2786), ("C38U", 0.0746)]
 MEASURED_REFUSAL = ["ASTREA6B"]
 
 # #143 §9's settled peak capital-at-risk, one row per name the spec pinned. The DATE a peak
