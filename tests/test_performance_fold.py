@@ -621,6 +621,31 @@ def test_an_fsm_transfer_in_spends_the_out_a_later_cdp_buy_cannot():
     assert (p["costed"], p["unknown"]) == (5600.0, 100.0)
 
 
+def test_a_transfer_in_takes_its_own_out_not_the_one_an_earlier_return_needs():
+    """A 2019 out comes back as a 2021 unpriced CDP buy; a 2023 out of 500 pairs with a 2023
+    FSM transfer in of 500. The transfer in's cover is its own 2023 out. Drawn from the 2019
+    out instead, it would leave the 2021 return 500 short, and the date limit stops the return
+    from reaching the 2023 out."""
+    txns = [
+        _txn(account="CDP", action="open", qty_signed=1000, price=None,
+             trade_date=D(2018, 2, 28)),
+        _txn(account="CDP", action="sell/transfer_out", qty_signed=-1000, price=None,
+             trade_date=D(2019, 12, 28)),
+        _txn(account="CDP", action="buy", qty_signed=1000, price=None,
+             trade_date=D(2021, 3, 28)),
+        _txn(account="CDP", action="sell/transfer_out", qty_signed=-500, price=None,
+             trade_date=D(2023, 6, 28)),
+        _txn(account="FSM", action="transfer in", qty_signed=500, price=None,
+             trade_date=D(2023, 6, 20)),
+    ]
+    cdp = {"D05": _cdp((D(2018, 2, 12), -1000.0, 1000.0))}
+    r = _only(_fold(txns, cdp=cdp, price={10: 2.0}))
+    assert r["cost_partition"]["units_in"] == 2500.0
+    assert r["cost_partition"]["unknown"] == 0.0
+    assert r["cost_partition"]["costed"] == 2500.0
+    assert r["cost_known"] is True
+
+
 def test_cdp_cost_is_matched_at_position_level_not_per_row():
     """A CDP txn row is a month-end statement diff and routinely aggregates several
     trade-dated cost lots. Two CDP rows of 17,000 against one 17,000-unit cost pool, and

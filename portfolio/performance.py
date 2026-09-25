@@ -548,21 +548,30 @@ def _draw_out_qty(outs, qty, day=None):
     return got
 
 
-def _release_paired_outs(outs, arrivals):
-    """Zero the out whose size matches each excluded arrival, the same size-pairing
-    `_matched_transfer_pairs` uses. An arrival the peak dropped already gave its departure
-    back; leaving that out in the dated list would let a later row spend it again."""
+def _release_paired_outs(outs, arrivals, qty=float("inf")):
+    """Spend each arrival's own departure — the out whose size matches it, the same
+    size-pairing `_matched_transfer_pairs` uses — up to `qty` in total, earliest arrival first.
+    Only what no out of matching size pays is then drawn earliest-first. A transfer in pairs
+    with the out nearest it, often a later one; drawing its share from the earliest out would
+    spend the departure an earlier CDP return needs, and the date limit keeps that return from
+    reaching the later out."""
     by_size = defaultdict(list)
     for o in outs:
         if o[1] > 1e-9:
             by_size[round(o[1], 6)].append(o)
+    rest = 0.0
     for a in arrivals:
-        bucket = by_size.get(round(a.qty, 6)) or []
+        if qty <= 1e-9:
+            break
+        take = min(a.qty, qty)
+        qty -= take
+        bucket = by_size.get(round(take, 6)) or []
         hit = next((o for o in bucket if o[1] > 1e-9), None)
         if hit is not None:
             hit[1] = 0.0
         else:
-            _draw_out_qty(outs, a.qty)
+            rest += take
+    _draw_out_qty(outs, rest)
 
 
 def _resolved_entries(p, exclude=frozenset()):
@@ -629,7 +638,7 @@ def _resolved_entries(p, exclude=frozenset()):
     leftover = max(0.0, transfer_out - cover)
     over = sum(o[1] for o in outs) - leftover
     if over > 1e-9:
-        _draw_out_qty(outs, over)
+        _release_paired_outs(outs, [e for e in entries if e.condition == "pending"], over)
     pending_budget = cover + carried
     pool = min(p["cdp_buy_qty"], cdp_in)
     out = []
