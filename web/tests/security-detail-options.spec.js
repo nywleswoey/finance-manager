@@ -117,9 +117,13 @@ test.describe("three tables (#159)", () => {
   test("options rows state realised from the server boolean; count matches the rows behind the header", async ({ page }) => {
     // The header figure is `summary.options_pl_sgd`, and the rows behind it are exactly the ones
     // the server marked realised — so on the shipped fixture their own P/L folds back to it.
+    // Each row's `realized_sgd` is rounded to the cent on its own and the header is the rounded
+    // total, so the fold holds to within half a cent per row, not to the cent: the 2026-09-20
+    // capture's 74 PLTR rows sum to 52707.17 against a 52707.11 header (41316.23 USD x 1.2757).
     const realised = fixture.options.filter((t) => t.realised);
-    expect(realised.reduce((a, t) => a + Number(t.realized_sgd || 0), 0))
-      .toBeCloseTo(fixture.summary.options_pl_sgd, 2);
+    const folded = realised.reduce((a, t) => a + Number(t.realized_sgd || 0), 0);
+    expect(Math.abs(folded - fixture.summary.options_pl_sgd))
+      .toBeLessThanOrEqual(0.005 * (realised.length + 1));
     await expect(optionsCard(page).getByTestId("option-realised")
       .filter({ hasText: /^Realised$/ })).toHaveCount(realised.length);
 

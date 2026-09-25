@@ -1,6 +1,6 @@
 {
- "as_of": "2026-09-13",
- "fx_as_of": "2026-09-13",
+ "as_of": "2026-09-20",
+ "fx_as_of": "2026-09-20",
  "summary": {
   "ticker": "PLTR",
   "name": "Palantir",
@@ -11,23 +11,23 @@
    "Tiger Prime"
   ],
   "units": 5.0,
-  "price": 167.23,
+  "price": 177.64,
   "avg_cost": 35.6785,
   "cost_basis_native": 178.39,
-  "cost_basis_sgd": 226.04,
-  "mv_native": 836.15,
-  "mv_sgd": 1059.49,
-  "realised_pl_sgd": 15997.58,
-  "unrealised_pl_sgd": 833.44,
-  "stock_pl_sgd": 16831.02,
+  "cost_basis_sgd": 227.58,
+  "mv_native": 888.2,
+  "mv_sgd": 1133.08,
+  "realised_pl_sgd": 16106.16,
+  "unrealised_pl_sgd": 905.5,
+  "stock_pl_sgd": 17011.66,
   "income_sgd": 0.0,
-  "options_pl_sgd": 52351.8,
-  "net_pl_sgd": 69182.82,
+  "options_pl_sgd": 52707.11,
+  "net_pl_sgd": 69718.77,
   "net_verdict": "hero",
-  "return_pct": 0.3201,
+  "return_pct": 0.3204,
   "return_verdict": "ok",
-  "peak_car_sgd": 216124.17,
-  "return_span_days": 1718,
+  "peak_car_sgd": 217591.04,
+  "return_span_days": 1723,
   "cost_partition": {
    "units_in": 3505.0,
    "costed": 3505.0,
@@ -35,11 +35,11 @@
    "unknown": 0,
    "unknown_pct": 0.0
   },
-  "invested_sgd": 158454.71,
+  "invested_sgd": 159530.16,
   "invested_native": 125053.04,
-  "fees_sgd": 13.62,
+  "fees_sgd": 13.71,
   "cost_known": true,
-  "breakeven_price": -10752.6383
+  "breakeven_price": -10752.6362
  },
  "buckets": [
   {
@@ -47,13 +47,13 @@
    "status": "open",
    "units": 5.0,
    "avg_cost": 35.6785,
-   "breakeven_price": -10752.6383,
-   "realised_pl_sgd": 15997.58,
-   "unrealised_pl_sgd": 833.44,
-   "stock_pl_sgd": 16831.02,
+   "breakeven_price": -10752.6362,
+   "realised_pl_sgd": 16106.16,
+   "unrealised_pl_sgd": 905.5,
+   "stock_pl_sgd": 17011.66,
    "income_sgd": 0.0,
-   "options_pl_sgd": 52351.8,
-   "net_pl_sgd": 69182.82
+   "options_pl_sgd": 52707.11,
+   "net_pl_sgd": 69718.77
   }
  ],
  "transactions": [
@@ -299,7 +299,7 @@
    "premium_open": 1.22,
    "premium_close": 0.0,
    "realized_native": 242.48,
-   "realized_sgd": 307.25,
+   "realized_sgd": 309.33,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -315,7 +315,7 @@
    "premium_open": 1.04,
    "premium_close": 7.25,
    "realized_native": -1245.01,
-   "realized_sgd": -1577.55,
+   "realized_sgd": -1588.26,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -331,39 +331,7 @@
    "premium_open": 0.75,
    "premium_close": 0.0,
    "realized_native": 148.48,
-   "realized_sgd": 188.14,
-   "currency": "USD",
-   "outcome": "expired",
-   "realised": true
-  },
-  {
-   "underlying": "PLTR",
-   "type": "put",
-   "contracts": 1.0,
-   "strike": 125.0,
-   "open_date": "2026-05-06",
-   "expiry": "2026-05-15",
-   "close_date": null,
-   "premium_open": 1.46,
-   "premium_close": 0.0,
-   "realized_native": 145.23,
-   "realized_sgd": 184.02,
-   "currency": "USD",
-   "outcome": "expired",
-   "realised": true
-  },
-  {
-   "underlying": "PLTR",
-   "type": "put",
-   "contracts": 1.0,
-   "strike": 120.0,
-   "open_date": "2026-05-06",
-   "expiry": "2026-05-15",
-   "close_date": null,
-   "premium_open": 0.67,
-   "premium_close": 0.0,
-   "realized_native": 66.23,
-   "realized_sgd": 83.92,
+   "realized_sgd": 189.42,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -379,7 +347,39 @@
    "premium_open": 3.0,
    "premium_close": 0.0,
    "realized_native": 299.23,
-   "realized_sgd": 379.15,
+   "realized_sgd": 381.73,
+   "currency": "USD",
+   "outcome": "expired",
+   "realised": true
+  },
+  {
+   "underlying": "PLTR",
+   "type": "put",
+   "contracts": 1.0,
+   "strike": 125.0,
+   "open_date": "2026-05-06",
+   "expiry": "2026-05-15",
+   "close_date": null,
+   "premium_open": 1.46,
+   "premium_close": 0.0,
+   "realized_native": 145.23,
+   "realized_sgd": 185.27,
+   "currency": "USD",
+   "outcome": "expired",
+   "realised": true
+  },
+  {
+   "underlying": "PLTR",
+   "type": "put",
+   "contracts": 1.0,
+   "strike": 120.0,
+   "open_date": "2026-05-06",
+   "expiry": "2026-05-15",
+   "close_date": null,
+   "premium_open": 0.67,
+   "premium_close": 0.0,
+   "realized_native": 66.23,
+   "realized_sgd": 84.49,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -395,7 +395,7 @@
    "premium_open": 3.45,
    "premium_close": 0.0,
    "realized_native": 688.48,
-   "realized_sgd": 872.37,
+   "realized_sgd": 878.29,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -411,7 +411,7 @@
    "premium_open": 1.31,
    "premium_close": 0.0,
    "realized_native": 260.5,
-   "realized_sgd": 330.08,
+   "realized_sgd": 332.32,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -427,7 +427,7 @@
    "premium_open": 1.28,
    "premium_close": 0.0,
    "realized_native": 127.24,
-   "realized_sgd": 161.23,
+   "realized_sgd": 162.32,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -443,7 +443,7 @@
    "premium_open": 0.67,
    "premium_close": 0.0,
    "realized_native": 132.5,
-   "realized_sgd": 167.89,
+   "realized_sgd": 169.03,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -459,7 +459,7 @@
    "premium_open": 0.9,
    "premium_close": 0.0,
    "realized_native": 178.5,
-   "realized_sgd": 226.18,
+   "realized_sgd": 227.71,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -475,7 +475,7 @@
    "premium_open": 5.0,
    "premium_close": 0.0,
    "realized_native": 998.5,
-   "realized_sgd": 1265.2,
+   "realized_sgd": 1273.79,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -491,23 +491,7 @@
    "premium_open": 0.9,
    "premium_close": 0.0,
    "realized_native": 89.25,
-   "realized_sgd": 113.09,
-   "currency": "USD",
-   "outcome": "expired",
-   "realised": true
-  },
-  {
-   "underlying": "PLTR",
-   "type": "call",
-   "contracts": 1.0,
-   "strike": 160.0,
-   "open_date": "2025-11-24",
-   "expiry": "2025-11-28",
-   "close_date": null,
-   "premium_open": 3.85,
-   "premium_close": 0.0,
-   "realized_native": 384.25,
-   "realized_sgd": 486.88,
+   "realized_sgd": 113.86,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -523,7 +507,23 @@
    "premium_open": 1.35,
    "premium_close": 0.0,
    "realized_native": 268.5,
-   "realized_sgd": 340.22,
+   "realized_sgd": 342.53,
+   "currency": "USD",
+   "outcome": "expired",
+   "realised": true
+  },
+  {
+   "underlying": "PLTR",
+   "type": "call",
+   "contracts": 1.0,
+   "strike": 160.0,
+   "open_date": "2025-11-24",
+   "expiry": "2025-11-28",
+   "close_date": null,
+   "premium_open": 3.85,
+   "premium_close": 0.0,
+   "realized_native": 384.25,
+   "realized_sgd": 490.19,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -539,7 +539,7 @@
    "premium_open": 1.9,
    "premium_close": 0.0,
    "realized_native": 189.25,
-   "realized_sgd": 239.8,
+   "realized_sgd": 241.43,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -555,7 +555,7 @@
    "premium_open": 2.8,
    "premium_close": 0.0,
    "realized_native": 558.5,
-   "realized_sgd": 707.68,
+   "realized_sgd": 712.48,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -571,7 +571,7 @@
    "premium_open": 1.15,
    "premium_close": 0.0,
    "realized_native": 228.5,
-   "realized_sgd": 289.53,
+   "realized_sgd": 291.5,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -587,7 +587,7 @@
    "premium_open": 1.7,
    "premium_close": 0.0,
    "realized_native": 338.5,
-   "realized_sgd": 428.91,
+   "realized_sgd": 431.82,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -603,7 +603,7 @@
    "premium_open": 9.0,
    "premium_close": 0.0,
    "realized_native": 1798.5,
-   "realized_sgd": 2278.88,
+   "realized_sgd": 2294.35,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -619,7 +619,7 @@
    "premium_open": 5.35,
    "premium_close": 0.0,
    "realized_native": 1068.5,
-   "realized_sgd": 1353.9,
+   "realized_sgd": 1363.09,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -635,7 +635,7 @@
    "premium_open": 5.35,
    "premium_close": 0.0,
    "realized_native": 1068.5,
-   "realized_sgd": 1353.9,
+   "realized_sgd": 1363.09,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -651,7 +651,7 @@
    "premium_open": 1.654,
    "premium_close": 0.0,
    "realized_native": 1646.28,
-   "realized_sgd": 2086.0,
+   "realized_sgd": 2100.16,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -667,7 +667,7 @@
    "premium_open": 3.278,
    "premium_close": 0.0,
    "realized_native": 3270.27,
-   "realized_sgd": 4143.76,
+   "realized_sgd": 4171.88,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -683,7 +683,7 @@
    "premium_open": 2.26,
    "premium_close": 2.838,
    "realized_native": -593.29,
-   "realized_sgd": -751.76,
+   "realized_sgd": -756.86,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -699,7 +699,7 @@
    "premium_open": 0.85,
    "premium_close": 0.0,
    "realized_native": 842.35,
-   "realized_sgd": 1067.34,
+   "realized_sgd": 1074.59,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -715,7 +715,7 @@
    "premium_open": 1.33,
    "premium_close": 0.0,
    "realized_native": 1322.36,
-   "realized_sgd": 1675.56,
+   "realized_sgd": 1686.93,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -731,7 +731,7 @@
    "premium_open": 1.75,
    "premium_close": 0.0,
    "realized_native": 1742.36,
-   "realized_sgd": 2207.74,
+   "realized_sgd": 2222.73,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -747,7 +747,7 @@
    "premium_open": 2.05,
    "premium_close": 0.0,
    "realized_native": 2042.42,
-   "realized_sgd": 2587.95,
+   "realized_sgd": 2605.52,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -763,7 +763,7 @@
    "premium_open": 1.8,
    "premium_close": 0.0,
    "realized_native": 1792.53,
-   "realized_sgd": 2271.31,
+   "realized_sgd": 2286.73,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -779,7 +779,7 @@
    "premium_open": 1.0,
    "premium_close": 0.0,
    "realized_native": 992.53,
-   "realized_sgd": 1257.63,
+   "realized_sgd": 1266.17,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -795,7 +795,7 @@
    "premium_open": 0.9,
    "premium_close": 0.0,
    "realized_native": 892.53,
-   "realized_sgd": 1130.92,
+   "realized_sgd": 1138.6,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -811,23 +811,7 @@
    "premium_open": 1.15,
    "premium_close": 0.0,
    "realized_native": 1142.53,
-   "realized_sgd": 1447.7,
-   "currency": "USD",
-   "outcome": "expired",
-   "realised": true
-  },
-  {
-   "underlying": "PLTR",
-   "type": "put",
-   "contracts": 10.0,
-   "strike": 15.0,
-   "open_date": "2023-10-13",
-   "expiry": "2024-02-16",
-   "close_date": null,
-   "premium_open": 1.33,
-   "premium_close": 0.0,
-   "realized_native": 1319.26,
-   "realized_sgd": 1671.63,
+   "realized_sgd": 1457.53,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -843,7 +827,23 @@
    "premium_open": 0.71,
    "premium_close": 0.0,
    "realized_native": 699.29,
-   "realized_sgd": 886.07,
+   "realized_sgd": 892.08,
+   "currency": "USD",
+   "outcome": "expired",
+   "realised": true
+  },
+  {
+   "underlying": "PLTR",
+   "type": "put",
+   "contracts": 10.0,
+   "strike": 15.0,
+   "open_date": "2023-10-13",
+   "expiry": "2024-02-16",
+   "close_date": null,
+   "premium_open": 1.33,
+   "premium_close": 0.0,
+   "realized_native": 1319.26,
+   "realized_sgd": 1682.98,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -859,7 +859,7 @@
    "premium_open": 0.5,
    "premium_close": 0.0,
    "realized_native": 489.26,
-   "realized_sgd": 619.94,
+   "realized_sgd": 624.15,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -875,7 +875,7 @@
    "premium_open": 1.87,
    "premium_close": 0.0,
    "realized_native": 1859.29,
-   "realized_sgd": 2355.91,
+   "realized_sgd": 2371.9,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -891,7 +891,7 @@
    "premium_open": 1.56,
    "premium_close": 0.0,
    "realized_native": 1549.24,
-   "realized_sgd": 1963.04,
+   "realized_sgd": 1976.37,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -907,7 +907,7 @@
    "premium_open": 1.32,
    "premium_close": 0.0,
    "realized_native": 1309.14,
-   "realized_sgd": 1658.81,
+   "realized_sgd": 1670.07,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -923,7 +923,7 @@
    "premium_open": 1.19,
    "premium_close": 0.0,
    "realized_native": 1179.17,
-   "realized_sgd": 1494.13,
+   "realized_sgd": 1504.27,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -939,7 +939,7 @@
    "premium_open": 0.77,
    "premium_close": 0.04,
    "realized_native": 708.49,
-   "realized_sgd": 897.73,
+   "realized_sgd": 903.82,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -955,7 +955,7 @@
    "premium_open": 1.75,
    "premium_close": 0.02,
    "realized_native": 1711.57,
-   "realized_sgd": 2168.73,
+   "realized_sgd": 2183.45,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -971,7 +971,7 @@
    "premium_open": 0.92,
    "premium_close": 0.0,
    "realized_native": 909.17,
-   "realized_sgd": 1152.01,
+   "realized_sgd": 1159.83,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -987,7 +987,7 @@
    "premium_open": 1.08,
    "premium_close": 0.0,
    "realized_native": 1069.17,
-   "realized_sgd": 1354.75,
+   "realized_sgd": 1363.94,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1003,7 +1003,7 @@
    "premium_open": 3.477,
    "premium_close": 3.65,
    "realized_native": -196.75,
-   "realized_sgd": -249.3,
+   "realized_sgd": -250.99,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1019,7 +1019,7 @@
    "premium_open": 3.02,
    "premium_close": 3.35,
    "realized_native": -351.51,
-   "realized_sgd": -445.4,
+   "realized_sgd": -448.42,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1035,7 +1035,7 @@
    "premium_open": 1.97,
    "premium_close": 2.6,
    "realized_native": -651.77,
-   "realized_sgd": -825.86,
+   "realized_sgd": -831.46,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1051,7 +1051,7 @@
    "premium_open": 1.29,
    "premium_close": 0.26,
    "realized_native": 1011.62,
-   "realized_sgd": 1281.82,
+   "realized_sgd": 1290.52,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1067,7 +1067,7 @@
    "premium_open": 0.53,
    "premium_close": 0.01,
    "realized_native": 501.73,
-   "realized_sgd": 635.74,
+   "realized_sgd": 640.06,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1083,7 +1083,7 @@
    "premium_open": 0.5,
    "premium_close": 0.0,
    "realized_native": 487.98,
-   "realized_sgd": 618.32,
+   "realized_sgd": 622.52,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1099,7 +1099,7 @@
    "premium_open": 1.25,
    "premium_close": 0.0,
    "realized_native": 1239.18,
-   "realized_sgd": 1570.16,
+   "realized_sgd": 1580.82,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1115,7 +1115,7 @@
    "premium_open": 0.48,
    "premium_close": 0.0,
    "realized_native": 563.01,
-   "realized_sgd": 713.39,
+   "realized_sgd": 718.23,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1131,23 +1131,7 @@
    "premium_open": 1.0,
    "premium_close": 0.0,
    "realized_native": 1088.09,
-   "realized_sgd": 1378.72,
-   "currency": "USD",
-   "outcome": "expired",
-   "realised": true
-  },
-  {
-   "underlying": "PLTR",
-   "type": "call",
-   "contracts": 10.0,
-   "strike": 9.0,
-   "open_date": "2023-03-14",
-   "expiry": "2023-04-21",
-   "close_date": null,
-   "premium_open": 0.23,
-   "premium_close": 0.0,
-   "realized_native": 219.18,
-   "realized_sgd": 277.72,
+   "realized_sgd": 1388.08,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1163,7 +1147,23 @@
    "premium_open": 0.62,
    "premium_close": 0.0,
    "realized_native": 731.01,
-   "realized_sgd": 926.26,
+   "realized_sgd": 932.55,
+   "currency": "USD",
+   "outcome": "expired",
+   "realised": true
+  },
+  {
+   "underlying": "PLTR",
+   "type": "call",
+   "contracts": 10.0,
+   "strike": 9.0,
+   "open_date": "2023-03-14",
+   "expiry": "2023-04-21",
+   "close_date": null,
+   "premium_open": 0.23,
+   "premium_close": 0.0,
+   "realized_native": 219.18,
+   "realized_sgd": 279.61,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1179,7 +1179,7 @@
    "premium_open": 0.8,
    "premium_close": 0.0,
    "realized_native": 789.17,
-   "realized_sgd": 999.96,
+   "realized_sgd": 1006.74,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1195,7 +1195,7 @@
    "premium_open": 0.36,
    "premium_close": 0.03,
    "realized_native": 400.88,
-   "realized_sgd": 507.96,
+   "realized_sgd": 511.4,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1211,7 +1211,7 @@
    "premium_open": 0.63,
    "premium_close": 0.08,
    "realized_native": 739.9,
-   "realized_sgd": 937.53,
+   "realized_sgd": 943.89,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1227,7 +1227,7 @@
    "premium_open": 0.19,
    "premium_close": 0.03,
    "realized_native": 221.95,
-   "realized_sgd": 281.23,
+   "realized_sgd": 283.14,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1243,7 +1243,7 @@
    "premium_open": 0.25,
    "premium_close": 0.2,
    "realized_native": 40.33,
-   "realized_sgd": 51.1,
+   "realized_sgd": 51.45,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1259,7 +1259,7 @@
    "premium_open": 0.28,
    "premium_close": 0.0,
    "realized_native": 350.2,
-   "realized_sgd": 443.74,
+   "realized_sgd": 446.75,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1275,7 +1275,7 @@
    "premium_open": 0.49,
    "premium_close": 0.0,
    "realized_native": 622.57,
-   "realized_sgd": 788.86,
+   "realized_sgd": 794.21,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1291,7 +1291,7 @@
    "premium_open": 0.31,
    "premium_close": 0.25,
    "realized_native": 45.4,
-   "realized_sgd": 57.53,
+   "realized_sgd": 57.92,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1307,7 +1307,7 @@
    "premium_open": 0.36,
    "premium_close": 1.38,
    "realized_native": -1042.23,
-   "realized_sgd": -1320.61,
+   "realized_sgd": -1329.57,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1323,7 +1323,7 @@
    "premium_open": 0.53,
    "premium_close": 0.0,
    "realized_native": 518.9,
-   "realized_sgd": 657.5,
+   "realized_sgd": 661.96,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1339,7 +1339,7 @@
    "premium_open": 0.63,
    "premium_close": 4.85,
    "realized_native": -4242.33,
-   "realized_sgd": -5375.46,
+   "realized_sgd": -5411.94,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1355,7 +1355,7 @@
    "premium_open": 0.36,
    "premium_close": 0.0,
    "realized_native": 348.77,
-   "realized_sgd": 441.93,
+   "realized_sgd": 444.93,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1371,7 +1371,7 @@
    "premium_open": 0.85,
    "premium_close": 0.09,
    "realized_native": 368.74,
-   "realized_sgd": 467.23,
+   "realized_sgd": 470.4,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1387,7 +1387,7 @@
    "premium_open": 0.83,
    "premium_close": 0.06,
    "realized_native": 372.74,
-   "realized_sgd": 472.3,
+   "realized_sgd": 475.5,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1403,7 +1403,7 @@
    "premium_open": 0.43,
    "premium_close": 0.0,
    "realized_native": 208.34,
-   "realized_sgd": 263.99,
+   "realized_sgd": 265.78,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1419,7 +1419,7 @@
    "premium_open": 0.55,
    "premium_close": 0.23,
    "realized_native": 147.73,
-   "realized_sgd": 187.19,
+   "realized_sgd": 188.46,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1435,7 +1435,7 @@
    "premium_open": 0.45,
    "premium_close": 0.0,
    "realized_native": 218.34,
-   "realized_sgd": 276.66,
+   "realized_sgd": 278.54,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -1451,7 +1451,7 @@
    "premium_open": 1.1,
    "premium_close": 0.38,
    "realized_native": 347.76,
-   "realized_sgd": 440.65,
+   "realized_sgd": 443.64,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -1467,7 +1467,7 @@
    "premium_open": 4.62,
    "premium_close": 3.15,
    "realized_native": 286.77,
-   "realized_sgd": 363.37,
+   "realized_sgd": 365.83,
    "currency": "USD",
    "outcome": "closed",
    "realised": true

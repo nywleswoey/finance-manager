@@ -1,6 +1,6 @@
 {
- "as_of": "2026-09-13",
- "fx_as_of": "2026-09-13",
+ "as_of": "2026-09-20",
+ "fx_as_of": "2026-09-20",
  "summary": {
   "ticker": "AAPL",
   "name": "AAPL",
@@ -11,23 +11,23 @@
    "Moomoo"
   ],
   "units": 1.0,
-  "price": 332.27,
+  "price": 336.13,
   "avg_cost": 0.0,
   "cost_basis_native": 0.0,
   "cost_basis_sgd": 0.0,
-  "mv_native": 332.27,
-  "mv_sgd": 421.02,
+  "mv_native": 336.13,
+  "mv_sgd": 428.8,
   "realised_pl_sgd": 0.0,
-  "unrealised_pl_sgd": 421.02,
-  "stock_pl_sgd": 421.02,
-  "income_sgd": 1.2,
+  "unrealised_pl_sgd": 428.8,
+  "stock_pl_sgd": 428.8,
+  "income_sgd": 1.21,
   "options_pl_sgd": null,
-  "net_pl_sgd": 422.22,
+  "net_pl_sgd": 430.01,
   "net_verdict": "hero",
   "return_pct": null,
   "return_verdict": "no_capital",
   "peak_car_sgd": 0.0,
-  "return_span_days": 1362,
+  "return_span_days": 1367,
   "cost_partition": {
    "units_in": 1.0,
    "costed": 0,
@@ -39,7 +39,7 @@
   "invested_native": 0.0,
   "fees_sgd": 0.0,
   "cost_known": true,
-  "breakeven_price": -0.947
+  "breakeven_price": -0.9485
  },
  "buckets": [
   {
@@ -47,13 +47,13 @@
    "status": "open",
    "units": 1.0,
    "avg_cost": 0.0,
-   "breakeven_price": -0.947,
+   "breakeven_price": -0.9485,
    "realised_pl_sgd": 0.0,
-   "unrealised_pl_sgd": 421.02,
-   "stock_pl_sgd": 421.02,
-   "income_sgd": 1.2,
+   "unrealised_pl_sgd": 428.8,
+   "stock_pl_sgd": 428.8,
+   "income_sgd": 1.21,
    "options_pl_sgd": null,
-   "net_pl_sgd": 422.22
+   "net_pl_sgd": 430.01
   }
  ],
  "transactions": [
@@ -93,7 +93,7 @@
    "units": 1.0,
    "amount_per_unit": 0.24,
    "rate": 0.24,
-   "gross_sgd": 0.3
+   "gross_sgd": 0.31
   },
   {
    "pay_date": "2023-08-15",
@@ -105,7 +105,7 @@
    "units": 1.0,
    "amount_per_unit": 0.24,
    "rate": 0.24,
-   "gross_sgd": 0.3
+   "gross_sgd": 0.31
   },
   {
    "pay_date": "2023-11-15",
@@ -117,7 +117,7 @@
    "units": 1.0,
    "amount_per_unit": 0.24,
    "rate": 0.24,
-   "gross_sgd": 0.3
+   "gross_sgd": 0.31
   }
  ],
  "options": []

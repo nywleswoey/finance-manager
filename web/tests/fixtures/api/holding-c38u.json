@@ -1,6 +1,6 @@
 {
- "as_of": "2026-09-13",
- "fx_as_of": "2026-09-13",
+ "as_of": "2026-09-20",
+ "fx_as_of": "2026-09-20",
  "summary": {
   "ticker": "C38U",
   "name": "CapitaMall Trust",
@@ -12,23 +12,23 @@
    "Moomoo"
   ],
   "units": 6700.0,
-  "price": 2.28,
+  "price": 2.29,
   "avg_cost": null,
   "cost_basis_native": null,
   "cost_basis_sgd": null,
-  "mv_native": 15276.0,
-  "mv_sgd": 15276.0,
+  "mv_native": 15343.0,
+  "mv_sgd": 15343.0,
   "realised_pl_sgd": null,
   "unrealised_pl_sgd": null,
-  "stock_pl_sgd": 4154.13,
+  "stock_pl_sgd": 4221.13,
   "income_sgd": 2530.62,
   "options_pl_sgd": null,
-  "net_pl_sgd": 6684.75,
+  "net_pl_sgd": 6751.75,
   "net_verdict": "bounded",
-  "return_pct": 0.601,
+  "return_pct": 0.6071,
   "return_verdict": "caveat",
   "peak_car_sgd": 11121.87,
-  "return_span_days": 2361,
+  "return_span_days": 2366,
   "cost_partition": {
    "units_in": 6700.0,
    "costed": 6200.0,
@@ -65,10 +65,10 @@
    "breakeven_price": null,
    "realised_pl_sgd": null,
    "unrealised_pl_sgd": null,
-   "stock_pl_sgd": 4154.13,
+   "stock_pl_sgd": 4221.13,
    "income_sgd": 2530.62,
    "options_pl_sgd": null,
-   "net_pl_sgd": 6684.75
+   "net_pl_sgd": 6751.75
   }
  ],
  "transactions": [
@@ -558,6 +558,18 @@
    "pay_date": "2026-06-08",
    "account": "FSM",
    "bucket": "cash",
+   "gross": 3.72,
+   "currency": "SGD",
+   "kind": "cash",
+   "units": 6200.0,
+   "amount_per_unit": null,
+   "rate": 0.0006,
+   "gross_sgd": 3.72
+  },
+  {
+   "pay_date": "2026-06-08",
+   "account": "FSM",
+   "bucket": "cash",
    "gross": 16.74,
    "currency": "SGD",
    "kind": "cash",
@@ -577,18 +589,6 @@
    "amount_per_unit": null,
    "rate": 0.0365,
    "gross_sgd": 226.3
-  },
-  {
-   "pay_date": "2026-06-08",
-   "account": "FSM",
-   "bucket": "cash",
-   "gross": 3.72,
-   "currency": "SGD",
-   "kind": "cash",
-   "units": 6200.0,
-   "amount_per_unit": null,
-   "rate": 0.0006,
-   "gross_sgd": 3.72
   }
  ],
  "options": []

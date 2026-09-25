@@ -79,6 +79,36 @@ divergence showing up in the fixtures.)
 None of it changes a rendered width — 19.64% and 19.62% are the same number of characters —
 so expect the churn in a recapture diff rather than going looking for a cause.
 
+An input ingested after the capture is the other cause of a diff, and it reaches every fixture,
+not only the two above. A row that lands after a capture moves every value derived from it on
+the next recapture, and the row can carry a date from before the capture, so a fixture's own
+dates do not rule it out. Issue #213 is the example, AMD's `return_span_days` in
+`positions-closed.json`:
+
+    1946  code before #202 (first event to last), book as captured on 2026-09-20:
+          2021-04-14, the first AMD contract, to 2026-08-12, the last one then in the book
+    1983  the same code on the book after the AMD put opened 2026-09-17, expiring
+          2026-09-18, was ingested: 2021-04-14 to 2026-09-18
+     584  the #202 held-interval code on that same book, the value the fixture now holds
+
+AMD is closed, so the run date moves none of these. The input moved the value by 37 days
+(1946 to 1983), and deleting that one contract gives 1946 back. #213's "33 days" came from
+subtracting a 4-day run-date shift from 1983, and that shift applies only to open names.
+
+To sort a recapture diff: run the code that made the old fixture against today's book with
+`dt.date.today()` pinned to the old capture date. A value that still differs from the old
+fixture is an input change; one that matches moved with the clock. Where that code and the
+current code disagree on the same book and pinned date, the change is behaviour. The
+2026-09-25 recapture sorted this way had no unexplained value. AMD was input and then
+behaviour, and every other value was clock, input, or both.
+
+Should capture be checked rather than left to memory? Yes. Recommended, but not built: drift is
+silent, #213 was found by accident, and hand-edited values (#211 edited its spans by hand) mix
+captured and derived numbers in one file. A possible follow-up is a `--check` mode that
+captures into a temp directory, runs the sort above, and fails on any behaviour change or
+unexplained value. It needs the docker book, so it is a local pre-merge step, not a CI one.
+Until then, recapture rather than hand-edit when a change moves a fixture value.
+
     PYTHONPATH=. .venv/bin/python -m uvicorn server.main:app --port 8123 &
     .venv/bin/python scripts/capture_web_fixtures.py --base http://localhost:8123
 """

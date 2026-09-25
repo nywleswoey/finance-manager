@@ -1,6 +1,6 @@
 {
- "as_of": "2026-09-13",
- "fx_as_of": "2026-09-13",
+ "as_of": "2026-09-20",
+ "fx_as_of": "2026-09-20",
  "summary": {
   "ticker": "TSLA",
   "name": "Tesla",
@@ -21,12 +21,12 @@
   "unrealised_pl_sgd": 0.0,
   "stock_pl_sgd": 0.0,
   "income_sgd": 0.0,
-  "options_pl_sgd": 3557.17,
-  "net_pl_sgd": 3557.17,
+  "options_pl_sgd": 3581.31,
+  "net_pl_sgd": 3581.31,
   "net_verdict": "hero",
   "return_pct": 0.0381,
   "return_verdict": "ok",
-  "peak_car_sgd": 93448.62,
+  "peak_car_sgd": 94082.88,
   "return_span_days": 39,
   "cost_partition": {
    "units_in": 100.0,
@@ -35,7 +35,7 @@
    "unknown": 0,
    "unknown_pct": 0.0
   },
-  "invested_sgd": 56385.95,
+  "invested_sgd": 56768.65,
   "invested_native": 44500.0,
   "fees_sgd": 0.0,
   "cost_known": true,
@@ -52,8 +52,8 @@
    "unrealised_pl_sgd": 0.0,
    "stock_pl_sgd": 0.0,
    "income_sgd": 0.0,
-   "options_pl_sgd": 3557.17,
-   "net_pl_sgd": 3557.17
+   "options_pl_sgd": 3581.31,
+   "net_pl_sgd": 3581.31
   }
  ],
  "transactions": [
@@ -95,7 +95,7 @@
    "premium_open": 1.07,
    "premium_close": 0.0,
    "realized_native": 106.23,
-   "realized_sgd": 134.6,
+   "realized_sgd": 135.52,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -111,7 +111,7 @@
    "premium_open": 1.68,
    "premium_close": 1.37,
    "realized_native": 29.48,
-   "realized_sgd": 37.35,
+   "realized_sgd": 37.61,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -127,7 +127,7 @@
    "premium_open": 1.8,
    "premium_close": 0.0,
    "realized_native": 179.23,
-   "realized_sgd": 227.1,
+   "realized_sgd": 228.64,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -143,7 +143,7 @@
    "premium_open": 2.41,
    "premium_close": 0.0,
    "realized_native": 240.23,
-   "realized_sgd": 304.4,
+   "realized_sgd": 306.46,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -159,7 +159,7 @@
    "premium_open": 1.4,
    "premium_close": 0.0,
    "realized_native": 139.24,
-   "realized_sgd": 176.43,
+   "realized_sgd": 177.63,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -175,7 +175,7 @@
    "premium_open": 10.6,
    "premium_close": 0.0,
    "realized_native": 1059.24,
-   "realized_sgd": 1342.16,
+   "realized_sgd": 1351.27,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -191,7 +191,7 @@
    "premium_open": 9.6,
    "premium_close": 0.0,
    "realized_native": 959.24,
-   "realized_sgd": 1215.45,
+   "realized_sgd": 1223.7,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -207,7 +207,7 @@
    "premium_open": 2.11,
    "premium_close": 0.0,
    "realized_native": 210.25,
-   "realized_sgd": 266.41,
+   "realized_sgd": 268.22,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -223,7 +223,7 @@
    "premium_open": 2.6,
    "premium_close": 13.5,
    "realized_native": -1091.49,
-   "realized_sgd": -1383.03,
+   "realized_sgd": -1392.41,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
@@ -239,7 +239,7 @@
    "premium_open": 3.6,
    "premium_close": 0.0,
    "realized_native": 359.25,
-   "realized_sgd": 455.21,
+   "realized_sgd": 458.3,
    "currency": "USD",
    "outcome": "expired",
    "realised": true
@@ -255,7 +255,7 @@
    "premium_open": 7.3,
    "premium_close": 1.07,
    "realized_native": 616.43,
-   "realized_sgd": 781.08,
+   "realized_sgd": 786.38,
    "currency": "USD",
    "outcome": "closed",
    "realised": true
