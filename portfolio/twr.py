@@ -237,9 +237,12 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
         if printed:
             newest_close = max(printed + ([newest_close] if newest_close else []))
     fx = {"SGD": {d: 1.0 for d in days}}
-    # Whatever the book holds, not a fixed USD/HKD/EUR list. MYR had no series, so
-    # fx_on returned None and every amount in that currency was skipped.
-    for c in sorted(set(ccy_of.values()) - {"SGD"}):
+    # Every currency converted below, not a fixed USD/HKD/EUR list. MYR had no series, so
+    # fx_on returned None and every amount in that currency was skipped. Dividends and fees
+    # carry their own currency: an SGD REIT can pay in EUR.
+    ccys = (set(ccy_of.values()) | {d["currency"] for d in divs}
+            | {t["currency"] for t in txns if t["fees"]})
+    for c in sorted(ccys - {None, "", "SGD"}):
         try:
             fx[c] = ffill(fetch(f"{c}SGD=X"), days)
         except Exception:

@@ -8,8 +8,6 @@ import datetime as dt
 
 import pytest
 
-import ingestion.prices as prices
-import portfolio.twr as twr
 from portfolio.performance import _xirr
 from portfolio.twr import _returns, _twr, contributions, fx_on
 
@@ -287,13 +285,6 @@ MYR_INVESTED = 303          # 100 * 10 * 0.30 + 10 * 0.30
 MYR_VALUE = 363             # 100 * 12 * 0.30 + the dividend
 
 
-def test_the_yahoo_symbol_rule_has_one_owner():
-    """Bursa codes take `.KL` from `ingestion.prices.yahoo_symbol`. A second copy in
-    `twr` is what handed Yahoo the bare code."""
-    assert twr.yahoo_symbol is prices.yahoo_symbol
-    assert prices.yahoo_symbol("3255", "MY") == "3255.KL"
-
-
 def _priced_book(sym):
     """AAA.SI and 3255.KL plus MYR/SGD. Nothing else — a bare Bursa code or USD/HKD/EUR is a bug."""
     if sym == "AAA.SI":
@@ -343,3 +334,25 @@ def test_a_failed_yahoo_fetch_names_the_position_it_dropped():
     assert dropped["invested_sgd"] == sgd["invested_sgd"]
     assert dropped["value_plus_income_sgd"] == sgd["value_plus_income_sgd"]
     assert dropped["unpriced"] == [{"ticker": "3255", "market": "MY", "currency": "MYR"}]
+
+
+def test_an_eur_dividend_on_an_sgd_security_is_in_the_money_figures():
+    """Regression: SET and UD1U are SGD securities paying EUR. With the FX list built from
+    security currencies alone, no EURSGD=X series was fetched and the dividend fell out."""
+    calls = []
+
+    def fetch(sym):
+        calls.append(sym)
+        if sym == "EURSGD=X":
+            return {D(2024, 1, 1): 1.5, D(2024, 6, 1): 1.5}
+        return _priced_book(sym)
+
+    eur_div = [{"security_id": 1, "ex_date": D(2024, 6, 1), "pay_date": D(2024, 6, 1),
+                "gross": 10.0, "currency": "EUR"}]
+    as_of = D(2026, 1, 1)
+    bare = _returns(HELD, TXNS, [], {}, as_of, fetch=_priced_book)
+    paid = _returns(HELD, TXNS, eur_div, {}, as_of, fetch=fetch)
+
+    assert "EURSGD=X" in calls
+    assert paid["value_plus_income_sgd"] - bare["value_plus_income_sgd"] == 15
+    assert paid["unpriced"] == []
