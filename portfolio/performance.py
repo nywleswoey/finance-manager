@@ -392,12 +392,12 @@ def _provenance(k, c, carries, listed, fx):
     """The wire object for one carried successor — #143 §12.
 
     `split_with` names only the **reachable** siblings: a sibling Holdings never lists points
-    at a page that does not exist. `bound` is `carry_bound`'s direction — the one direction both
-    of the page's figures take, **asserted, not computed**, because nothing in the book bounds
-    the magnitude — and `null` on a single-successor carry, which is exact and disclosed anyway:
-    an exact number is not an accounted-for one when the denominator has no visible origin on
-    the page. Whether that direction survives the partition's own doubt is `net_verdict`'s
-    call, not this object's.
+    at a page that does not exist. `bound` is `carry_bound`'s direction, **asserted, not
+    computed**, because nothing in the book bounds the magnitude, and `null` on a
+    single-successor carry, which is exact and disclosed anyway: an exact number is not an
+    accounted-for one when the denominator has no visible origin on the page. Whether that
+    direction survives the partition's own doubt is `net_verdict`'s call, not this object's;
+    what the page states is `web/src/modules/portfolio/bound.js`.
     """
     siblings = sorted(({"ticker": o["ticker"], "units": round(o["units"], 4)}
                        for k2, o in carries.items()
@@ -412,9 +412,9 @@ def _provenance(k, c, carries, listed, fx):
 def carry_bound(c):
     """Which way a split carry's cost was mis-attributed, or `None` where nothing split.
 
-    `lower` — the name the whole cost went to: its cost is too high, so its Net is a floor.
-    `upper` — a sibling that took units and no cost: its cost is too low, so its Net is a
-              ceiling.
+    `lower` — the name the whole cost went to: its cost is too high.
+    `upper` — a sibling that took units and no cost: its cost is too low.
+    What that does to the Net is `net_verdict`'s rule.
 
     Read twice, deliberately: `net_verdict` needs it to decide whether the bound survives the
     partition's own doubt, and `_provenance` ships it beside the sentence that discloses the
@@ -1082,22 +1082,18 @@ def _breakeven_price(r, units, rate):
     negative number says by how much — clamping it at zero would report `already even` of a
     position that is ahead, and would be the only figure on this page that lies downward.
 
-    **A `bounded` Net bounds this price THE OTHER WAY, and the fourth state is that bound rather
+    **A `bounded` Net puts a bound on this price, and that bound is the fourth state rather
     than a null.** Substituting the components gives `price × rate × units == mv_sgd − Net`, and
     `mv_sgd`, `rate` and `units` are all exact — only `cost_basis_sgd` carries the carry's
-    mis-attribution — so the Net and the price move in OPPOSITE directions: a `lower` carry
-    overstates the cost, which floors the Net (`≥`) and ceilings this price (`≤`). The direction
-    is therefore `carry_bound`'s, read once and inverted, which is exactly the direction peak
-    capital already takes; the renderer marks it with the same glyph it prints there rather than
-    deciding it again.
+    mis-attribution. Which way the Net and this price run is `net_verdict`'s rule, read on the
+    page in `web/src/modules/portfolio/bound.js`; the renderer marks the price with the glyph it
+    already prints on peak capital rather than deciding the direction here.
 
-    **WHAT MAKES THAT DIRECTION THE ONLY ONE ON A PRICE THAT SHIPS, PER COLUMN AND NOT PER
-    TICKER.** The two doubts on this page push opposite ways: a carry's mis-attribution moves
-    `cost_basis_sgd`, and the partition's unknown units read as free, which moves the Net the
-    other way. A figure carrying both would be bounded in neither direction — the pairing
-    `net_verdict` now guards, by shipping `caveat` rather than `bounded` for it. It cannot arise
-    here either, and what rules it out is the third null above rather than anything about the
-    ticker: `cost_basis_sgd` is null on **any column holding unknown units** — a leg by
+    **WHAT MAKES THE CARRY'S DOUBT THE ONLY ONE ON A PRICE THAT SHIPS, PER COLUMN AND NOT PER
+    TICKER.** A figure carrying both the carry and unknown units is the pairing `net_verdict`
+    guards (that docstring). It cannot arise on a price either, and what rules it out is the
+    third null above rather than anything about the ticker: `cost_basis_sgd` is null on **any
+    column holding unknown units** — a leg by
     `priceable` (`cost_known and unknown < 1e-6`), the summary by `_sum_known` — so every column
     that ships a price has zero unknown units and the carry's is the only doubt left on it. THE
     COLUMN IS THE UNIT OF THAT CLAIM. `net_verdict` sums its counts across a ticker's legs, so
@@ -1136,11 +1132,9 @@ def _return_figures(car, rows):
     `0`, because that is the true answer to "how much was at risk", and **the verdict, not a
     null, is what gates the render**.
 
-    **`caveat`** where some entering units are unknown: the error compounds, because the
-    numerator is an upper bound (unknown units assumed free) while the denominator is a lower
-    bound (costed lots only). The numerator's direction is the Net's and is never decided here:
-    where a `lower` carry meets those units `net_verdict` ships `caveat` and the Net is bounded
-    in neither direction, and the page says that of the percentage too. It carries its own
+    **`caveat`** where some entering units are unknown. The direction of either side of the
+    ratio is never decided here: the Net's is `net_verdict`'s, above, and the page reads both in
+    `web/src/modules/portfolio/bound.js`. The percentage carries its own
     verdict rather than reusing the Net's, which would leave it reading as merely optimistic
     instead of not comparable to any other name.
     """

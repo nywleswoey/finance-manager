@@ -205,7 +205,7 @@ def test_net_does_not_carry_the_cent_that_independent_rounding_puts_in_pl_sgd():
 
 def test_the_caveat_nets_through_the_collapsed_pair():
     """Q01's shape: the split is `not known`, `stock_pl_sgd` carries the pair, and the Net is
-    still exact — the unknown units read as free, which is the upper bound the caveat states."""
+    still exact. Direction: `net_verdict`."""
     r = _legs(SHAPES["caveat"]())["cash"]
     assert (r["realised_pl_sgd"], r["unrealised_pl_sgd"]) == (None, None)
     assert r["stock_pl_sgd"] == 1400.0                     # 200 × 12 − 1,000
@@ -231,8 +231,7 @@ def test_a_refusal_has_no_partial_net_under_any_name_even_on_a_leg_that_knows_it
 
 def test_a_caveat_nets_every_leg_including_the_one_whose_units_are_all_unknown():
     """The divergence case's Net stands, so leg B cannot contribute a null — a null leg would
-    make the ticker's Net partial. Leg B reads its unknown units as free, exactly as Q01's
-    single leg does: the upper bound the caveat already declares."""
+    make the ticker's Net partial. Direction: `net_verdict`, as on Q01's single leg."""
     legs = _legs(SHAPES["divergence"]())
     assert legs["cash"]["net_pl_sgd"] == 200.0             # 100 × 12 − 1,000
     assert legs["cpf"]["stock_pl_sgd"] == 600.0            # 50 × 12, nothing recorded against it
