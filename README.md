@@ -77,8 +77,9 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
   net worth (and excl-housing / excl-housing-&-CPF) via `portfolio/networth.py`. Built from
   broker/bank statements by `scripts/snapshot_from_statements.py` (Tiger Prime CSV cash +
   MMF, DBS consolidated PDF Multiplier + SRS cash; other items carried forward; FX
-  auto-backfilled). Dry-run by default; `--commit` writes; `--all-new --commit` ingests each
-  DBS month newer than the latest snapshot (forward-delta, month-end dated).
+  auto-backfilled). Dry-run by default; `--commit` writes; `--all-new --commit` ingests
+  one new DBS month (month-end dated) and refuses a catch-up that would stamp run-day
+  portfolio and Tiger cash onto an older month. The snapshot note records the valuation date.
 - **App** (`web/`) — three modules behind a shared shell: **Portfolio** (Overview with tiles +
   allocation donuts, Holdings, Performance, Dividends, Options, Transactions), **Net Worth**
   (snapshots + trend), and **Spending** (Overview, By Category, Classify, Recurring,

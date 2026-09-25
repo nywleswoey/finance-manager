@@ -45,9 +45,9 @@ load-cash:    ## load the spending ledger into DB (idempotent)
 spending: flat-cash load-cash   ## full spending ingest: statements -> classify -> DB
 	@echo "spending ingested. (HSBC scanned PDFs are vision-extracted to build/hsbc_extracted.csv)"
 
-snapshot:     ## preview net-worth snapshots for DBS months newer than latest (dry-run)
+snapshot:     ## preview --all-new (one DBS month, or the catch-up refusal)
 	$(PY) scripts/snapshot_from_statements.py --all-new
-snapshot-commit:   ## write those new net-worth snapshots to DB (forward-delta)
+snapshot-commit:   ## write that snapshot, or refuse a mis-dated catch-up
 	$(PY) scripts/snapshot_from_statements.py --all-new --commit
 
 ingest-all:   ## delta-ingest EVERY source: brokers + spending + prices + net-worth snapshots (all idempotent)
