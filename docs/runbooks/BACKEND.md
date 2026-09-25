@@ -234,9 +234,8 @@ Six rules, each with its own gate in `tests/test_peak_car.py`:
 
 `return_verdict` is a second axis, independent of the Net's: `no_capital` where peak CAR is
 zero (the return does not *exist* — undefined, not unmeasured), `caveat` where some entering
-units are unknown (the numerator takes the Net's doubt — an upper bound, or no direction at all
-where a `lower` carry meets those units — and the denominator is a lower one, so the error
-compounds) **or where there is no Net to divide at all**, else `ok`. Never `ok` beside a
+units are unknown **or where there is no Net to divide at all** (direction: `net_verdict` in
+`portfolio/performance.py`), else `ok`. Never `ok` beside a
 null percentage — that is the one pairing a renderer branching on the verdict cannot survive. **`peak_car_sgd` is always a number**, a measured zero where
 nothing was at risk; the verdict, not a null, is what a renderer branches on.
 
@@ -300,9 +299,8 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
 - **`refuse` ships `null`** on every leg — including a leg of a refusing ticker whose own components
   are known. There is no partial Net on the wire under any name.
 - **A caveat nets every leg.** A leg whose every unit is unknown, inside a ticker that does not
-  refuse, keeps `stock_pl_sgd` (its unknown units read as free — the reading the caveat already
-  declares, exactly as Q01's partly-unknown leg does). `stock_pl_sgd` is therefore null only where
-  the leg is all-unknown *and* the name refuses.
+  refuse, keeps `stock_pl_sgd`. Direction: `net_verdict` in `portfolio/performance.py`.
+  `stock_pl_sgd` is therefore null only where the leg is all-unknown *and* the name refuses.
 - **Known gap, zero-instance: `/api/performance`'s group `net_pl_sgd` is not this field.**
   `rollup()` is untouched and still adds a leg's `stock_pl_sgd` only where `cost_known` is true,
   so in the divergence case the group Net drops leg B while the row Nets include it. No live
@@ -322,17 +320,18 @@ components it has to undo.
 - **Negative is a real answer** — income and realised gains past cost basis mean the name is
   already whole at any price, including zero — and is never clamped. The RENDERER is what turns
   it into words: `Breakeven` prints `free of cost` for a value `<= 0` and no figure (#201) —
-  unless the Net is `bounded` `upper`, where the price is only a floor and `<= 0` reads
-  `not known` instead.
+  unless the Net is `bounded` `upper`, where `<= 0` reads `not known` instead. Which way that
+  price runs: `net_verdict` in `portfolio/performance.py`.
 - **Tolerance is the quote's, not a cent's.** The field's own share of the drift when the fold is
   revalued at it is `5e-5 × units × rate` SGD (0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700);
   it scales with units and the FX rate and never tightens to a constant. It is not the whole
   residual: `bucket-split.spec.js` gates the SUM of the three roundings that are really there —
   the components' own cent-rounding (`0.02`), that quote, and the error in the FX rate the gate
   must recover from the market-value pair since no endpoint ships one (`|be − price| × units × ε`).
-- **A `bounded` Net bounds it the OTHER way.** `price × rate × units ≡ mv_sgd − Net` with mv, rate
-  and units exact, so a `lower` carry floors the Net (`≥`) and ceilings the price (`≤`) — the
-  direction peak capital already takes, which is the glyph the detail page marks the figure with.
+- **Whether a `bounded` Net bounds this price, and which way:** `net_verdict` in
+  `portfolio/performance.py`, read on the page in `web/src/modules/portfolio/bound.js`.
+  `price × rate × units ≡ mv_sgd − Net` with mv, rate and units exact — only the Net's side of
+  that identity carries the doubt. The mark is the glyph peak capital already takes.
   `provenance` is whole-ticker and names no bucket, so every column of a bounded ticker takes the
   mark — including a bucket the carry never touched, an open call recorded on the renderer rather
   than guarded. The partition's opposite doubt never meets it: `cost_basis_sgd` is null on any
@@ -453,16 +452,20 @@ pending after the leg stays `unknown`. No tolerance window, so no unargued N.
 
 ```text
 refuse   ⟺  costed == 0 ∧ unknown > 0
-bounded  ⟸  a split carry reached the name — overrides hero, and caveat unless the carry
-             is `lower` (opposite doubts, below); never refuse
+bounded  ⟸  a split carry reached the name — never `refuse`. When it overrides
+             `hero` or `caveat`, and the direction: `net_verdict` in
+             `portfolio/performance.py`.
 caveat   ⟺  costed > 0  ∧ unknown > 0
 hero     ⟺  unknown == 0
 ```
 
-| | cause | tiles | direction |
-|---|---|---|---|
-| `caveat` | some units have **no** cost | **null** | upper, or **neither** under a `lower` carry |
-| `bounded` | the **total is mis-attributed** | **kept** | lower *or* upper |
+| | cause | tiles |
+|---|---|---|
+| `caveat` | some units have **no** cost | **null** |
+| `bounded` | the **total is mis-attributed** | **kept** |
+
+Which way either row runs: `net_verdict` in `portfolio/performance.py`; the page reads it in
+`web/src/modules/portfolio/bound.js`.
 
 - **Tiles follow the partition, not the verdict**, so 9CI keeps `avg_cost: 3.73` while C38U — the
   one name carrying both doubts — still nulls its cost-basis family and reads `return_verdict:
@@ -476,16 +479,13 @@ hero     ⟺  unknown == 0
   reclassifying the holding to evidence the criterion is rejected. **Trigger:** the first
   ceiling-bounded name whose units are all costed. Recorded beside #158's other open calls in
   `web/TESTING.md`.
-- **Guarded (was #158's open call): a `lower` carry meeting unknown-cost units** ships `caveat`,
-  not `bounded`. The partition's doubt is always a ceiling and `upper` agrees with it, which is
-  why C38U's bound stands over its caveat; a `lower` carry pushes the other way, so the Net is
-  bounded in neither direction and the wire no longer promises one. The client reads the pair
-  (`caveat`, provenance `lower`) as "doubted both ways" in `web/src/modules/portfolio/bound.js`,
-  the one place that decides direction. Zero-instance on the live book (9CI has no unknown
+- **Guarded (was #158's open call): a `lower` carry meeting unknown-cost units.** What ships,
+  and which way that Net runs: `net_verdict` in `portfolio/performance.py`; the page reads it
+  in `web/src/modules/portfolio/bound.js`. Zero-instance on the live book (9CI has no unknown
   units); pinned by `tests/test_bounded_carry.py` and `web/tests/bound-direction.spec.js`.
   **Per-column caveat:** in that state no breakeven price is marked either, even a column whose
-  only doubt is the carry — the ticker's Net has no direction, and a marked price beside an
-  unmarked Net is the disagreement this rework removes.
+  only doubt is the carry — a marked price beside an unmarked Net is the disagreement this
+  rework removes.
 
 **`provenance`** ships on every row — null unless a carry reached the name, and whole-ticker like
 the verdict, so it rides every leg:
