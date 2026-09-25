@@ -13,8 +13,8 @@ from portfolio import dividends
 from portfolio.db import SessionLocal, fx_as_of, fx_map, session_scope, valuation_as_of
 from portfolio.money import rate_to_sgd, to_sgd
 from portfolio.options import trades_for
-from portfolio.performance import (alloc_by_account, cdp_transactions, compute_with_fx,
-                                   empty_group, fold_ticker, is_leg, rollup)
+from portfolio.performance import (CDP_ACCOUNT, alloc_by_account, cdp_transactions,
+                                   compute_with_fx, empty_group, fold_ticker, is_leg, rollup)
 from sqlalchemy import text
 
 router = APIRouter()
@@ -180,14 +180,14 @@ def ticker_ledger(s, ticker):
     literal did not list. The `cdp_transactions()` rows carry an account name and no bucket, so
     they take theirs from the same table, by name.
 
-    `a.name <> 'CDP'` stays: CDP's statement rows are month-end unit diffs, and its priced
+    `a.name <> CDP_ACCOUNT` stays: CDP's statement rows are month-end unit diffs, and its priced
     trades arrive from `cdp_cost_lot` instead. Cash dividends booked as 0-qty `stock dividend`
     txns belong in the dividend history, not the ledger — they do not change the position."""
     txns = _dicts(s,
         "SELECT t.trade_date, a.name account, a.funding_bucket bucket, t.action, t.qty_signed, "
         "t.price, t.gross_amount, t.currency, t.source_file FROM txn t "
         "JOIN account a ON a.id=t.account_id JOIN security sec ON sec.id=t.security_id "
-        "WHERE sec.canonical_ticker=:tk AND a.name <> 'CDP' "
+        f"WHERE sec.canonical_ticker=:tk AND a.name <> '{CDP_ACCOUNT}' "
         "AND NOT (t.action ILIKE '%dividend%' AND t.qty_signed = 0)",
         {"tk": ticker})
     divs = _dicts(s,
@@ -272,11 +272,11 @@ def transactions(account: str | None = None, ticker: str | None = None, limit: i
     s = SessionLocal()
     # CDP transactions come from cdp-stocks (has price + amount); statements omit them
     rows = []
-    if account != "CDP":                               # CDP comes only from cdp-stocks below
+    if account != CDP_ACCOUNT:                         # CDP comes only from cdp-stocks below
         q = ("SELECT t.trade_date, a.name account, s.canonical_ticker ticker, COALESCE(s.name,'') name, "
              "t.action, t.qty_signed, t.price, t.gross_amount, t.currency, t.source_file "
              "FROM txn t JOIN account a ON a.id=t.account_id JOIN security s ON s.id=t.security_id "
-             "WHERE a.name <> 'CDP'")
+             f"WHERE a.name <> '{CDP_ACCOUNT}'")
         p: dict = {}
         if account:
             q += " AND a.name=:acct"; p["acct"] = account
@@ -284,7 +284,7 @@ def transactions(account: str | None = None, ticker: str | None = None, limit: i
             q += " AND s.canonical_ticker=:tk"; p["tk"] = ticker
         rows = _dicts(s, q + " LIMIT 2000", p)
     s.close()
-    if account in (None, "CDP"):                       # add CDP from cdp-stocks
+    if account in (None, CDP_ACCOUNT):                 # add CDP from cdp-stocks
         cdp = cdp_transactions()
         if ticker:
             cdp = [r for r in cdp if r["ticker"] == ticker]

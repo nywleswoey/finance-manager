@@ -12,6 +12,35 @@ from portfolio.recurring import (_add_months, _add_period, _status, _infer_caden
                                  _is_weekend, _shift_business, _infer_shift)
 
 
+def test_card_sources_have_one_owner():
+    """Recurring detection, the cash classifier, and the model comment were three
+    lists. `dbs-cc` was missing from the comment; hsbc and trust were a second
+    tuple in the classifier."""
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "build"))
+    import classify_cash
+
+    from portfolio.recurring import _CARD_IN
+    from portfolio.spending import CARD_SOURCES
+
+    assert CARD_SOURCES == ("dbs-cc", "hsbc", "trust")
+    assert _CARD_IN == ", ".join(f"'{s}'" for s in CARD_SOURCES)
+
+    def row(source, amt):
+        return {"source": source, "account_label": "", "txn_date": "2024-01-01",
+                "post_date": "", "description": "x", "merchant": "SHOP",
+                "amount_sgd": amt, "fcy_amount": "", "fcy_currency": "",
+                "direction": "credit", "source_file": "", "raw": ""}
+
+    out, _ = classify_cash.classify([row("trust", "20"), row("hsbc", "20"),
+                                     row("dbs", "20"), row("dbs-cc", "-5")],
+                                    {"groups": {}, "income": {}}, {}, {}, [], {})
+    assert out[0]["exclude_reason"] == "cc_payment"
+    assert out[1]["exclude_reason"] == "cc_payment"
+    assert out[2]["exclude_reason"] == "income"
+    assert out[3]["is_spend"] == "true"
+
+
 class AddMonthsTest(unittest.TestCase):
     def test_simple(self):
         self.assertEqual(_add_months(dt.date(2026, 1, 15), 1), dt.date(2026, 2, 15))

@@ -2,11 +2,15 @@
 `from build._ledgercommon import ...`, the ingestion loaders).
 
 Holds the parse-layer primitives that every statement parser reimplemented inline:
-the `ALIAS`/`canon` counter-rename map, the `num` money parser, and the
-`norm_ticker` symbol normaliser. Kept import-free (only stdlib `re`) so it loads
-cleanly whether imported as a bare sibling (`python3 build/x.py`, build/ on
-sys.path[0]) or as a package member (`-m ingestion.x`, repo root on path).
+the `ALIAS`/`canon` counter-rename map, the `num` money parser, the
+`norm_ticker` symbol normaliser, `name_to_ticker` (display name to ticker, from
+symbols.csv), `market_of` (ticker shape to market), `MARKET_CCY`, and
+`TIGER_FEE_COLS`. Stdlib only, so it loads cleanly whether imported as a bare
+sibling (`python3 build/x.py`, build/ on sys.path[0]) or as a package member
+(`-m ingestion.x`, repo root on path).
 """
+import csv
+import os
 import re
 
 # Holdings.md label -> canonical SGX/exchange code used in transaction data.
@@ -16,6 +20,80 @@ ALIAS = {"QAF": "Q01", "CWBU": "SET", "C": "C52"}
 
 def canon(t):
     return ALIAS.get(t, t)
+
+
+# Market code -> the currency that market's statements quote. MY is in the map
+# because FSM books Bursa trades in MYR; a market this does not name has no currency.
+MARKET_CCY = {"SG": "SGD", "US": "USD", "HK": "HKD", "MY": "MYR"}
+
+# Per-trade fee columns in the Tiger flex Trades section. Summed by name, so a
+# file whose columns shift (2020 has 54, later files 53) still adds the same fees.
+TIGER_FEE_COLS = (
+    "Transaction Fee", "Other Tripartite fees", "Settlement Fee", "SEC Fee",
+    "Option Regulatory Fee", "Stamp Duty", "Transaction Levy", "Clearing Fee",
+    "Trading Activity Fee", "Exchange Fee", "Future Regulatory Fee", "Commission",
+    "Platform Fee", "Option Settlement Fee", "Subscription Fee", "Redemption Fee",
+    "Switching Fee", "PH Stock Transaction Tax", "Tax Service Fee", "AFRC Transaction Levy",
+    "Trading Tariff", "Brokerage fee", "Handing Fee", "Securities Management Fee",
+    "Transfer Fees (CSDC)", "Transfer Fees (HKSCC)", "Stamp Duty On Stock Borrowing",
+    "Consolidated Audit Trail Fee", "Processing Fee", "CM DA SI Fee", "DVP SI Fee",
+    "IPO Transaction Fee", "IPO Process Fee", "Ipo Settle Fee", "IPO Channel Fee", "GST",
+)
+
+
+def market_of(sym):
+    """Market implied by a ticker's shape, when the row itself did not say.
+
+    `.SI` is SG. An all-digit code, including one pulled out of a trailing
+    `(00823)`, is HK. A letters-and-dots code (`AAPL`, `BRK.B`) is US. Anything
+    else (`D05`, `C38U`, `9CI`) is SG — an SGX counter that arrived without `.SI`.
+
+    A letters-only SGX code (`SET`) is indistinguishable from a US ticker by
+    shape. A caller that already has a market (the ledger, an option leg) keeps
+    that and does not consult this.
+    """
+    s = "" if sym is None else str(sym).strip()
+    if re.search(r"\.SI\b", s, re.I):
+        return "SG"
+    inner = s.split("(")[-1].strip(") ").strip()
+    code = re.sub(r"\.(US|HK)$", "", inner or s, flags=re.I).strip()
+    if code.isdigit():
+        return "HK"
+    if re.fullmatch(r"[A-Za-z.]+", code):
+        return "US"
+    return "SG"
+
+
+_NAME_TO_TICKER = None
+
+
+def _symbol_names():
+    """display name (casefolded) -> canonical ticker, from symbols.csv `names`."""
+    global _NAME_TO_TICKER
+    if _NAME_TO_TICKER is None:
+        path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                            "symbols.csv")
+        out = {}
+        with open(path, newline="") as fh:
+            for r in csv.DictReader(fh):
+                for a in (r.get("names") or "").split(";"):
+                    a = a.strip()
+                    if not a or "(label" in a:
+                        continue
+                    out.setdefault(a.casefold(), r["canonical"])
+        _NAME_TO_TICKER = out
+    return _NAME_TO_TICKER
+
+
+def name_to_ticker(name):
+    """Canonical ticker for a statement display name, read from symbols.csv.
+
+    Case-insensitive. A name the CSV does not carry returns None; callers fall
+    back only for those. `(label alias)` cells are codes, not names.
+    """
+    if not name:
+        return None
+    return _symbol_names().get(str(name).strip().casefold())
 
 
 def num(s):

@@ -11,29 +11,9 @@ import glob, os, re
 
 from _pdf import raw_text
 from _csvout import write_rows
+from _ledgercommon import name_to_ticker
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "cdp-statements")
-
-# CDP display name -> SGX code (current holdings confirmed; historical best-effort)
-# CDP display name -> canonical SGX code. Renamed securities map to ONE code so the
-# snapshot-diff treats a rename as continuity (no spurious sell+rebuy):
-#   AIMSAMP CAP REIT == AIMS APAC REIT == O5RU
-#   CROMWELL/STONEWEG European REIT (all variants) == CWBU
-NAME2CODE = {
-    "HOCK LIAN SENG": "J2T", "HYPHENS PHARMA": "1J5", "JUMBO": "42R",
-    "OCBC BANK": "O39", "QAF": "Q01", "SASSEUR REIT": "CRPU",
-    "AIMSAMP CAP REIT": "O5RU", "AIMS APAC REIT": "O5RU",
-    "CENTURION": "OU8", "DBS": "D05", "GUOCOLAND": "F17", "HRNETGROUP": "CHZ",
-    "SINGTEL": "Z74", "ASIAN PAY TV TR": "S7OU", "ADVANCER GLOBAL": "43Q",
-    "NETLINK NBN TR": "CJLU", "RAFFLES MEDICAL": "BSL", "SOILBUILDBIZREIT": "SV3U",
-    "STARHILLGBL REIT": "P40U", "TOP GLOVE": "BVA",
-    "STONEWEG EUTRUST": "CWBU", "STONEWEG REIT EU": "CWBU",
-    "CROMWELL REIT EU": "CWBU", "CROMWELLREIT EUR": "CWBU",
-    "EAGLE HTRUST USD": "LIW", "MANULIFEREIT USD": "BTOU",
-    "NORDIC": "MR7", "SILVERLAKE AXIS": "5CP", "UMS": "558",
-    "ACCORDIA GOLF TR": "ADQU", "ACCORDIA GOLF TR (SUSP)": "ADQU",
-    "ASTREAVIB310318": "ASTREA6B",
-}
 ROW = re.compile(r"^\s*([A-Z0-9][A-Z0-9 &.\-/()']+?)\s+([\d,]+)\s+(NIL|[\d,]+)\s+([\d,]+)\s+[\d,]+\.\d+\s+[\d,]+\.\d+\s*$")
 
 def f(s): return float(s.replace(",", ""))
@@ -59,21 +39,26 @@ def parse(path):
     return ym, out
 
 def code_of(name):
-    return NAME2CODE.get(name, re.sub(r"[^A-Z0-9]", "", name.upper())[:8] or "?")
+    """Canonical ticker for a CDP statement name. symbols.csv owns the map;
+    a name it does not carry falls back to a squashed code so the row is visible."""
+    return name_to_ticker(name) or re.sub(r"[^A-Z0-9]", "", name.upper())[:8] or "?"
 
 def main():
-    snaps = {}; label = {}
+    snaps = {}; label = {}; unmapped = set()
     for p in sorted(glob.glob(os.path.join(DATA, "*.pdf"))):
         ym, hold = parse(p)
         if not hold: continue
         # collapse names -> canonical code, summing same-code rows within the month
         bycode = {}
         for name, bal in hold.items():
-            c = code_of(name); bycode[c] = bycode.get(c, 0) + bal; label[c] = name
+            c = code_of(name)
+            if name_to_ticker(name) is None:
+                unmapped.add(name)
+            bycode[c] = bycode.get(c, 0) + bal; label[c] = name
         snaps[ym] = bycode
     months = sorted(snaps)
     codes = sorted({c for h in snaps.values() for c in h})
-    unmapped = sorted({c for c in codes if c not in NAME2CODE.values()})
+    unmapped = sorted(unmapped)
     # snapshot-diff per CANONICAL CODE -> events (renames are now continuous)
     ev = []
     for c in codes:
@@ -89,7 +74,7 @@ def main():
             elif seen and prev:                      # dropped out of holdings -> exited
                 ev.append((mo, c, "sell/transfer_out", -prev)); prev = 0.0
     print(f"CDP statements: {len(months)} ({months[0]}..{months[-1]}), securities (by code): {len(codes)}")
-    if unmapped: print("UNMAPPED codes (review):", unmapped)
+    if unmapped: print("UNMAPPED names (review):", unmapped)
     print("\n=== CDP timeline (snapshot-diff, by canonical code) ===")
     for mo, c, act, q in ev:
         print(f"  {mo}  {c:8} {label.get(c,''):20} {act:18} {q:>+9.0f}")

@@ -88,7 +88,7 @@ def cdp_transactions(session=None):
             "SELECT trade_date, ticker, stock_name, action, qty, unit_price, amount, currency "
             "FROM cdp_cost_lot ORDER BY trade_date")).mappings().all()
     return [{
-        "trade_date": r["trade_date"].isoformat() if r["trade_date"] else None, "account": "CDP",
+        "trade_date": r["trade_date"].isoformat() if r["trade_date"] else None, "account": CDP_ACCOUNT,
         "ticker": r["ticker"], "name": r["stock_name"] or "", "action": r["action"] or "",
         "qty_signed": float(r["qty"] or 0),
         "price": _f(r["unit_price"]),
@@ -96,6 +96,8 @@ def cdp_transactions(session=None):
         "currency": r["currency"] or "SGD", "source_file": "cdp-stocks/transactions.csv",
     } for r in rows]
 
+
+CDP_ACCOUNT = "CDP"  # account.name of the SGX CDP custodian
 
 # CDP rows that move stock between custodians rather than trade it. The CSV records these at
 # market value with a POSITIVE Amount (the 2020-03-19 CDP->FSM migration of D05 and O5RU), which
@@ -142,6 +144,7 @@ CASH_TRADE = {"buy", "sell", "open market", "ipo", "private placement",
 ZERO_CASH = {"transfer_in", "transfer_out", "gift_in", "gifted stock in", "gifted stock out",
              "bonus", "bonus issuance", "scrip", "script dividend", "scrip dividend",
              "corp action", "corp_action", "open", "open/transfer_in", "transfer in",
+             "transfer out",   # spaced spelling the CPF/SRS CSVs emit
              "sell/transfer_out", "sell/transfer", "stock dividend",
              "switch_in"}      # fund-switch IN leg: units only; cost carries from predecessor
 # The zero-cash actions whose free-ness is not in doubt: the broker's own word for a gift or a
@@ -163,9 +166,8 @@ PRICED_CORP_ACTION = {"corp action", "corp_action"}
 # a dated replay has to be able to pick one out of the series. Built from CDP_TRANSFER rather than
 # re-listing its spellings: a fifth spelling should land in one place, not two. Resolved here,
 # once, rather than left for every reader to re-derive — re-deriving a rule that already exists is
-# how the options P/L went wrong. Every member but `transfer out` is also in ZERO_CASH; that one
-# is a standing gap in ZERO_CASH (classify() calls it `unknown`), not a disagreement introduced
-# here — the leg moves stock either way.
+# how the options P/L went wrong. Every member is also in ZERO_CASH, the spaced
+# `transfer out` included. The leg moves stock either way.
 STOCK_MOVING_LEG = CDP_TRANSFER | {"open/transfer_in", "sell/transfer_out", "sell/transfer",
                                    "gift_in", "gifted stock in", "gifted stock out", "switch_in"}
 # a fund fee paid by redeeming units (Endowus). No cash leaves the investor's pocket, so the
@@ -481,7 +483,7 @@ def _apply_units(p, r, kind, today, annotations):
     day = r["trade_date"] or today
     if qty > 0:
         p["units_in"] += qty                       # GROSS units in; a sale subtracts nothing
-        if r["account"] == "CDP":
+        if r["account"] == CDP_ACCOUNT:
             p["cdp_units_in"] += qty               # matched against the cost pool, not per row
             p["entries"].append(EntryLot(day, qty, "cdp"))
             return
@@ -503,7 +505,7 @@ def _apply_units(p, r, kind, today, annotations):
         # later transfer in draws on — see cost_partition. Keyed on #147's STOCK_MOVING_LEG
         # rather than a second list of the same spellings: "moved stock rather than traded it" is
         # this rule's premise too, and a sixth spelling should land in one place. It is also the
-        # sharper set — it catches `transfer out` (a standing gap in ZERO_CASH) and declines a
+        # sharper set — it includes the spaced `transfer out`, and it declines a
         # negative `corp action`, which removes units in a consolidation and backs nothing.
         p["transfer_out_units"] += -qty
 
@@ -889,7 +891,7 @@ def _trade_dated_units(p):
         if i in drop or abs(e.qty) < 1e-9:
             continue
         day = e.date
-        cands = lots.get(round(e.qty, 6)) if e.account == "CDP" else None
+        cands = lots.get(round(e.qty, 6)) if e.account == CDP_ACCOUNT else None
         if cands:
             day = min(cands, key=lambda d: abs((d - e.date).days))
             cands.remove(day)
@@ -1374,7 +1376,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
         p["accounts"].add(r["account"])
         kind = classify(r["action"], _f(r["price"]))   # classified once; both folds read it
         _apply_units(p, r, kind, today, annotations)
-        if r["account"] == "CDP":
+        if r["account"] == CDP_ACCOUNT:
             continue                                   # CDP cost comes from cdp-stocks below
         unk = _apply_txn(p, r, kind, today)
         if unk is not None:
@@ -1394,7 +1396,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
     for tk, c in cdp.items():
         sid = sec_by_ticker.get(tk)
         k = ("cash", sid)
-        if sid is None or k not in pos or "CDP" not in pos[k]["accounts"]:
+        if sid is None or k not in pos or CDP_ACCOUNT not in pos[k]["accounts"]:
             continue
         pos[k]["flows"].extend(c["flows"])
         pos[k]["invested"] += c["invested"]

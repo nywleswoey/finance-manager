@@ -110,7 +110,6 @@ class Txn(Base):
     gross_amount: Mapped[Decimal | None] = mapped_column(MONEY)
     fees: Mapped[Decimal | None] = mapped_column(MONEY)
     currency: Mapped[str | None] = mapped_column(String(3))
-    funding_bucket: Mapped[str | None] = mapped_column(String(8))
     source_file: Mapped[str | None] = mapped_column(String(256))
     raw: Mapped[str | None] = mapped_column(Text)
     batch_id: Mapped[int | None] = mapped_column(ForeignKey("import_batch.id"))
@@ -150,7 +149,7 @@ class CashTxn(Base):
     """
     __tablename__ = "cash_txn"
     id: Mapped[int] = mapped_column(primary_key=True)
-    source: Mapped[str] = mapped_column(String(8))                    # dbs | hsbc | trust
+    source: Mapped[str] = mapped_column(String(8))                    # bank 'dbs', or portfolio.spending.CARD_SOURCES
     account_label: Mapped[str] = mapped_column(String(32))            # DBS | HSBC Live+ | Trust
     txn_date: Mapped[dt.date | None] = mapped_column(Date, index=True)
     post_date: Mapped[dt.date | None] = mapped_column(Date)

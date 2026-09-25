@@ -64,8 +64,8 @@ def test_transfer_legs_do_not_book_proceeds_or_pl():
     fully-held position. The transfer must not read as a sale (no proceeds, no realised P/L)."""
     # the ledger's own spellings, which matter now that the partition reads them (#148): the
     # out leg is the cover the in leg draws on, so the re-entering units are costed rather than
-    # a second unpriced lot — and the components stay knowable (#149). `transfer out`, with a
-    # space, is a standing gap in ZERO_CASH and lives only in `cdp_cost_lot`.
+    # a second unpriced lot — and the components stay knowable (#149). The spaced
+    # `transfer out` is zero cash; this row uses the slash spelling.
     txns = [_txn(action="buy", qty_signed=100, price=10.0),
             _txn(action="sell/transfer_out", qty_signed=-100, price=15.0),  # positive-value move
             _txn(action="transfer_in", qty_signed=100, price=15.0)]
@@ -73,6 +73,25 @@ def test_transfer_legs_do_not_book_proceeds_or_pl():
     assert r["units"] == 100.0
     assert r["realised_pl_sgd"] == 0.0              # nothing was actually sold
     assert r["unrealised_pl_sgd"] == 200.0          # cost basis survived the round trip
+
+
+def test_spaced_transfer_out_is_not_an_unclassified_warning(caplog):
+    """CPF/SRS CSVs emit `transfer out`. classify() used to return unknown, and
+    every compute then logged `unclassified txn action(s)`. The units already
+    moved through STOCK_MOVING_LEG; the cash leg is zero either way."""
+    import logging
+    with caplog.at_level(logging.WARNING, logger="portfolio.performance"):
+        r = _only(_fold([
+            _txn(action="buy", qty_signed=100, price=10.0),
+            _txn(action="transfer out", qty_signed=-100, price=15.0,
+                 trade_date=D(2020, 6, 1)),
+        ], price={10: 12.0}))
+    assert r["units"] == 0.0
+    # A sale of the same 100 at 15 would realise +500. Zero cash writes the cost
+    # off with the units instead of booking the 15 as proceeds — same cash as
+    # the old `unknown` classification, without the warning.
+    assert r["realised_pl_sgd"] == -1000.0
+    assert not any("unclassified" in m for m in caplog.messages)
 
 
 def test_dividend_income_folds_in():

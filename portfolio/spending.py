@@ -67,6 +67,13 @@ def _rows(s, sql, p):
 #: in summary()'s total_sgd, because they are spend — see that function's note.
 DATED = "txn_date IS NOT NULL"
 
+# Credit-card statement sources. `dbs` is the bank account, not a card.
+# `ITEMISED_CARD` is the line-item statement; the other members are the card bill.
+# One tuple so the recurring detector, the cash classifier, and the cash_txn
+# comment cannot drift.
+ITEMISED_CARD = "dbs-cc"
+CARD_SOURCES = (ITEMISED_CARD, "hsbc", "trust")
+
 
 def summary(frm=None, to=None, s=None):
     """Totals + category / subcategory / month breakdowns for the `frm`/`to` date window.

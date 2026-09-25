@@ -20,8 +20,6 @@ from portfolio.db import SessionLocal
 from portfolio.models import Account, Dividend, ImportBatch, Security, SecurityAlias, Txn
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
-BUCKET = {"Tiger Prime": "cash", "Tiger Cash Boost": "cash", "Moomoo": "cash",
-          "FSM": "cash", "CDP": "cash", "CPF": "cpf", "SRS": "srs"}
 
 # ledger 'account' values that aren't real tracked accounts (dups/superseded/legacy) -> skip
 SKIP_ACCT = ("superseded", "dup", "Vickers", "Tiger-archive")
@@ -131,7 +129,7 @@ def load_ledger(session, acct, alias):
             account_id=a.id, security_id=sid, trade_date=pdate(r["date"]),
             action=r["action"], qty_signed=num(r["qty_signed"]) or 0,
             price=num(r["price"]), gross_amount=num(r["amount"]), fees=num(r.get("fees")),
-            currency=(r["currency"] or None), funding_bucket=BUCKET.get(r["account"]),
+            currency=(r["currency"] or None),
             source_file=r["source"], raw=r["raw"], batch_id=b.id, dedup_hash=dh,
         ))
     _report_dropped(dropped)

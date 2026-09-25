@@ -325,3 +325,58 @@ def test_fetch_collects_performance_warnings_and_refreshes_only_the_all_cache(mo
     assert main._cache == {"rows": "still cached", "all": "fresh"}
     assert not any(isinstance(h, al._WarningCollector)
                    for h in logging.getLogger("portfolio").handlers)
+
+
+def test_fetch_hands_the_fold_every_corporate_action(monkeypatch):
+    """compute() counts a split over every corporate_action row, carry type or not.
+    Filtering to the five carry types dropped C31's distribution, so the audit's
+    own accumulators did not see that C31 is a split."""
+    from portfolio import cost_annotations, db, options, performance
+    from server import main
+
+    class Result:
+        def __init__(self, rows):
+            self._rows = rows
+
+        def all(self):
+            return self._rows
+
+        def mappings(self):
+            return self
+
+        def scalar(self):
+            return 0
+
+    class Session:
+        def execute(self, sql):
+            if "from_ticker" in str(sql):
+                return Result([("C31", "9CI", "split"), ("C31", "C38U", "distribution")])
+            return Result([])
+
+    @contextmanager
+    def session_scope():
+        yield Session()
+
+    seen = {}
+
+    def accumulate(txns, divs, cdp, corp, today, ann):
+        seen["corp"] = [tuple(c) for c in corp]
+        return {}, {}
+
+    monkeypatch.setattr(cost_annotations, "annotation_map", lambda: {})
+    monkeypatch.setattr(db, "session_scope", session_scope)
+    monkeypatch.setattr(db, "valuation_as_of", lambda _: None)
+    monkeypatch.setattr(db, "fx_as_of", lambda _: None)
+    monkeypatch.setattr(options, "contracts_by_ticker", lambda: {})
+    monkeypatch.setattr(options, "realized_by_ticker", lambda: {})
+    monkeypatch.setattr(performance, "compute", lambda: [])
+    monkeypatch.setattr(performance, "cdp_cost", lambda _: {})
+    monkeypatch.setattr(performance, "_fx_and_price", lambda _: ({}, {}))
+    monkeypatch.setattr(performance, "_accumulate_positions", accumulate)
+    monkeypatch.setattr(performance, "legs_by_ticker", lambda *args: {})
+    monkeypatch.setattr(main, "performance", lambda *, by: {by: {}})
+    main._cache.clear()
+
+    al.fetch()
+
+    assert seen["corp"] == [("C31", "9CI", "split"), ("C31", "C38U", "distribution")]

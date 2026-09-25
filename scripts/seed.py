@@ -13,6 +13,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import func, select
 
+from build._ledgercommon import MARKET_CCY, market_of
 from portfolio.db import SessionLocal
 from portfolio.models import Account, CorporateAction, Security, SecurityAlias
 
@@ -42,7 +43,6 @@ ASSET_TYPE = {"0P0001OOJG": "fund", "0P00006FYT": "fund"}
 # symbols.csv records it as an alias of SET. Membership is tested against canonicals.
 REITS = {"O5RU", "C38U", "UD1U", "N2IU", "CRPU", "SET", "BTOU", "S7OU", "P40U",
          "SV3U", "ADQU", "HMN", "9CI", "CMOU", "LIW", "H78", "CJLU"}
-CCY = {"US": "USD", "HK": "HKD", "SG": "SGD", "MY": "MYR"}
 
 # ticker code changes / restructures (PLAN.md)
 CORP_ACTIONS = [
@@ -159,11 +159,13 @@ def main():
     canon = {c for c in canon if is_security(c) and not c.startswith("SGXZ")}  # skip options + T-bills
 
     for c in sorted(canon):
-        market = mkt.get(c) or opt_mkt.get(c) or ("HK" if c.isdigit() else "SG")
+        # The ledger (then an option leg) is the market. market_of is only the
+        # shape fallback for a ticker neither of those has seen.
+        market = mkt.get(c) or opt_mkt.get(c) or market_of(c)
         name = NAME.get(c) or (syms.get(c, {}).get("name")) or raw_names.get(c) or c
         atype = ASSET_TYPE.get(c) or ("reit" if c in REITS else "stock")
         sec = upsert(s, Security, {"canonical_ticker": c},
-                     name=name, market=market, asset_type=atype, currency=CCY.get(market))
+                     name=name, market=market, asset_type=atype, currency=MARKET_CCY.get(market))
         s.flush()
         aliases = syms.get(c, {}).get("aliases", set()) | {c, NAME.get(c, "")}
         for a in {a for a in aliases if a}:
