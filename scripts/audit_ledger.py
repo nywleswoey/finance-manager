@@ -229,10 +229,11 @@ class Settled:
     fx: dict = dataclasses.field(default_factory=lambda: {"USD": 1.281, "HKD": 0.1633})
     # (ticker, unknown share of entering units) — #143 §11
     caveat: list = dataclasses.field(default_factory=lambda: [
-        ("S51", 0.400), ("SET", 0.279), ("Q01", 0.250), ("C38U", 0.075)])
+        ("S51", 0.400), ("SET", 0.279), ("C38U", 0.075)])
     # #143 §7, after #138 moved C38U's 417 from free to unknown
+    # and #199 moved Q01's 17,000 from unknown to costed (derived, not re-measured)
     partition: dict = dataclasses.field(default_factory=lambda: {
-        "units_in": 1_574_652, "costed": 1_521_274, "free": 545, "unknown": 52_833})
+        "units_in": 1_574_652, "costed": 1_538_274, "free": 545, "unknown": 35_833})
     # #143 §8 — read under the definition in force when #137 measured it
     cost_known_false: list = dataclasses.field(default_factory=lambda: [
         "0P00006FYT", "AAPL", "AMZN", "ASTREA6B", "C31", "HMN"])
