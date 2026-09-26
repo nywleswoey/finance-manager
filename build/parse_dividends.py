@@ -47,7 +47,8 @@ def tiger_currency(sym, explicit):
 def tiger():
     for pat, acct in [("tiger-prime/*.csv", "Tiger Prime"),
                       ("tiger-cash-boost/*.csv", "Tiger Cash Boost")]:
-        for f in glob.glob(os.path.join(DATA, pat)):
+        # sorted: the loader's dedup_hash numbers same-day rows of one ticker in file order
+        for f in sorted(glob.glob(os.path.join(DATA, pat))):
             for row in csv.reader(open(f, encoding="utf-8-sig")):
                 if not (row and row[0] == "Dividends" and len(row) > 10 and row[3] == "DATA"):
                     continue
@@ -222,6 +223,7 @@ def apply_corrections():
             d["units"], d["rate"] = CORRECTIONS[k]
 
 def main():
+    DIV.clear()
     # cdp() last: dedups vs the rest
     tiger(); fsm(); moomoo(); cpf_srs(); cdp(); apply_corrections()
     out = os.path.join(HERE, "dividends.csv")
@@ -238,6 +240,7 @@ def main():
     bysrc = defaultdict(int)
     for d in DIV: bysrc[d["source"]] += 1
     print("\nby source:", dict(bysrc))
+    return DIV
 
 
 if __name__ == "__main__":

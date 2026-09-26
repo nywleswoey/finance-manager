@@ -11,12 +11,10 @@ import glob, os, re
 
 from _pdf import raw_text
 from _csvout import write_rows
-from _ledgercommon import name_to_ticker
+from _ledgercommon import name_to_ticker, num
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "cdp-statements")
 ROW = re.compile(r"^\s*([A-Z0-9][A-Z0-9 &.\-/()']+?)\s+([\d,]+)\s+(NIL|[\d,]+)\s+([\d,]+)\s+[\d,]+\.\d+\s+[\d,]+\.\d+\s*$")
-
-def f(s): return float(s.replace(",", ""))
 
 def parse(path):
     mo = re.search(r"(\d{6})", path).group(1)
@@ -35,7 +33,7 @@ def parse(path):
         if not m: continue
         name = m.group(1).strip()
         if name in ("Security", "Main Balance"): continue
-        out[name] = f(m.group(4))           # Balance column
+        out[name] = num(m.group(4))           # Balance column
     return ym, out
 
 def code_of(name):

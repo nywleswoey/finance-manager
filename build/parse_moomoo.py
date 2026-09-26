@@ -12,6 +12,7 @@ import glob, os, re
 
 from _pdf import raw_text
 from _csvout import write_csv
+from _ledgercommon import num
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 NUM = r"[+\-]?[\d,]+(?:\.\d+)?"
@@ -19,9 +20,6 @@ NUM = r"[+\-]?[\d,]+(?:\.\d+)?"
 #  change-table  (11 nums): startQ startP startV endQ endP endV dV buyQ sellQ tin tout  -> endQ = nums[3]
 #  holdings-table (8 nums): settledQ unsettledQ Qty mult price mktVal fx ccySGD          -> endQ = nums[2]
 ROW = re.compile(r"^\s*(SGX|US|HK|SEHK|NYSE|NASDAQ)\s+([A-Z]{3})\s+((?:" + NUM + r"\s+){7,12}" + NUM + r")\s*$")
-
-def f2(s):
-    return float(s.replace(",", "").replace("+", "")) if s not in ("", "-") else 0.0
 
 def parse(path):
     """Return list of (month, ticker, market, endQ) snapshots."""
@@ -35,7 +33,7 @@ def parse(path):
         if not m:
             continue
         exch, ccy = m.group(1), m.group(2)
-        nums = [f2(x) for x in m.group(3).split()]
+        nums = [num(x) for x in m.group(3).split()]
         if len(nums) == 11:      endQ = nums[3]
         elif 8 <= len(nums) <= 9: endQ = nums[2]
         else:                    continue
@@ -72,7 +70,7 @@ def trades(path):
                     tk = first
         ym = re.search(r"(\d{6})", path).group(1)
         out.append({"ym": f"{ym[:4]}-{ym[4:]}", "ticker": tk,
-                    "qty": f2(qty), "price": f2(price), "amount": f2(amount),
+                    "qty": num(qty), "price": num(price), "amount": num(amount),
                     "buy": direction.startswith("Buy")})
     return out
 

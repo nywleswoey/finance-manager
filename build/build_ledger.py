@@ -226,13 +226,22 @@ def load_cdp():
             ticker=canon(code.upper()), asset_type="stock", action=r["action"],
             qty_signed=float(r["qty_signed"]), source="cdp-statements (pdf)", raw=r["name"])
 
-# ---------- Endowus (CPF/SRS/Cash funds — from parse_endowus.py snapshot-diff) ----------
-ENDOWUS_BUCKET = {"CPF OA": "CPF", "CPF SA": "CPF", "SRS": "SRS", "Cash": "Tiger Prime"}
+# ---------- Endowus (CPF/SRS funds — from parse_endowus.py snapshot-diff) ----------
+# Endowus funding column -> ledger account. A cash-funded Endowus portfolio has no ledger
+# account of its own; guessing one (it used to fall through to CPF) books the fund into the
+# wrong bucket without a word, so an unmapped funding source stops the build instead.
+ENDOWUS_BUCKET = {"CPF OA": "CPF", "CPF SA": "CPF", "SRS": "SRS"}
+def endowus_account(src):
+    if src not in ENDOWUS_BUCKET:
+        raise SystemExit(f"endowus_events.csv: funding source {src!r} has no ledger account "
+                         f"-> seed one (scripts/seed.py) and map it in ENDOWUS_BUCKET")
+    return ENDOWUS_BUCKET[src]
+
 def load_endowus():
     p = os.path.join(os.path.dirname(__file__), "endowus_events.csv")
     if not os.path.exists(p): return
     for r in csv.DictReader(open(p)):
-        acct = ENDOWUS_BUCKET.get(r["src"], "CPF")
+        acct = endowus_account(r["src"])
         qty = float(r["qty_signed"])
         act = r["action"]
         # the snapshot-diff records a magnitude. Endowus takes its advisory fee in units,
@@ -300,20 +309,31 @@ def reconcile_transfer_amounts():
             i["price"]  = m["price"]   # keep price x qty consistent (avg cost)
 
 # ---------- run ----------
-load_simple(); load_tiger(); load_fsm(); load_moomoo(); load_cdp(); load_endowus()
-synthesize_transfer_ins()
-reconcile_transfer_amounts()
-LEDGER.sort(key=lambda r: (str(r["date"]), r["account"], r["ticker"]))
-
-# write ledger.csv
-cols = ["date","account","market","ticker","asset_type","action","qty_signed",
+COLS = ["date","account","market","ticker","asset_type","action","qty_signed",
         "price","amount","currency","fees","source","raw"]
-out = os.path.join(os.path.dirname(__file__), "ledger.csv")
-write_csv(out, cols, LEDGER, extrasaction="ignore")
-print(f"ledger rows: {len(LEDGER)} -> {out}")
 
-# coverage / file inventory
-print("\n=== SOURCE COVERAGE ===")
-src = defaultdict(int)
-for r in LEDGER: src[r["source"]] += 1
-for k in sorted(src): print(f"{src[k]:5}  {k}")
+def build():
+    """Every source into LEDGER, custody moves reconciled, date-sorted. Returns LEDGER."""
+    LEDGER.clear()
+    load_simple(); load_tiger(); load_fsm(); load_moomoo(); load_cdp(); load_endowus()
+    synthesize_transfer_ins()
+    reconcile_transfer_amounts()
+    LEDGER.sort(key=lambda r: (str(r["date"]), r["account"], r["ticker"]))
+    return LEDGER
+
+def main():
+    build()
+    out = os.path.join(os.path.dirname(__file__), "ledger.csv")
+    write_csv(out, COLS, LEDGER, extrasaction="ignore")
+    print(f"ledger rows: {len(LEDGER)} -> {out}")
+
+    # coverage / file inventory
+    print("\n=== SOURCE COVERAGE ===")
+    src = defaultdict(int)
+    for r in LEDGER: src[r["source"]] += 1
+    for k in sorted(src): print(f"{src[k]:5}  {k}")
+    return LEDGER
+
+
+if __name__ == "__main__":
+    main()

@@ -6,7 +6,6 @@ This bridges the current parser outputs into the DB before parsers are rewritten
 write directly. Run:  PYTHONPATH=. .venv/bin/python -m ingestion.load
 """
 import csv
-import datetime as dt
 import hashlib
 import os
 import sys
@@ -16,6 +15,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from build._dates import try_date
 from portfolio.db import SessionLocal
 from portfolio.models import Account, Dividend, ImportBatch, Security, SecurityAlias, Txn
 
@@ -48,23 +48,22 @@ def occ_hash(occ, key):
 
 
 def pdate(s):
-    s = (s or "").strip()
-    for f in ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y-%m"):
-        try:
-            return dt.datetime.strptime(s, f).date()
-        except ValueError:
-            pass
-    return None
+    return try_date(s, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y-%m"))
 
 
 def num(s):
+    """The None-sentinel sibling of build._ledgercommon.num: a blank or unparseable cell is
+    NULL, not 0.0, because it feeds nullable DB columns (a missing price is not a free trade).
+    Same cell grammar otherwise: thousands separators and `$` stripped, `(1.23)` is -1.23."""
     s = str(s or "").replace(",", "").replace("$", "").strip()
     if s in ("", "-"):
         return None
+    neg = s.startswith("(") and s.endswith(")")
     try:
-        return float(s)
+        v = float(s.strip("()"))
     except ValueError:
         return None
+    return -v if neg else v
 
 
 def maps(session):
@@ -86,19 +85,20 @@ def batch(session, source, name, rows_in):
     return b
 
 
-def _report_dropped(dropped):
-    """Ledger rows that couldn't be placed. An unseeded ticker is the common one, and it is
+def _report_dropped(dropped, what="ledger"):
+    """Rows that couldn't be placed. An unseeded ticker is the common one, and it is
     indistinguishable from 'you don't own that' once the load finishes — so name it here."""
     if not dropped:
         return
     tickers = sorted(v for (kind, v) in dropped if kind == "ticker")
     accounts = sorted(v for (kind, v) in dropped if kind == "account")
     total = sum(dropped.values())
-    print(f"⚠️  ledger: dropped {total} row(s) that could not be resolved")
+    print(f"⚠️  {what}: dropped {total} row(s) that could not be resolved")
     if tickers:
         print(f"    unseeded ticker(s): {', '.join(tickers)}  -> add to symbols.csv, then `make seed`")
     if accounts:
-        print(f"    unknown account(s): {', '.join(accounts)}  -> add to scripts/seed.py or SKIP_ACCT")
+        skip = " or SKIP_ACCT" if what == "ledger" else ""     # only the ledger consults it
+        print(f"    unknown account(s): {', '.join(accounts)}  -> add to scripts/seed.py{skip}")
 
 
 def load_ledger(session, acct, alias):
@@ -142,13 +142,18 @@ def load_dividends(session, acct, alias):
         return 0
     rows = list(csv.DictReader(open(p)))
     b = batch(session, "dividends", "build/dividends.csv", len(rows))
-    payload, occ = [], Counter()
+    payload, occ, dropped = [], Counter(), Counter()
     for r in rows:
         a = acct.get(r["account"])
-        sid = alias.get(r["ticker"])
+        sid = alias.get(r["ticker"])       # an unmapped ticker is kept (flagged in the UI)
         if not a:
+            dropped[("account", r["account"])] += 1
             continue
-        key = (r["account"], r["ticker"], r["date"], r["gross"], r["source"])
+        # Same policy as the txn key: the stable natural key only, no amount. A corrected
+        # gross then updates the existing row (keeping its ex_date) instead of pruning it and
+        # inserting a fresh, ex_date-less one. occ separates same-day components of one
+        # ticker (a REIT's taxable + tax-exempt tranches), in file order.
+        key = (r["account"], r["ticker"], r["date"], r["source"])
         dh = occ_hash(occ, key)
         payload.append(dict(
             account_id=a.id, security_id=sid, pay_date=pdate(r["date"]), kind=r["kind"],
@@ -158,6 +163,7 @@ def load_dividends(session, acct, alias):
         ))
     # prune dividends that vanished from the CSV (e.g. dateless rows now reparsed with a date)
     prune_stale(session, Dividend, {p["dedup_hash"] for p in payload}, batch_id=b.id)
+    _report_dropped(dropped, "dividends")
     return upsert(session, Dividend, payload, ["gross", "net", "currency", "amount_per_unit", "units"])
 
 
