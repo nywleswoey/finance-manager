@@ -11,25 +11,16 @@ Run: PYTHONPATH=. .venv/bin/python tests/test_snapshot_ingest.py
 """
 import datetime as dt
 import io
-import os
-import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from decimal import Decimal
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import text
 
 from portfolio import networth as nw
-from portfolio.models import Base, NwItem, NwSnapshot, NwValue
+from portfolio.models import NwItem, NwSnapshot, NwValue
 from scripts import snapshot_from_statements as ingest
-
-
-def make_session():
-    eng = create_engine("sqlite://")
-    Base.metadata.create_all(eng)
-    return sessionmaker(bind=eng, future=True)()
+from tests.sqlitetest import make_session
 
 
 def items(*rows):

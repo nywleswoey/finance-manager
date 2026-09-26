@@ -12,14 +12,11 @@ and a skip when no server is up. Marked `pg` — `-m "not pg"` deselects the fil
 Run: make db-up && PYTHONPATH=. .venv/bin/python -m pytest tests/test_holding_pg.py -q
 """
 import datetime as dt
-import os
-import sys
 import unittest
 from decimal import Decimal
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from portfolio.db import fx_as_of
 from portfolio.models import Account, CdpCostLot, Dividend, FxRate, Security, Txn
 from server.main import ticker_ledger

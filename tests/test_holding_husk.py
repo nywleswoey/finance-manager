@@ -22,11 +22,8 @@ import datetime as dt
 from contextlib import contextmanager
 
 import pytest
-from fastapi.testclient import TestClient
 
 from portfolio import performance as perf
-from portfolio.config import settings
-from server import main
 from server.routes import portfolio as portfolio_routes
 
 D = dt.date
@@ -64,8 +61,6 @@ class _Reached(Exception):
 
 @pytest.fixture(autouse=True)
 def _stub(monkeypatch):
-    main._cache.clear()
-    monkeypatch.setattr(settings, "dev_auth_bypass", True)
     rows = _rows()
     # the fold generation: rows AND the rate their SGD figures were converted at. Stubbing
     # the pair is the only way to stub either — these rows are SGD, so the map is empty.
@@ -74,13 +69,6 @@ def _stub(monkeypatch):
     def _tripwire(*a, **k):
         raise _Reached
     monkeypatch.setattr(portfolio_routes, "session_scope", _tripwire)
-    yield
-    main._cache.clear()
-
-
-@pytest.fixture
-def client():
-    return TestClient(main.app)
 
 
 def test_the_fold_really_does_read_the_husk_as_a_hero():

@@ -12,19 +12,10 @@ from server import auth
 
 
 @pytest.fixture(autouse=True)
-def _cfg():
-    """Deterministic auth config for every test.
-
-    dev_auth_bypass is pinned like the rest: a developer's local .env sets DEV_AUTH_BYPASS=true,
-    which would otherwise short-circuit user_from_request and silently pass tests that exist to
-    prove the cookie/allowlist path denies. The tests that exercise the bypass turn it on
-    explicitly via monkeypatch."""
-    settings.session_secret = "test-secret-key"
-    settings.google_client_id = "test-client.apps.googleusercontent.com"
-    settings.allowed_emails = "yes@gmail.com, Owner@Gmail.com"
-    settings.cookie_secure = False
-    settings.dev_auth_bypass = False
-    yield
+def _cfg(auth_settings):
+    """conftest's enforced gate, with this file's allowlist. The tests that exercise the bypass
+    turn it on explicitly via monkeypatch."""
+    auth_settings.allowed_emails = "yes@gmail.com, Owner@Gmail.com"
 
 
 # ---------------- session token ----------------
@@ -171,7 +162,7 @@ def test_logout_clears_cookie(client):
 
 def test_bypass_off_by_default():
     """Off by default is a property of the class, not of the instance the fixture just pinned.
-    Asserting settings.dev_auth_bypass here would only prove _cfg ran."""
+    Asserting settings.dev_auth_bypass here would only prove auth_settings ran."""
     assert Settings.model_fields["dev_auth_bypass"].default is False
 
 

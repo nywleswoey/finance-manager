@@ -3,11 +3,7 @@
 An FSM Bursa buy (HEIM/3255) once disappeared because the statement introduced a ticker
 seed.py had never registered, and load_ledger dropped it with no output at all.
 """
-import os
-import sys
 from collections import Counter
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import ingestion.load as L
 
