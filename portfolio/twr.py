@@ -123,7 +123,7 @@ def contributions(txns, sids, px, ccy_of, fx):
     for sid in sids:
         per = defaultdict(float)
         for t in txns:
-            if t["security_id"] == sid and flow_kind(t["action"], t["price"]) == EXTERNAL:
+            if t["security_id"] == sid and flow_kind(t["action"]) == EXTERNAL:
                 per[t["trade_date"]] += float(t["qty_signed"])
         for day, dq in per.items():
             if abs(dq) < 1e-9:

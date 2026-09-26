@@ -18,8 +18,8 @@ from ingestion.prices import sg_today
 
 from .cost_annotations import annotation_map, condition_for, unmatched
 from .db import fx_map, latest_close, session_scope
-from .flows import (COST_IN_KIND, CORP_ACTION, EXTERNAL, GIFT_IN_ACTIONS,
-                    RETURN_IN_KIND_ACTIONS, flow_kind)
+from .flows import (COST_IN_KIND, EXTERNAL, GIFT_IN_ACTIONS, RETURN_IN_KIND_ACTIONS,
+                    flow_kind)
 from .money import rate_to_sgd
 from .nullable import num, rounded
 from .xirr import xirr as solve_xirr
@@ -150,11 +150,16 @@ CASH_TRADE = {"buy", "sell", "open market", "ipo", "private placement",
               "rights", "rights issue", "subscription"}
 # external but non-cash: units that moved without a trade (transfers, gifts, snapshot-diff opens)
 # and carry no cost of their own. The return-in-kind half of ZERO_CASH (bonus, scrip, stock
-# dividend, zero-priced corp action) is `flows.flow_kind`'s, not a list here.
+# dividend) is `flows.flow_kind`'s, not a list here.
 MOVED_NOT_TRADED = CDP_TRANSFER | GIFT_IN_ACTIONS | {
     "gifted stock out", "open", "open/transfer_in",
     "sell/transfer_out", "sell/transfer",
     "switch_in"}      # fund-switch IN leg: units only; cost carries from predecessor
+# 'corp action' is a catch-all in the FSM ledger. A PRICED row is an entitlement the holder paid
+# cash for — the ESR-LOGOS (UD1U) rights issues at 0.49 / 0.595 / 0.408, C38U, O5RU, S51. A
+# zero-priced row is a bonus or consolidation (D05's 280 bonus shares). Only the first costs money.
+# The price rule is cost basis only: `flows.flow_kind` calls every `corp action` external.
+CORP_ACTION = {"corp action", "corp_action"}
 # free / non-cash (the vocabulary as one set, for the ledger audit and models.py)
 ZERO_CASH = MOVED_NOT_TRADED | RETURN_IN_KIND_ACTIONS | CORP_ACTION
 # The zero-cash actions whose free-ness is not in doubt: the broker's own word for a gift or a
@@ -198,13 +203,9 @@ def classify(act, px):
     """
     if act in CASH_TRADE:
         return "cash" if px else "uncosted"
-    # 'corp action' is a catch-all in the FSM ledger. A PRICED row is an entitlement the holder
-    # paid cash for — the ESR-LOGOS (UD1U) rights issues at 0.49 / 0.595 / 0.408, C38U, O5RU,
-    # S51. A zero-priced row is a bonus or consolidation (D05's 280 bonus shares), which
-    # `flow_kind` calls return in kind. Only the first costs money.
-    if act in CORP_ACTION and px:
-        return "cash"
-    kind = flow_kind(act, px)
+    if act in CORP_ACTION:
+        return "cash" if px else "zero"
+    kind = flow_kind(act)
     if kind == COST_IN_KIND:
         return "cost_in_kind"
     if kind != EXTERNAL or act in MOVED_NOT_TRADED:

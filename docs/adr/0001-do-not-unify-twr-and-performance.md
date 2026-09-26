@@ -60,16 +60,22 @@ sequenced so nothing touches the return engine unverified:
 2. **Extract one flow classifier** (`external / return-in-kind / cost-in-kind`) that both
    engines consume, ending the twice-named concept. Both taxonomies already have test
    coverage (`test_performance.py::classify*`, `test_twr.py` contribution tests), so the merge
-   is checkable on both sides. **Done:** `portfolio/flows.py` `flow_kind(action, price)`;
+   is checkable on both sides. **Done:** `portfolio/flows.py` `flow_kind(action)`;
    `twr.contributions` counts only its `external` rows and `performance.classify` reads its
    return-in-kind and cost-in-kind answers (`tests/test_flows.py`). The rules it settles:
    - **A gift is external.** Gifted-in shares are cash put in at their market value on the day,
      in both XIRR and TWR. The headline profit and cost basis still take a gift at zero cost
      (`performance.FREE_ACTION`): the rates and the profit answer different questions.
-   - **Return in kind is every spelling of the holding paying itself** — stock dividend, bonus,
-     bonus issuance, scrip, scrip/script dividend — plus a zero-priced `corp action` (a bonus
-     such as D05's 280 FSM shares; priced, it is a rights subscription and external). twr used to
-     list only `stock dividend` and `bonus issuance`, so D05's FSM bonus counted as money put in.
+   - **Return in kind is every explicit spelling of the holding paying itself** — stock
+     dividend, bonus, bonus issuance, scrip, scrip/script dividend. twr used to list only
+     `stock dividend` and `bonus issuance`, so the other spellings counted as money put in.
+   - **A generic `corp action` is external, priced or zero-priced**, as before: FSM's catch-all
+     covers a rights subscription, a bonus, a consolidation and an in-specie distribution under
+     one string, so the price cannot say the holding paid itself. `performance.classify` keeps
+     its own price rule for cost (priced `cash`, zero-priced `zero`). Known case: D05's 280
+     zero-priced FSM `corp action` shares are a bonus but still count as a contribution at
+     market value; classifying from `portfolio.cost_annotations`' condition instead of the
+     action string could handle it later.
    - Anything unnamed is external, so an unknown action can never be minted as return.
 
    performance's per-position XIRR is still the rate on that position's own P&L flows, so a gift

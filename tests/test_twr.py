@@ -86,13 +86,14 @@ def test_stock_dividend_bonus_and_scrip_are_return_not_contribution():
         assert c == {}, action
 
 
-def test_zero_priced_corp_action_is_a_bonus_not_a_contribution():
-    """D05's 280 FSM bonus shares arrive as a zero-priced `corp action` beside the cpf leg's
-    `bonus issuance` the same day; both are the holding paying itself."""
+def test_zero_priced_corp_action_is_a_contribution_at_market_value():
+    """A generic `corp action` is external whatever its price: the catch-all can be a bonus, a
+    consolidation or an in-specie distribution, so D05's 280 zero-priced FSM shares count as
+    money put in at market value."""
     px = {D(2024, 4, 30): 35.0}
     c = contributions([txn(1, D(2024, 4, 30), 280.0, action="corp action", price=0.0)], [1],
                       _px(px), {1: "SGD"}, FX1)
-    assert c == {}
+    assert c[D(2024, 4, 30)] == pytest.approx(280.0 * 35.0)
 
 
 def test_priced_corp_action_is_a_contribution():

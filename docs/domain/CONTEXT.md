@@ -113,8 +113,9 @@ _Avoid_: transaction (a transaction may be an external flow, a return-in-kind, o
 
 **Return-in-kind**:
 A unit change that is part of the *return*, not an external contribution: units the holding paid
-itself (stock dividend, bonus, scrip, a zero-priced `corp action`). Kept inside the return, never in
-the cashflow series. Received free is not enough — a gift is free too, and is an **external flow**.
+itself, named as such by the ledger (stock dividend, bonus, scrip). Kept inside the return, never in
+the cashflow series. Received free is not enough — a gift is free too, and is an **external flow**;
+so is a generic `corp action`, priced or zero-priced, since the one string covers more than bonuses.
 
 **Cost-in-kind**:
 Units redeemed to pay a fee (Endowus). No cash leaves the investor, so the market-value drop
