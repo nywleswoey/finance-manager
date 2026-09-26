@@ -4,27 +4,16 @@ Stdlib unittest + in-memory SQLite (no pg), matching tests/test_networth.py.
 Run: PYTHONPATH=. .venv/bin/python tests/test_performance.py
 """
 import datetime as dt
-import os
-import sys
 import unittest
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 from ingestion.prices import sg_today
 from portfolio import cost_annotations as ca
 from portfolio import performance as perf
-from portfolio.models import Base, CdpCostLot
+from portfolio.models import CdpCostLot
 from portfolio.xirr import xirr
+from tests.sqlitetest import make_session
 
 D = dt.date
-
-
-def make_session():
-    eng = create_engine("sqlite://")
-    Base.metadata.create_all(eng)
-    return sessionmaker(bind=eng, future=True)()
 
 
 class TestClassify(unittest.TestCase):

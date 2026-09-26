@@ -8,12 +8,9 @@ import sys
 import unittest
 from decimal import Decimal
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from portfolio import recurring
-from portfolio.models import Base, CashTxn
+from portfolio.models import CashTxn
+from tests.sqlitetest import make_session
 from portfolio.recurring import (_add_months, _add_period, _status, _infer_cadence,
                                  _is_weekend, _shift_business, _infer_shift, _per_month)
 
@@ -31,7 +28,6 @@ def test_card_sources_have_one_owner():
     """Recurring detection, the cash classifier, and the model comment were three
     lists. `dbs-cc` was missing from the comment; hsbc and trust were a second
     tuple in the classifier."""
-    import sys
     sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "build"))
     import classify_cash
 
@@ -235,9 +231,7 @@ class RecurringDb:
 
 class DbTest(RecurringDb, unittest.TestCase):
     def setUp(self):
-        eng = create_engine("sqlite://")
-        Base.metadata.create_all(eng)
-        self.s = sessionmaker(bind=eng, future=True)()
+        self.s = make_session()
 
     def tearDown(self):
         self.s.close()

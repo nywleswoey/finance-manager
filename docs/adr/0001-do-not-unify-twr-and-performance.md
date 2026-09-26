@@ -63,10 +63,10 @@ sequenced so nothing touches the return engine unverified:
    is checkable on both sides.
 3. **Give `compute_twr` an injectable price/FX seam** (a `PriceSource` port wrapping the live
    Yahoo `daily()` fetch and the DB fallback). The pure fold `_twr` is *already* separated and
-   tested; the residual untested surface is only the `compute_twr` fetch adapter, hard-wired to
-   live Yahoo and the Postgres-only `current_position` view. A port makes that adapter testable
-   with a fixture source — the single highest-value change, and the precondition for doing (2)
-   safely against the twr side.
+   tested; the `compute_twr` fetch adapter reads the Postgres-only `current_position` view, so
+   it is covered only by a pg-marked test with a fake `fetch` (`tests/test_twr_pg.py`). A port
+   makes that adapter testable with a fixture source and no database — the single
+   highest-value change, and the precondition for doing (2) safely against the twr side.
 
 Not doing this leaves one real cost: the flow-classification concept lives in two places and
 can drift. That is accepted for now; the drift risk is bounded (both copies are unit-tested)

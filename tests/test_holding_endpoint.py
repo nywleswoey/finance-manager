@@ -9,17 +9,13 @@ ledger fetch and the options book are all stubbed — no database, no network.
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_holding_endpoint.py -q
 """
 import datetime as dt
-from contextlib import contextmanager
 from types import SimpleNamespace
 
 import pytest
-from fastapi.testclient import TestClient
 
 from portfolio import options
-from portfolio.config import settings
 from portfolio.performance import LEG_FIELDS, _breakeven_price
 
-from server import main
 from server.routes import portfolio as portfolio_routes
 
 D = dt.date
@@ -73,31 +69,16 @@ TRADES = [{"underlying": "D05", "type": "put", "realised": True, "realized_sgd":
 
 
 @pytest.fixture(autouse=True)
-def _stub(monkeypatch):
+def _stub(monkeypatch, no_db):
     """Two legs of D05 and C31's husk; the ledger and options book canned. No database."""
-    main._cache.clear()
-    settings.dev_auth_bypass = True
     # the fold generation: rows AND the rate their SGD figures were converted at, which the
     # server hands out as one value. Empty is SGD-only, which is what these rows are priced in.
     monkeypatch.setattr(portfolio_routes, "perf_fold", lambda: ([_row(), dict(CPF), dict(HUSK)], {}))
-    monkeypatch.setattr(portfolio_routes, "session_scope", lambda *a, **k: _no_session())
     monkeypatch.setattr(portfolio_routes, "valuation_as_of", lambda s: D(2026, 7, 25))
     monkeypatch.setattr(portfolio_routes, "fx_as_of", lambda s: D(2026, 8, 5))
     monkeypatch.setattr(portfolio_routes, "ticker_ledger",
                         lambda s, tk: ([dict(t) for t in TXNS], [dict(x) for x in DIVS], {}))
     monkeypatch.setattr(portfolio_routes, "trades_for", lambda tk: [dict(t) for t in TRADES])
-    yield
-    main._cache.clear()
-
-
-@contextmanager
-def _no_session():
-    yield None
-
-
-@pytest.fixture
-def client():
-    return TestClient(main.app)
 
 
 def test_one_response_covers_every_bucket(client):

@@ -20,15 +20,12 @@ and a skip when no server is up. Marked `pg` — `-m "not pg"` deselects the fil
 Run: make db-up && PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending_pg.py -q
 """
 import datetime as dt
-import os
-import sys
 import unittest
 from decimal import Decimal
 from unittest import mock
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from portfolio import spending
 from portfolio.models import CashTxn
 from tests import pgtest

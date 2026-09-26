@@ -7,25 +7,14 @@ details() is portable (plain SELECT + Python fold) and carries the qty-replay lo
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_dividends.py -q
 """
 import datetime as dt
-import os
-import sys
 import unittest
 from decimal import Decimal
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from portfolio import dividends
-from portfolio.models import Account, Base, Dividend, FxRate, Security, Txn
+from portfolio.models import Account, Dividend, FxRate, Security, Txn
+from tests.sqlitetest import make_session
 
 D = dt.date
-
-
-def make_session():
-    eng = create_engine("sqlite://")
-    Base.metadata.create_all(eng)
-    return sessionmaker(bind=eng, future=True)()
 
 
 # ---------------- the shared primitives (pure) ----------------

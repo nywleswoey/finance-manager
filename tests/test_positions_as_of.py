@@ -11,14 +11,9 @@ were 29,451 SGD apart when the issue was written. The gap closes by ingest; what
 owe the reader is the moment each of them is speaking about.
 """
 import datetime as dt
-from contextlib import contextmanager
 
 import pytest
-from fastapi.testclient import TestClient
 
-from portfolio.config import settings
-
-from server import main
 from server.routes import portfolio as portfolio_routes
 
 D = dt.date
@@ -28,24 +23,9 @@ ROW = {"ticker": "D05", "bucket": "cash", "units": 3080.0, "price": 73.94, "mv_s
 
 
 @pytest.fixture(autouse=True)
-def _stub(monkeypatch):
-    """One open position, no database. The cache is process-wide, so clear it either side."""
-    main._cache.clear()
-    settings.dev_auth_bypass = True
+def _stub(monkeypatch, no_db):
+    """One open position, no database."""
     monkeypatch.setattr(portfolio_routes, "perf_all", lambda: [dict(ROW)])
-    monkeypatch.setattr(portfolio_routes, "session_scope", lambda *a, **k: _no_session())
-    yield
-    main._cache.clear()
-
-
-@contextmanager
-def _no_session():
-    yield None
-
-
-@pytest.fixture
-def client():
-    return TestClient(main.app)
 
 
 def as_of(monkeypatch, value):

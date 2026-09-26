@@ -37,12 +37,9 @@ the identity above would be false for it.
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_performance_identity.py -q
 """
 import pytest
-from fastapi.testclient import TestClient
 
 from portfolio import options
-from portfolio.config import settings
 
-from server import main
 from server.routes import portfolio as portfolio_routes
 
 BY = ("market", "bucket", "account", "asset_type")
@@ -117,18 +114,9 @@ OPTION_KEY = {"market": "US", "bucket": "cash", "account": "Tiger Prime", "asset
 @pytest.fixture(autouse=True)
 def _stub(monkeypatch):
     """The fold's output as a literal, and the options book as a dict. No database anywhere."""
-    main._cache.clear()
-    settings.dev_auth_bypass = True
     monkeypatch.setattr(portfolio_routes, "perf_all", lambda: [dict(r) for r in ROWS])
     monkeypatch.setattr(options, "realized_by",
                         lambda by: {OPTION_KEY[by]: round(sum(OPTION_BOOK.values()), 2)})
-    yield
-    main._cache.clear()
-
-
-@pytest.fixture
-def client():
-    return TestClient(main.app)
 
 
 def ticker_nets(rows):
