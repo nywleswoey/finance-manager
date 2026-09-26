@@ -29,6 +29,11 @@ plans.
   must be patched on the `server.routes.*` module that defines it, not on `server.main`. Lazy
   in-handler imports
   (ruff E402, ignored repo-wide) break real import cycles, not accidental ones.
+- **Tests share scaffolding; don't re-copy it.** [tests/conftest.py](tests/conftest.py) restores
+  `settings` after every test and provides `client` (gate bypassed), `owner_client` (real
+  cookie gate), `auth_settings`, `no_db`; SQLite sessions and the alembic-only
+  `current_position` view SQL are in `tests/sqlitetest.py`, Postgres-only SQL goes in
+  `tests/*_pg.py` via `tests/pgtest.py`, build/ scripts load via `tests/buildscript.py`.
 - **ADR [0001](docs/adr/0001-do-not-unify-twr-and-performance.md): do not unify
   `performance.py` and `twr.py`.** They're deliberately separate engines.
 - **`docs/archive/`** holds historical/superseded docs (old plans). **`archive/`** at repo root
