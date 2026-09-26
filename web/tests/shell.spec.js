@@ -149,7 +149,8 @@ test.describe("where the shell is the phone's, the navigation is a drawer and a 
       await expect(side.getByTestId("nav-portfolio")).toBeVisible();
       await expect(side.getByTestId("nav-networth")).toBeVisible();
       await expect(side.getByTestId("nav-spending")).toBeVisible();
-      await expect(side.locator(".navitem.dim"), "the dimmed Settings entry").toBeVisible();
+      // Sections only: the dimmed `Settings` placeholder led nowhere and is gone.
+      await expect(side.locator(".navitem.dim"), "a dimmed placeholder entry").toHaveCount(0);
       await expect(side.locator(".side-email"), "the signed-in email").toBeVisible();
       await expect(side.locator(".logout-btn"), "Sign out").toBeVisible();
 

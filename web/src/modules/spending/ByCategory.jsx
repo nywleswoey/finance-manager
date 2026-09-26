@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { get, sgd, fmt, catName } from "../../api.js";
 import { Donut } from "../../charts.jsx";
 import { categoryColour } from "../../palette.js";
-import { CardGroup, Cards, RowCard, usePhone } from "../../cards.jsx";
+import { CardGroup, Cards, RowCard, Tile, usePhone } from "../../cards.jsx";
 
 // Expenses for a single calendar year, broken down by category. The year selector loads that
 // year's window (from=YYYY-01-01, to=YYYY-12-31) through the existing spending endpoints;
@@ -279,15 +279,5 @@ function TxnList({ rows }) {
         ))}
       </tbody>
     </table>
-  );
-}
-
-function Tile({ lbl, val, sub }) {
-  return (
-    <div className="tile">
-      <div className="lbl">{lbl}</div>
-      <div className="val">{val}</div>
-      {sub ? <div className="mut" style={{ fontSize: 12 }}>{sub}</div> : null}
-    </div>
   );
 }

@@ -262,7 +262,8 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
   row ships it and skips it where the row ships null — nothing there reads `cost_known` — so a
   caveat leg whose every unit is unknown adds its `stock_pl_sgd` (and its `unsplit_pl_sgd`) to
   the group like any other. Zero-instance on the live book; `tests/test_performance_identity.py`
-  carries the shape.
+  carries the shape. Holdings' grouped subtotal rows read this group figure rather than
+  re-summing their own rows, so the subtotal has one owner.
 
 **`breakeven_price`** ships beside the Net on every position row and every bucket column: the
 native-currency price at which THAT column's Net reaches zero — `(cost_basis_sgd − realised −

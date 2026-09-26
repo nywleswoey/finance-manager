@@ -132,11 +132,10 @@ export default function App() {
   return (
     <div className="app">
       <div className={"side" + (drawerOpen ? " on" : "")}>
-        <div className="brand">📊 MyApp</div>
+        <div className="brand">📊 Finance Manager</div>
         {navItem("Portfolio", "nav-portfolio")}
         {navItem("Net Worth", "nav-networth")}
         {canSpend && navItem("Spending", "nav-spending")}
-        <div className="navitem dim">Settings</div>
         {user && (
           <div className="side-user">
             <div className="side-email" title={user.email}>{user.email}</div>

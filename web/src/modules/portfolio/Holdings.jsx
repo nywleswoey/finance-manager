@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import posthog from "posthog-js";
 import { get, fmt, sgd, money, pct, cls } from "../../api.js";
-import SecurityDetail from "./SecurityDetail.jsx";
+import SecurityDetail, { NOT_KNOWN } from "./SecurityDetail.jsx";
 import { netDirection } from "./bound.js";
 import { NET_MARKS, markTitle } from "./netMarks.js";
 
-const GROUPS = {                                   // group key -> label
+// group key -> label. Every grouping but the two flat ones is also a `by` `/api/performance`
+// accepts, which is where the group's subtotal row comes from.
+const GROUPS = {
   asset_type: "Asset class",
   market: "Market",
   bucket: "Bucket",
@@ -42,8 +44,7 @@ const plBase = (r) => (r.status === "closed" ? r.pl_sgd : r.unrealised_pl_sgd);
 // A consolidated ticker row resolves the choice per *leg* and sums the answers, because a name can
 // be open in one bucket and closed in another — F34 is held in cash and sold out of CPF. Folding
 // the raw fields instead would read `unrealised_pl_sgd` for the whole row and silently drop the
-// closed leg's realised result. This is the rule the group subtotal below already uses on its own
-// members (`a.pl += plOf(r)`); `pl_folded` is how a single row carries the same answer.
+// closed leg's realised result. `pl_folded` is how a single row carries the per-leg answer.
 //
 // THE COLUMN FOLLOWS NET ONTO THE WHOLE TICKER (#143 §15). Since the fold sees every leg whatever
 // the checkbox says, so does this: leaving P/L on the *visible* legs while Net covered all of them
@@ -198,7 +199,7 @@ function mergeTicker(rows) {
     // refusal nulls every leg of its ticker and nothing else nulls any — but they fail
     // differently if that ever stops being true. `sumOf` coalesces a null to 0, so reading the
     // verdict off one leg would print a whole-ticker number that is silently short by a bucket;
-    // testing the legs themselves reports `n/a`, which is what a fold that cannot add up should
+    // testing the legs themselves reports `not known`, which is what a fold that cannot add up should
     // say. `performance.py`'s equivalent raises instead, for the same reason and with a server's
     // freedom to crash.
     net_pl_sgd: rs.some((r) => r.net_pl_sgd == null) ? null
@@ -240,21 +241,23 @@ function consolidate(rows) {
 function NetCell({ net, verdict, bound, max }) {
   // A refusal: not a zero and not a small number, but no answer. Every entering unit arrived
   // with no cost, so there is nothing to net — and no bar either, because a bar length is a
-  // magnitude and this row has none.
+  // magnitude and this row has none. The words are in the cell, as on the detail page: `n/a`
+  // reads as *not applicable*, and a tooltip is unreachable on touch (CONTEXT.md, Cell state).
   if (net == null) return (
     <td style={{ minWidth: 110 }}>
-      <span className="mut" title="not known: every unit of this name entered with no recorded cost">
-        n/a</span>
+      <span className="mut" title="every unit of this name entered with no recorded cost">
+        {NOT_KNOWN}</span>
     </td>
   );
   const mark = netMark({ verdict, bound });
   const w = max > 0 ? Math.min(100, (Math.abs(net) / max) * 100) : 0;
-  const color = net >= 0 ? "16,185,129" : "239,68,68";   // green / red
+  // the app's own gain/loss tokens, faded — a DOM style, so `var()` resolves here
+  const color = net >= 0 ? "var(--pos)" : "var(--neg)";
   return (
     <td style={{ minWidth: 110 }}>
       <div style={{ position: "relative", padding: "1px 4px" }}>
         <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: w + "%",
-                      background: `rgba(${color},0.18)`, borderRadius: 3 }} />
+                      background: `color-mix(in srgb, ${color} 18%, transparent)`, borderRadius: 3 }} />
         <span className={cls(net)} title={mark ? markTitle(mark) : NET_TITLE}
               style={{ position: "relative", fontWeight: 700 }}>
           {mark && mark.pre && <span className="mut" style={{ fontWeight: 400 }}>{mark.glyph} </span>}
@@ -293,14 +296,14 @@ function DataRow({ r, onClick, max }) {
       <td>{closed ? <span className="mut">—</span> : fmt(r.units, r.units < 10 ? 2 : 0)}</td>
       <td className="mut">{money(r.avg_cost, r.currency, 4)}</td>
       <td className="mut">{money(r.price, r.currency, 4)}</td>
-      <td>{r.cost_basis_sgd == null ? <span className="mut">n/a</span> : sgd(r.cost_basis_sgd)}</td>
+      <td>{r.cost_basis_sgd == null ? <span className="mut">{NOT_KNOWN}</span> : sgd(r.cost_basis_sgd)}</td>
       <td>{closed ? <span className="mut">—</span> : sgd(r.mv_sgd)}</td>
       {/* A consolidated row spanning an open and a closed bucket is neither one nor the other, and
           saying "unrealised" over a figure that folds in a realised leg would be the wrong word. */}
       <td className={cls(pl)}
           title={r.pl_mixed ? "realised P/L on closed buckets, unrealised on open ones"
                             : closed ? "realised P/L" : "unrealised P/L"}>
-        {pl == null ? <span className="mut">n/a</span> : sgd(pl)}</td>
+        {pl == null ? <span className="mut">{NOT_KNOWN}</span> : sgd(pl)}</td>
       {/* SGD like the Cost/MV/P/L columns it sits between (and like Net, which folds it in);
           the native amount stays as the tooltip for statement reconciliation. */}
       <td className="pos" title={r.income_native ? `${money(r.income_native, r.currency, 2)} native` : undefined}>
@@ -326,10 +329,27 @@ export default function Holdings() {
   const [showClosed, setShowClosed] = useState(false);
   const [collapsed, setCollapsed] = useState({});
   const [noteOpen, setNoteOpen] = useState(() => !startsCollapsed());
+  const [perf, setPerf] = useState(null);
 
   // Two modes render one ungrouped list, for opposite reasons: `none` has no grouping to show,
   // and `ticker` has already spent the grouping on the row itself.
   const flat = by === "none" || by === "ticker";
+
+  // THE SUBTOTAL ROW IS THE SERVER'S, NOT A SUM OF THE ROWS UNDER IT. `/api/performance` owns a
+  // group's total — the Performance tab prints the same ones — and a second reduce here was a
+  // second owner, with its own refusal rule and its own set of rows. Keyed by grouping, so a
+  // response that lands after the select has moved on is dropped rather than shown against
+  // groups it was not computed for. Whole-group, closed legs included, like the Net column:
+  // "Show closed positions" decides which rows are listed and moves no subtotal.
+  useEffect(() => {
+    if (flat) return undefined;
+    let live = true;
+    setPerf(null);
+    get("/api/performance?by=" + by)
+      .then((d) => live && setPerf(d))
+      .catch(() => live && setPerf({}));
+    return () => { live = false; };
+  }, [by, flat]);
 
   useEffect(() => {
     setRows(null);
@@ -372,20 +392,12 @@ export default function Holdings() {
       if (!m.has(k)) m.set(k, []);
       m.get(k).push(r);
     }
-    const subtotal = (rs) => rs.reduce((a, r) => {
-      a.mv += r.status === "closed" ? 0 : (r.mv_sgd || 0);
-      a.pl += plOf(r) || 0;
-      a.inc += r.income_sgd || 0;
-      a.opt += r.options_pl_sgd || 0;
-      // a refusal has no Net to add — not a zero, no answer — so it contributes nothing, which
-      // is also what its group contributes in `/api/performance` (#143 §15).
-      a.net += netOf(r).net || 0;
-      return a;
-    }, { mv: 0, pl: 0, inc: 0, opt: 0, net: 0 });
+    // `sub` is null while the subtotals load, and for a group the server does not list — every
+    // row in it a closed leg with no known cost and no income, which `rollup()` drops.
     return [...m.entries()]
-      .map(([key, rs]) => ({ key, label: key, rows: rs, ...subtotal(rs) }))
-      .sort((a, b) => b.mv - a.mv);
-  }, [display, by, flat]);
+      .map(([key, rs]) => ({ key, label: key, rows: rs, sub: perf?.[key] || null }))
+      .sort((a, b) => (b.sub?.mv_sgd || 0) - (a.sub?.mv_sgd || 0));
+  }, [display, by, flat, perf]);
 
   // bar scale: largest |net| across the rows on screen, so bars are comparable everywhere. Read
   // from `display` rather than `rows`: in ticker mode a merged row's Net is the sum of its parts,
@@ -450,11 +462,15 @@ export default function Holdings() {
                         {hidden ? "▸" : "▾"} {g.label}
                         <span className="mut" style={{ fontWeight: 400 }}> · {g.rows.length}</span>
                       </td>
-                      <td>{sgd(g.mv)}</td>
-                      <td className={cls(g.pl)}>{sgd(g.pl)}</td>
-                      <td className="pos">{g.inc ? sgd(g.inc) : ""}</td>
-                      <td className={cls(g.opt)}>{g.opt ? sgd(g.opt) : ""}</td>
-                      <td className={cls(g.net)} style={{ fontWeight: 700 }}>{sgd(g.net)}</td>
+                      {/* P/L is the group's stock P/L, realised + unrealised on every leg: the
+                          figure its Net is built from, so the subtotal row adds across. */}
+                      <td>{g.sub ? sgd(g.sub.mv_sgd) : ""}</td>
+                      <td className={cls(g.sub?.stock_pl_sgd)}>{g.sub ? sgd(g.sub.stock_pl_sgd) : ""}</td>
+                      <td className="pos">{g.sub?.income_sgd ? sgd(g.sub.income_sgd) : ""}</td>
+                      <td className={cls(g.sub?.options_pl_sgd)}>
+                        {g.sub?.options_pl_sgd ? sgd(g.sub.options_pl_sgd) : ""}</td>
+                      <td className={cls(g.sub?.net_pl_sgd)} style={{ fontWeight: 700 }}>
+                        {g.sub ? sgd(g.sub.net_pl_sgd) : ""}</td>
                       <td></td>
                     </tr>
                     {!hidden && g.rows.map((r, i) => <DataRow key={i} r={r} max={maxNet} onClick={() => open(r)} />)}
@@ -481,9 +497,12 @@ export default function Holdings() {
           {Object.values(NET_MARKS).map((m) => (
             <React.Fragment key={m.lede}><b>{m.glyph}</b> {m.lede} — {m.why}; </React.Fragment>
           ))}
-          <b>n/a</b> where no unit of the name has a recorded cost and there is no Net to state. Grouped by
+          <b>{NOT_KNOWN}</b> where the book cannot measure a figure — for Net, where no unit of the name has
+          a recorded cost and there is no Net to state. Grouped by
           Ticker, a row covers the <b>whole</b> name — every funding bucket, open legs and closed ones —
-          whatever “Show closed positions” is set to, which only decides which rows are listed.
+          whatever “Show closed positions” is set to, which only decides which rows are listed. In the
+          other groupings the group row is the whole group's total as the Performance tab computes it,
+          closed positions included, and its P/L is realised + unrealised.
         </p>
       </details>
     </div>

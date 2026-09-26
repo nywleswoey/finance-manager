@@ -5,6 +5,7 @@
  "sources": [
   {
    "source": "dbs",
+   "label": "DBS",
    "first_txn": "2025-01-02",
    "last_txn": "2026-08-31",
    "total_sgd": 121178.06,
@@ -13,6 +14,7 @@
   },
   {
    "source": "dbs-cc",
+   "label": "DBS Card 5946",
    "first_txn": "2025-08-21",
    "last_txn": "2026-08-19",
    "total_sgd": 21130.34,
@@ -21,6 +23,7 @@
   },
   {
    "source": "trust",
+   "label": "Trust",
    "first_txn": "2025-08-14",
    "last_txn": "2026-08-15",
    "total_sgd": 10510.29,
@@ -29,6 +32,7 @@
   },
   {
    "source": "hsbc",
+   "label": "HSBC Live+",
    "first_txn": "2025-08-22",
    "last_txn": "2025-11-24",
    "total_sgd": 496.41,

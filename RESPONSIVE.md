@@ -237,7 +237,7 @@ reconciliation unless marked otherwise.
   here because the ticket's "4 → 2 → 1 with no third rung" is true at nine viewports and not at
   the tenth; `charts.spec.js` asserts the orphan happens at **exactly** that named viewport, so
   a second one — or its disappearance — is a failure rather than a surprise.
-- **The drawer's row height at 844×390 — 39px** (`Settings`, the dim one, 37.5px), against **44px**
+- **The drawer's row height at 844×390 — 39px** (the dim `Settings` placeholder, since removed, was 37.5px), against **44px**
   for the same rows at 390×844. Predicted ~38px. This is the residual the tablet tier's height guard
   creates and the one place two of that tier's decisions pull against each other: the shell travels
   to a rotated phone on `(max-height: 500px)`, and the 44px floor stays behind `max-width` because

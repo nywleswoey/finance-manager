@@ -35,6 +35,10 @@
   "file": "performance-account.json",
   "status": 200
  },
+ "/api/performance?by=asset_type": {
+  "file": "performance-asset_type.json",
+  "status": 200
+ },
  "/api/dividends-annual": {
   "file": "dividends-annual.json",
   "status": 200

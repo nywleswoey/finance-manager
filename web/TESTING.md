@@ -256,12 +256,16 @@ closed rows are listed or not, so ticking the box moves no number on any row; th
 the matching `holding-*.json`'s `summary.net_pl_sgd` — the **cross-page** claim, on the multi-bucket
 ticker, since a single-bucket one makes it a sum over one element; and every meaning the mark table
 carries renders with its own explanation — `~` twice over, and `≥`/`≤` for a split carry —
-with `n/a` where the book records no cost at all. Which way each mark runs: `net_verdict` in
-`portfolio/performance.py`, read in `src/modules/portfolio/bound.js`. The legend gate walks that
+with the words `not known`, never `n/a`, where the book records no cost at all. Which way each
+mark runs: `net_verdict` in `portfolio/performance.py`, read in `src/modules/portfolio/bound.js`. The legend gate walks that
 table rather than a list of symbols, so a mark added with no sentence of its own fails it. One of
 the Net column's gates is a file check rather than a render one, and says so: the retired
 client-side rule differs from the server's field by a **cent**, which no whole-dollar column can
 show.
+
+The grouped modes' subtotal rows are gated here too: every group row, in each of the four groupings
+and with closed positions shown and hidden, renders the `performance-<by>.json` group it was served —
+MV, stock P/L and Net — because the subtotal is the server's and no longer a sum of the listed rows.
 
 What it deliberately does not check is anything responsive; the pin, the column count and the row
 shape stay `pinned.spec.js`'s, because consolidated rows are ordinary data rows and inherit those
@@ -471,6 +475,13 @@ that runs after that render). Three of the six would have passed against the del
 listed exactly the fixture's fourteen codes in exactly its band order; they are characterization, and
 the other three are the regression gates. What none of them check is the form's geometry, which stays
 `editors.spec.js`'s at all ten viewports.
+
+`tests/served-figures.spec.js` — figures a page takes from the server instead of working out
+itself, at one viewport for the reason `ticker.spec.js` gives: Dividends' detail pills are the
+payload's `total`/`total_sgd` and, under "flagged only", `flagged`/`flagged_sgd`; its YoY row is
+`yoy_pct`; Recurring's tile adds each charge's server-side `monthly_amount` (served here, since the
+captured book tracks none) rather than the raw amounts of mixed cadences; and the spending source
+filter offers exactly `/api/spending/window`'s `sources`, under their `label`s.
 
 `tests/viewports.js` — the ten viewports, declared once. They mirror `RESPONSIVE.md`'s table
 one-for-one and a test fails if the two lists drift apart.

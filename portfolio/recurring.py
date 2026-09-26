@@ -24,6 +24,14 @@ _CARD_IN = ", ".join(f"'{s}'" for s in CARD_SOURCES)
 
 # cadence -> nominal period length in days (for next-due + detection buckets)
 CADENCE_DAYS = {"weekly": 7, "monthly": 30, "quarterly": 91, "annual": 365}
+# cadence -> charges per month, so one charge of each cadence can be stated in one period
+PER_MONTH = {"weekly": 52 / 12, "monthly": 1, "quarterly": 1 / 3, "annual": 1 / 12}
+
+
+def _per_month(amount, cadence):
+    """One charge of `cadence` restated per month, so charges of different cadences add up:
+    the Recurring page's headline tile is their sum. None when the charge has no amount."""
+    return None if amount is None else round(amount * PER_MONTH.get(cadence, 1), 2)
 
 
 def _add_period(d, cadence):
@@ -131,6 +139,7 @@ def list_recurring(s=None, today=None):
                 shift = direction if next_due != raw_due else None
             exp = float(d["expected_amount"]) if d["expected_amount"] is not None else None
             drift = round(last_amt - exp, 2) if (exp is not None and last_amt is not None) else None
+            monthly = _per_month(exp if exp is not None else avg_amt, d["cadence"])
             out.append({
                 "id": d["id"], "name": d["name"], "merchant_match": d["merchant_match"],
                 "category": d["category"], "cadence": d["cadence"],
@@ -143,6 +152,7 @@ def list_recurring(s=None, today=None):
                 "next_due": iso(next_due),
                 "shift": shift,                         # 'prev'|'next' if weekend-adjusted, else None
                 "amount_drift": drift,
+                "monthly_amount": monthly,
                 "status": "inactive" if not d["active"] else _status(next_due, today),
             })
         return out

@@ -152,6 +152,9 @@ ENDPOINTS: list[tuple[str, str]] = [
     ("performance-market", "/api/performance?by=market"),
     ("performance-bucket", "/api/performance?by=bucket"),
     ("performance-account", "/api/performance?by=account"),
+    # Holdings' fourth grouping. Its subtotal rows read this route for whichever grouping is
+    # selected, so asset class needs its own capture beside the three Performance offers.
+    ("performance-asset_type", "/api/performance?by=asset_type"),
     ("dividends-annual", "/api/dividends-annual"),
     ("dividend-details", "/api/dividend-details"),
     ("accounts", "/api/accounts"),

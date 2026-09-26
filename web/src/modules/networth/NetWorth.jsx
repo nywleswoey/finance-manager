@@ -288,7 +288,7 @@ function Breakdown({ detail, onSaved, setErr }) {
   return (
     <div className="card" style={{ marginTop: 22 }} data-testid="networth-breakdown">
       <h3>Breakdown&nbsp;<span className="pill">{String(detail.date)}</span>
-        {dirty && <span className="pill" style={{ background: "#d29922" }}>unsaved</span>}</h3>
+        {dirty && <span className="pill" style={{ background: "var(--warn)" }}>unsaved</span>}</h3>
       {/* The `manual` / `auto` split, as visible text. It was a `title="pulled from
           statements"` on the `auto` pill — the only tooltip in either editor carrying
           something a reader could not get anywhere else, and the whole explanation of why

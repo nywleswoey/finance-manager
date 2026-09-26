@@ -151,6 +151,26 @@ class TestDetails(unittest.TestCase):
         self.s.commit()
         self.assertEqual(dividends.details(self.s)["total_sgd"], 200.0)
 
+    def test_totals_are_rounded_once_not_summed_from_rounded_rows(self):
+        # 0.03 HKD at 0.17 is 0.0051 SGD, which each row ships as 0.01. Three of them are
+        # 0.0153 SGD — 0.02 — and a sum of the shipped rows would say 0.03.
+        self._fx("HKD", 0.17)
+        for m in (6, 7, 8):
+            self._div(D(2024, m, 1), 0.03, declared=0.03, units=1, ccy="HKD")
+        self.s.commit()
+        res = dividends.details(self.s)
+        self.assertEqual([r["gross_sgd"] for r in res["rows"]], [0.01, 0.01, 0.01])
+        self.assertEqual(res["total_sgd"], 0.02)
+
+    def test_flagged_sgd_totals_only_the_flagged_rows(self):
+        # the page's flagged-only filter reads this rather than re-adding the rows it shows
+        self._div(None, 30, declared=1, units=30)                          # flagged: no date
+        self._div(D(2024, 7, 1), 70, declared=1, units=70)
+        self.s.commit()
+        res = dividends.details(self.s)
+        self.assertEqual((res["flagged"], res["flagged_sgd"]), (1, 30.0))
+        self.assertEqual((res["total"], res["total_sgd"]), (2, 100.0))
+
     def test_rows_sorted_pay_date_desc_nulls_first(self):
         # newest-first (reverse=True) over nulls_last, which sorts null dates last ascending ->
         # first descending. Undated dividends surface at the top for manual attention.
