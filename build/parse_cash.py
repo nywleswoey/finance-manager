@@ -241,6 +241,7 @@ def parse_trust():
 #   cr_flag      "CR" when the statement marks the line a credit (refund / payment), else blank
 #   source_file  the statement PDF the line came from, relative to the repo root
 HSBC_COLS = ("tran_date", "post_date", "description", "amount_sgd", "cr_flag", "source_file")
+HSBC_AMOUNT = re.compile(r"\d{1,3}(,\d{3})*(\.\d+)?|\d+(\.\d+)?")
 
 
 def parse_hsbc():
@@ -255,10 +256,9 @@ def parse_hsbc():
     for r in reader:
         if not r["amount_sgd"].strip():
             raise SystemExit(f"{os.path.relpath(HSBC_CSV, ROOT)}: blank amount_sgd on {r}")
-        try:
-            sgd = float(r["amount_sgd"].replace(",", ""))
-        except ValueError:
+        if not HSBC_AMOUNT.fullmatch(r["amount_sgd"].strip()):
             raise SystemExit(f"{os.path.relpath(HSBC_CSV, ROOT)}: malformed amount_sgd on {r}")
+        sgd = float(r["amount_sgd"].strip().replace(",", ""))
         is_credit = r["cr_flag"].strip().upper() == "CR"
         amt = sgd if is_credit else -sgd
         desc = r["description"].strip()
