@@ -13,6 +13,21 @@ from .models import OptionTrade, Security
 from .money import rate_to_sgd
 from .nullable import iso, num
 
+# Option underlyings that trade in HKD. Every other option trades in USD. Link REIT's contracts
+# carry HKEX's option code, not the stock's 00823.
+HKD_UNDERLYINGS = frozenset({"LNK"})
+
+
+def option_currency(underlying, currency=None):
+    """The currency an option trade is valued in: its own if recorded, else the default for its
+    underlying (HKD for HKD_UNDERLYINGS, otherwise USD). The one default every reader of
+    option_trade.currency applies, so a NULL is never SGD in one view and USD in another."""
+    return currency or ("HKD" if underlying in HKD_UNDERLYINGS else "USD")
+
+
+def _ccy(t):
+    return option_currency(t.underlying, t.currency)
+
 
 def _fx(s):
     fx = fx_map(s)
@@ -57,7 +72,7 @@ def compute():
         return d[k]
 
     for t in trades:
-        ccy = t.currency or "USD"
+        ccy = _ccy(t)
         pl_n = float(t.realized_pl or 0)
         pl = _sgd(t.realized_pl, ccy, fx)
         prem = _sgd((t.premium_open or 0) * (t.contracts or 0) * (t.multiplier or 100), ccy, fx)
@@ -126,8 +141,8 @@ def realized_by_ticker():
     out = {}
     for t, fx in _closed_trades():
         r = out.setdefault(t.underlying, {"pl_sgd": 0.0, "pl_native": 0.0, "trades": 0,
-                                          "currency": t.currency, "market": t.market})
-        r["pl_sgd"] += _sgd(t.realized_pl, t.currency, fx)
+                                          "currency": _ccy(t), "market": t.market})
+        r["pl_sgd"] += _sgd(t.realized_pl, _ccy(t), fx)
         r["pl_native"] += float(t.realized_pl or 0)
         r["trades"] += 1
     return {k: {**v, "pl_sgd": round(v["pl_sgd"], 2), "pl_native": round(v["pl_native"], 2)}
@@ -153,7 +168,7 @@ def contracts_by_ticker():
             out.setdefault(t.underlying, []).append({
                 "type": t.option_type, "contracts": float(t.contracts or 0),
                 "strike": num(t.strike), "multiplier": int(t.multiplier or 100),
-                "currency": t.currency, "open_date": t.open_date,
+                "currency": _ccy(t), "open_date": t.open_date,
                 "expiry_date": t.expiry_date, "close_date": t.close_date,
                 "open": _is_open(t)})
         return out
@@ -176,7 +191,7 @@ def realized_by(dim):
             key = kinds.get(t.underlying) or "—"
         else:                                          # account
             key = "Tiger Prime"
-        agg[key] = agg.get(key, 0.0) + _sgd(t.realized_pl, t.currency, fx)
+        agg[key] = agg.get(key, 0.0) + _sgd(t.realized_pl, _ccy(t), fx)
     return {k: round(v, 2) for k, v in agg.items()}
 
 
@@ -210,8 +225,8 @@ def _trade_dict(t, fx):
         "premium_open": num(t.premium_open),
         "premium_close": num(t.premium_close),
         "realized_native": num(t.realized_pl),
-        "realized_sgd": round(_sgd(t.realized_pl, t.currency, fx), 2),
-        "currency": t.currency, "outcome": t.outcome,
+        "realized_sgd": round(_sgd(t.realized_pl, _ccy(t), fx), 2),
+        "currency": _ccy(t), "outcome": t.outcome,
         # `_is_open()`'s ANSWER, not its inputs. `outcome` and `close_date` stay on the wire and
         # stay reconstructible, and re-deriving realised-vs-open from `close_date` is how every
         # expired-worthless leg fell out of the detail page's options P/L (#144).

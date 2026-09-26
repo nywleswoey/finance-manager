@@ -11,10 +11,8 @@ The one rule every function shares is `_is_open`: an expired-worthless leg has
 outcome='expired' and no close_date, and it is REALIZED. Re-deriving open-vs-realized from
 close_date is the #144 defect, so the classification is pinned here on its own.
 
-One divergence is pinned as current behaviour, not endorsed: `compute()` treats a trade with
-no currency as USD, while `realized_by_ticker()`, `realized_by()` and the trade dicts pass
-None to `rate_to_sgd`, which reads it as SGD 1:1. The same trade is worth two different SGD
-figures depending on which page asks.
+A trade with no currency is valued in `option_currency()`'s default (USD, HKD for Link REIT's
+LNK) by every one of them, pinned below so the pages cannot drift apart again.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_options_book.py -q
 """
@@ -194,20 +192,37 @@ def test_compute_raises_even_when_the_unrated_trade_is_open(monkeypatch):
         options.compute()
 
 
-# ---------------------------------------------------------------- the null-currency divergence
+# ---------------------------------------------------------------- the null-currency default
 
-def test_null_currency_is_usd_in_compute_but_sgd_everywhere_else(monkeypatch):
-    """INCONSISTENCY, pinned as-is: `compute()` defaults a missing currency to USD
-    (`t.currency or "USD"`), but `realized_by_ticker()`, `realized_by()` and `_trade_dict`
-    hand None to `rate_to_sgd`, which is SGD 1:1. One 100-unit trade reads 135 SGD on the
-    Options tab and 100 SGD on Holdings."""
-    seed(monkeypatch, [trade(currency=None, realized_pl=100)])
+@pytest.mark.parametrize("underlying, recorded, expected", [
+    ("PLTR", None, "USD"),
+    ("LNK", None, "HKD"),                       # Link REIT's options, by their HKEX code
+    ("00823", None, "USD"),                     # the stock's code is not an option underlying
+    ("LNK", "USD", "USD"),                      # a recorded currency always wins
+    ("PLTR", "SGD", "SGD"),
+])
+def test_option_currency(underlying, recorded, expected):
+    assert options.option_currency(underlying, recorded) == expected
 
-    assert options.compute()["total_pl_sgd"] == round(100 * USD, 2)
-    assert options.compute()["by_currency"][0]["key"] == "USD"
-    assert options.realized_by_ticker()["PLTR"]["pl_sgd"] == 100
-    assert options.realized_by("market") == {"US": 100}
-    assert options.recent()[0]["realized_sgd"] == 100
+
+@pytest.mark.parametrize("underlying, market, rate", [("PLTR", "US", USD), ("LNK", "HK", 0.17)])
+def test_null_currency_is_valued_the_same_everywhere(monkeypatch, underlying, market, rate):
+    """One default for a missing currency across the Options tab, Holdings, the allocation
+    splits and the trade lists: once `compute()` read it as USD while the rest read SGD 1:1,
+    so one trade had two SGD values depending on the page."""
+    ccy = options.option_currency(underlying)
+    seed(monkeypatch, [trade(underlying=underlying, market=market, currency=None, realized_pl=100)],
+         fx=(("USD", D(2024, 6, 1), USD), ("HKD", D(2024, 6, 1), 0.17)))
+    sgd = round(100 * rate, 2)
+
+    c = options.compute()
+    assert c["total_pl_sgd"] == sgd
+    assert [b["key"] for b in c["by_currency"]] == [ccy]
+    assert options.realized_by_ticker()[underlying]["pl_sgd"] == sgd
+    assert options.realized_by_ticker()[underlying]["currency"] == ccy
+    assert options.realized_by("market") == {market: sgd}
+    assert [(t["realized_sgd"], t["currency"]) for t in options.recent()] == [(sgd, ccy)]
+    assert [k["currency"] for k in options.contracts_by_ticker()[underlying]] == [ccy]
 
 
 # ---------------------------------------------------------------- realized_by / realized_by_ticker

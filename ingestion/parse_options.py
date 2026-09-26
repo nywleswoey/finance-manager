@@ -32,6 +32,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from build._ledgercommon import MARKET_CCY, TIGER_FEE_COLS
 from portfolio.db import SessionLocal
 from portfolio.models import OptionTrade
+from portfolio.options import option_currency
 from ingestion.load import ROOT, batch, count, maps, num, occ_hash, pdate, prune_stale, upsert
 from ingestion.prices import sg_today
 
@@ -152,7 +153,7 @@ def _reconcile(legs, a, alias):
             open_date=open_d, expiry_date=exp, close_date=close_d,
             premium_open=prem_open, premium_close=prem_close,
             fees_open=d["open_fees"], fees_close=d["close_fees"], realized_pl=realized,
-            currency=MARKET_CCY.get(d["market"], "USD"), outcome=outcome,
+            currency=MARKET_CCY.get(d["market"]) or option_currency(und), outcome=outcome,
             source_file="tiger-flex/options", dedup_hash=occ_hash(occ, key),
         ))
     return payload
@@ -189,7 +190,8 @@ def _archive_legs(src, a, alias):
             market=market or None, option_type=otype, contracts=contracts or 0, strike=strike,
             multiplier=mult, open_date=open_d, expiry_date=expiry, close_date=close_d,
             premium_open=prem_open, premium_close=prem_close, fees_open=fees_open,
-            fees_close=fees_close, realized_pl=realized, currency=MARKET_CCY.get(market, "USD"),
+            fees_close=fees_close, realized_pl=realized,
+            currency=MARKET_CCY.get(market) or option_currency(ticker),
             outcome=outcome, source_file="ibkr-options/options.csv", dedup_hash=occ_hash(occ, key),
         ))
     return payload
