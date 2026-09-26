@@ -149,11 +149,7 @@ def load_dividends(session, acct, alias):
         if not a:
             dropped[("account", r["account"])] += 1
             continue
-        # Same policy as the txn key: the stable natural key only, no amount. A corrected
-        # gross then updates the existing row (keeping its ex_date) instead of pruning it and
-        # inserting a fresh, ex_date-less one. occ separates same-day components of one
-        # ticker (a REIT's taxable + tax-exempt tranches), in file order.
-        key = (r["account"], r["ticker"], r["date"], r["source"])
+        key = (r["account"], r["ticker"], r["date"], r["gross"], r["source"])
         dh = occ_hash(occ, key)
         payload.append(dict(
             account_id=a.id, security_id=sid, pay_date=pdate(r["date"]), kind=r["kind"],

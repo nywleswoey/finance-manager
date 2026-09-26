@@ -255,8 +255,11 @@ def parse_hsbc():
     for r in reader:
         if not r["amount_sgd"].strip():
             raise SystemExit(f"{os.path.relpath(HSBC_CSV, ROOT)}: blank amount_sgd on {r}")
+        try:
+            sgd = float(r["amount_sgd"].replace(",", ""))
+        except ValueError:
+            raise SystemExit(f"{os.path.relpath(HSBC_CSV, ROOT)}: malformed amount_sgd on {r}")
         is_credit = r["cr_flag"].strip().upper() == "CR"
-        sgd = num(r["amount_sgd"])
         amt = sgd if is_credit else -sgd
         desc = r["description"].strip()
         rows.append(row(source="hsbc", account_label="HSBC Live+",
