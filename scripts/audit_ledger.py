@@ -483,6 +483,17 @@ class _WarningCollector(logging.Handler):
         self.messages.append(f"{record.name}: {record.getMessage()}")
 
 
+def dividend_rows(s):
+    """Every dividend row as `{ticker, gross, currency}`, currency by the fold's rule: a NULL one
+    was paid in its security's currency."""
+    from sqlalchemy import text
+
+    return [dict(r) for r in s.execute(text(
+        "SELECT sec.canonical_ticker ticker, d.gross, "
+        "COALESCE(d.currency, sec.currency) AS currency FROM dividend d "
+        "LEFT JOIN security sec ON sec.id = d.security_id")).mappings().all()]
+
+
 def fetch():
     """Read the book `DATABASE_URL` points at into a `Book`. Read-only."""
     from sqlalchemy import text
@@ -539,9 +550,7 @@ def fetch():
             divs = [dict(r) for r in s.execute(text(
                 "SELECT account_id, security_id, pay_date, gross, currency FROM dividend"
             )).mappings().all()]
-            dividends = [dict(r) for r in s.execute(text(
-                "SELECT sec.canonical_ticker ticker, d.gross, d.currency FROM dividend d "
-                "LEFT JOIN security sec ON sec.id = d.security_id")).mappings().all()]
+            dividends = dividend_rows(s)
         # every row, not only the carry types: a split is counted over all of them,
         # the same rows compute_with_fx hands the fold.
         pos, meta = _accumulate_positions(
