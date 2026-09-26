@@ -282,7 +282,9 @@ def _window_shape(coverage, presence):
     (`to_char`) and this is not, so the rule is testable with no database at all — see
     tests/test_spending.py::TestWindowShape, which is where every clause below is pinned.
 
-    `coverage` is one row per source: `first_txn`, `last_txn`, `total_sgd` (the *dated* sum).
+    `coverage` is one row per source: `first_txn`, `last_txn`, `total_sgd` (the *dated* sum),
+    and `label`, the source's `account_label` — the name the Transactions page's source filter
+    offers it under, so that list is the ledger's sources rather than a list in the browser.
     `presence` is one row per (month, source): `ym`, `source`, `n`, `v`. The rule:
 
       * **Material source** — lifetime counted spend >= MATERIAL_SHARE of all counted spend.
@@ -349,6 +351,7 @@ def _window_shape(coverage, presence):
         share = total / dated_total if dated_total else 0.0
         sources.append({
             "source": c["source"],
+            "label": c.get("label") or c["source"],
             "first_txn": first,
             "last_txn": _iso(c["last_txn"]),
             "total_sgd": round(total, 2),
@@ -411,7 +414,7 @@ def window(s=None):
     where, p = _where()
     with session_scope(s) as s:
         coverage = fetch_dicts(s,
-            f"SELECT source, MIN(txn_date) first_txn, MAX(txn_date) last_txn, "
+            f"SELECT source, MIN(account_label) label, MIN(txn_date) first_txn, MAX(txn_date) last_txn, "
             f"COALESCE(SUM(CASE WHEN {DATED} THEN -amount_sgd ELSE 0 END),0) total_sgd "
             f"FROM cash_txn WHERE {where} GROUP BY source", p)
         presence = fetch_dicts(s,

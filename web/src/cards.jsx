@@ -72,6 +72,24 @@ export function usePhone() {
   return phone;
 }
 
+/**
+ * THE TILE — one headline figure under its label, as every view's `.tiles` row draws it.
+ *
+ * One component because there were seven copies with two prop shapes: `cls` colours the value,
+ * `sub` is a muted line under it, and `compact` is the security detail page's smaller value,
+ * which sits five to a row beside a hero rather than leading a page. No `title`: a tile says
+ * what it has to say in its own text, which is what `unknown-book.spec.js` gates.
+ */
+export function Tile({ lbl, val, cls, sub, compact }) {
+  return (
+    <div className="tile">
+      <div className="lbl">{lbl}</div>
+      <div className={"val" + (cls ? " " + cls : "")} style={compact ? { fontSize: 18 } : undefined}>{val}</div>
+      {sub ? <div className="mut" style={{ fontSize: 12 }}>{sub}</div> : null}
+    </div>
+  );
+}
+
 /** The column of cards. One flex column so the gap is declared once rather than per card. */
 export function Cards({ children }) {
   return <div className="cards">{children}</div>;

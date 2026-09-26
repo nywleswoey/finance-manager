@@ -11,19 +11,18 @@ export default function Dividends() {
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   const phone = usePhone();
   useEffect(() => {
-    get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {} }));
-    get("/api/dividend-details").then(setDet).catch(() => setDet({ rows: [], flagged: 0, total: 0, total_sgd: 0 }));
+    get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {}, yoy_pct: {} }));
+    get("/api/dividend-details").then(setDet).catch(() => setDet({ rows: [], flagged: 0, total: 0, total_sgd: 0, flagged_sgd: 0 }));
   }, []);
   if (!ann) return <div className="loading">Loading…</div>;
   const rows = det ? (onlyFlagged ? det.rows.filter((r) => r.flags.length) : det.rows) : [];
-  const shownSgd = rows.reduce((a, r) => a + (r.gross_sgd || 0), 0);
+  // The count and total of what is listed, both the server's: it ships one pair per filter
+  // state, the total summed at full precision and rounded once. A sum of the cent-rounded rows
+  // here would be a second sum of dividends in the browser, and not the same number.
+  const shownN = det ? (onlyFlagged ? det.flagged : det.total) : 0;
+  const shownSgd = det ? (onlyFlagged ? det.flagged_sgd : det.total_sgd) : 0;
   const years = ann.years;                                   // newest → oldest
-  // YoY % vs the next (older) year
-  const yoy = (y, i) => {
-    const prev = ann.totals[years[i + 1]];
-    if (prev == null || !prev) return null;
-    return ((ann.totals[y] - prev) / prev) * 100;
-  };
+  const yoy = (y) => ann.yoy_pct?.[y] ?? null;               // vs the year before, server-side
   const chart = years.map((y) => ({ year: String(y), total: ann.totals[y] || 0 }));
   return (
     <>
@@ -58,8 +57,8 @@ export default function Dividends() {
               </tr>
               <tr>
                 <td className="l mut">YoY</td>
-                {years.map((y, i) => {
-                  const c = yoy(y, i);
+                {years.map((y) => {
+                  const c = yoy(y);
                   return <td key={y} className={c == null ? "mut" : c >= 0 ? "pos" : "neg"}>
                     {c == null ? "—" : `${c >= 0 ? "+" : ""}${fmt(c, 0)}%`}
                   </td>;
@@ -97,12 +96,11 @@ export default function Dividends() {
       <div className="card">
         <h3>Dividend Detail — qty held &amp; declared rate&nbsp;
           <span className="pill">SGD · latest FX</span>
-          {/* The count of what is RENDERED, not what the server holds — `det.total` ignores
-              the flagged-only filter, and under the card pattern this pill is where the
+          {/* The count of what is RENDERED — under the card pattern this pill is where the
               missing header's count went, so a title that disagrees with the cards below it
-              is the one thing it must not do. The `shownSgd` pill beside it was already
-              filter-aware; these two now say the same thing about the same list. */}
-          {det && <span className="pill" style={{ marginLeft: 6 }}>{rows.length} payments</span>}
+              is the one thing it must not do. `shownN` and `shownSgd` follow the flagged-only
+              filter together, so the two pills say the same thing about the same list. */}
+          {det && <span className="pill" style={{ marginLeft: 6 }}>{shownN} payments</span>}
           {det && <span className="pill" style={{ marginLeft: 6 }}>{sgd(shownSgd)}</span>}
           {det && det.flagged > 0 &&
             <span className="pill" style={{ marginLeft: 6, color: "var(--neg)" }}>{det.flagged} need manual input</span>}

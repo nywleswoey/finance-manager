@@ -6,7 +6,7 @@ import {
 import { get, sgd, fmt, catName } from "../../api.js";
 import { ChartKey, Donut, TOOLTIP } from "../../charts.jsx";
 import { categoryColour } from "../../palette.js";
-import { Cards, RowCard, usePhone } from "../../cards.jsx";
+import { Cards, RowCard, Tile, usePhone } from "../../cards.jsx";
 import SpendTrend from "./SpendTrend.jsx";
 
 export default function SpendOverview() {
@@ -147,16 +147,6 @@ export default function SpendOverview() {
           <ChartKey items={trend.groups.map((g) => ({ name: g, colour: categoryColour(g) }))} />
         </div>
       )}
-    </div>
-  );
-}
-
-function Tile({ lbl, val, sub }) {
-  return (
-    <div className="tile">
-      <div className="lbl">{lbl}</div>
-      <div className="val">{val}</div>
-      {sub ? <div className="mut" style={{ fontSize: 12 }}>{sub}</div> : null}
     </div>
   );
 }

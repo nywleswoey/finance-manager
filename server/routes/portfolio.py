@@ -140,7 +140,10 @@ def positions(closed: bool = False):
 
 
 @router.get("/api/performance")
-def performance(by: str = Query("market", enum=["market", "bucket", "account"])):
+def performance(by: str = Query("market", enum=["market", "bucket", "account", "asset_type"])):
+    """Group totals per `by`, closed positions included. The one owner of a group subtotal:
+    Holdings' grouped modes read their subtotal rows from here rather than re-summing the rows
+    they list, so the checkbox that hides closed rows moves no subtotal either."""
     r = rollup(perf_all(), by)                          # perf_all -> include closed positions
     # fold in realized options P/L for the same dimension (computed directly from the
     # options book so orphan underlyings with no stock position are still counted)

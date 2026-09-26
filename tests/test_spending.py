@@ -378,8 +378,15 @@ class TestWindowShape(unittest.TestCase):
         self.assertEqual((got["start"], got["end"], got["gaps"]),
                          ("2024-02", "2024-04", []))
         self.assertEqual(self.by(got, "dbs"), {
-            "source": "dbs", "first_txn": "2024-01-02", "last_txn": "2024-05-30",
+            "source": "dbs", "label": "dbs", "first_txn": "2024-01-02", "last_txn": "2024-05-30",
             "total_sgd": 500.0, "share": 1.0, "material": True})
+
+    def test_a_source_carries_its_account_label(self):
+        # the Transactions page's source filter is built from these, not from a browser list
+        coverage = [{"source": "dbs-cc", "label": "DBS Card 5946", "first_txn": "2024-01-02",
+                     "last_txn": "2024-05-30", "total_sgd": 500.0}]
+        got = spending._window_shape(coverage, [])
+        self.assertEqual(self.by(got, "dbs-cc")["label"], "DBS Card 5946")
 
     def test_an_empty_ledger_is_a_null_window_not_an_error(self):
         self.assertEqual(spending._window_shape([], []), {
@@ -408,7 +415,7 @@ class TestWindowShape(unittest.TestCase):
         got = spending._window_shape(
             coverage, self.seen(*self.months("dbs", "2024-01", "2024-04", 100.0)))
         self.assertEqual(self.by(got, "orphan"),
-                         {"source": "orphan", "first_txn": None, "last_txn": None,
+                         {"source": "orphan", "label": "orphan", "first_txn": None, "last_txn": None,
                           "total_sgd": 0.0, "share": 0.0, "material": False})
         self.assertEqual((got["start"], got["end"]), ("2024-02", "2024-03"))
 

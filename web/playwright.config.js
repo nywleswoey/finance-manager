@@ -111,6 +111,14 @@ export default defineConfig({
       testMatch: /failures\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // Figures a page takes from the server instead of working out itself — Dividends' totals
+    // and YoY, Recurring's monthly tile, the spending source filter. Copy and arithmetic, so one
+    // viewport, on the same reasoning as `ticker`.
+    {
+      name: "served-figures",
+      testMatch: /served-figures\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
       testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts|editors|tablet|tap|split-width|phone-layout)\.spec\.js/,

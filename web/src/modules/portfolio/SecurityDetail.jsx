@@ -1,6 +1,6 @@
 import React, { Fragment, useEffect, useState } from "react";
 import { get, fmt, sgd, money, cls, signed, signedPct } from "../../api.js";
-import { Cards, RowCard, usePhone } from "../../cards.jsx";
+import { Cards, RowCard, Tile, usePhone } from "../../cards.jsx";
 import { ContractCell } from "./contract.jsx";
 import { boundOf, boundPhrase } from "./bound.js";
 
@@ -14,7 +14,7 @@ import { boundOf, boundPhrase } from "./bound.js";
  * ONE CONDITION, EVERYWHERE IT APPEARS: the stream exists and the book cannot measure it.
  * A stream that never existed is omitted outright; one that measured zero renders its zero.
  */
-const NOT_KNOWN = "not known";
+export const NOT_KNOWN = "not known";      // Holdings says the same words, from here
 const FREE_OF_COST = "free of cost";
 
 /**
@@ -619,17 +619,17 @@ export default function SecurityDetail({ ticker, onBack }) {
           reconciliation rows now, not tiles: as tiles they were three of the hero's own
           components standing beside it with nothing saying they add up to anything. */}
       <div className="tiles tiles-list" style={{ marginTop: 14 }}>
-        <Tile lbl="Units" val={fmt(s.units, s.units < 10 ? 4 : 0)} />
-        <Tile lbl="Avg Cost"
+        <Tile compact lbl="Units" val={fmt(s.units, s.units < 10 ? 4 : 0)} />
+        <Tile compact lbl="Avg Cost"
               val={s.avg_cost == null ? NOT_KNOWN : money(s.avg_cost, s.currency, 4)} />
         {/* Price keeps `money`'s dash. It is not one of the three fields the cost partition can
             refuse (§6 names avg cost and both cost bases and no others): a closed position has
             no live price because there is no position, which is the structural state and not an
             unmeasured one. */}
-        <Tile lbl="Price" val={money(s.price, s.currency, 4)} />
-        <Tile lbl="Cost Basis"
+        <Tile compact lbl="Price" val={money(s.price, s.currency, 4)} />
+        <Tile compact lbl="Cost Basis"
               val={s.cost_basis_sgd == null ? NOT_KNOWN : sgd(s.cost_basis_sgd)} />
-        <Tile lbl="Market Value" val={sgd(s.mv_sgd)} />
+        <Tile compact lbl="Market Value" val={sgd(s.mv_sgd)} />
       </div>
 
       <div className="card" style={{ marginBottom: 18 }}>
@@ -803,8 +803,4 @@ export default function SecurityDetail({ ticker, onBack }) {
       )}
     </div>
   );
-}
-
-function Tile({ lbl, val, cls }) {
-  return <div className="tile"><div className="lbl">{lbl}</div><div className={"val " + (cls || "")} style={{ fontSize: 18 }}>{val}</div></div>;
 }

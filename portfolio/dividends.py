@@ -56,7 +56,12 @@ def details(s=None):
     Gross is reported both native (`gross`) and in SGD (`gross_sgd`, latest FX). Rates stay
     native — a declared per-unit rate is a statement fact, not a converted figure. A currency
     with no FX rate becomes a flagged row (gross_sgd=None) rather than an endpoint-wide error,
-    so one unpriced currency can't blank the whole tab."""
+    so one unpriced currency can't blank the whole tab.
+
+    `total_sgd` and `flagged_sgd` are the whole list's and the flagged rows' SGD totals — the
+    page's two filter states — each summed at full precision and rounded once, so neither is a
+    sum of the cent-rounded `gross_sgd` beside it and the browser never re-adds the rows.
+    `total` is the row count and `flagged` the flagged count, pairing with them."""
     with session_scope(s) as s:
         fx = fx_map(s)
         divs = fetch_dicts(s,
@@ -72,7 +77,7 @@ def details(s=None):
                 "WHERE security_id IS NOT NULL")).all():
             by[(aid, sid)].append((td, float(q)))
 
-    out = []
+    out, full = [], {}                                  # full: row id -> unrounded SGD gross
     for d in divs:
         gross = float(d["gross"] or 0)
         declared = num(d["declared_rate"])
@@ -90,7 +95,8 @@ def details(s=None):
         if declared is None and implied is None:
             flags.append("qty unknown — needs manual input")
         try:
-            gross_sgd = round(to_sgd(gross, d["currency"], fx), 2)
+            full[d["id"]] = to_sgd(gross, d["currency"], fx)
+            gross_sgd = round(full[d["id"]], 2)
         except ValueError:
             gross_sgd = None
             flags.append(f"no FX rate for {d['currency']}")
@@ -105,8 +111,10 @@ def details(s=None):
             "flags": flags,
         })
     out.sort(key=nulls_last("pay_date"), reverse=True)
-    return {"rows": out, "flagged": sum(1 for r in out if r["flags"]), "total": len(out),
-            "total_sgd": round(sum(r["gross_sgd"] or 0 for r in out), 2)}
+    flagged = [r for r in out if r["flags"]]
+    return {"rows": out, "flagged": len(flagged), "total": len(out),
+            "total_sgd": round(sum(full.get(r["id"], 0.0) for r in out), 2),
+            "flagged_sgd": round(sum(full.get(r["id"], 0.0) for r in flagged), 2)}
 
 
 def annual(s=None):
@@ -130,10 +138,15 @@ def annual(s=None):
         totals[r["yr"]] += sgd
         years.add(r["yr"]); buckets.add(r["bucket"])
     order = {"cash": 0, "srs": 1, "cpf": 2}
+    # YoY % against the year before, from the unrounded totals. Null for the oldest year and
+    # wherever the year before paid nothing, since there is no ratio to state.
+    yoy = {y: (round((v - totals[y - 1]) / totals[y - 1] * 100, 2) if totals.get(y - 1) else None)
+           for y, v in totals.items()}
     return {
         "currency": "SGD",
         "years": sorted(years, reverse=True),
         "buckets": sorted(buckets, key=lambda b: order.get(b, 9)),
         "matrix": {b: {y: round(v, 2) for y, v in yr.items()} for b, yr in matrix.items()},
         "totals": {y: round(v, 2) for y, v in totals.items()},
+        "yoy_pct": yoy,
     }

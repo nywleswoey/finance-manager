@@ -12,7 +12,16 @@ from portfolio import recurring
 from portfolio.models import CashTxn
 from tests.sqlitetest import make_session
 from portfolio.recurring import (_add_months, _add_period, _status, _infer_cadence,
-                                 _is_weekend, _shift_business, _infer_shift)
+                                 _is_weekend, _shift_business, _infer_shift, _per_month)
+
+
+def test_per_month_puts_every_cadence_in_one_period():
+    # the tile adds these, so a weekly and an annual charge must not be summed as they come
+    assert _per_month(12.0, "monthly") == 12.0
+    assert _per_month(12.0, "weekly") == 52.0
+    assert _per_month(12.0, "quarterly") == 4.0
+    assert _per_month(120.0, "annual") == 10.0
+    assert _per_month(None, "monthly") is None
 
 
 def test_card_sources_have_one_owner():

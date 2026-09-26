@@ -46,6 +46,10 @@ plans.
   home. The `SECURITY-NN` codes cited in `server/` are defined in DEPLOY.md § Security
   register; add a line there before citing a new one.
 
+- **Playwright reuses whatever already listens on its preview port** (`reuseExistingServer`
+  outside CI; default 4173). With several worktrees open that can be another checkout's build,
+  so tests run against stale code. Set `PREVIEW_PORT` to a port you have checked is free.
+
 ## Maintaining this file
 
 Keep this file for knowledge useful to almost every future agent session in this project.

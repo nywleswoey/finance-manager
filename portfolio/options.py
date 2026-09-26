@@ -9,7 +9,7 @@ collected, and yield-style ratios instead.
 from sqlalchemy import select
 
 from .db import fx_map, session_scope
-from .models import OptionTrade
+from .models import OptionTrade, Security
 from .money import rate_to_sgd
 from .nullable import iso, num
 
@@ -160,18 +160,30 @@ def contracts_by_ticker():
 
 
 def realized_by(dim):
-    """Closed-trade realized P/L (SGD) grouped by dimension: 'market' | 'bucket' | 'account'.
-    Options trade on the Tiger Prime cash account, so bucket='cash', account='Tiger Prime'."""
+    """Closed-trade realized P/L (SGD) grouped by dimension: 'market' | 'bucket' | 'account' |
+    'asset_type'. Options trade on the Tiger Prime cash account, so bucket='cash',
+    account='Tiger Prime'. Asset type is the underlying's own, read off `security` by the same
+    ticker `realized_by_ticker()` attaches the stream to a Holdings row by; an underlying with
+    no security row lands under '—', as an unmarketed one does under 'market'."""
+    kinds = _asset_types() if dim == "asset_type" else {}
     agg = {}
     for t, fx in _closed_trades():
         if dim == "market":
             key = t.market or "—"
         elif dim == "bucket":
             key = "cash"
+        elif dim == "asset_type":
+            key = kinds.get(t.underlying) or "—"
         else:                                          # account
             key = "Tiger Prime"
         agg[key] = agg.get(key, 0.0) + _sgd(t.realized_pl, t.currency, fx)
     return {k: round(v, 2) for k, v in agg.items()}
+
+
+def _asset_types():
+    """canonical ticker -> asset_type, for `realized_by('asset_type')`."""
+    with session_scope() as s:
+        return dict(s.execute(select(Security.canonical_ticker, Security.asset_type)).all())
 
 
 def _trade_dicts(stmt):

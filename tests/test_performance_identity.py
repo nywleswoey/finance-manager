@@ -16,8 +16,8 @@ never-held name a red build. What is asserted here is the *shape*: fabricated ro
 database, so a failure means `rollup()` and `realized_by()` stopped composing rather than that
 the book moved.
 
-**All three `by` dimensions, because the identity is a claim about each of them.** The ticker
-side does not change between them, so the three are three chances for one dimension's key to
+**All four `by` dimensions, because the identity is a claim about each of them.** The ticker
+side does not change between them, so the four are four chances for one dimension's key to
 drop a row — `account` joins a leg's accounts into one string and is the only key that is not a
 bare field, which is exactly where a dropped row would hide.
 
@@ -42,7 +42,7 @@ from portfolio import options
 
 from server.routes import portfolio as portfolio_routes
 
-BY = ("market", "bucket", "account")
+BY = ("market", "bucket", "account", "asset_type")
 
 
 def _row(**over):
@@ -108,7 +108,7 @@ ORPHANS = {k: v for k, v in OPTION_BOOK.items() if k not in {r["ticker"] for r i
 # Options are cash-bucket by construction and all on one account (#143 §16), so every dimension
 # collapses the whole book onto a single key — which is the real `realized_by()`'s shape and the
 # reason the residual cannot be split across groups.
-OPTION_KEY = {"market": "US", "bucket": "cash", "account": "Tiger Prime"}
+OPTION_KEY = {"market": "US", "bucket": "cash", "account": "Tiger Prime", "asset_type": "stock"}
 
 
 @pytest.fixture(autouse=True)
@@ -158,8 +158,8 @@ def test_the_residual_is_the_whole_gap_and_is_not_zero(client, by):
     assert abs(gap) > 1.0
 
 
-def test_the_three_dimensions_agree_with_each_other(client):
-    """One book, three partitions of it. A dimension whose key dropped a row would differ from
+def test_the_dimensions_agree_with_each_other(client):
+    """One book, four partitions of it. A dimension whose key dropped a row would differ from
     the other two even if every one of them still looked plausible on its own."""
     assert len({group_net(client, by) for by in BY}) == 1
 
@@ -201,3 +201,11 @@ def test_a_divergence_leg_reaches_its_group_net(client, by):
 
     assert stock == round(sum(r["stock_pl_sgd"] or 0 for r in ROWS), 2)
     assert unsplit == round(CAVEAT["stock_pl_sgd"] + DIVERGENCE["stock_pl_sgd"], 2)
+
+
+def test_an_unmarketed_row_groups_under_the_key_options_use():
+    """`realized_by('market')` keys an unmarketed underlying '—', and Holdings looks its subtotal
+    up by that key, so `rollup()` has to file the stock side there too, not under None."""
+    from portfolio.performance import rollup
+    groups = rollup([_row(market=None)], "market")
+    assert list(groups) == ["—"]
