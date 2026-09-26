@@ -6,7 +6,7 @@ which SQLite cannot run, so tests/test_dividends.py covers `details()` and says 
 
 What is pinned: undated rows stay out, each currency is
 converted before the currencies of one year and bucket are summed, buckets come out in the
-page's cash/srs/cpf order, and a currency with no FX rate refuses rather than passing through
+page's cash/srs/cpf order, YoY is stated against the year before, and a currency with no FX rate refuses rather than passing through
 unconverted — unlike `details()`, which flags the row and carries on.
 
 `tests/pgtest.py` owns the connection: a throwaway `portfolio_test` database, never the app's,
@@ -65,6 +65,8 @@ class TestAnnual(pgtest.Case):
         assert out["matrix"] == {"cash": {2024: 127.0, 2025: 5.0}, "cpf": {2024: 50.0},
                                  "srs": {2025: 10.0}}
         assert out["totals"] == {2024: 177.0, 2025: 15.0}
+        # YoY against the year before, from the totals; the oldest year has none to compare
+        assert out["yoy_pct"] == {2024: None, 2025: -91.53}
 
     def test_an_undated_dividend_is_left_out(self):
         self.div(1, D(2024, 3, 1), 100)
@@ -80,4 +82,4 @@ class TestAnnual(pgtest.Case):
 
     def test_no_dividends_is_an_empty_matrix(self):
         assert dividends.annual(s=self.s) == {"currency": "SGD", "years": [], "buckets": [],
-                                              "matrix": {}, "totals": {}}
+                                              "matrix": {}, "totals": {}, "yoy_pct": {}}
