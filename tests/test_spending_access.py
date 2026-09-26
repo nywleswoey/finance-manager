@@ -20,16 +20,9 @@ PROBE = "/api/spending/__probe__"  # matches the gate, no route behind it
 
 
 @pytest.fixture(autouse=True)
-def _cfg():
-    """Deterministic auth config. Pins dev_auth_bypass explicitly — the local .env sets
-    DEV_AUTH_BYPASS=true, which would otherwise short-circuit every check here."""
-    settings.session_secret = "test-secret-key"
-    settings.google_client_id = "test-client.apps.googleusercontent.com"
-    settings.allowed_emails = f"{OWNER}, {GUEST}"
-    settings.spending_emails = OWNER
-    settings.cookie_secure = False
-    settings.dev_auth_bypass = False
-    yield
+def _cfg(auth_settings):
+    """conftest's enforced gate, with GUEST added to the allowlist but not to Spending."""
+    auth_settings.allowed_emails = f"{OWNER}, {GUEST}"
 
 
 @pytest.fixture

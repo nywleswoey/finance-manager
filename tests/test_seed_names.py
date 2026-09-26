@@ -8,10 +8,6 @@ name and SecurityDetail rendered "GIFTED STOCK IN" as AMZN's heading (#145).
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_seed_names.py -q
 """
 import csv
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 import scripts.seed as seed
 

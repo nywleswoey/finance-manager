@@ -17,14 +17,9 @@ including when the row still received a dividend.
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_overview_net.py -q
 """
 import datetime as dt
-from contextlib import contextmanager
 
 import pytest
-from fastapi.testclient import TestClient
 
-from portfolio.config import settings
-
-from server import main
 from server.routes import portfolio as portfolio_routes
 
 
@@ -74,26 +69,11 @@ BOOK_INVESTED = 780.0
 
 
 @pytest.fixture(autouse=True)
-def _stub(monkeypatch):
-    main._cache.clear()
-    settings.dev_auth_bypass = True
+def _stub(monkeypatch, no_db):
     monkeypatch.setattr(portfolio_routes, "perf_all", lambda: [dict(r) for r in ROWS])
     monkeypatch.setattr(portfolio_routes, "alloc_by_account", lambda: {})
     # /api/positions reads its as-of date from the database; neither test has one.
-    monkeypatch.setattr(portfolio_routes, "session_scope", lambda *a, **k: _no_session())
     monkeypatch.setattr(portfolio_routes, "valuation_as_of", lambda s: dt.date(2026, 9, 26))
-    yield
-    main._cache.clear()
-
-
-@contextmanager
-def _no_session():
-    yield None
-
-
-@pytest.fixture
-def client():
-    return TestClient(main.app)
 
 
 def test_the_headline_is_the_book_net(client):

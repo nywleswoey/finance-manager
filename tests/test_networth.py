@@ -3,23 +3,14 @@
 Run: PYTHONPATH=. .venv/bin/python tests/test_networth.py
 """
 import datetime as dt
-import os
-import sys
 import unittest
 from decimal import Decimal
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import create_engine, event, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import event, text
 
 from portfolio import networth as nw
-from portfolio.models import Base, NwItem, NwSnapshot, NwValue
-
-
-def make_session():
-    eng = create_engine("sqlite://")
-    Base.metadata.create_all(eng)
-    return sessionmaker(bind=eng, future=True)()
+from portfolio.models import NwItem, NwSnapshot, NwValue
+from tests.sqlitetest import make_session
 
 
 def _no_portfolio(s):

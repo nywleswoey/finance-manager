@@ -8,25 +8,16 @@ code the migration seeds from and the model + loader behaviour built on it.
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spend_classification.py -q
 """
 import datetime as dt
-import os
-import sys
 import unittest
 from collections import Counter
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import sessionmaker
 
 from ingestion.load_cash import REFRESH_COLS
-from portfolio.models import Base, CashTxn, ClassificationRule, SpendCategory
+from portfolio.models import CashTxn, ClassificationRule, SpendCategory
 from portfolio.spend_categories import SPEND_CATEGORIES
-
-
-def make_session():
-    eng = create_engine("sqlite://")
-    Base.metadata.create_all(eng)
-    return sessionmaker(bind=eng, future=True)()
+from tests.sqlitetest import make_session
 
 
 # ---------------- canonical taxonomy (pure data) ----------------

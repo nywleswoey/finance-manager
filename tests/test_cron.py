@@ -22,10 +22,8 @@ SECRET = "cron-secret-value"
 
 
 @pytest.fixture(autouse=True)
-def _cfg():
-    settings.cron_secret = SECRET
-    settings.dev_auth_bypass = False   # a developer's .env sets this true; pin it
-    yield
+def _cfg(auth_settings):
+    auth_settings.cron_secret = SECRET
 
 
 @pytest.fixture

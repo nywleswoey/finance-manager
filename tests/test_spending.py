@@ -13,25 +13,14 @@ runs on every machine with no server up.
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending.py -q
 """
 import datetime as dt
-import os
-import sys
 import unittest
 from decimal import Decimal
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from portfolio import spending
-from portfolio.models import Base, CashTxn
+from portfolio.models import CashTxn
+from tests.sqlitetest import make_session
 
 D = dt.date
-
-
-def make_session():
-    eng = create_engine("sqlite://")
-    Base.metadata.create_all(eng)
-    return sessionmaker(bind=eng, future=True)()
 
 
 # ---------------- the shared WHERE builder (pure) ----------------
