@@ -1,18 +1,23 @@
-"""Classify + exclude the raw cash ledger.
+"""Decide which raw cash-ledger rows count as spend.
 
 Reads  build/cash_ledger_raw.csv  (from parse_cash.py)
-Writes build/cash_ledger.csv      (enriched: is_spend, exclude_reason, category, subcategory)
+Writes build/cash_ledger.csv      (the raw columns + is_spend, exclude_reason)
+
+Only the spend decision lives here. Category is DB-owned: ingestion/load_cash.py never reads
+one from this file, and portfolio.classify's stored rules classify rows after they load.
 
 Rules (in order, per row):
-  1. Inflows (amount_sgd >= 0) are never spend.
-       - on a CARD_SOURCES row other than ITEMISED_CARD -> reason 'cc_payment'
-       - on dbs -> categorized as Income, reason 'income'
-  2. Outflows matching exclusions.yaml -> is_spend=false + that reason
-     (cc_payment for the HSBC/Trust card bills we itemise elsewhere; brokerage/internal
-     transfers; investment). Bill payments to cards we DON'T itemise stay as spend.
-  3. Remaining outflows are spend -> category (group) + subcategory (line item) from
-     categories.yaml. Unmatched spend merchants go to the LLM fallback (see classify_llm),
-     whose answer is written back into categories.yaml; still-unmatched -> Uncategorized.
+  0. A per-record fix in record_corrections.csv wins over everything. `EXCLUDED:<reason>`
+     makes the row non-spend with that reason; any other target makes it spend.
+  1. The itemised card (ITEMISED_CARD): every line is spend (refund credits net against
+     their purchase), unless the merchant is on merchant_overrides.yaml's `exclude` list.
+  2. Inflows (amount_sgd >= 0) are never spend: 'cc_payment' on the other CARD_SOURCES,
+     'income' elsewhere.
+  3. Outflows matching exclusions.yaml -> not spend, with that reason (cc_payment for the card
+     bills we itemise elsewhere; brokerage/internal transfers; investment). Bill payments to
+     cards we DON'T itemise stay as spend.
+  4. Outflows whose merchant is on merchant_overrides.yaml's `exclude` list -> 'manual'.
+  5. Everything else is spend.
 
 Run:  PYTHONPATH=. .venv/bin/python build/classify_cash.py
 """
@@ -28,7 +33,6 @@ from portfolio.spending import CARD_SOURCES, ITEMISED_CARD
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW = os.path.join(ROOT, "build", "cash_ledger_raw.csv")
 OUT = os.path.join(ROOT, "build", "cash_ledger.csv")
-CATS = os.path.join(ROOT, "data", "spending", "categories.yaml")
 EXCL = os.path.join(ROOT, "data", "spending", "exclusions.yaml")
 OVERRIDES = os.path.join(ROOT, "data", "spending", "merchant_overrides.yaml")
 WATCHLIST = os.path.join(ROOT, "data", "spending", "watchlist.yaml")
@@ -36,7 +40,7 @@ RECORD_CORR = os.path.join(ROOT, "data", "spending", "record_corrections.csv")
 
 OUT_COLS = ["source", "account_label", "txn_date", "post_date", "description", "merchant",
             "amount_sgd", "fcy_amount", "fcy_currency", "direction", "is_spend",
-            "exclude_reason", "category", "subcategory", "source_file", "raw"]
+            "exclude_reason", "source_file", "raw"]
 
 
 def _hay(r):
@@ -57,33 +61,11 @@ def exclusion_for(hay, excl):
     return None
 
 
-def category_for(hay, groups):
-    for group, leaves in groups.items():
-        for leaf, keywords in leaves.items():
-            if _match(hay, keywords):
-                return group, leaf
-    return None, None
-
-
-def income_for(hay, income):
-    for leaf, keywords in income.items():
-        if _match(hay, keywords):
-            return leaf
-    return "Other Income"
-
-
-def override_for(merchant, overrides, oexcl):
-    """Learned manual overrides take priority — matched by merchant PREFIX (startswith),
+def manually_excluded(merchant, oexcl):
+    """merchant_overrides.yaml `exclude` entries, matched by merchant PREFIX (startswith),
     which is precise and avoids substring false-hits ('ace' in 'marketplace')."""
     m = merchant.lower()
-    for key in oexcl:
-        if m.startswith(key.lower()):
-            return "EXCLUDE", None
-    for key, target in overrides.items():
-        if m.startswith(key.lower()):
-            group, _, leaf = target.partition("::")
-            return group, (leaf or None)
-    return None, None
+    return any(m.startswith(key.lower()) for key in oexcl)
 
 
 def _iso(s):
@@ -94,7 +76,7 @@ def _iso(s):
 
 def load_record_corrections():
     """Per-record manual fixes (from the full-ledger review) keyed by the exact row, so
-    amount-specific overrides work (same merchant -> different bucket by amount)."""
+    amount-specific fixes work (same merchant -> spend at one amount, excluded at another)."""
     if not os.path.exists(RECORD_CORR):
         return {}
     corr = {}
@@ -105,89 +87,46 @@ def load_record_corrections():
     return corr
 
 
-def _apply_correction(o, target):
-    if target.startswith("EXCLUDED:"):
-        o["is_spend"] = "false"
-        o["exclude_reason"] = target.split(":", 1)[1]
-        o["category"], o["subcategory"] = "Excluded", o["exclude_reason"]
-    else:
-        group, _, leaf = target.partition("::")
-        o["is_spend"] = "true"
-        o["exclude_reason"] = ""
-        o["category"], o["subcategory"] = group, leaf
+def _decide(o, is_spend, reason=""):
+    o["is_spend"] = "true" if is_spend else "false"
+    o["exclude_reason"] = reason
     return o
 
 
-def _assign_spend_category(o, r, hay, og, ol, groups, unmatched):
-    """Set category/subcategory on a spend row: a manual override (og/ol) wins, else the
-    keyword category from categories.yaml, else Uncategorized (recording the merchant in
-    `unmatched` for the LLM fallback report)."""
-    if og:
-        o["category"], o["subcategory"] = og, ol or ""
-        return
-    group, leaf = category_for(hay, groups)
-    if group:
-        o["category"], o["subcategory"] = group, leaf
-    else:
-        o["category"], o["subcategory"] = "Uncategorized", ""
-        unmatched[r["merchant"][:60]] = unmatched.get(r["merchant"][:60], 0) + 1
-
-
-def classify(rows, cats, excl, overrides, oexcl, corrections=None):
+def classify(rows, excl, oexcl, corrections=None):
     corrections = corrections or {}
-    groups = cats.get("groups", {})
-    income = cats.get("income", {})
     out = []
-    unmatched = {}  # merchant -> count, for the LLM fallback report
     for r in rows:
-        hay = _hay(r)
         amt = float(r["amount_sgd"])
         o = {c: r.get(c, "") for c in OUT_COLS}
         ckey = (r["source"], r["txn_date"], round(amt, 2), (r["merchant"] or "")[:40].strip())
         if ckey in corrections:                       # exact per-record fix wins over all
-            out.append(_apply_correction(o, corrections[ckey]))
+            target = corrections[ckey]
+            if target.startswith("EXCLUDED:"):
+                out.append(_decide(o, False, target.split(":", 1)[1]))
+            else:
+                out.append(_decide(o, True))
             continue
         if r["source"] == ITEMISED_CARD:
             # itemised card: every line is spend (debits) or an offset (refund/instalment
             # adjustment credits, kept as spend so they net within their category).
-            o["is_spend"] = "true"
-            og, ol = override_for(r["merchant"], overrides, oexcl)
-            if og == "EXCLUDE":
-                o["is_spend"] = "false"
-                o["exclude_reason"], o["category"], o["subcategory"] = "manual", "Excluded", "manual"
+            if manually_excluded(r["merchant"], oexcl):
+                out.append(_decide(o, False, "manual"))
             else:
-                _assign_spend_category(o, r, hay, og, ol, groups, unmatched)
-            out.append(o)
+                out.append(_decide(o, True))
             continue
         if amt >= 0:  # inflow
-            o["is_spend"] = "false"
-            if r["source"] in CARD_SOURCES and r["source"] != ITEMISED_CARD:
-                o["exclude_reason"] = "cc_payment"
-                o["category"], o["subcategory"] = "Income", "Card Repayment"
-            else:
-                o["exclude_reason"] = "income"
-                o["category"], o["subcategory"] = "Income", income_for(hay, income)
-            out.append(o)
+            card = r["source"] in CARD_SOURCES
+            out.append(_decide(o, False, "cc_payment" if card else "income"))
             continue
-        reason = exclusion_for(hay, excl)
+        reason = exclusion_for(_hay(r), excl)
         if reason:
-            o["is_spend"] = "false"
-            o["exclude_reason"] = reason
-            o["category"], o["subcategory"] = "Excluded", reason
-            out.append(o)
-            continue
-        # manual overrides (incl. manual excludes) win over keyword categories
-        og, ol = override_for(r["merchant"], overrides, oexcl)
-        if og == "EXCLUDE":
-            o["is_spend"] = "false"
-            o["exclude_reason"] = "manual"
-            o["category"], o["subcategory"] = "Excluded", "manual"
-            out.append(o)
-            continue
-        o["is_spend"] = "true"
-        _assign_spend_category(o, r, hay, og, ol, groups, unmatched)
-        out.append(o)
-    return out, unmatched
+            out.append(_decide(o, False, reason))
+        elif manually_excluded(r["merchant"], oexcl):
+            out.append(_decide(o, False, "manual"))
+        else:
+            out.append(_decide(o, True))
+    return out
 
 
 def watch_alerts(out, watchlist):
@@ -208,13 +147,10 @@ def _load(path, default):
 
 def main():
     rows = list(csv.DictReader(open(RAW)))
-    cats = yaml.safe_load(open(CATS))
     excl = yaml.safe_load(open(EXCL))
-    ov = _load(OVERRIDES, {}) or {}
-    overrides, oexcl = ov.get("overrides", {}), ov.get("exclude", [])
+    oexcl = (_load(OVERRIDES, {}) or {}).get("exclude", [])
     watchlist = _load(WATCHLIST, {}) or {}
-    corrections = load_record_corrections()
-    out, unmatched = classify(rows, cats, excl, overrides, oexcl, corrections)
+    out = classify(rows, excl, oexcl, load_record_corrections())
     write_csv(OUT, OUT_COLS, out)
 
     for d, amt, m, note in watch_alerts(out, watchlist):
@@ -222,16 +158,13 @@ def main():
 
     spend = [o for o in out if o["is_spend"] == "true"]
     spend_total = sum(-float(o["amount_sgd"]) for o in spend)
-    uncat = [o for o in spend if o["category"] == "Uncategorized"]
-    uncat_total = sum(-float(o["amount_sgd"]) for o in uncat)
     print(f"classified {len(out)} rows -> {os.path.relpath(OUT, ROOT)}")
     print(f"  spend rows: {len(spend)}  total S${spend_total:,.0f}")
-    print(f"  uncategorized: {len(uncat)} rows / S${uncat_total:,.0f} "
-          f"({100*uncat_total/spend_total:.0f}% of spend)" if spend_total else "")
-    if unmatched:
-        print("  top unmatched merchants (extend categories.yaml or run LLM fallback):")
-        for m, c in sorted(unmatched.items(), key=lambda kv: -kv[1])[:20]:
-            print(f"    {c:3}  {m}")
+    excluded = {}
+    for o in out:
+        if o["is_spend"] == "false":
+            excluded[o["exclude_reason"]] = excluded.get(o["exclude_reason"], 0) + 1
+    print(f"  excluded rows by reason: {dict(sorted(excluded.items()))}")
 
 
 if __name__ == "__main__":

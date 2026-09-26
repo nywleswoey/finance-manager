@@ -36,9 +36,8 @@ def test_card_sources_have_one_owner():
                 "amount_sgd": amt, "fcy_amount": "", "fcy_currency": "",
                 "direction": "credit", "source_file": "", "raw": ""}
 
-    out, _ = classify_cash.classify([row("trust", "20"), row("hsbc", "20"),
-                                     row("dbs", "20"), row("dbs-cc", "-5")],
-                                    {"groups": {}, "income": {}}, {}, {}, [], {})
+    out = classify_cash.classify([row("trust", "20"), row("hsbc", "20"),
+                                  row("dbs", "20"), row("dbs-cc", "-5")], {}, [], {})
     assert out[0]["exclude_reason"] == "cc_payment"
     assert out[1]["exclude_reason"] == "cc_payment"
     assert out[2]["exclude_reason"] == "income"

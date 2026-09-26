@@ -222,6 +222,7 @@ def apply_corrections():
             d["units"], d["rate"] = CORRECTIONS[k]
 
 def main():
+    DIV.clear()
     # cdp() last: dedups vs the rest
     tiger(); fsm(); moomoo(); cpf_srs(); cdp(); apply_corrections()
     out = os.path.join(HERE, "dividends.csv")
@@ -238,6 +239,7 @@ def main():
     bysrc = defaultdict(int)
     for d in DIV: bysrc[d["source"]] += 1
     print("\nby source:", dict(bysrc))
+    return DIV
 
 
 if __name__ == "__main__":

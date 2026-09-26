@@ -45,18 +45,6 @@ _SYM = re.compile(r"([A-Z0-9.]+)\s+(\d{8})\s+(PUT|CALL)\s+([\d.]+)")
 # that list; 'Accrued Interest in Trade' is not one of them.
 
 
-def money(s):
-    """Parse '$15.50', '($6.80)', ' $0.00   ' -> float; parens => negative."""
-    s = str(s or "").strip()
-    if not s:
-        return None
-    neg = s.startswith("(") and s.endswith(")")
-    v = num(s.strip("()"))
-    if v is None:
-        return None
-    return -v if neg else v
-
-
 def _und(ticker):
     """Normalise underlying to the archive's convention (HK counters carry a '.HK' suffix)."""
     t = (ticker or "").upper()
@@ -179,11 +167,11 @@ def _archive_legs(src, a, alias):
         if len(r) < 11 or not r[1].strip():
             continue
         market, ticker, otype = r[0].strip(), r[1].strip().upper(), r[4].strip().lower()
-        contracts, strike = num(r[2]), money(r[3])
+        contracts, strike = num(r[2]), num(r[3])
         open_d, expiry, close_d = pdate(r[5]), pdate(r[8]), pdate(r[9])
-        prem_open, fees_open = money(r[6]), (money(r[7]) or 0.0)
-        prem_close = abs(money(r[10]) or 0.0)
-        fees_close = (money(r[11]) if len(r) > 11 else 0.0) or 0.0
+        prem_open, fees_open = num(r[6]), (num(r[7]) or 0.0)
+        prem_close = abs(num(r[10]) or 0.0)
+        fees_close = (num(r[11]) if len(r) > 11 else 0.0) or 0.0
         mult = MULT.get(market, 100)
         realized = None
         if prem_open is not None and contracts is not None:

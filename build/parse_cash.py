@@ -9,8 +9,9 @@ Sources (scope: 2025-01 onward):
       pdftotext -layout; dates are "DD Mon" with the year inferred from the statement
       cycle. Credits are shown with a leading "+".
   - HSBC Live+ credit card           (build/hsbc_extracted.csv)
-      scanned PDFs -> Claude-vision extracted to CSV (see build/hsbc_extracted.csv).
-      Credits carry a "CR" flag.
+      The statements are scanned PDFs with no text layer, so this CSV is made by hand
+      (vision-extracted, one row per statement line); no script in the repo produces it.
+      Its column contract is HSBC_COLS below.
 
 Output: build/cash_ledger_raw.csv  (raw, pre-classification). amount_sgd is SIGNED:
 negative = outflow/spend candidate, positive = inflow. classify_cash.py enriches it.
@@ -27,6 +28,7 @@ import unicodedata
 from _pdf import raw_text
 from _csvout import write_csv
 from _dates import try_date
+from _ledgercommon import num
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "build", "cash_ledger_raw.csv")
@@ -41,18 +43,6 @@ COLS = ["source", "account_label", "txn_date", "post_date", "description", "merc
 MONEY = re.compile(r"[+-]?[\d,]+\.\d{2}")
 MONTHS = {m: i for i, m in enumerate(
     ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], 1)}
-
-
-def money(s):
-    return float(str(s).replace(",", "").replace("+", "").strip())
-
-
-def _num(s):
-    s = str(s or "").replace(",", "").strip()
-    try:
-        return float(s) if s else 0.0
-    except ValueError:
-        return 0.0
 
 
 def _pdate(s):
@@ -109,7 +99,7 @@ def parse_dbs():
             if "Balance Brought Forward" in line and in_multiplier:
                 nums = MONEY.findall(line)
                 if nums:
-                    running = money(nums[-1])
+                    running = num(nums[-1])
                 capturing = True
                 continue
             if "Balance Carried Forward" in line:
@@ -127,7 +117,7 @@ def parse_dbs():
                     rows.append(_dbs_finish(cur, src))
                 d, mo, y, rest = m.group(1), m.group(2), m.group(3), m.group(4)
                 nums = MONEY.findall(line)
-                bal = money(nums[-1])
+                bal = num(nums[-1])
                 delta = bal - running if running is not None else 0.0
                 running = bal
                 txntype = MONEY.split(rest)[0].strip()
@@ -212,8 +202,8 @@ def parse_trust():
                     continue
                 nums = MONEY.findall(rest)
                 is_credit = "+" in nums[-1] or "+" in rest
-                sgd = money(nums[-1])
-                fcy = money(nums[-2]) if len(nums) >= 2 else ""
+                sgd = num(nums[-1])
+                fcy = num(nums[-2]) if len(nums) >= 2 else ""
                 txn_d = _year_for(int(td), tm, start, end)
                 post_d = _year_for(int(pd_), pm, start, end)
                 amt = sgd if is_credit else -sgd
@@ -242,13 +232,34 @@ def parse_trust():
 
 
 # ----------------------------------------------------------------- HSBC card (vision CSV)
+# build/hsbc_extracted.csv, one row per statement transaction line. Header row required;
+# extra columns are ignored.
+#   tran_date    transaction date, ISO YYYY-MM-DD
+#   post_date    posting date, ISO YYYY-MM-DD
+#   description  the statement's merchant text as printed (also used as the merchant key)
+#   amount_sgd   the SGD amount as printed: unsigned, may carry thousands commas ("1,234.50")
+#   cr_flag      "CR" when the statement marks the line a credit (refund / payment), else blank
+#   source_file  the statement PDF the line came from, relative to the repo root
+HSBC_COLS = ("tran_date", "post_date", "description", "amount_sgd", "cr_flag", "source_file")
+HSBC_AMOUNT = re.compile(r"\d{1,3}(,\d{3})*(\.\d+)?|\d+(\.\d+)?")
+
+
 def parse_hsbc():
     rows = []
     if not os.path.exists(HSBC_CSV):
         return rows
-    for r in csv.DictReader(open(HSBC_CSV)):
+    reader = csv.DictReader(open(HSBC_CSV))
+    missing = [c for c in HSBC_COLS if c not in (reader.fieldnames or [])]
+    if missing:
+        raise SystemExit(f"{os.path.relpath(HSBC_CSV, ROOT)}: missing column(s) {missing}; "
+                         f"see HSBC_COLS in build/parse_cash.py")
+    for r in reader:
+        if not r["amount_sgd"].strip():
+            raise SystemExit(f"{os.path.relpath(HSBC_CSV, ROOT)}: blank amount_sgd on {r}")
+        if not HSBC_AMOUNT.fullmatch(r["amount_sgd"].strip()):
+            raise SystemExit(f"{os.path.relpath(HSBC_CSV, ROOT)}: malformed amount_sgd on {r}")
+        sgd = float(r["amount_sgd"].strip().replace(",", ""))
         is_credit = r["cr_flag"].strip().upper() == "CR"
-        sgd = money(r["amount_sgd"])
         amt = sgd if is_credit else -sgd
         desc = r["description"].strip()
         rows.append(row(source="hsbc", account_label="HSBC Live+",
@@ -298,7 +309,7 @@ def parse_dbs_cc():
             if not d:
                 continue
             file_dates.append(d)
-            deb, cr = _num(debit), _num(credit)
+            deb, cr = num(debit), num(credit)
             tt = ttype.strip().upper()
             if tt == "PAYMENT":                            # card bill settlement -> not spend
                 continue

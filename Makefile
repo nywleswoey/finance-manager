@@ -23,8 +23,8 @@ flat:         ## (re)build the normalized flat files from statements
 	$(PY) build/parse_moomoo.py >/dev/null
 	$(PY) build/parse_cdp.py >/dev/null
 	$(PY) build/parse_endowus.py >/dev/null
-	python3 build/build_ledger.py >/dev/null
-	python3 build/parse_dividends.py >/dev/null
+	$(PY) build/build_ledger.py >/dev/null
+	$(PY) build/parse_dividends.py >/dev/null
 
 load:         ## load ledger + dividends into DB (idempotent)
 	$(PY) -m ingestion.load
@@ -37,12 +37,12 @@ ingest: flat seed load   ## full ingest: statements -> flat -> seed -> DB
 	@# mapping, and load silently drops trades whose ticker has no security row yet. A
 	@# statement introducing a new ticker (e.g. FSM's first Bursa buy) needs both, in order.
 
-flat-cash:    ## parse bank/card statements -> classified spending ledger (build/cash_ledger.csv)
+flat-cash:    ## parse bank/card statements -> spending ledger with the is_spend decision (build/cash_ledger.csv)
 	$(PY) build/parse_cash.py
 	$(PY) build/classify_cash.py
 load-cash:    ## load the spending ledger into DB (idempotent)
 	$(PY) -m ingestion.load_cash
-spending: flat-cash load-cash   ## full spending ingest: statements -> classify -> DB
+spending: flat-cash load-cash   ## full spending ingest: statements -> is_spend -> DB (rules categorise)
 	@echo "spending ingested. (HSBC scanned PDFs are vision-extracted to build/hsbc_extracted.csv)"
 
 snapshot:     ## preview --all-new (one DBS month, or the catch-up refusal)
