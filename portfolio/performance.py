@@ -1224,6 +1224,43 @@ def _return_figures(car, rows):
 # named out-of-scope; recorded here so the next reader does not assume they agree.
 
 
+def _xirr_flows(p, px, today, part):
+    """`(flows, cost_ok)` — one leg's dated XIRR cashflows, closed by the held units at market
+    today, and whether its cost gate passes: units entered, every one of them with a known cost.
+
+    One function because two solves read it: the leg's own `xirr` in `_build_row`, and the
+    name's pooled `ticker_xirr` in `fold_positions`, which must gate each leg's cost exactly as
+    the leg's own figure is gated. The span gate is not here — it belongs to whichever flows are
+    solved (`_spans`)."""
+    flows = list(p["flows"])
+    if p["units"] > 1e-6 and px:
+        flows.append((today, p["units"] * px))
+    return flows, part["units_in"] > 1e-6 and part["unknown"] < 1e-6
+
+
+def _spans(flows):
+    """Whether dated flows span long enough for annualisation to mean something."""
+    if not flows:
+        return False
+    return (max(d for d, _ in flows) - min(d for d, _ in flows)).days >= MIN_XIRR_DAYS
+
+
+def _ticker_xirr(legs):
+    """One XIRR per name: every listed leg's flows pooled and solved once, or `None` unless every
+    leg passes its own cost gate and the pooled flows span `MIN_XIRR_DAYS`.
+
+    Not a mean of the legs' rates — the mean of two IRRs is not the IRR of the merged flows (D05
+    19.8% cash, 28.9% CPF; pooled 21.5%). Pooling adds native amounts, which is sound because
+    every leg of a ticker is one security and so one currency. A leg with unknown cost poisons
+    the pool rather than dropping out of it: its money is part of the name's, and a pool without
+    it would be a rate on some other book. A leg too short to annualise alone does not — the
+    span that matters is the pool's, so a days-old lot beside a years-held one still pools."""
+    if not legs or not all(ok for _, ok in legs):
+        return None
+    flows = [f for fl, _ in legs for f in fl]
+    return solve_xirr(flows) if _spans(flows) else None
+
+
 def _build_row(k, p, m, fx, price, today, part, verdict):
     """Assemble one position's output dict (native ccy + SGD) from its accumulated flows/units.
     `part` is the leg's own cost partition and `verdict` its whole ticker's `net_verdict` —
@@ -1233,19 +1270,13 @@ def _build_row(k, p, m, fx, price, today, part, verdict):
     rate = rate_to_sgd(ccy, fx)
     px = price.get(k[1])
     mv = (p["units"] * px) if px else 0.0
-    flows = list(p["flows"])
-    if p["units"] > 1e-6 and px:
-        flows.append((today, mv))
+    flows, cost_ok = _xirr_flows(p, px, today, part)
     # `cost_known` is the partition read as a boolean: false only when EVERY entering unit is
     # unknown. Not `unknown == 0` — that would flip C38U (417 of 6,700 unpriced) to false and
     # delete its 7,756.75 Net from Holdings, Performance and Overview. A name with SOME cost
     # still answers "did I make money on this"; only a name with none has to refuse.
     cost_known = part["units_in"] > 1e-6 and part["unknown"] < part["units_in"] - 1e-6
-    # XIRR is only meaningful when every unit that entered has a known cost and the flows
-    # span long enough for annualisation to mean something.
-    span = (max(d for d, _ in flows) - min(d for d, _ in flows)).days if flows else 0
-    xirr_ok = cost_known and part["unknown"] < 1e-6 and span >= MIN_XIRR_DAYS
-    xirr = solve_xirr(flows) if xirr_ok else None
+    xirr = solve_xirr(flows) if cost_ok and _spans(flows) else None
     total_pl = (mv + p["proceeds"] + p["income"] - p["invested"]) if cost_known else None
     # a free lot has a cost of zero, so it has no denominator — a percentage return on nothing
     # is not a smaller number, it is not a number.
@@ -1482,12 +1513,22 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
               for _, c in sorted(carries.items(), key=lambda kc: str(kc[0]))}
     verdicts = {tk: net_verdict(ps, bounds.get(tk)) for tk, ps in by_ticker.items()}
     out = []
+    pooled = defaultdict(list)
     for k, p in pos.items():
         m = meta.get(k)
         if not m:
             continue
-        out.append(_build_row(k, p, m, fx, price, today, parts[k],
-                              verdicts[m["canonical_ticker"]]))
+        r = _build_row(k, p, m, fx, price, today, parts[k], verdicts[m["canonical_ticker"]])
+        out.append(r)
+        # the legs Holdings lists, so the pool is the name a consolidated row stands for; noise
+        # rows `is_leg` drops carry no money to pool.
+        if is_leg(r):
+            pooled[r["ticker"]].append(_xirr_flows(p, price.get(k[1]), today, parts[k]))
+    # whole-ticker like the verdict, and rides every leg (#110's "second fold keyed on the
+    # security alone"): what Holdings' ticker mode shows for a name held in several buckets.
+    ticker_xirr = {tk: rounded(_ticker_xirr(legs), 4) for tk, legs in pooled.items()}
+    for r in out:
+        r["ticker_xirr"] = ticker_xirr.get(r["ticker"])
     # a held security with no `price` row folds at a market value of ZERO — `mv_sgd: 0`, the
     # whole cost basis as unrealised loss and a breakeven solved against nothing — while
     # `alloc_by_account` skips the same row. `price: null` is the only other sign of it, so say

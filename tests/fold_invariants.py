@@ -177,8 +177,19 @@ class FoldInvariants:
         seen = {}
         for r in self.rows:
             got = {k: r[k] for k in ("peak_car_sgd", "return_span_days", "return_pct",
-                                     "return_verdict")}
+                                     "return_verdict", "ticker_xirr")}
             self.assertEqual(seen.setdefault(r["ticker"], got), got, r["ticker"])
+
+    def test_a_name_listed_in_one_bucket_pools_to_that_buckets_own_xirr(self):
+        """The pooled XIRR is the leg's own where there is nothing to pool: one listed leg's
+        flows solved once are the same flows its `xirr` solved."""
+        legs = {}
+        for r in self.rows:
+            if is_leg(r):
+                legs.setdefault(r["ticker"], []).append(r)
+        for ticker, rs in legs.items():
+            if len(rs) == 1:
+                self.assertEqual(rs[0]["ticker_xirr"], rs[0]["xirr"], ticker)
 
     # -- two verdicts on two axes, and Net on the wire (#150) -----------------------------
 
