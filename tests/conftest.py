@@ -34,7 +34,7 @@ def auth_settings():
     """Deterministic auth config with the gate enforced. dev_auth_bypass is pinned off: a
     developer's local .env sets DEV_AUTH_BYPASS=true, which would otherwise short-circuit
     user_from_request and silently pass tests that exist to prove the gate denies."""
-    settings.session_secret = "test-secret-key"
+    settings.session_secret = "test-secret-key-at-least-32-bytes"   # HS256 warns under 32
     settings.google_client_id = "test-client.apps.googleusercontent.com"
     settings.allowed_emails = OWNER
     settings.spending_emails = OWNER
@@ -56,10 +56,12 @@ def no_db(monkeypatch):
 
 
 @pytest.fixture
-def client():
-    """The app with the auth gate bypassed. The response memo is process-wide, so it is cleared
-    on both sides: a figure cached by one test's stubs must not answer the next test."""
+def client(monkeypatch):
+    """The app with the auth gate bypassed (VERCEL unset: the bypass is off whenever it is set).
+    The response memo is process-wide, so it is cleared on both sides: a figure cached by one
+    test's stubs must not answer the next test."""
     from server import main
+    monkeypatch.delenv("VERCEL", raising=False)
     settings.dev_auth_bypass = True
     main._cache.clear()
     yield TestClient(main.app)

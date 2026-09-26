@@ -4,12 +4,8 @@ engine production uses. `tests/pgtest.py` owns the throwaway database (or the sk
 
 Run: make db-up && PYTHONPATH=. .venv/bin/python -m pytest tests/test_recurring_pg.py -q
 """
-import os
-import sys
-
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from tests import pgtest
 from tests.test_recurring import RecurringDb
 
