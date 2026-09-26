@@ -262,7 +262,9 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
   `rollup()` adds a leg's `stock_pl_sgd` only where `cost_known` is true, and the route sums
   that into the group Net. A caveat leg whose every entering unit is unknown still ships a
   row Net (`stock_pl` is kept when the ticker's verdict is not `refuse`) and is left out of
-  the group. No live ticker has that shape.
+  the group. No live ticker has that shape. Holdings' grouped subtotal rows read this group
+  figure rather than re-summing their own rows, so the gap has one owner and shows the same in
+  both places.
 
 **`breakeven_price`** ships beside the Net on every position row and every bucket column: the
 native-currency price at which THAT column's Net reaches zero — `(cost_basis_sgd − realised −

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { get, sgd, pct, cls } from "../../api.js";
+import { Tile } from "../../cards.jsx";
 import { Donut } from "../../charts.jsx";
 
 export default function Overview() {
@@ -10,7 +11,7 @@ export default function Overview() {
   useEffect(() => { get("/api/return").then(setRet).catch(() => setRet({})); }, []);
   useEffect(() => { get("/api/options").then(setOpt).catch(() => setOpt({})); }, []);
   if (!d) return <div className="loading">Loading…</div>;
-  if (d.error) return <div className="loading">API not reachable. Start: uvicorn server.main:app</div>;
+  if (d.error) return <div className="loading">API not reachable.</div>;
 
   const pie = (obj) => Object.entries(obj).map(([k, v]) => ({ name: k, value: v.mv_sgd }));
   const mkt = pie(d.by_market), acct = pie(d.by_account).filter((x) => x.value > 0);
@@ -39,8 +40,3 @@ export default function Overview() {
     </div>
   );
 }
-
-function Tile({ lbl, val, cls }) {
-  return <div className="tile"><div className="lbl">{lbl}</div><div className={"val " + (cls || "")}>{val}</div></div>;
-}
-

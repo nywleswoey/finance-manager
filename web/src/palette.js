@@ -3,9 +3,9 @@
  *
  * SCOPE, because the file name overclaims if left alone. This is the colour a *series* is
  * drawn in — a spending category, a net-worth band, a donut slice. It is not the app's
- * colour: `styles.css` owns the surface and text tokens, and the amber `#d29922` on
- * Recurring's "due soon" pill, Classify's error card and the breakdown's "unsaved" pill is a
- * status colour, which is a different job that happens to share a hex. `NetWorth.jsx`'s
+ * colour: `styles.css` owns the surface, text and status tokens, and the amber on Recurring's
+ * "due soon" pill, Classify's error card and the breakdown's "unsaved" pill is `--warn`, a
+ * status colour, which is a different job that happens to share a hex with a series here. `NetWorth.jsx`'s
  * two-line chart also still carries its own two hexes; it is deliberately not migrated,
  * because the composition chart retires that chart rather than recolouring it.
  *

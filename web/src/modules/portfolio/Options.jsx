@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from "recharts";
 import { get, sgd, money, pct, fmt, cls } from "../../api.js";
-import { usePhone } from "../../cards.jsx";
+import { Tile, usePhone } from "../../cards.jsx";
 import { ContractCell } from "./contract.jsx";
 
 /**
@@ -23,6 +23,11 @@ import { ContractCell } from "./contract.jsx";
  * Not phone-only either way. A negative bar reaches the bottom of the plot at every width.
  */
 const NEG_LABEL_BAND = 18;
+
+// `--pos` and `--neg`, as literals because recharts writes a `Cell` fill as an SVG attribute,
+// where `var()` resolves to nothing — `styles.css`'s `:root` block is the other site.
+const GAIN = "#2ea043";
+const LOSS = "#f85149";
 const band = (rows) => ({ bottom: rows.some((r) => r.pl < 0) ? NEG_LABEL_BAND : 0 });
 
 export default function Options() {
@@ -68,7 +73,7 @@ export default function Options() {
             <YAxis tickFormatter={(v) => (v / 1000) + "k"} padding={band(yrChart)} />
             <Tooltip formatter={(v) => sgd(v)} />
             <Bar dataKey="pl">
-              {yrChart.map((e, i) => <Cell key={i} fill={e.pl >= 0 ? "#2ea043" : "#f85149"} />)}
+              {yrChart.map((e, i) => <Cell key={i} fill={e.pl >= 0 ? GAIN : LOSS} />)}
               <LabelList dataKey="pl" position="top" fill="#c9d1d9" fontSize={12}
                          formatter={(v) => sgd(v)} />
             </Bar>
@@ -91,7 +96,7 @@ export default function Options() {
               <YAxis tickFormatter={(v) => (v / 1000) + "k"} padding={band(moChart)} />
               <Tooltip formatter={(v, n, p) => [sgd(v), `P/L · ${p.payload.trades} trades`]} />
               <Bar dataKey="pl">
-                {moChart.map((e, i) => <Cell key={i} fill={e.pl >= 0 ? "#2ea043" : "#f85149"} />)}
+                {moChart.map((e, i) => <Cell key={i} fill={e.pl >= 0 ? GAIN : LOSS} />)}
                 {/* 11px, up from 9 — the number ticket 015 settled ("11px holds, no floor":
                     it is *at* iOS HIG's 11pt minimum rather than under it, and WCAG sets
                     none), not one invented here. 9 was under the only number the app has,
@@ -175,8 +180,4 @@ export default function Options() {
       </div>
     </div>
   );
-}
-
-function Tile({ lbl, val, cls }) {
-  return <div className="tile"><div className="lbl">{lbl}</div><div className={"val " + (cls || "")}>{val}</div></div>;
 }

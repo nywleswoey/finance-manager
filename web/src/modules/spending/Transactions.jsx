@@ -2,10 +2,11 @@ import React, { useEffect, useState } from "react";
 import { get, sgd } from "../../api.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
-const SOURCES = { "": "All sources", dbs: "DBS bank", trust: "Trust card", hsbc: "HSBC card" };
-
 export default function SpendTransactions() {
   const [cats, setCats] = useState([]);
+  // The ledger's own sources, each under its account label — from the server, so a source the
+  // ingest adds (dbs-cc was the one a list here missed) is offered without an edit here.
+  const [sources, setSources] = useState([]);
   const [group, setGroup] = useState("");
   const [source, setSource] = useState("");
   const [excluded, setExcluded] = useState(false);
@@ -13,6 +14,9 @@ export default function SpendTransactions() {
   const phone = usePhone();
 
   useEffect(() => { get("/api/spending/categories").then(setCats).catch(() => {}); }, []);
+  useEffect(() => {
+    get("/api/spending/window").then((w) => setSources(w.sources || [])).catch(() => {});
+  }, []);
   useEffect(() => {
     const q = new URLSearchParams();
     if (group) q.set("group", group);
@@ -35,7 +39,8 @@ export default function SpendTransactions() {
           {groups.map((g) => <option key={g} value={g}>{g}</option>)}
         </select>
         <select value={source} onChange={(e) => setSource(e.target.value)} style={{ marginLeft: 8 }}>
-          {Object.entries(SOURCES).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          <option value="">All sources</option>
+          {sources.map((s) => <option key={s.source} value={s.source}>{s.label}</option>)}
         </select>
         {/* `taplabel` — 015 named this exact label when it wrote the rule: the label is the
             target and `<label>` is inline, so it needs the flex to have a box at all. The

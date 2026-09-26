@@ -1,0 +1,47 @@
+{
+ "stock": {
+  "mv_sgd": 1020509.22,
+  "income_sgd": 122892.68,
+  "pl_sgd": 438795.71,
+  "cost_sgd": 2054081.01,
+  "capital_sgd": 765016.63,
+  "invested_sgd": 2054081.01,
+  "realised_pl_sgd": 58140.32,
+  "unrealised_pl_sgd": 255492.62,
+  "stock_pl_sgd": 315903.04,
+  "unsplit_pl_sgd": 2270.1,
+  "options_pl_sgd": 187881.68,
+  "net_pl_sgd": 626677.4,
+  "return_pct": 0.3051
+ },
+ "reit": {
+  "mv_sgd": 172742.6,
+  "income_sgd": 78334.69,
+  "pl_sgd": 16856.66,
+  "cost_sgd": 347523.45,
+  "capital_sgd": 199343.6,
+  "invested_sgd": 347523.45,
+  "realised_pl_sgd": 550.68,
+  "unrealised_pl_sgd": -63404.0,
+  "stock_pl_sgd": -61478.02,
+  "unsplit_pl_sgd": 1375.3,
+  "options_pl_sgd": 0.0,
+  "net_pl_sgd": 16856.67,
+  "return_pct": 0.0485
+ },
+ "fund": {
+  "mv_sgd": 98083.49,
+  "income_sgd": 0.0,
+  "pl_sgd": 45126.83,
+  "cost_sgd": 52956.66,
+  "capital_sgd": 52956.66,
+  "invested_sgd": 52956.66,
+  "realised_pl_sgd": 0.0,
+  "unrealised_pl_sgd": 45126.83,
+  "stock_pl_sgd": 45126.83,
+  "unsplit_pl_sgd": 0.0,
+  "options_pl_sgd": 0.0,
+  "net_pl_sgd": 45126.83,
+  "return_pct": 0.8521
+ }
+}

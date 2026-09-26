@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { get, post, del, sgd } from "../../api.js";
+import { Tile } from "../../cards.jsx";
 
 const CADENCES = ["weekly", "monthly", "quarterly", "annual"];
 const STATUS = {
-  overdue: { lbl: "Overdue", c: "#f85149" },
-  due_soon: { lbl: "Due soon", c: "#d29922" },
-  on_track: { lbl: "On track", c: "#2ea043" },
-  no_data: { lbl: "No match", c: "#6e7681" },
-  inactive: { lbl: "Inactive", c: "#6e7681" },
+  overdue: { lbl: "Overdue", c: "var(--neg)" },
+  due_soon: { lbl: "Due soon", c: "var(--warn)" },
+  on_track: { lbl: "On track", c: "var(--pos)" },
+  no_data: { lbl: "No match", c: "var(--idle)" },
+  inactive: { lbl: "Inactive", c: "var(--idle)" },
 };
 
 const EMPTY = { name: "", merchant_match: "", cadence: "monthly", expected_amount: "", expected_day: "" };
@@ -63,14 +64,16 @@ export default function Recurring() {
 
   const active = items.filter((r) => r.active);
   const overdue = active.filter((r) => r.status === "overdue").length;
-  const monthlyTotal = active.reduce((a, r) => a + (r.expected_amount || r.avg_amount || 0), 0);
+  // Each charge restated per month by the server (`recurring.py` owns cadence), so a weekly and
+  // an annual charge add up in one period rather than as they come.
+  const monthlyTotal = active.reduce((a, r) => a + (r.monthly_amount || 0), 0);
 
   return (
     <div>
       <div className="tiles">
         <Tile lbl="Tracked" val={active.length} />
         <Tile lbl="Overdue" val={overdue} cls={overdue ? "neg" : ""} />
-        <Tile lbl="Recurring / period (est.)" val={sgd(monthlyTotal)} />
+        <Tile lbl="Recurring / month (est.)" val={sgd(monthlyTotal)} />
         <Tile lbl="Detected (unregistered)" val={cands.length} />
       </div>
 
@@ -164,8 +167,4 @@ function shiftArrow(iso) {
 function Badge({ status }) {
   const s = STATUS[status] || STATUS.no_data;
   return <span style={{ color: s.c, fontWeight: 600, fontSize: 12 }}>● {s.lbl}</span>;
-}
-
-function Tile({ lbl, val, cls }) {
-  return <div className="tile"><div className="lbl">{lbl}</div><div className={"val " + (cls || "")}>{val}</div></div>;
 }

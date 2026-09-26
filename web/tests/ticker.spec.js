@@ -39,6 +39,10 @@ import holdingQ01 from "./fixtures/api/holding-q01.json" with { type: "json" };
 import holding9CI from "./fixtures/api/holding-9ci.json" with { type: "json" };
 import holdingC38U from "./fixtures/api/holding-c38u.json" with { type: "json" };
 import holdingAstrea from "./fixtures/api/holding-astrea6b.json" with { type: "json" };
+import perfMarket from "./fixtures/api/performance-market.json" with { type: "json" };
+import perfBucket from "./fixtures/api/performance-bucket.json" with { type: "json" };
+import perfAccount from "./fixtures/api/performance-account.json" with { type: "json" };
+import perfAssetType from "./fixtures/api/performance-asset_type.json" with { type: "json" };
 
 const holdings = VIEWS.find((v) => v.name === "Portfolio › Holdings");
 
@@ -264,12 +268,12 @@ test("the checkbox changes which rows are listed and no cell of any listed row",
     // identically once the closed rows join it. A fold that still consulted the checkbox would
     // move at least one cell of at least one row.
     //
-    // THE SCOPE IS THE DATA ROWS, AND TWO THINGS OUTSIDE THEM DO FOLLOW THE VISIBLE SET, both by
-    // design and both predating this rule. The Net bar scales to the largest |Net| **on screen**
-    // so bars are comparable where you are looking, and a group subtotal in the grouped modes is
-    // a sum over the rows it is listing. Neither is a claim about a name: the rule #143 §15 fixed
-    // is that a TICKER's own figures must not depend on the checkbox, and those are exactly the
-    // cells this compares.
+    // THE SCOPE IS THE DATA ROWS, AND ONE THING OUTSIDE THEM DOES FOLLOW THE VISIBLE SET, by
+    // design and predating this rule: the Net bar scales to the largest |Net| **on screen** so
+    // bars are comparable where you are looking. It is not a claim about a name: the rule #143
+    // §15 fixed is that a TICKER's own figures must not depend on the checkbox, and those are
+    // exactly the cells this compares. The grouped modes' subtotal rows no longer follow it
+    // either — the next test holds that.
     await groupBy(page).selectOption("ticker");
     const snapshot = async () => {
       const rows = await page.locator(".pinned tbody tr").all();
@@ -288,6 +292,39 @@ test("the checkbox changes which rows are listed and no cell of any listed row",
     expect(after.size).toBeGreaterThan(before.size);       // rows joined
     for (const [identity, cells] of before) {
       expect.soft(after.get(identity), identity).toBe(cells);   // and nothing else moved
+    }
+  });
+
+test("a group's subtotal row is /api/performance's group, whatever the checkbox says",
+  async ({ page }) => {
+    // ONE OWNER OF A GROUP TOTAL. The subtotal row used to be a reduce over the rows under it,
+    // with its own refusal rule and its own row set, beside the server's rollup of the same
+    // group; now it is the server's, so every cell is compared against the payload the page was
+    // served for that grouping — the `by` it asked for, never a neighbour's. Both checkbox
+    // states, because a subtotal that still summed the listed rows would move when they do.
+    const PERF = { market: perfMarket, bucket: perfBucket, account: perfAccount,
+                   asset_type: perfAssetType };
+    const MV = 1, PL_ = 2, NET_ = 5;
+    for (const [by, groups] of Object.entries(PERF)) {
+      await groupBy(page).selectOption(by);
+      for (const checked of [false, true]) {
+        await page.getByLabel("Show closed positions").setChecked(checked);
+        const rows = page.locator(".pinned tbody tr.grouprow");
+        await expect(rows.first()).toBeVisible();
+        // wait for the subtotals to land, not only the rows they head
+        await expect(rows.first().locator("td").nth(NET_)).not.toHaveText("");
+        for (const r of await rows.all()) {
+          const cells = await r.locator("td").allInnerTexts();
+          const key = cells[0].replace(/^[▸▾]\s*/, "").replace(/\s*·\s*\d+$/, "");
+          const g = groups[key];
+          const where = `${by} ${key} (closed ${checked ? "shown" : "hidden"})`;
+          expect.soft(g, `${where}: no /api/performance group`).toBeTruthy();
+          if (!g) continue;
+          expect.soft(cells[MV], where).toBe(asSgd(g.mv_sgd));
+          expect.soft(cells[PL_], where).toBe(asSgd(g.stock_pl_sgd));
+          expect.soft(cells[NET_], where).toBe(asSgd(g.net_pl_sgd));
+        }
+      }
     }
   });
 
@@ -365,9 +402,11 @@ test("three states, three distinct glyphs, and a refusal that states no number",
   const refusal = holdingAstrea.summary;
   expect.soft(refusal.net_verdict).toBe("refuse");
   expect.soft(refusal.net_pl_sgd).toBeNull();
+  // In words, as the detail page says it (CONTEXT.md, Cell state): `n/a` reads as *not
+  // applicable*, and the tooltip beside it is unreachable on touch.
   const cell = netCell(page, refusal.ticker);
-  await expect.soft(cell).toHaveText("n/a");
-  await expect.soft(cell.locator("span[title]")).toHaveAttribute("title", /not known/);
+  await expect.soft(cell).toHaveText("not known");
+  await expect.soft(cell.locator("span[title]")).toHaveAttribute("title", /no recorded cost/);
 });
 
 test("the legend explains every meaning a mark can carry, and the refusal's", async ({ page }) => {
@@ -390,5 +429,6 @@ test("the legend explains every meaning a mark can carry, and the refusal's", as
     expect.soft(text, `legend must explain ${m.glyph} meaning "${m.lede}"`)
       .toContain(`${m.glyph} ${m.lede} — ${m.why}`);
   }
-  expect.soft(text, "legend must explain n/a").toContain("n/a");
+  expect.soft(text, "legend must explain not known").toContain("not known");
+  expect.soft(text, "the glossary avoids n/a").not.toContain("n/a");
 });

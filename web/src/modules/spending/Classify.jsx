@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { get, post, put, del, sgd } from "../../api.js";
+import { Tile } from "../../cards.jsx";
 
 // A spend's amount_sgd is signed negative; show the positive spend magnitude.
 const mag = (n) => (n == null ? "—" : sgd(-n));
@@ -24,8 +25,8 @@ function Pill({ source }) {
   const m = source === "manual"
     ? { lbl: "manual", c: "#8957e5" }
     : source === "rule"
-      ? { lbl: "rule", c: "#2ea043" }
-      : { lbl: "unclassified", c: "#6e7681" };
+      ? { lbl: "rule", c: "var(--pos)" }
+      : { lbl: "unclassified", c: "var(--idle)" };
   return <span style={{ color: m.c, fontWeight: 600, fontSize: 11 }}>● {m.lbl}</span>;
 }
 
@@ -44,9 +45,6 @@ function CatSelect({ cats, value, onChange }) {
   );
 }
 
-function Tile({ lbl, val, cls }) {
-  return <div className="tile"><div className="lbl">{lbl}</div><div className={"val " + (cls || "")}>{val}</div></div>;
-}
 
 export default function Classify() {
   const [q, setQ] = useState(null);          // {total_spend, unclassified, spends:[]}
@@ -371,8 +369,8 @@ function RuleModal({ modal, setModal, cats, onDone }) {
         {modal.error && <div className="neg" style={{ marginBottom: 8 }}>{modal.error}</div>}
 
         {p?.status === "unmappable" && (
-          <div className="card" style={{ borderColor: "#d29922" }}>
-            <div style={{ color: "#d29922", fontWeight: 600 }}>Couldn’t map that rule</div>
+          <div className="card" style={{ borderColor: "var(--warn)" }}>
+            <div style={{ color: "var(--warn)", fontWeight: 600 }}>Couldn’t map that rule</div>
             <div className="mut">{p.reason}</div>
             <div style={{ marginTop: 6 }}>{p.clarifying_question}</div>
           </div>
