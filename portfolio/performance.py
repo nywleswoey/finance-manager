@@ -1753,7 +1753,7 @@ def rollup(rows, by):
         if r["units"] <= 1e-6 and not r["cost_known"] and abs(r["income_sgd"]) < 1e-6:
             continue
         # positions are pooled per funding bucket, so a row can span accounts -> join them
-        key = (", ".join(r["accounts"]) or "—") if by == "account" else r[by]
+        key = (", ".join(r["accounts"]) if by == "account" else r[by]) or "—"
         g = agg[key]
         g["mv_sgd"] += r["mv_sgd"]; g["income_sgd"] += r["income_sgd"]
         if r["cost_known"]:                              # only sum P/L where cost is real

@@ -186,3 +186,11 @@ def test_an_orphan_underlying_has_no_holdings_row_to_carry_it(client):
     held = {r["ticker"] for r in ROWS}
 
     assert not (set(ORPHANS) & held)
+
+
+def test_an_unmarketed_row_groups_under_the_key_options_use():
+    """`realized_by('market')` keys an unmarketed underlying '—', and Holdings looks its subtotal
+    up by that key, so `rollup()` has to file the stock side there too, not under None."""
+    from portfolio.performance import rollup
+    groups = rollup([_row(market=None)], "market")
+    assert list(groups) == ["—"]
