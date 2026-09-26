@@ -60,9 +60,10 @@ def nw_get(snap_id: int):
 def nw_create(body: NwSnapshotIn):
     try:
         return nw.create_snapshot(body.date, [v.model_dump() for v in body.values], body.note)
+    except nw.SnapshotExists as e:
+        raise HTTPException(409, str(e))                    # duplicate date
     except ValueError as e:
-        # duplicate date -> 409; missing FX / unknown item -> 400
-        raise HTTPException(409 if "already exists" in str(e) else 400, str(e))
+        raise HTTPException(400, str(e))                    # missing FX / unknown item
 
 
 class NwUpdateIn(BaseModel):

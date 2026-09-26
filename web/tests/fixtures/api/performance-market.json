@@ -2,8 +2,6 @@
  "SG": {
   "mv_sgd": 710670.83,
   "income_sgd": 158318.23,
-  "pl_sgd": 419990.59,
-  "cost_sgd": 885713.77,
   "capital_sgd": 418702.32,
   "invested_sgd": 885713.77,
   "realised_pl_sgd": 31151.62,
@@ -17,8 +15,6 @@
  "HK": {
   "mv_sgd": 156836.64,
   "income_sgd": 35058.24,
-  "pl_sgd": 125938.94,
-  "cost_sgd": 343485.4,
   "capital_sgd": 156266.43,
   "invested_sgd": 343485.4,
   "realised_pl_sgd": 90310.5,
@@ -32,8 +28,6 @@
  "US": {
   "mv_sgd": 416766.89,
   "income_sgd": 1808.5,
-  "pl_sgd": -48573.92,
-  "cost_sgd": 1215682.2,
   "capital_sgd": 415937.72,
   "invested_sgd": 1215682.2,
   "realised_pl_sgd": -51211.62,
@@ -47,8 +41,6 @@
  "MY": {
   "mv_sgd": 7060.95,
   "income_sgd": 0.0,
-  "pl_sgd": -2618.8,
-  "cost_sgd": 9679.75,
   "capital_sgd": 9679.75,
   "invested_sgd": 9679.75,
   "realised_pl_sgd": 0.0,

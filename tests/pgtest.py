@@ -17,7 +17,8 @@ the real ledger — a database this module derives and creates itself cannot be 
 Schema comes from `Base.metadata`, not from alembic: the tests assert on query behaviour
 (`to_char` output, GROUP BY cardinality, numeric arithmetic), which the model definitions
 carry, and running migrations per test-session would tie the suite to migration history it
-does not exercise.
+does not exercise. That is only sound while the two agree, which CI's `alembic check` step
+enforces (.github/workflows/ci.yml).
 
 `make db-up` is the Postgres these tests expect. Without it they skip, and the default run is
 unchanged — deselect them explicitly with `-m "not pg"`.

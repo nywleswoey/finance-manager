@@ -6,7 +6,7 @@ the `ALIAS`/`canon` counter-rename map, the `num` money parser, the
 `norm_ticker` symbol normaliser, `name_to_ticker` (display name to ticker, from
 symbols.csv), `cdp_dividend_ticker`, `market_of` (ticker shape to market), `MARKET_CCY`, and
 `TIGER_FEE_COLS`. Stdlib only, so it loads cleanly whether imported as a bare
-sibling (`python3 build/x.py`, build/ on sys.path[0]) or as a package member
+sibling (`python build/x.py`, build/ on sys.path[0]) or as a package member
 (`-m ingestion.x`, repo root on path).
 """
 import csv

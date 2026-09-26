@@ -6,7 +6,9 @@ PostHog proxy, StaticFiles. This module owns the portfolio-specific memoization 
 that /api/refresh-prices and the cron handler in server.main clear — server.main re-exports it so
 `server.main._cache` (imported by tests and scripts/audit_ledger.py) stays the same object.
 """
-from fastapi import APIRouter, Query
+import logging
+
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from portfolio import dividends
@@ -19,6 +21,7 @@ from portfolio.performance import (CDP_ACCOUNT, alloc_by_account, cdp_transactio
 from sqlalchemy import text
 
 router = APIRouter()
+log = logging.getLogger("api")
 
 _cache: dict = {}
 
@@ -254,7 +257,12 @@ def dividends_annual():
 
 
 @router.get("/api/transactions")
-def transactions(account: str | None = None, ticker: str | None = None, limit: int = 500):
+def transactions(account: str | None = None, ticker: str | None = None,
+                 limit: int = Query(500, ge=1, le=2000)):
+    """The oldest `limit` trades, ascending, statement rows and CDP's priced trades merged.
+
+    The SQL takes the same oldest-first `limit` the merge keeps, so a ledger longer than the
+    page cannot lose rows to an unordered cut before the sort."""
     # CDP transactions come from cdp-stocks (has price + amount); statements omit them
     rows = []
     if account != CDP_ACCOUNT:                         # CDP comes only from cdp-stocks below
@@ -262,13 +270,13 @@ def transactions(account: str | None = None, ticker: str | None = None, limit: i
              "t.action, t.qty_signed, t.price, t.gross_amount, t.currency, t.source_file "
              "FROM txn t JOIN account a ON a.id=t.account_id JOIN security s ON s.id=t.security_id "
              f"WHERE a.name <> '{CDP_ACCOUNT}'")
-        p: dict = {}
+        p: dict = {"lim": limit}
         if account:
             q += " AND a.name=:acct"; p["acct"] = account
         if ticker:
             q += " AND s.canonical_ticker=:tk"; p["tk"] = ticker
         with session_scope() as s:
-            rows = fetch_dicts(s, q + " LIMIT 2000", p)
+            rows = fetch_dicts(s, q + " ORDER BY t.trade_date IS NULL, t.trade_date LIMIT :lim", p)
     if account in (None, CDP_ACCOUNT):                 # add CDP from cdp-stocks
         cdp = cdp_transactions()
         if ticker:
@@ -280,12 +288,15 @@ def transactions(account: str | None = None, ticker: str | None = None, limit: i
 
 @router.get("/api/return")
 def portfolio_return():
+    """XIRR + TWR off live Yahoo prices (portfolio.twr). A failed fetch is a 503 and is not
+    cached, so the next load retries; the exception goes to the log, never onto the wire."""
     if "ret" not in _cache:
         from portfolio.twr import compute_twr
         try:
             _cache["ret"] = compute_twr()
-        except Exception as e:
-            return {"error": str(e)[:120]}
+        except Exception:
+            log.exception("return computation failed")
+            raise HTTPException(503, "return unavailable") from None
     return _cache["ret"]
 
 

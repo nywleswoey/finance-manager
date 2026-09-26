@@ -4,14 +4,17 @@ overdue / amount-drifted charges. Also auto-detects recurring merchants not yet 
 
 All amounts SGD, positive magnitude (spend). Occurrence = an is_spend cash_txn whose merchant
 contains the recurring's merchant_match (case-insensitive).
+
+Case-insensitive matching is `LOWER(x) LIKE LOWER(:p)`, not `ILIKE`: the same SQL then runs on
+the SQLite sessions tests/test_recurring.py builds as well as on Postgres.
 """
 import calendar
 import datetime as dt
 import statistics
 
-from sqlalchemy import text
+from sqlalchemy import Date, text
 
-from portfolio.db import SessionLocal
+from portfolio.db import session_scope
 from portfolio.nullable import iso
 from portfolio.spending import CARD_SOURCES
 
@@ -95,16 +98,16 @@ def _occurrences(s, match):
         return []
     rows = s.execute(text(
         "SELECT txn_date, -amount_sgd AS amt FROM cash_txn "
-        "WHERE is_spend AND txn_date IS NOT NULL AND merchant ILIKE :m "
-        "ORDER BY txn_date DESC"),
+        "WHERE is_spend AND txn_date IS NOT NULL AND LOWER(merchant) LIKE LOWER(:m) "
+        "ORDER BY txn_date DESC").columns(txn_date=Date),
         {"m": f"%{match}%"}).all()
     return [(r[0], float(r[1])) for r in rows]
 
 
-def list_recurring():
+def list_recurring(s=None, today=None):
     """Every registered recurring charge with matched-occurrence timing + status."""
-    today = dt.date.today()
-    with SessionLocal() as s:
+    today = today or dt.date.today()
+    with session_scope(s) as s:
         defs = s.execute(text(
             "SELECT id, name, merchant_match, category, cadence, expected_amount, "
             "expected_day, active, notes FROM recurring_spend ORDER BY name")).mappings().all()
@@ -145,29 +148,31 @@ def list_recurring():
         return out
 
 
-def add(name, merchant_match=None, category=None, cadence="monthly",
-        expected_amount=None, expected_day=None, notes=None):
-    with SessionLocal() as s:
+def add(name, merchant_match=None, cadence="monthly",
+        expected_amount=None, expected_day=None, notes=None, s=None):
+    """Register a recurring charge; returns its id. `category` is a column nothing sets — the
+    app never offered a way to choose one, so the API no longer accepts one either."""
+    with session_scope(s) as s:
         row = s.execute(text(
-            "INSERT INTO recurring_spend (name, merchant_match, category, cadence, "
-            "expected_amount, expected_day, notes) VALUES "
-            "(:name, :mm, :cat, :cad, :amt, :day, :notes) RETURNING id"),
-            {"name": name, "mm": merchant_match, "cat": category,
+            "INSERT INTO recurring_spend (name, merchant_match, cadence, "
+            "expected_amount, expected_day, notes, active) VALUES "
+            "(:name, :mm, :cad, :amt, :day, :notes, :active) RETURNING id"),
+            {"name": name, "mm": merchant_match, "active": True,
              "cad": cadence if cadence in CADENCE_DAYS else "monthly",
              "amt": expected_amount, "day": expected_day, "notes": notes}).scalar()
         s.commit()
         return row
 
 
-def delete(rid):
-    with SessionLocal() as s:
+def delete(rid, s=None):
+    with session_scope(s) as s:
         s.execute(text("DELETE FROM recurring_spend WHERE id = :id"), {"id": rid})
         s.commit()
 
 
-def dismiss(merchant):
+def dismiss(merchant, s=None):
     """Mark a detected merchant as a false positive so detect_candidates stops suggesting it."""
-    with SessionLocal() as s:
+    with session_scope(s) as s:
         s.execute(text("INSERT INTO recurring_dismissed (merchant) VALUES (:m) "
                        "ON CONFLICT (merchant) DO NOTHING"), {"m": merchant})
         s.commit()
@@ -184,7 +189,7 @@ def _infer_cadence(gaps):
     return None
 
 
-def detect_candidates(min_occurrences=3):
+def detect_candidates(min_occurrences=3, s=None):
     """Auto-detect recurring merchants in the ledger not already registered. A candidate is a
     merchant with >= min_occurrences spend rows whose median gap maps to a known cadence and
     whose per-occurrence amount is stable (low spread).
@@ -193,7 +198,7 @@ def detect_candidates(min_occurrences=3):
     (`CARD_SOURCES`) and DBS GIRO / standing instructions — so one-off transfers, PayNow, ATM
     withdrawals etc. never surface as suggestions. Merchants the user has dismissed are
     excluded so a rejected suggestion never reappears."""
-    with SessionLocal() as s:
+    with session_scope(s) as s:
         registered = [r[0].lower() for r in s.execute(text(
             "SELECT merchant_match FROM recurring_spend WHERE merchant_match IS NOT NULL")).all()]
         dismissed = {r[0].lower() for r in s.execute(text(
@@ -202,8 +207,8 @@ def detect_candidates(min_occurrences=3):
             "SELECT merchant, txn_date, -amount_sgd AS amt FROM cash_txn "
             "WHERE is_spend AND merchant IS NOT NULL AND txn_date IS NOT NULL "
             f"AND (source IN ({_CARD_IN}) "                                  # credit-card charge
-            "     OR (source = 'dbs' AND description ILIKE '%giro%')) "      # DBS GIRO + standing instr.
-            "ORDER BY merchant, txn_date")).all()
+            "     OR (source = 'dbs' AND LOWER(description) LIKE '%giro%')) "      # DBS GIRO + standing instr.
+            "ORDER BY merchant, txn_date").columns(txn_date=Date)).all()
         by_merchant = {}
         for merch, d, amt in rows:
             by_merchant.setdefault(merch, []).append((d, float(amt)))

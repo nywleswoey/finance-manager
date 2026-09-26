@@ -13,7 +13,8 @@ plans.
   hits `/api/cron/refresh-prices` on the same app.
 - **Alembic lives in `migrations/`**, driven by `alembic.ini` (`script_location =
   %(here)s/migrations`). `env.py` imports `portfolio.config` and `portfolio.models.Base`. Don't
-  move `migrations/` or `portfolio.models`.
+  move `migrations/` or `portfolio.models`. The models must describe exactly what the migrations
+  create: CI runs `alembic check` on a freshly migrated DB (pg tests build from the models).
 - **`make ingest-all`** delta-ingests every source (brokers, spending, prices, net-worth
   snapshots); idempotent. See the README table for per-source commands.
 - **Frontend and HTTP routes are split by product; the domain package is not.**
@@ -37,7 +38,8 @@ plans.
 - **`docs/archive/`** holds historical/superseded docs (old plans). **`archive/`** at repo root
   holds retired AIDLC process trees (`aidlc-docs/`, `.aidlc-rule-details/`, `.wayfinder/`) kept
   for history, not live process — do not treat them as the active workflow or documentation
-  home.
+  home. The `SECURITY-NN` codes cited in `server/` are defined in DEPLOY.md § Security
+  register; add a line there before citing a new one.
 
 ## Maintaining this file
 

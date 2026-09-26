@@ -2,8 +2,6 @@
  "cash": {
   "mv_sgd": 1022124.47,
   "income_sgd": 161113.55,
-  "pl_sgd": 383437.26,
-  "cost_sgd": 2207738.41,
   "capital_sgd": 802799.9,
   "invested_sgd": 2207738.41,
   "realised_pl_sgd": 64446.89,
@@ -17,8 +15,6 @@
  "cpf": {
   "mv_sgd": 200084.09,
   "income_sgd": 17648.12,
-  "pl_sgd": 134135.55,
-  "cost_sgd": 130666.66,
   "capital_sgd": 86115.66,
   "invested_sgd": 130666.66,
   "realised_pl_sgd": 2519.0,
@@ -32,8 +28,6 @@
  "srs": {
   "mv_sgd": 69126.75,
   "income_sgd": 16423.3,
-  "pl_sgd": -22836.0,
-  "cost_sgd": 116156.05,
   "capital_sgd": 111670.66,
   "invested_sgd": 116156.05,
   "realised_pl_sgd": 3284.61,

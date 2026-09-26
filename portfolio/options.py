@@ -147,8 +147,8 @@ def contracts_by_ticker():
     resolved-vs-open: `SecurityDetail.jsx` re-deriving exactly that from `close_date` is the
     defect this whole page is being rebuilt around.
     """
-    out = {}
     with session_scope() as s:
+        out = {}
         for t in s.scalars(select(OptionTrade)).all():
             out.setdefault(t.underlying, []).append({
                 "type": t.option_type, "contracts": float(t.contracts or 0),
@@ -156,7 +156,7 @@ def contracts_by_ticker():
                 "currency": t.currency, "open_date": t.open_date,
                 "expiry_date": t.expiry_date, "close_date": t.close_date,
                 "open": _is_open(t)})
-    return out
+        return out
 
 
 def realized_by(dim):

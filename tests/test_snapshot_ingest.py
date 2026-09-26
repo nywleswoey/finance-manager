@@ -14,7 +14,7 @@ import io
 import os
 import sys
 import unittest
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -217,6 +217,48 @@ class ValuationNoteTest(unittest.TestCase):
         got = {v.item.code: v.source for v in
                self.s.query(NwValue).filter(NwValue.snapshot_id == snap.id).all()}
         self.assertEqual(got["tiger_usd"], "statement")
+
+
+class ParseDbsTest(unittest.TestCase):
+    """The DBS rows are found by product name, not by account number — none is in the repo.
+    The account numbers below are made up."""
+
+    SUMMARY = ("Account Summary as at 30 Jun 2026\n"
+               "  DBS Multiplier Account     000-000000-0     SGD      12,345.67\n"
+               "  SRS Account                0000-000000-0-0         1,000.00\n")
+
+    def parse(self, txt):
+        self.addCleanup(setattr, ingest.subprocess, "run", ingest.subprocess.run)
+        ingest.subprocess.run = lambda *a, **k: type("R", (), {"stdout": txt})()
+        return ingest.parse_dbs("dbs_202606.pdf")
+
+    def test_balances_are_read_by_product_name(self):
+        out, asat = self.parse(self.SUMMARY)
+        self.assertEqual(out["dbs_multiplier"]["native_value"], Decimal("12345.67"))
+        self.assertEqual(out["srs"]["native_value"], Decimal("1000.00"))
+        self.assertEqual(asat, "30 Jun 2026")
+
+    def test_the_same_account_listed_twice_is_one_account(self):
+        out, _ = self.parse(self.SUMMARY + self.SUMMARY)
+        self.assertEqual(out["dbs_multiplier"]["native_value"], Decimal("12345.67"))
+
+    def test_a_second_multiplier_account_raises(self):
+        extra = "  DBS Multiplier Account     111-111111-1     SGD      5.00\n"
+        with self.assertRaises(ValueError) as cm:
+            self.parse(self.SUMMARY + extra)
+        self.assertIn("2 DBS Multiplier accounts", str(cm.exception))
+
+    def test_a_missing_row_raises(self):
+        with self.assertRaises(ValueError):
+            self.parse("Account Summary as at 30 Jun 2026\n")
+
+
+class DateArgTest(unittest.TestCase):
+    def test_date_is_required_without_all_new(self):
+        # It used to default to one fixed day, silently dating any run without it there.
+        with redirect_stderr(io.StringIO()) as err, self.assertRaises(SystemExit):
+            ingest.main([])
+        self.assertIn("--date is required", err.getvalue())
 
 
 if __name__ == "__main__":

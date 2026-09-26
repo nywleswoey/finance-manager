@@ -8,7 +8,8 @@ import sys
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from ingestion.parse_options import _SYM, _expiry, _reconcile, _und, money
+from ingestion.load import num as money
+from ingestion.parse_options import _SYM, _expiry, _reconcile, _und
 
 
 class _Acct:

@@ -1738,9 +1738,9 @@ def alloc_by_account(session=None):
 def empty_group():
     """Zeroed rollup-group accumulator. Shared with server.routes.portfolio so the groups it
     synthesises for orphan option underlyings match rollup()'s schema exactly."""
-    return {"mv_sgd": 0.0, "income_sgd": 0.0, "pl_sgd": 0.0, "cost_sgd": 0.0,
-            "capital_sgd": 0.0, "invested_sgd": 0.0, "realised_pl_sgd": 0.0,
-            "unrealised_pl_sgd": 0.0, "stock_pl_sgd": 0.0, "unsplit_pl_sgd": 0.0}
+    return {"mv_sgd": 0.0, "income_sgd": 0.0, "capital_sgd": 0.0, "invested_sgd": 0.0,
+            "realised_pl_sgd": 0.0, "unrealised_pl_sgd": 0.0, "stock_pl_sgd": 0.0,
+            "unsplit_pl_sgd": 0.0}
 
 
 def rollup(rows, by):
@@ -1762,8 +1762,6 @@ def rollup(rows, by):
         key = (", ".join(r["accounts"]) or "—") if by == "account" else r[by]
         g = agg[key]
         g["mv_sgd"] += r["mv_sgd"]; g["income_sgd"] += r["income_sgd"]
-        g["pl_sgd"] += r["pl_sgd"] or 0
-        g["cost_sgd"] += r["invested_sgd"] or 0
         # capital = cost basis of CURRENT holdings (so Capital + Unrealised = Current Value);
         # invested_sgd = total ever deployed incl. since-sold (return denominator)
         g["capital_sgd"] += r["cost_basis_sgd"] or 0

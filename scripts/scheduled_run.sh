@@ -5,8 +5,7 @@
 #
 #   the environment — launchd starts a job with almost none. No login shell, no profile, a
 #   PATH of /usr/bin:/bin, and the working directory is /. Anything the ingest shells out to
-#   (pdftotext for every PDF statement and the Endowus NAV, python3 for the build/ parsers)
-#   has to be findable from the PATH set here, not from the one you have interactively.
+#   (pdftotext for every PDF statement and the Endowus NAV) has to be findable from the PATH set here, not from the one you have interactively.
 #
 #   the database — `make ingest` with no DATABASE_URL writes to the local docker DB, because
 #   that is config.py's default (and what a .env copied from .env.example sets). A scheduled job that did that would
@@ -21,8 +20,8 @@ JOB="${1:?usage: scheduled_run.sh <make-target>}"
 LOG_DIR="$HOME/Library/Logs/portfolio"
 LOG="$LOG_DIR/$JOB.log"
 
-# Homebrew first: pdftotext (poppler) and python3 both live there, and neither is in the
-# PATH launchd hands us.
+# Homebrew first: pdftotext (poppler) lives there, and it is not in the PATH launchd hands us.
+# Python needs nothing from PATH: every make target runs the repo's .venv interpreter.
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
 mkdir -p "$LOG_DIR"

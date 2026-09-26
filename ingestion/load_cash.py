@@ -1,7 +1,7 @@
 """Load build/cash_ledger.csv -> Postgres cash_txn (the spending ledger).
 
-Idempotent: each row gets a dedup_hash; re-runs INSERT ... ON CONFLICT DO UPDATE so
-re-classifying (category/is_spend changes) refreshes rows in place without duplicating.
+Idempotent: each row gets a dedup_hash; re-runs INSERT ... ON CONFLICT DO UPDATE so a
+changed is_spend/exclude_reason decision refreshes rows in place without duplicating.
 Reuses the helpers + upsert() from ingestion.load.
 
 Run:  PYTHONPATH=. .venv/bin/python -m ingestion.load_cash
@@ -33,8 +33,8 @@ def load_cash(session):
     b = batch(session, "spending", "build/cash_ledger.csv", len(rows))
     payload, occ = [], Counter()
     for r in rows:
-        # stable natural key (no mutable category/amount) so re-classification updates
-        # the same row; occ disambiguates genuinely identical lines in one statement.
+        # stable natural key (no mutable spend decision) so a re-decided row updates in
+        # place; occ disambiguates genuinely identical lines in one statement.
         key = (r["source"], r["account_label"], r["txn_date"], r["description"][:120],
                r["amount_sgd"])
         dh = occ_hash(occ, key)
@@ -47,9 +47,8 @@ def load_cash(session):
             fcy_currency=(r["fcy_currency"] or None),
             direction=r["direction"], is_spend=_bool(r["is_spend"]),
             exclude_reason=(r["exclude_reason"] or None),
-            # classification is DB-owned now: new rows land unclassified and the CSV's
-            # category/subcategory columns (+ build/classify_cash.py) are ignored. Rules
-            # (portfolio.classify) own category going forward.
+            # category is DB-owned: new rows land unclassified (the CSV carries none) and
+            # the rules in portfolio.classify fill it in main() below.
             source_file=r["source_file"], raw=r["raw"], batch_id=b.id, dedup_hash=dh,
         ))
     # rows that vanished from the CSV (e.g. a fixed parser bug) are pruned from this batch

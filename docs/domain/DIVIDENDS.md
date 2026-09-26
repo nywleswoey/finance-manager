@@ -101,7 +101,7 @@ data/**  (broker statements: tiger-prime, fsm, cdp-stocks, moomoo, cpf/srs …)
   ├─ make load   ingestion.load  →  load_dividends()  ──►  Postgres `dividend` table
   │              │   idempotent upsert keyed on dedup_hash = h(account,ticker,date,gross,source,occ#);
   │              │   mutable fields (gross/net/currency/rate/units) refreshed in place;
-  │              │   rows that vanish from the CSV are pruned.
+  │              │   rows that vanish from the CSV are pruned; unknown accounts are named.
   │              └─ build/export_dividends_master.py  ──►  data/dividends-master.csv
   │                  (one row per distinct dividend event: date, ex_date, ticker, rate_per_unit, currency;
   │                   rate = gross / qty-at-ex-date, account-independent, deduped across accounts)

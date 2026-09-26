@@ -17,16 +17,18 @@ that *knows*: it decided between the three itself. The snapshot form and the API
 because a user leaving an unchanged field alone has confirmed the figure, not carried it.
 
 FX: create_snapshot freezes rate_to_sgd via networth.rate_for(date), which needs an
-fx_rate row dated <= the snapshot date. If none exists for a needed currency, we
-backfill one from the nearest later fx_rate (source='carry-back') so history stays usable.
+fx_rate row dated <= the snapshot date. If none exists for a needed currency, `ensure_fx`
+writes one AT the snapshot date carrying the nearest LATER rate. fx_rate has no provenance
+column, so that row is indistinguishable from a real observation afterwards; the dry-run's
+"fx backfill" line is the only record. See `ensure_fx`.
 
 Usage:
-  PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py            # dry-run preview
-  PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --commit   # write to DB
+  PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --date YYYY-MM-DD            # dry-run preview
+  PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --date YYYY-MM-DD --commit   # write to DB
   PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --all-new --commit  # delta ingest
 
 Options:
-  --date YYYY-MM-DD    snapshot date (default 2026-06-18, the tiger statement end date)
+  --date YYYY-MM-DD    snapshot date (required unless --all-new)
   --dbs YYYYMM         DBS statement month (default: latest available)
   --all-new            ingest the one DBS month that closes after the latest snapshot,
                        dated to its month-end, when that month-end is at most
@@ -111,25 +113,49 @@ def parse_tiger(path: str) -> dict[str, dict]:
     return out
 
 
+# An account row: the product name, its account number (any digits-and-hyphens), then the
+# balance. The number is matched, never named — an account number does not belong in the repo.
+DBS_MULTIPLIER_RE = re.compile(r"DBS Multiplier Account\s+(\d[\d-]*)\s+SGD\s+([\d,]+\.\d{2})")
+DBS_SRS_RE = re.compile(r"SRS Account\s+(\d[\d-]*)\s+([\d,]+\.\d{2})")
+
+
+def _one_account(rx: re.Pattern, txt: str, what: str, path: str) -> Decimal | None:
+    """The balance of the one account `rx` matches, or None when it matches none.
+
+    Raises when the statement holds more than one such account: with no account number to pick
+    by, taking the first would silently value whichever the PDF happens to list first."""
+    found = rx.findall(txt)
+    if len({acct for acct, _ in found}) > 1:
+        raise ValueError(f"DBS parse: {len({a for a, _ in found})} {what} accounts in {path}; "
+                         "cannot tell which one the catalogue item is")
+    return _num(found[0][1]) if found else None
+
+
 def parse_dbs(path: str) -> tuple[dict[str, dict], str]:
     """Return ({code: {native_value, currency}}, as_at_str) from a DBS consolidated PDF."""
     txt = subprocess.run(["pdftotext", "-layout", path, "-"],
                          capture_output=True, text=True).stdout
-    m_mult = re.search(r"DBS Multiplier Account\s+120-260301-9\s+SGD\s+([\d,]+\.\d{2})", txt)
-    m_srs = re.search(r"SRS Account\s+0029-[\d-]+\s+([\d,]+\.\d{2})", txt)
+    mult = _one_account(DBS_MULTIPLIER_RE, txt, "DBS Multiplier", path)
+    srs = _one_account(DBS_SRS_RE, txt, "SRS", path)
     m_date = re.search(r"Account Summary as at\s+(\d{1,2} \w+ \d{4})", txt)
-    if not (m_mult and m_srs):
-        raise ValueError(f"DBS parse failed (multiplier={bool(m_mult)} srs={bool(m_srs)}) in {path}")
+    if mult is None or srs is None:
+        raise ValueError(f"DBS parse failed (multiplier={mult is not None} "
+                         f"srs={srs is not None}) in {path}")
     out = {
-        "dbs_multiplier": {"native_value": _num(m_mult.group(1)), "currency": "SGD"},
-        "srs": {"native_value": _num(m_srs.group(1)), "currency": "SGD"},
+        "dbs_multiplier": {"native_value": mult, "currency": "SGD"},
+        "srs": {"native_value": srs, "currency": "SGD"},
     }
     return out, (m_date.group(1) if m_date else "?")
 
 
 def ensure_fx(s, currencies: set[str], on_date: dt.date) -> list[str]:
     """Backfill fx_rate at on_date for currencies lacking a rate <= on_date, using the
-    nearest later rate. Returns human-readable notes for what was backfilled."""
+    nearest later rate. Returns human-readable notes for what was backfilled.
+
+    The written row is a plain fx_rate row: nothing marks it as carried back, so every later
+    reader — `networth.rate_for` included — takes it for a rate observed on `on_date`. It values
+    the snapshot at a later day's FX. The returned notes are the only trace, which is why the
+    dry-run prints them."""
     notes = []
     for ccy in sorted(currencies):
         if ccy == "SGD":
@@ -334,7 +360,7 @@ def build_snapshot(s, snap_date: dt.date, dbs_path: str, tiger_path: str, commit
 
 def main(argv):
     ap = argparse.ArgumentParser()
-    ap.add_argument("--date", default="2026-06-18")
+    ap.add_argument("--date", help="snapshot date YYYY-MM-DD (required unless --all-new)")
     ap.add_argument("--dbs", default=None, help="DBS statement YYYYMM (default latest)")
     ap.add_argument("--all-new", action="store_true",
                     help="ingest the one DBS month newer than the latest snapshot, dated to its "
@@ -342,6 +368,8 @@ def main(argv):
                          "Refuses a multi-month or older catch-up.")
     ap.add_argument("--commit", action="store_true")
     args = ap.parse_args(argv)
+    if not args.all_new and args.date is None:
+        ap.error("--date is required unless --all-new")
 
     tiger_path = sorted(glob.glob(TIGER_GLOB))[-1]
     today = dt.date.today()
