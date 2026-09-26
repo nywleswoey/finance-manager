@@ -14,16 +14,15 @@ from typing import NamedTuple
 
 from sqlalchemy import text
 
+from ingestion.prices import sg_today
+
 from .cost_annotations import annotation_map, condition_for, unmatched
 from .db import fx_map, latest_close, session_scope
 from .money import rate_to_sgd
+from .nullable import num, rounded
+from .xirr import xirr as solve_xirr
 
 log = logging.getLogger(__name__)
-
-
-def _f(x):
-    """float(x), passing None through unchanged — for nullable numeric fields."""
-    return float(x) if x is not None else None
 
 
 class UnitEvent(NamedTuple):
@@ -91,8 +90,8 @@ def cdp_transactions(session=None):
         "trade_date": r["trade_date"].isoformat() if r["trade_date"] else None, "account": CDP_ACCOUNT,
         "ticker": r["ticker"], "name": r["stock_name"] or "", "action": r["action"] or "",
         "qty_signed": float(r["qty"] or 0),
-        "price": _f(r["unit_price"]),
-        "gross_amount": _f(r["amount"]),
+        "price": num(r["unit_price"]),
+        "gross_amount": num(r["amount"]),
         "currency": r["currency"] or "SGD", "source_file": "cdp-stocks/transactions.csv",
     } for r in rows]
 
@@ -121,6 +120,7 @@ def cdp_cost(session=None):
         rows = s.execute(text(
             "SELECT ticker, trade_date, qty, amount, action FROM cdp_cost_lot")).all()
     out = {}
+    today, undated = sg_today(), []
     for ticker, d, qty, amount, action in rows:
         if (action or "").strip().lower() in CDP_TRANSFER:
             continue
@@ -129,12 +129,18 @@ def cdp_cost(session=None):
             continue
         g = out.setdefault(ticker, {"flows": [], "invested": 0.0, "buy_cost": 0.0,
                                     "buy_qty": 0.0, "cost_events": [], "unit_lots": []})
-        day = d or dt.date.today()
+        if d is None:
+            undated.append(ticker)
+        day = d or today
         q = abs(float(qty or 0))
         g["flows"].append((day, cash))
         g["unit_lots"].append((day, -q if cash > 0 else q))   # buys AND sales: the trade dates
         if cash < 0:
             _book_buy(g, day, -cash, q)                  # qty bought, for avg-cost
+    if undated:
+        log.warning("%d undated cdp_cost_lot row(s) %s dated today — /api/return drops "
+                    "undated rows instead, so the two engines disagree about them",
+                    len(undated), sorted(set(undated)))
     return out
 
 # actions where qty*price is real cash paid/received (CPF/SRS CSVs use 'open market' etc.)
@@ -198,43 +204,6 @@ def classify(act, px):
     if act in ZERO_CASH:
         return "zero"
     return "unknown"
-
-
-def _xirr(flows, guess=0.1):
-    """flows: list[(date, amount)]; amount<0 out, >0 in. Returns annualised rate or None."""
-    flows = [(d, float(a)) for d, a in flows if abs(a) > 1e-9]
-    if len(flows) < 2 or not (any(a < 0 for _, a in flows) and any(a > 0 for _, a in flows)):
-        return None
-    t0 = min(d for d, _ in flows)
-    yrs = [((d - t0).days / 365.0, a) for d, a in flows]
-
-    def npv(r):
-        return sum(a / (1 + r) ** t for t, a in yrs)
-
-    def dnpv(r):
-        return sum(-t * a / (1 + r) ** (t + 1) for t, a in yrs)
-
-    r = guess
-    for _ in range(100):                       # Newton
-        f = npv(r)
-        if abs(f) < 1e-7:
-            return r
-        d = dnpv(r)
-        if abs(d) < 1e-12:
-            break
-        r -= f / d
-        if r <= -0.9999:
-            r = -0.99
-    lo, hi = -0.9999, 10.0                      # bisection fallback
-    if npv(lo) * npv(hi) > 0:
-        return None
-    for _ in range(200):
-        mid = (lo + hi) / 2
-        if npv(lo) * npv(mid) <= 0:
-            hi = mid
-        else:
-            lo = mid
-    return (lo + hi) / 2
 
 
 def _fx_and_price(s):
@@ -513,7 +482,7 @@ def _apply_units(p, r, kind, today, annotations):
 def _apply_txn(p, r, kind, today):
     """Fold one non-CDP txn row's COST into its position accumulator `p`. Returns the action
     string if it couldn't be classified (caller should warn), else None."""
-    px = _f(r["price"])
+    px = num(r["price"])
     qty = float(r["qty_signed"])
     fee = abs(float(r["fees"])) if r["fees"] is not None else 0.0   # native ccy, same as px*qty
     if kind == "cash":
@@ -833,6 +802,12 @@ def _put_collateral_steps(contracts, fx, today):
         start = c.get("open_date")
         if start is None:
             continue
+        # still open: locked through TODAY inclusive. The release step lands the day after,
+        # because a step on `end` is applied at `end` — `[start, end)` — and an end of `today`
+        # would release the collateral on the one date the walk samples it as open.
+        # `_held_days` ends the same contract at `today`: it counts elapsed days, `(end -
+        # start).days`, over the same half-open interval, so the one day between the two ends
+        # is the convention, not a disagreement.
         end = (today + dt.timedelta(days=1)) if c.get("open") else \
             (c.get("close_date") or c.get("expiry_date"))
         if end is None or end <= start:
@@ -954,6 +929,8 @@ def _held_days(legs, contracts, today):
         spans.append((since, today))
     for c in contracts:
         start = c.get("open_date")
+        # elapsed days, so an open contract ends at `today` — see `_put_collateral_steps`, which
+        # ends it at `today + 1` because it samples a value on `today` rather than counting it.
         end = today if c.get("open") else (c.get("close_date") or c.get("expiry_date"))
         if start is not None and end is not None and end > start:
             spans.append((start, end))
@@ -1229,7 +1206,7 @@ def _return_figures(car, rows):
     else:
         verdict = "ok"
     return {"peak_car_sgd": peak, "return_span_days": car["return_span_days"],
-            "return_pct": None if verdict == "no_capital" else _rn(net, 4, 1.0 / peak),
+            "return_pct": None if verdict == "no_capital" else rounded(net, 4, 1.0 / peak),
             "return_verdict": verdict}
 
 
@@ -1238,12 +1215,6 @@ def _return_figures(car, rows):
 # for this page, so the collision is inherited rather than introduced. The three denominators
 # are genuinely different questions and the one P/L definition across the whole app is the map's
 # named out-of-scope; recorded here so the next reader does not assume they agree.
-
-
-def _rn(x, n, mult=1.0):
-    """round(x * mult, n), passing None through unchanged — for nullable output fields.
-    The None-check is on the base `x` (before multiplying) so a None never hits the *mult."""
-    return round(x * mult, n) if x is not None else None
 
 
 def _build_row(k, p, m, fx, price, today, part, verdict):
@@ -1267,7 +1238,7 @@ def _build_row(k, p, m, fx, price, today, part, verdict):
     # span long enough for annualisation to mean something.
     span = (max(d for d, _ in flows) - min(d for d, _ in flows)).days if flows else 0
     xirr_ok = cost_known and part["unknown"] < 1e-6 and span >= MIN_XIRR_DAYS
-    xirr = _xirr(flows) if xirr_ok else None
+    xirr = solve_xirr(flows) if xirr_ok else None
     total_pl = (mv + p["proceeds"] + p["income"] - p["invested"]) if cost_known else None
     # a free lot has a cost of zero, so it has no denominator — a percentage return on nothing
     # is not a smaller number, it is not a number.
@@ -1311,19 +1282,19 @@ def _build_row(k, p, m, fx, price, today, part, verdict):
         "bucket": k[0], "accounts": sorted(p["accounts"]), "ticker": m["canonical_ticker"],
         "name": m["name"], "market": m["market"], "asset_type": m["asset_type"], "currency": ccy,
         "units": round(p["units"], 4), "price": px, "mv_native": round(mv, 2),
-        "avg_cost": _rn(avg_cost, 4),
-        "cost_basis_native": _rn(cost_basis, 2),
-        "cost_basis_sgd": _rn(cost_basis, 2, rate),
-        "unrealised_pl_sgd": _rn(unreal, 2, rate),
-        "realised_pl_sgd": _rn(realised, 2, rate),
+        "avg_cost": rounded(avg_cost, 4),
+        "cost_basis_native": rounded(cost_basis, 2),
+        "cost_basis_sgd": rounded(cost_basis, 2, rate),
+        "unrealised_pl_sgd": rounded(unreal, 2, rate),
+        "realised_pl_sgd": rounded(realised, 2, rate),
         # rounded FROM the members where the members exist, not independently beside them: the
         # cent §14 measures on five tickers is `_build_row` rounding each component at 2dp, and
         # a third rounding of the same quantity would put that cent between this field and the
         # two it is the sum of. Where the pair collapses there is nothing to sum, so it rounds
         # the identity instead.
-        "stock_pl_sgd": (round(_rn(realised, 2, rate) + _rn(unreal, 2, rate), 2)
+        "stock_pl_sgd": (round(rounded(realised, 2, rate) + rounded(unreal, 2, rate), 2)
                          if realised is not None and unreal is not None
-                         else _rn(stock_pl, 2, rate)),
+                         else rounded(stock_pl, 2, rate)),
         "invested_native": round(p["invested"], 2), "income_native": round(p["income"], 2),
         "fees_sgd": round(p["fees"] * rate, 2), "cost_known": cost_known,
         "cost_partition": part,
@@ -1331,8 +1302,8 @@ def _build_row(k, p, m, fx, price, today, part, verdict):
         "invested_sgd": round(p["invested"] * rate, 2) if cost_known else None,
         "mv_sgd": round(mv * rate, 2), "income_sgd": round(p["income"] * rate, 2),
         "pl_sgd": round(total_pl * rate, 2) if cost_known else None,
-        "xirr": _rn(xirr, 4),
-        "simple_return": _rn(simple, 4),
+        "xirr": rounded(xirr, 4),
+        "simple_return": rounded(simple, 4),
     }
 
 
@@ -1346,7 +1317,8 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=
     Split out of fold_positions() so the accumulators are reachable without going through
     _build_row(): each one carries a dated `unit_events` / `cost_events` series beside the
     undated running totals, and peak capital-at-risk (#143 §9) and the dated corporate-action
-    carry (§12) both need to replay those in date order. Nothing reads them yet.
+    carry (§12) both replay those in date order — `ticker_car` and `_carry_leg` read them, and
+    so does the ledger audit.
 
     `annotations` is the curated free/transferred map (portfolio.cost_annotations) the cost
     partition consults; it arrives as plain data like the corporate actions do."""
@@ -1367,6 +1339,14 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=
                                 "cdp_buy_qty": 0.0, "cdp_lots": []})
     meta = {}
     _unknown_actions = set()
+    # an undated row is folded as if it happened `today`, while /api/return's `compute_twr`
+    # drops it (`WHERE trade_date IS NOT NULL`): the two engines then disagree about it, so the
+    # fallback is not allowed to fire silently. Zero-instance on the live book.
+    undated = [r["canonical_ticker"] for r in txns if r["trade_date"] is None]
+    undated += [f"dividend:{d['security_id']}" for d in divs if d["pay_date"] is None]
+    if undated:
+        log.warning("%d undated txn/dividend row(s) %s folded as dated today — /api/return "
+                    "drops them instead", len(undated), sorted(set(undated)))
     for r in txns:
         k = (r["funding_bucket"], r["security_id"])
         meta[k] = r
@@ -1378,7 +1358,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=
         p["unit_events"].append(UnitEvent(r["trade_date"] or today, qty, r["action"],
                                           r["action"] in STOCK_MOVING_LEG, r["account"]))
         p["accounts"].add(r["account"])
-        kind = classify(r["action"], _f(r["price"]))   # classified once; both folds read it
+        kind = classify(r["action"], num(r["price"]))   # classified once; both folds read it
         _apply_units(p, r, kind, today, annotations)
         if r["account"] == CDP_ACCOUNT:
             continue                                   # CDP cost comes from cdp-stocks below
@@ -1412,9 +1392,15 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=
         pos[k]["proceeds"] += sum(a for _, a in c["flows"] if a > 0)
 
     bucket_by_acct_id = {r["account_id"]: r["funding_bucket"] for r in txns}
+    # a dividend lands on the (bucket, security) position its account belongs to. One with no
+    # such position has nowhere to go, but `dividends.annual()` still counts it, so the Dividends
+    # tab and Σ Holdings income would disagree with nothing saying why — hence the warning, and
+    # the ledger audit's invariant that the two totals tie. Zero-instance on the live book.
+    dropped = []
     for d in divs:
         k = (bucket_by_acct_id.get(d["account_id"]), d["security_id"])
         if k not in pos:
+            dropped.append(d["security_id"])
             continue
         amt = float(d["gross"] or 0)
         sec_ccy = (meta.get(k) or {}).get("currency") or "SGD"
@@ -1428,6 +1414,10 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=
             amt = amt * rate_to_sgd(div_ccy, fx) / rate_to_sgd(sec_ccy, fx)
         pos[k]["income"] += amt
         pos[k]["flows"].append((d["pay_date"] or today, amt))
+    if dropped:
+        log.warning("%d dividend row(s) on security_id(s) %s match no (bucket, security) "
+                    "position and are left out of Holdings income", len(dropped),
+                    sorted(set(dropped), key=str))
 
     _carry_corporate_actions(corp_actions, pos, meta)
 
@@ -1456,7 +1446,8 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
       corp_actions — iterable of (from_ticker, to_ticker, type), every `corporate_action` row;
               the fold moves cost along CARRY_TYPES and counts a split over all of them.
       options — {ticker: {pl_sgd, ...}} realized options income per underlying.
-      fx / price — latest FX map and latest close per security_id. today defaults to today.
+      fx / price — latest FX map and latest close per security_id. today defaults to today in
+              SGT (`ingestion.prices.sg_today`), the date every price/FX row is stamped with.
       annotations — {natural key: condition} from portfolio.cost_annotations; the curated list
               when omitted. The free/transferred distinction is not in the ledger and cannot be
               put there, so it arrives as data like the corporate actions do.
@@ -1464,7 +1455,7 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
               rollup in `options` cannot serve peak capital-at-risk: a denominator needs the
               strike, the size and the two dates of every contract, resolved or not.
     """
-    today = today or dt.date.today()
+    today = today or sg_today()
     annotations = annotation_map() if annotations is None else annotations
     contracts = contracts or {}
     pos, meta = _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx)
@@ -1490,6 +1481,12 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
             continue
         out.append(_build_row(k, p, m, fx, price, today, parts[k],
                               verdicts[m["canonical_ticker"]]))
+    # a held security with no `price` row folds at a market value of ZERO — `mv_sgd: 0`, the
+    # whole cost basis as unrealised loss and a breakeven solved against nothing — while
+    # `alloc_by_account` skips the same row. `price: null` is the only other sign of it, so say
+    # so: a new ticker before `make prices`, or a name Yahoo never priced.
+    for tk in sorted({r["ticker"] for r in out if r["units"] > 1e-6 and not r["price"]}):
+        log.warning("held security %s has no price row — its market value folds to 0", tk)
     # fold in the options income stream per underlying (realized, SGD). Options trade on the
     # cash account, so attach to the cash-bucket row for that security; orphan underlyings
     # (no stock position) are still counted in the Performance rollup via options.realized_by().
@@ -1694,7 +1691,7 @@ def compute_with_fx(session=None):
     runs for seconds. Returning it is the only way to hold the two together.
 
     `compute()` is this with the map dropped — one projection, not a second fetch."""
-    today = dt.date.today()
+    today = sg_today()
     with session_scope(session) as s:
         fx, price = _fx_and_price(s)
         # group txns + dividends per (account, security)
@@ -1747,34 +1744,43 @@ def empty_group():
 
 
 def rollup(rows, by):
+    """Group the fold's rows by `market`, `bucket` or `account` (SGD).
+
+    Every figure is summed where the row ships it and skipped where it ships null — no field
+    is gated on `cost_known`. That gate once left a caveat leg whose every unit is unknown out of
+    the group Net while its row still shipped a `stock_pl_sgd` and a Net (#143 §8): the row's
+    own nulls already say what it does not know."""
     agg = defaultdict(empty_group)
     for r in rows:
-        # include closed positions (units≈0): they still carry realised P/L + dividends.
-        if r["units"] <= 1e-6 and not r["cost_known"] and abs(r["income_sgd"]) < 1e-6:
+        # a row with nothing to add: no units, no stock P/L (a refusal) and no income. Closed
+        # positions stay — they still carry realised P/L + dividends. Not `is_leg`: that asks
+        # whether a leg is worth a detail-page column, and a closed lot that cost nothing (a
+        # gift since sold) fails it while its proceeds are still stock P/L to count here.
+        if r["units"] <= 1e-6 and r["stock_pl_sgd"] is None and abs(r["income_sgd"]) < 1e-6:
             continue
         # positions are pooled per funding bucket, so a row can span accounts -> join them
         key = (", ".join(r["accounts"]) or "—") if by == "account" else r[by]
         g = agg[key]
         g["mv_sgd"] += r["mv_sgd"]; g["income_sgd"] += r["income_sgd"]
-        if r["cost_known"]:                              # only sum P/L where cost is real
-            g["pl_sgd"] += r["pl_sgd"] or 0
-            g["cost_sgd"] += r["invested_sgd"] or 0
-            # capital = cost basis of CURRENT holdings (so Capital + Unrealised = Current Value);
-            # invested_sgd = total ever deployed incl. since-sold (return denominator)
-            g["capital_sgd"] += r["cost_basis_sgd"] or 0
-            g["invested_sgd"] += r["invested_sgd"] or 0
-            g["realised_pl_sgd"] += r["realised_pl_sgd"] or 0
-            g["unrealised_pl_sgd"] += r["unrealised_pl_sgd"] or 0
-            # a leg the partition doubts knows the pair's SUM and neither member (#143 §6), so
-            # summing the members alone would silently drop its stock P/L out of the group.
-            # `stock_pl_sgd` is the accumulator /api/performance builds its Net from, for that
-            # reason, and `unsplit_pl_sgd` is the part of it no leg could attribute to either
-            # member — so `realised + unrealised + unsplit == stock_pl` on every group, and a
-            # page showing the two members can say how much they do not reach rather than
-            # printing a short column beside a whole Net.
-            g["stock_pl_sgd"] += r["stock_pl_sgd"] or 0
+        g["pl_sgd"] += r["pl_sgd"] or 0
+        g["cost_sgd"] += r["invested_sgd"] or 0
+        # capital = cost basis of CURRENT holdings (so Capital + Unrealised = Current Value);
+        # invested_sgd = total ever deployed incl. since-sold (return denominator)
+        g["capital_sgd"] += r["cost_basis_sgd"] or 0
+        g["invested_sgd"] += r["invested_sgd"] or 0
+        g["realised_pl_sgd"] += r["realised_pl_sgd"] or 0
+        g["unrealised_pl_sgd"] += r["unrealised_pl_sgd"] or 0
+        # a leg the partition doubts knows the pair's SUM and neither member (#143 §6), so
+        # summing the members alone would silently drop its stock P/L out of the group.
+        # `stock_pl_sgd` is the accumulator /api/performance builds its Net from, for that
+        # reason, and `unsplit_pl_sgd` is the part of it no leg could attribute to either
+        # member — so `realised + unrealised + unsplit == stock_pl` on every group, and a
+        # page showing the two members can say how much they do not reach rather than
+        # printing a short column beside a whole Net.
+        if r["stock_pl_sgd"] is not None:
+            g["stock_pl_sgd"] += r["stock_pl_sgd"]
             if r["realised_pl_sgd"] is None or r["unrealised_pl_sgd"] is None:
-                g["unsplit_pl_sgd"] += r["stock_pl_sgd"] or 0
+                g["unsplit_pl_sgd"] += r["stock_pl_sgd"]
     return {k: {kk: round(vv, 2) for kk, vv in v.items()} for k, v in agg.items()}
 
 
@@ -1783,12 +1789,14 @@ if __name__ == "__main__":
     held = [r for r in rows if r["units"] > 1e-6]
     tot_mv = sum(r["mv_sgd"] for r in held)
     tot_inc = sum(r["income_sgd"] for r in held)
-    tot_pl = sum(r["pl_sgd"] for r in held if r["cost_known"])
-    n_cost = sum(1 for r in held if r["cost_known"])
-    print(f"held positions: {len(held)}  ({n_cost} with known cost basis)")
+    netted = [r for r in rows if r["net_pl_sgd"] is not None]
+    tot_net = sum(r["net_pl_sgd"] for r in netted)
+    n_refused = len({r["ticker"] for r in rows if r["net_verdict"] == "refuse"})
+    print(f"held positions: {len(held)}")
     print(f"portfolio MV:  SGD {tot_mv:,.0f}")
     print(f"dividends:     SGD {tot_inc:,.0f}  (held only)")
-    print(f"P/L (cost-known only): SGD {tot_pl:,.0f}")
+    print(f"Net (closed legs + options incl.; {n_refused} refused name(s) omitted): "
+          f"SGD {tot_net:,.0f}")
     print("\nby market:", rollup(held, "market"))
     print("\ntop holdings by MV:")
     for r in sorted(held, key=lambda r: -r["mv_sgd"])[:8]:

@@ -25,13 +25,11 @@ from sqlalchemy import text
 
 from ingestion.prices import yahoo_symbol
 
-from .db import SessionLocal, latest_close
+from .db import latest_close, session_scope
+from .nullable import rounded
+from .xirr import xirr as solve_xirr
 
 UA = {"User-Agent": "Mozilla/5.0"}
-
-
-def _r4(x):
-    return round(x, 4) if x is not None else None
 
 
 def daily(sym, rng="10y"):
@@ -313,8 +311,6 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
 
     # money-weighted (XIRR): units in => cash out, units out => cash in, valued at the same price
     # MV uses; brokerage fees are a real cost; current market value is the terminal inflow.
-    from .performance import _xirr
-
     flows = [(day, -c) for day, c in contrib_all.items()]
     for t in txns:
         if t["fees"]:
@@ -333,14 +329,14 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
             mv += u * px * rate
     if mv > 0:
         flows.append((as_of, mv))
-    xirr = _xirr(flows)
+    xirr = solve_xirr(flows)
     twr_cum, twr_ann = _twr(days, txns, prices, ccy_of, fx, contrib_twr, div_by_day)
     invested = sum(-a for _, a in flows if a < 0)
     received = sum(a for _, a in flows if a > 0)
     years = max((as_of - start).days / 365.0, 0.1)
-    return {"xirr_annualised": _r4(xirr),
-            "twr_annualised": _r4(twr_ann),
-            "twr_cumulative": _r4(twr_cum),
+    return {"xirr_annualised": rounded(xirr, 4),
+            "twr_annualised": rounded(twr_ann, 4),
+            "twr_cumulative": rounded(twr_cum, 4),
             "invested_sgd": round(invested, 0), "value_plus_income_sgd": round(received, 0),
             "years": round(years, 1), "from": str(start),
             # Yahoo's newest close, which is not /api/positions' date (the `price` table's) and
@@ -355,27 +351,26 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
 
 def compute_twr(as_of=None, fetch=daily):
     """Read the held book out of the database and hand it to `_returns`."""
-    s = SessionLocal()
-    # one row per (account, security): the same counter can sit in FSM and CPF at once
-    held = s.execute(text(
-        "SELECT DISTINCT security_id, canonical_ticker, market, asset_type, currency "
-        "FROM current_position WHERE units > 0")).all()
-    ids = sorted({h[0] for h in held})
-    # txns for held securities (units over time + external cash flows)
-    txns = s.execute(text(
-        "SELECT security_id, trade_date, action, qty_signed, price, fees, currency FROM txn "
-        "WHERE trade_date IS NOT NULL AND security_id = ANY(:ids)"), {"ids": ids}).mappings().all()
-    # dividends scoped to held securities: a dividend whose purchase cost never entered `flows`
-    # (sold-out position) is a free inflow that inflates XIRR.
-    divs = s.execute(text(
-        "SELECT security_id, COALESCE(ex_date, pay_date) AS ex_date, pay_date, gross, currency "
-        "FROM dividend WHERE pay_date IS NOT NULL AND security_id = ANY(:ids)"),
-        {"ids": ids}).mappings().all()
-    # last known close per security — covers what Yahoo can't price (funds, delisted tickers)
-    last_px = latest_close(s)
-    s.close()
+    with session_scope() as s:
+        # one row per (account, security): the same counter can sit in FSM and CPF at once
+        held = s.execute(text(
+            "SELECT DISTINCT security_id, canonical_ticker, market, asset_type, currency "
+            "FROM current_position WHERE units > 0")).all()
+        ids = sorted({h[0] for h in held})
+        # txns for held securities (units over time + external cash flows)
+        txns = s.execute(text(
+            "SELECT security_id, trade_date, action, qty_signed, price, fees, currency FROM txn "
+            "WHERE trade_date IS NOT NULL AND security_id = ANY(:ids)"),
+            {"ids": ids}).mappings().all()
+        # dividends scoped to held securities: a dividend whose purchase cost never entered
+        # `flows` (sold-out position) is a free inflow that inflates XIRR.
+        divs = s.execute(text(
+            "SELECT security_id, COALESCE(ex_date, pay_date) AS ex_date, pay_date, gross, currency "
+            "FROM dividend WHERE pay_date IS NOT NULL AND security_id = ANY(:ids)"),
+            {"ids": ids}).mappings().all()
+        # last known close per security — covers what Yahoo can't price (funds, delisted tickers)
+        last_px = latest_close(s)
     return _returns(held, txns, divs, last_px, as_of or dt.date.today(), fetch)
-
 
 if __name__ == "__main__":
     print(compute_twr())

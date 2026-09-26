@@ -220,9 +220,9 @@ def test_foreign_currency_converts_at_fx():
 # ---------------------------------------------------------------------------
 # Dated accumulators (#147). The fold keeps a dated unit series and a dated cost series
 # beside the undated scalars it already kept, so peak capital-at-risk (#143 §9) and the
-# dated corporate-action carry (§12) can replay them in date order. Nothing reads them yet,
-# so what is provable today is that they mirror the scalars exactly, carry the right dates,
-# and reach no endpoint.
+# dated corporate-action carry (§12) can replay them in date order. Those two read them
+# (`ticker_car`, `_carry_leg`); what these tests pin is that the series mirror the scalars
+# exactly, carry the right dates, and reach no endpoint as raw fields.
 # ---------------------------------------------------------------------------
 
 def _acc(txns, *, divs=None, cdp=None, corp=None, annotations=None, fx=None):
@@ -976,3 +976,59 @@ def test_a_group_with_nothing_unsplit_says_so_with_a_zero():
     stock P/L exactly, and a page keys its marker off that zero."""
     g = perf.rollup(_fold([_txn(qty_signed=100, price=10.0)], price={10: 12.0}), "bucket")["cash"]
     assert g["unsplit_pl_sgd"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# The fold's silent fallbacks, each now said out loud. The ledger audit's "the fold emits no
+# warning" invariant is what turns these into a red run on a real book.
+# ---------------------------------------------------------------------------
+
+def _warnings(caplog, fn):
+    import logging
+    with caplog.at_level(logging.WARNING, logger="portfolio.performance"):
+        out = fn()
+    return out, [r.getMessage() for r in caplog.records if r.name == "portfolio.performance"]
+
+
+def test_a_held_security_with_no_price_row_warns(caplog):
+    """No `price` row folds the holding at a market value of zero — the whole cost basis read
+    as unrealised loss — so the fold says so rather than ship `mv_sgd: 0` quietly."""
+    r, msgs = _warnings(caplog, lambda: _only(_fold([_txn(qty_signed=100, price=10.0)])))
+    assert r["price"] is None and r["mv_sgd"] == 0.0
+    assert r["unrealised_pl_sgd"] == -1000.0
+    assert any("D05 has no price row" in m for m in msgs), msgs
+
+
+def test_a_priced_or_closed_security_does_not_warn_about_price(caplog):
+    txns = [_txn(qty_signed=100, price=10.0),
+            _txn(canonical_ticker="O5RU", security_id=11, qty_signed=100, price=1.0),
+            _txn(canonical_ticker="O5RU", security_id=11, action="sell", qty_signed=-100,
+                 price=1.2, trade_date=D(2021, 1, 1))]
+    _, msgs = _warnings(caplog, lambda: _fold(txns, price={10: 12.0}))
+    assert not any("no price row" in m for m in msgs), msgs
+
+
+def test_a_dividend_with_no_position_warns_and_is_left_out_of_income(caplog):
+    """The Dividends tab counts every `dividend` row; Holdings income counts only the ones that
+    land on a (bucket, security) position. One that lands nowhere is named, not lost."""
+    divs = [{"account_id": 1, "security_id": 10, "pay_date": D(2021, 6, 1), "gross": 50},
+            {"account_id": 1, "security_id": 99, "pay_date": D(2021, 6, 1), "gross": 7}]
+    r, msgs = _warnings(caplog, lambda: _only(_fold([_txn(qty_signed=100, price=10.0)],
+                                                   divs=divs, price={10: 10.0})))
+    assert r["income_native"] == 50.0
+    assert any("1 dividend row(s) on security_id(s) [99]" in m for m in msgs), msgs
+
+
+def test_an_undated_row_warns_that_it_is_folded_as_today(caplog):
+    """The fold dates an undated row `today`; /api/return drops it. Both engines keep their
+    rule — the disagreement is what gets said."""
+    txns = [_txn(qty_signed=100, price=10.0), _txn(qty_signed=10, price=11.0, trade_date=None)]
+    r, msgs = _warnings(caplog, lambda: _only(_fold(txns, price={10: 12.0})))
+    assert r["units"] == 110.0
+    assert any("1 undated txn/dividend row(s) ['D05']" in m for m in msgs), msgs
+
+
+def test_a_dated_book_does_not_warn_about_dates(caplog):
+    _, msgs = _warnings(caplog, lambda: _fold([_txn(qty_signed=100, price=10.0)],
+                                              price={10: 12.0}))
+    assert not any("undated" in m for m in msgs), msgs

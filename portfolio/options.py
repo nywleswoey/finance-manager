@@ -6,15 +6,12 @@ type, with win-rate and premium-collected. Money-weighted return isn't meaningfu
 cash-secured premium selling (no stable capital base), so we report realized P&L, premium
 collected, and yield-style ratios instead.
 """
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import select
 
-from portfolio.db import SessionLocal, fx_map
-from portfolio.models import OptionTrade
-from portfolio.money import rate_to_sgd
+from .db import fx_map, session_scope
+from .models import OptionTrade
+from .money import rate_to_sgd
+from .nullable import iso, num
 
 
 def _fx(s):
@@ -27,16 +24,6 @@ def _sgd(v, ccy, fx):
     # None premium/realized -> 0.0 (this book's convention); otherwise convert through the
     # one money policy, which raises on a missing foreign rate instead of silently using 1.0.
     return 0.0 if v is None else float(v) * rate_to_sgd(ccy, fx)
-
-
-def _f(x):
-    """float(x), passing None through (nullable numeric column -> nullable output)."""
-    return float(x) if x is not None else None
-
-
-def _d(x):
-    """x.isoformat() for a truthy date/datetime, else None (nullable date -> nullable ISO string)."""
-    return x.isoformat() if x else None
 
 
 def _is_open(t):
@@ -56,9 +43,9 @@ def _realized_date(t):
 
 
 def compute():
-    s = SessionLocal()
-    fx = _fx(s)
-    trades = s.scalars(select(OptionTrade)).all()
+    with session_scope() as s:
+        fx = _fx(s)
+        trades = s.scalars(select(OptionTrade)).all()
 
     by_year, by_month, by_ticker, by_type, by_ccy = {}, {}, {}, {}, {}
     total_pl = total_prem = 0.0
@@ -107,7 +94,6 @@ def compute():
         out.sort(key=lambda r: r[sort_key], reverse=True)
         return out
 
-    s.close()
     return {
         "total_pl_sgd": round(total_pl, 2),
         "total_premium_sgd": round(total_prem, 2),
@@ -127,14 +113,11 @@ def compute():
 def _closed_trades():
     """Yield (trade, fx) for each closed (realized) trade — expired legs ARE realized.
     Opens the session and loads FX once; the session stays open until iteration finishes."""
-    s = SessionLocal()
-    fx = _fx(s)
-    try:
+    with session_scope() as s:
+        fx = _fx(s)
         for t in s.scalars(select(OptionTrade)).all():
             if not _is_open(t):
                 yield t, fx
-    finally:
-        s.close()
 
 
 def realized_by_ticker():
@@ -164,19 +147,16 @@ def contracts_by_ticker():
     resolved-vs-open: `SecurityDetail.jsx` re-deriving exactly that from `close_date` is the
     defect this whole page is being rebuilt around.
     """
-    s = SessionLocal()
-    try:
-        out = {}
+    out = {}
+    with session_scope() as s:
         for t in s.scalars(select(OptionTrade)).all():
             out.setdefault(t.underlying, []).append({
                 "type": t.option_type, "contracts": float(t.contracts or 0),
-                "strike": _f(t.strike), "multiplier": int(t.multiplier or 100),
+                "strike": num(t.strike), "multiplier": int(t.multiplier or 100),
                 "currency": t.currency, "open_date": t.open_date,
                 "expiry_date": t.expiry_date, "close_date": t.close_date,
                 "open": _is_open(t)})
-        return out
-    finally:
-        s.close()
+    return out
 
 
 def realized_by(dim):
@@ -196,11 +176,9 @@ def realized_by(dim):
 
 def _trade_dicts(stmt):
     """Run `stmt` (an OptionTrade select) and serialize each row to a dict at latest FX."""
-    s = SessionLocal()
-    fx = _fx(s)
-    out = [_trade_dict(t, fx) for t in s.scalars(stmt).all()]
-    s.close()
-    return out
+    with session_scope() as s:
+        fx = _fx(s)
+        return [_trade_dict(t, fx) for t in s.scalars(stmt).all()]
 
 
 def trades_for(underlying):
@@ -213,13 +191,13 @@ def trades_for(underlying):
 def _trade_dict(t, fx):
     return {
         "underlying": t.underlying, "type": t.option_type,
-        "contracts": float(t.contracts or 0), "strike": _f(t.strike),
-        "open_date": _d(t.open_date),
-        "expiry": _d(t.expiry_date),
-        "close_date": _d(t.close_date),
-        "premium_open": _f(t.premium_open),
-        "premium_close": _f(t.premium_close),
-        "realized_native": _f(t.realized_pl),
+        "contracts": float(t.contracts or 0), "strike": num(t.strike),
+        "open_date": iso(t.open_date),
+        "expiry": iso(t.expiry_date),
+        "close_date": iso(t.close_date),
+        "premium_open": num(t.premium_open),
+        "premium_close": num(t.premium_close),
+        "realized_native": num(t.realized_pl),
         "realized_sgd": round(_sgd(t.realized_pl, t.currency, fx), 2),
         "currency": t.currency, "outcome": t.outcome,
         # `_is_open()`'s ANSWER, not its inputs. `outcome` and `close_date` stay on the wire and

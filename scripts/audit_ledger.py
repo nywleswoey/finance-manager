@@ -11,9 +11,11 @@ non-zero:
   - the cost partition sums to gross units in on every position
   - exactly one `from_ticker` in `corporate_action` has more than one row (the split carry, #151)
   - `transfer out` — with a space — appears only in `cdp_cost_lot`
-  - the fold emits no warning while it computes (no unclassified action, no stale annotation)
+  - the fold emits no warning while it computes (no unclassified action, no stale annotation,
+    no held security without a price, no undated row, no dividend that reaches no position)
   - every `stock dividend` row carries zero quantity
   - every cost lot aimed at a cash leg has CDP `txn` rows behind it (#146)
+  - every `dividend` row reaches Holdings income: Σ gross == Σ `income_sgd`, per ticker
 
 **Readings — print, never assert.** Pinned to THIS book, which gains trades and re-prices daily;
 asserting them would make every new trade a red build. Each is printed beside the figure #143
@@ -86,6 +88,8 @@ class Book:
       orphan_options    — {underlying: realised SGD} for option underlyings with no stock row
       counts            — table sizes, dates and rates, printed so a reader knows which book
       fx                — {currency: rate_to_sgd}, latest — what `fold_ticker` converts at
+      dividends         — every `dividend` row as {ticker, gross, currency}; ticker None when
+                          the row's security is unmapped
     """
     rows: list
     corporate_actions: list
@@ -99,6 +103,7 @@ class Book:
     orphan_options: dict
     counts: dict = dataclasses.field(default_factory=dict)
     fx: dict = dataclasses.field(default_factory=dict)
+    dividends: list = dataclasses.field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------- invariants
@@ -183,6 +188,32 @@ def _cost_lots_backed_by_cdp_rows(book):
             for t in sorted((book.cost_lot_tickers & cash_legs) - book.cdp_txn_tickers)]
 
 
+def _dividends_reach_income(book):
+    """The fold lands a dividend on its (bucket, security) position and drops one with none,
+    while `dividends.annual()` — the Dividends tab — counts every row. So the tab and Σ Holdings
+    income agree only if nothing was dropped. Compared in SGD at latest FX, per ticker: a
+    dividend in another currency than its security's is converted into the security's before it
+    reaches `income_native`, so a native comparison by currency would not tie. One cent per leg,
+    because each leg's `income_sgd` is rounded on its own."""
+    paid, errors = defaultdict(float), []
+    for d in book.dividends:
+        try:
+            paid[d["ticker"]] += float(d["gross"] or 0) * rate_to_sgd(d["currency"], book.fx)
+        except ValueError as e:
+            errors.append(f"{d['ticker']}: dividend in {d['currency']!r} — {e}")
+    income, legs = defaultdict(float), defaultdict(int)
+    for r in book.rows:
+        income[r["ticker"]] += r["income_sgd"]
+        legs[r["ticker"]] += 1
+    out = []
+    for tk in sorted(set(paid) | set(income), key=str):
+        gap = paid.get(tk, 0.0) - income.get(tk, 0.0)
+        if abs(gap) > 0.01 * max(legs.get(tk, 0), 1) + 1e-6:
+            out.append(f"{tk}: dividend rows total {paid.get(tk, 0.0):,.2f} SGD, Holdings "
+                       f"income {income.get(tk, 0.0):,.2f} — {gap:,.2f} reaches no position")
+    return errors + out
+
+
 INVARIANTS = [
     Invariant("partition sums to units in", _partition_sums),
     Invariant("exactly one multi-successor corporate action", _one_multi_successor),
@@ -190,6 +221,7 @@ INVARIANTS = [
     Invariant("the fold emits no warning (no unclassified action)", _no_fold_warnings),
     Invariant("every stock dividend carries zero quantity", _stock_dividends_deliver_no_units),
     Invariant("cost lots only on tickers CDP holds", _cost_lots_backed_by_cdp_rows),
+    Invariant("every dividend reaches Holdings income", _dividends_reach_income),
 ]
 
 
@@ -506,6 +538,9 @@ def fetch():
             divs = [dict(r) for r in s.execute(text(
                 "SELECT account_id, security_id, pay_date, gross, currency FROM dividend"
             )).mappings().all()]
+            dividends = [dict(r) for r in s.execute(text(
+                "SELECT sec.canonical_ticker ticker, d.gross, d.currency FROM dividend d "
+                "LEFT JOIN security sec ON sec.id = d.security_id")).mappings().all()]
         # every row, not only the carry types: a split is counted over all of them,
         # the same rows compute_with_fx hands the fold.
         pos, meta = _accumulate_positions(
@@ -527,7 +562,8 @@ def fetch():
                     cost_lot_tickers=cost_lot_tickers, cdp_txn_tickers=cdp_txn_tickers, car=car,
                     performance={by: server_main.performance(by=by)
                                  for by in ("market", "bucket", "account")},
-                    orphan_options=orphan_options, counts=counts, fx=fx)
+                    orphan_options=orphan_options, counts=counts, fx=fx,
+                    dividends=dividends)
     finally:
         root.removeHandler(collect)
 

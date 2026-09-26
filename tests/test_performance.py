@@ -12,9 +12,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from ingestion.prices import sg_today
 from portfolio import cost_annotations as ca
 from portfolio import performance as perf
 from portfolio.models import Base, CdpCostLot
+from portfolio.xirr import xirr
 
 D = dt.date
 
@@ -177,13 +179,30 @@ class TestCdpCost(unittest.TestCase):
         self.s.commit()
         self.assertEqual(perf.cdp_cost(self.s), {})
 
+    def test_an_undated_lot_is_dated_today_in_sgt_and_says_so(self):
+        """/api/return drops an undated row; the fold dates it today. The disagreement is logged
+        — and "today" is the SGT one every price row is stamped with, not the host's clock."""
+        self._add("D05", None, 400, -10764.16, "open market")
+        self.s.commit()
+        with self.assertLogs("portfolio.performance", "WARNING") as logs:
+            c = perf.cdp_cost(self.s)["D05"]
+        self.assertEqual(c["flows"][0][0], sg_today())
+        self.assertIn("1 undated cdp_cost_lot row(s) ['D05']", logs.output[0])
+
+    def test_blank_undated_rows_do_not_warn(self):
+        """A CSV's trailing blank lines land as undated zero-amount rows; they book nothing."""
+        self._add("", None, 0, 0.0, None)
+        self.s.commit()
+        with self.assertNoLogs("portfolio.performance", "WARNING"):
+            self.assertEqual(perf.cdp_cost(self.s), {})
+
 
 class TestXirrGuards(unittest.TestCase):
     def test_short_horizon_span(self):
         """1600 HEIM bought yesterday, down 0.2%, annualised to -79.6% p.a. Below MIN_XIRR_DAYS
         the rate is noise, so compute() suppresses it."""
         self.assertGreaterEqual(perf.MIN_XIRR_DAYS, 7)
-        one_day = perf._xirr([(D(2026, 7, 9), -30944.0), (D(2026, 7, 10), 30880.0)])
+        one_day = xirr([(D(2026, 7, 9), -30944.0), (D(2026, 7, 10), 30880.0)])
         self.assertLess(one_day, -0.5)          # the raw rate really is that absurd
         span = (D(2026, 7, 10) - D(2026, 7, 9)).days
         self.assertLess(span, perf.MIN_XIRR_DAYS)

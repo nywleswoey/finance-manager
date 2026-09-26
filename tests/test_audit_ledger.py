@@ -157,6 +157,31 @@ def test_cost_lots_on_a_ticker_with_no_cdp_rows_fail():
         "attached (#146)"]
 
 
+def test_a_dividend_that_reaches_no_position_fails():
+    """The fold drops a dividend whose (bucket, security) has no position; the Dividends tab
+    still counts it. Compared in SGD, so a foreign payment on a local name ties once converted."""
+    rows = [_row("AAA", income_sgd=15.0), _row("AAA", bucket="cpf", income_sgd=5.0),
+            _row("BBB", income_sgd=0.0)]
+    ok = _book(rows=rows, fx={"EUR": 1.5},
+               dividends=[{"ticker": "AAA", "gross": 10.0, "currency": "SGD"},
+                          {"ticker": "AAA", "gross": 20.0 / 3, "currency": "EUR"}])
+    assert _failures(ok, "every dividend reaches Holdings income") == []
+
+    dropped = _book(rows=rows, fx={"EUR": 1.5},
+                    dividends=[{"ticker": "AAA", "gross": 20.0, "currency": "SGD"},
+                               {"ticker": "BBB", "gross": 3.0, "currency": None},
+                               {"ticker": None, "gross": 1.0, "currency": "SGD"}])
+    assert _failures(dropped, "every dividend reaches Holdings income") == [
+        "BBB: dividend rows total 3.00 SGD, Holdings income 0.00 — 3.00 reaches no position",
+        "None: dividend rows total 1.00 SGD, Holdings income 0.00 — 1.00 reaches no position"]
+
+
+def test_a_dividend_in_a_currency_with_no_rate_fails_rather_than_converting_at_one():
+    book = _book(dividends=[{"ticker": "AAA", "gross": 1.0, "currency": "MYR"}])
+    assert _failures(book, "every dividend reaches Holdings income")[0].startswith(
+        "AAA: dividend in 'MYR'")
+
+
 def test_cost_lots_with_no_cash_leg_to_attach_to_are_not_counted_at_all():
     """`cdp_cost()`'s result is aimed at an existing cash leg, so a lot for a ticker the book
     holds no cash leg of — or a blank row with no ticker — describes no reported position."""

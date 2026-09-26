@@ -258,11 +258,11 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
 - **A caveat nets every leg.** A leg whose every unit is unknown, inside a ticker that does not
   refuse, keeps `stock_pl_sgd`. Direction: `net_verdict` in `portfolio/performance.py`.
   `stock_pl_sgd` is therefore null only where the leg is all-unknown *and* the name refuses.
-- **Known gap, zero-instance: `/api/performance`'s group `net_pl_sgd` is not the row Net.**
-  `rollup()` adds a leg's `stock_pl_sgd` only where `cost_known` is true, and the route sums
-  that into the group Net. A caveat leg whose every entering unit is unknown still ships a
-  row Net (`stock_pl` is kept when the ticker's verdict is not `refuse`) and is left out of
-  the group. No live ticker has that shape.
+- **`/api/performance`'s group Net includes that leg.** `rollup()` sums every figure where the
+  row ships it and skips it where the row ships null — nothing there reads `cost_known` — so a
+  caveat leg whose every unit is unknown adds its `stock_pl_sgd` (and its `unsplit_pl_sgd`) to
+  the group like any other. Zero-instance on the live book; `tests/test_performance_identity.py`
+  carries the shape.
 
 **`breakeven_price`** ships beside the Net on every position row and every bucket column: the
 native-currency price at which THAT column's Net reaches zero — `(cost_basis_sgd − realised −

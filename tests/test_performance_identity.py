@@ -21,15 +21,18 @@ side does not change between them, so the three are three chances for one dimens
 drop a row — `account` joins a leg's accounts into one string and is the only key that is not a
 bare field, which is exactly where a dropped row would hide.
 
-Four shapes carry the whole rule and every one of them is live: a ticker split across two
-funding buckets (so the ticker side sums legs before it is compared), an optioned name (whose
-premiums are in both sides), a **caveat** whose realised/unrealised pair is null with
-`stock_pl_sgd` carrying it, and a refusal, whose Net is null on the wire and whose group
-contribution is nothing. The caveat is the load-bearing one: it is the only row that can fail a
-group Net assembled from `realised + unrealised` instead of from `stock_pl_sgd`, which is the
-regression §15 names. **A refusal with dividends would need a second residual and there is none
-in the book** — asserted below rather than assumed, because the identity above would be false
-for it.
+Five shapes carry the whole rule: a ticker split across two funding buckets (so the ticker side
+sums legs before it is compared), an optioned name (whose premiums are in both sides), a
+**caveat** whose realised/unrealised pair is null with `stock_pl_sgd` carrying it, a refusal,
+whose Net is null on the wire and whose group contribution is nothing, and the **divergence
+leg** — a leg whose every unit is unknown inside a ticker that does not refuse. The first four
+are live; the divergence leg is zero-instance on the book and is here because it is the one
+`rollup()` used to drop (it gated `stock_pl_sgd` on `cost_known`, which that leg reads false)
+while its row still shipped a Net. The caveat is the load-bearing live one: it is the only row
+that can fail a group Net assembled from `realised + unrealised` instead of from
+`stock_pl_sgd`, which is the regression §15 names. **A refusal with dividends would need a
+second residual and there is none in the book** — asserted below rather than assumed, because
+the identity above would be false for it.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_performance_identity.py -q
 """
@@ -69,11 +72,11 @@ OPTIONED = _row(ticker="PLTR", market="US", accounts=["Tiger Prime"], units=5.0,
                 unrealised_pl_sgd=20.0, stock_pl_sgd=16820.0, income_sgd=0.0,
                 options_pl_sgd=52989.24, pl_sgd=16820.0, net_pl_sgd=69809.24)
 # The refusal: every entering unit unknown, so there is no Net on the wire at all. `rollup()`
-# DROPS it outright — its guard is `units <= 1e-6 and not cost_known and income ≈ 0`, which this
-# row meets on all three counts — so it is on neither side of the identity. That third clause is
-# why its income has to be zero: a refusal that had paid a dividend would not be dropped, and
-# `income_sgd` accumulates OUTSIDE the `cost_known` guard, so the money would land in a group
-# total with no ticker Net anywhere that could match it.
+# DROPS it outright — its guard is `units <= 1e-6 and stock_pl_sgd is None and income ≈ 0`,
+# which this row meets on all three counts — so it is on neither side of the identity. That third
+# clause is why its income has to be zero: a refusal that had paid a dividend would not be
+# dropped, and `income_sgd` accumulates whether or not the row has a stock P/L, so the money
+# would land in a group total with no ticker Net anywhere that could match it.
 REFUSAL = _row(ticker="ASTREA6B", accounts=["FSM"], units=0.0, mv_sgd=0.0,
                cost_basis_sgd=None, invested_sgd=None, realised_pl_sgd=None,
                unrealised_pl_sgd=None, stock_pl_sgd=None, income_sgd=0.0, pl_sgd=None,
@@ -88,7 +91,17 @@ CAVEAT = _row(ticker="Q01", units=27000.0, mv_sgd=25650.0, cost_basis_sgd=None,
               stock_pl_sgd=-11630.17, income_sgd=8500.00, pl_sgd=None,
               net_verdict="caveat", net_pl_sgd=-3130.17)
 
-ROWS = [CASH, CPF, OPTIONED, CAVEAT, REFUSAL]
+# The divergence leg (#143 §8): Q01's second bucket, every entering unit unknown, so
+# `cost_known` is false and the whole cost-basis family is null — but the TICKER is a caveat, not
+# a refusal, so the leg keeps its `stock_pl_sgd` (its unknown units read as free) and ships a Net.
+# Closed and dividend-free on purpose: that is the shape the old `cost_known` drop guard threw
+# away whole, and its stock P/L is the sale's proceeds, so dropping it is visibly money.
+DIVERGENCE = _row(ticker="Q01", bucket="cpf", accounts=["CPF"], units=0.0, mv_sgd=0.0,
+                  cost_basis_sgd=None, invested_sgd=None, realised_pl_sgd=None,
+                  unrealised_pl_sgd=None, stock_pl_sgd=4200.0, income_sgd=0.0, pl_sgd=None,
+                  cost_known=False, net_verdict="caveat", net_pl_sgd=4200.0)
+
+ROWS = [CASH, CPF, OPTIONED, CAVEAT, REFUSAL, DIVERGENCE]
 
 # The options book as `realized_by()` sees it — every underlying, held or not. Two of these are
 # written but never held, one of them a loss, and no Holdings row exists for either: that is the
@@ -186,3 +199,17 @@ def test_an_orphan_underlying_has_no_holdings_row_to_carry_it(client):
     held = {r["ticker"] for r in ROWS}
 
     assert not (set(ORPHANS) & held)
+
+
+@pytest.mark.parametrize("by", BY)
+def test_a_divergence_leg_reaches_its_group_net(client, by):
+    """The leg `cost_known` reads false and the ticker's verdict still nets. Its Net is on the
+    ticker side, so it has to be on the group side too — in `stock_pl_sgd`, and in
+    `unsplit_pl_sgd`, because neither member of its pair is known."""
+    assert DIVERGENCE["cost_known"] is False and DIVERGENCE["net_pl_sgd"] is not None
+    groups = client.get(f"/api/performance?by={by}").json()
+    stock = round(sum(g["stock_pl_sgd"] for g in groups.values()), 2)
+    unsplit = round(sum(g["unsplit_pl_sgd"] for g in groups.values()), 2)
+
+    assert stock == round(sum(r["stock_pl_sgd"] or 0 for r in ROWS), 2)
+    assert unsplit == round(CAVEAT["stock_pl_sgd"] + DIVERGENCE["stock_pl_sgd"], 2)

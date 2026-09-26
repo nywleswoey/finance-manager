@@ -12,6 +12,7 @@ import statistics
 from sqlalchemy import text
 
 from portfolio.db import SessionLocal
+from portfolio.nullable import iso
 from portfolio.spending import CARD_SOURCES
 
 # The card half of detect_candidates' payment-channel filter. GIRO stays a
@@ -20,11 +21,6 @@ _CARD_IN = ", ".join(f"'{s}'" for s in CARD_SOURCES)
 
 # cadence -> nominal period length in days (for next-due + detection buckets)
 CADENCE_DAYS = {"weekly": 7, "monthly": 30, "quarterly": 91, "annual": 365}
-
-
-def _d(x):
-    """x.isoformat() for a truthy date, else None (nullable date -> nullable ISO string)."""
-    return x.isoformat() if x else None
 
 
 def _add_period(d, cadence):
@@ -138,10 +134,10 @@ def list_recurring():
                 "expected_amount": exp, "expected_day": d["expected_day"],
                 "active": d["active"], "notes": d["notes"],
                 "occurrences": len(occ),
-                "last_seen": _d(last_date),
+                "last_seen": iso(last_date),
                 "last_amount": last_amt, "avg_amount": avg_amt,
                 "typical_day": typical_day,
-                "next_due": _d(next_due),
+                "next_due": iso(next_due),
                 "shift": shift,                         # 'prev'|'next' if weekend-adjusted, else None
                 "amount_drift": drift,
                 "status": "inactive" if not d["active"] else _status(next_due, today),

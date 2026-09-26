@@ -45,8 +45,9 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, future=True)
 
 def fx_map(s):
     """currency -> rate_to_sgd (float) from fx_rate — the newest dated rate per currency.
-    One entry per currency; callers look rates up with fx.get(ccy, 1.0). (SGD may be absent —
-    the .get default covers it.)
+    One entry per currency; callers convert through portfolio.money (`rate_to_sgd`/`to_sgd`),
+    never `fx.get(ccy, 1.0)`. SGD is absent from the table, so from the map too — money.py
+    answers it 1:1, and a missing foreign rate raises instead of converting at 1.0.
 
     The newest date is picked in SQL rather than left to the dict comprehension: fx_rate holds
     one row per (date, currency), so a bare `SELECT currency, rate_to_sgd` leaves the
@@ -100,6 +101,12 @@ def fx_as_of(s):
     and so reads as FX's date beside the words "latest FX" when it is not (#143 §2). Same
     upper-bound caveat: newest row in the table, not every currency's own newest."""
     return s.execute(text("SELECT max(date) FROM fx_rate")).scalar()
+
+
+def fetch_dicts(s, sql, params=None):
+    """Run a text() query on session `s` and return its rows as plain dicts (materialized
+    before the session closes)."""
+    return [dict(r) for r in s.execute(text(sql), params or {}).mappings().all()]
 
 
 @contextmanager

@@ -10,8 +10,9 @@ from fastapi import APIRouter, Query
 from fastapi.responses import JSONResponse
 
 from portfolio import dividends
-from portfolio.db import SessionLocal, fx_as_of, fx_map, session_scope, valuation_as_of
+from portfolio.db import fetch_dicts, fx_as_of, fx_map, session_scope, valuation_as_of
 from portfolio.money import rate_to_sgd, to_sgd
+from portfolio.nullable import nulls_last, num
 from portfolio.options import trades_for
 from portfolio.performance import (CDP_ACCOUNT, alloc_by_account, cdp_transactions,
                                    compute_with_fx, empty_group, fold_ticker, is_leg, rollup)
@@ -29,22 +30,7 @@ def _cached(key, fn):
     return _cache[key]
 
 
-def _dicts(s, sql, params=None):
-    """Run a text() query on session `s` and return its rows as plain dicts."""
-    return [dict(r) for r in s.execute(text(sql), params or {}).mappings().all()]
-
-
-def _date_key(field):
-    """Sort key over a nullable date `field`: null dates sort last (ascending)."""
-    return lambda r: (r[field] is None, str(r[field] or ""))
-
-
-def _f(x):
-    """float(x), passing None through unchanged."""
-    return float(x) if x is not None else None
-
-
-def _iso(read):
+def _read_date(read):
     """`read(session)`'s date as an ISO string, or None — for the cached as-of dates."""
     with session_scope() as s:
         d = read(s)
@@ -60,7 +46,7 @@ def _as_of():
     clears no cache here. So a date filled after such a write can sit above a fold filled
     before it. Narrow, self-healing on the next /refresh, and strictly smaller than the
     staleness the memo already carries."""
-    return _iso(valuation_as_of)
+    return _read_date(valuation_as_of)
 
 
 def perf_fold():
@@ -183,14 +169,14 @@ def ticker_ledger(s, ticker):
     `a.name <> CDP_ACCOUNT` stays: CDP's statement rows are month-end unit diffs, and its priced
     trades arrive from `cdp_cost_lot` instead. Cash dividends booked as 0-qty `stock dividend`
     txns belong in the dividend history, not the ledger — they do not change the position."""
-    txns = _dicts(s,
+    txns = fetch_dicts(s,
         "SELECT t.trade_date, a.name account, a.funding_bucket bucket, t.action, t.qty_signed, "
         "t.price, t.gross_amount, t.currency, t.source_file FROM txn t "
         "JOIN account a ON a.id=t.account_id JOIN security sec ON sec.id=t.security_id "
         f"WHERE sec.canonical_ticker=:tk AND a.name <> '{CDP_ACCOUNT}' "
         "AND NOT (t.action ILIKE '%dividend%' AND t.qty_signed = 0)",
         {"tk": ticker})
-    divs = _dicts(s,
+    divs = fetch_dicts(s,
         "SELECT d.pay_date, a.name account, a.funding_bucket bucket, d.gross, d.currency, d.kind, "
         "d.units, d.amount_per_unit FROM dividend d "
         "JOIN account a ON a.id=d.account_id JOIN security sec ON sec.id=d.security_id "
@@ -204,7 +190,7 @@ def ticker_ledger(s, ticker):
 
 def _fx_as_of():
     """ISO date of the newest FX row, or None — cached and cleared beside `_as_of`."""
-    return _iso(fx_as_of)
+    return _read_date(fx_as_of)
 
 
 @router.get("/api/holding")
@@ -230,7 +216,7 @@ def holding(ticker: str):
         return JSONResponse({"detail": "not found"}, status_code=404)
     with session_scope() as s:
         txns, divs, ledger_fx = ticker_ledger(s, ticker)
-    txns.sort(key=_date_key("trade_date"))
+    txns.sort(key=nulls_last("trade_date"))
     bal = 0.0
     for t in txns:
         bal += float(t["qty_signed"] or 0)
@@ -241,17 +227,17 @@ def holding(ticker: str):
     # gross_sgd mirrors the rest of the detail view (cost/MV/P/L are all SGD); the native
     # gross + rate stay alongside it because they are what the statement actually said.
     for x in divs:
-        units = _f(x["units"])
+        units = num(x["units"])
         if units is None:
             pairs = [(t["trade_date"], float(t["qty_signed"] or 0)) for t in txns
                      if t["account"] == x["account"]]
             units = dividends.units_at(x["pay_date"], pairs)
-        rate = _f(x["amount_per_unit"])
+        rate = num(x["amount_per_unit"])
         if rate is None:
             rate = dividends.implied_rate(x["gross"], units)
         x["units"] = units
         x["rate"] = rate
-        x["gross_sgd"] = round(to_sgd(_f(x["gross"]) or 0, x["currency"], ledger_fx), 2)
+        x["gross_sgd"] = round(to_sgd(num(x["gross"]) or 0, x["currency"], ledger_fx), 2)
     return {"as_of": _cached("as_of", _as_of), "fx_as_of": _cached("fx_as_of", _fx_as_of),
             **folded, "transactions": txns, "dividends": divs,
             "options": trades_for(ticker)}
@@ -269,7 +255,6 @@ def dividends_annual():
 
 @router.get("/api/transactions")
 def transactions(account: str | None = None, ticker: str | None = None, limit: int = 500):
-    s = SessionLocal()
     # CDP transactions come from cdp-stocks (has price + amount); statements omit them
     rows = []
     if account != CDP_ACCOUNT:                         # CDP comes only from cdp-stocks below
@@ -282,14 +267,14 @@ def transactions(account: str | None = None, ticker: str | None = None, limit: i
             q += " AND a.name=:acct"; p["acct"] = account
         if ticker:
             q += " AND s.canonical_ticker=:tk"; p["tk"] = ticker
-        rows = _dicts(s, q + " LIMIT 2000", p)
-    s.close()
+        with session_scope() as s:
+            rows = fetch_dicts(s, q + " LIMIT 2000", p)
     if account in (None, CDP_ACCOUNT):                 # add CDP from cdp-stocks
         cdp = cdp_transactions()
         if ticker:
             cdp = [r for r in cdp if r["ticker"] == ticker]
         rows += cdp
-    rows.sort(key=_date_key("trade_date"))
+    rows.sort(key=nulls_last("trade_date"))
     return rows[:limit]
 
 
@@ -318,7 +303,6 @@ def options_trades(limit: int = 500):
 
 @router.get("/api/accounts")
 def accounts():
-    s = SessionLocal()
-    rows = _dicts(s, "SELECT name, broker, funding_bucket FROM account ORDER BY funding_bucket, name")
-    s.close()
-    return rows
+    with session_scope() as s:
+        return fetch_dicts(s, "SELECT name, broker, funding_bucket FROM account "
+                              "ORDER BY funding_bucket, name")

@@ -33,6 +33,7 @@ from build._ledgercommon import MARKET_CCY, TIGER_FEE_COLS
 from portfolio.db import SessionLocal
 from portfolio.models import OptionTrade
 from ingestion.load import ROOT, batch, count, maps, num, occ_hash, pdate, prune_stale, upsert
+from ingestion.prices import sg_today
 
 TIGER_GLOBS = ["data/tiger-prime/*.csv", "data/tiger-cash-boost/*.csv"]
 IBKR_SRC = os.path.join(ROOT, "data", "ibkr-options", "options.csv")
@@ -132,8 +133,8 @@ def _reconcile(legs, a, alias):
             if lg["trade_date"]:
                 d["close_dates"].append(lg["trade_date"])
 
-    from datetime import date
-    today = date.today()
+    # the book's one "today" (SGT), the date the price rows and the fold read
+    today = sg_today()
     payload, occ = [], Counter()
     for (und, exp, typ, strike), d in grp.items():
         oc, cc = d["open_ct"], d["close_ct"]

@@ -1,15 +1,22 @@
 """Per-ticker net verdict: is a name +ve or -ve once dividends and option premiums count?
 
-Folds three income streams into ONE number per canonical ticker (all SGD, latest FX):
-  stock P/L   = realised + unrealised  (performance.compute -> pl_sgd; needs cost)
-  dividends   = cash dividends received (income_sgd; included in pl_sgd when cost known)
-  premiums    = realised options P/L on that underlying (options_pl_sgd)
+Prints the fold's own Net per canonical ticker (all SGD, latest FX) — `net_pl_sgd` summed over
+the ticker's legs, flagged by its `net_verdict` — beside the three components it is the sum of:
 
-net_sgd = stock P/L (incl. dividends) + option premiums.
+  STOCK  realised + unrealised stock P/L   (stock_pl_sgd; dividends NOT included)
+  DIV    cash dividends received           (income_sgd)
+  PREM   realised options P/L on that name (options_pl_sgd)
 
-Cost-unknown positions (CDP/transferred-in names with no purchase price) can't give a true
-stock P/L — for those `net` shows only the KNOWN cash streams (dividends + premiums) and is
-flagged with `~` so you don't read a partial number as the full story.
+so NET == STOCK + DIV + PREM on every line. What a Net may claim is `performance.net_verdict`'s
+rule, read here rather than re-derived:
+
+  (blank)  hero     every entering unit has a known cost
+  ~        caveat   some units' cost is unknown: read as free, so the Net is a ceiling
+  b        bounded  a split corporate-action carry mis-attributes the cost (#143 §12)
+  !        refuse   no unit's cost is known — there is no Net, and NET/STOCK print n/a
+
+Option underlyings never held as stock have no row and are not listed (they are
+/api/performance's named residual).
 
 Usage:
   make net                 # all tickers, sorted by net
@@ -25,66 +32,49 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from portfolio.performance import compute
 
+FLAG = {"hero": " ", "caveat": "~", "bounded": "b", "refuse": "!"}
+
 
 def main(argv):
     held_only = "--held" in argv
     wanted = {a.upper() for a in argv if not a.startswith("-")}
 
-    rows = compute()
-
-    agg = defaultdict(lambda: {
-        "name": "", "market": "", "units": 0.0,
-        "stock_pl": 0.0, "div": 0.0, "prem": 0.0,
-        "cost_known": True, "has_stock_pl": False,
-    })
-    for r in rows:
-        tk = r["ticker"]
-        a = agg[tk]
+    agg = defaultdict(lambda: {"name": "", "units": 0.0, "verdict": "hero",
+                               "net": 0.0, "stock": 0.0, "div": 0.0, "prem": 0.0})
+    for r in compute():
+        a = agg[r["ticker"]]
         a["name"] = r["name"]
-        a["market"] = r["market"]
+        a["verdict"] = r["net_verdict"]          # whole-ticker: identical on every leg
         a["units"] += r["units"] or 0.0
         a["div"] += r["income_sgd"] or 0.0
-        a["prem"] += r.get("options_pl_sgd") or 0.0
-        if r["cost_known"] and r["pl_sgd"] is not None:
-            a["stock_pl"] += r["pl_sgd"]      # already includes that bucket's dividends
-            a["has_stock_pl"] = True
-        else:
-            a["cost_known"] = False
+        a["prem"] += r["options_pl_sgd"] or 0.0
+        if r["net_verdict"] != "refuse":         # every other verdict nets every leg
+            a["net"] += r["net_pl_sgd"]
+            a["stock"] += r["stock_pl_sgd"]
 
-    # options-only underlyings (no stock row at all) still appear via compute()'s cash rows,
-    # but a fully-closed name with no current position may not — pull any stragglers in.
-    out = []
-    for tk, a in agg.items():
-        if wanted and tk not in wanted:
-            continue
-        if held_only and abs(a["units"]) < 1e-6:
-            continue
-        # net: when stock P/L known it already carries dividends; else only cash streams known
-        if a["has_stock_pl"] and a["cost_known"]:
-            net = a["stock_pl"] + a["prem"]
-            partial = False
-        else:
-            net = a["div"] + a["prem"] + (a["stock_pl"] if a["has_stock_pl"] else 0.0)
-            partial = True
-        out.append((tk, a, net, partial))
-
-    out.sort(key=lambda x: x[2], reverse=True)
+    out = [(tk, a) for tk, a in agg.items()
+           if (not wanted or tk in wanted) and not (held_only and abs(a["units"]) < 1e-6)]
+    # refusals last: they have no Net to sort by
+    out.sort(key=lambda x: (x[1]["verdict"] == "refuse", -x[1]["net"]))
 
     print(f"{'TICKER':<8}{'NET S$':>12}  {'STOCK':>11}{'DIV':>10}{'PREM':>11}  {'':2}NAME")
     print("-" * 92)
     pos_sum = neg_sum = 0.0
-    for tk, a, net, partial in out:
-        sign = "+" if net >= 0 else "-"
-        flag = "~" if partial else " "
-        stock = f"{a['stock_pl']:>11,.0f}" if a["has_stock_pl"] else f"{'n/a':>11}"
-        print(f"{tk:<8}{net:>11,.0f}{sign} {stock}{a['div']:>10,.0f}"
-              f"{a['prem']:>11,.0f}  {flag} {a['name'][:34]}")
-        pos_sum += net if net >= 0 else 0
-        neg_sum += net if net < 0 else 0
+    for tk, a in out:
+        if a["verdict"] == "refuse":
+            net, stock = f"{'n/a':>12}", f"{'n/a':>11}"
+        else:
+            net = f"{a['net']:>11,.0f}{'+' if a['net'] >= 0 else '-'}"
+            stock = f"{a['stock']:>11,.0f}"
+            pos_sum += max(a["net"], 0.0)
+            neg_sum += min(a["net"], 0.0)
+        print(f"{tk:<8}{net} {stock}{a['div']:>10,.0f}{a['prem']:>11,.0f}  "
+              f"{FLAG.get(a['verdict'], '?')} {a['name'][:34]}")
     print("-" * 92)
     print(f"{len(out)} tickers   winners +S${pos_sum:,.0f}   losers -S${abs(neg_sum):,.0f}"
           f"   net S${pos_sum + neg_sum:,.0f}")
-    print("~ = cost basis unknown (CDP / transferred-in): net shows known cash streams only")
+    print("~ caveat (unknown-cost units read as free: a ceiling)   b bounded (split carry)   "
+          "! refuse (no Net)")
 
 
 if __name__ == "__main__":
