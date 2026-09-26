@@ -36,7 +36,8 @@ plans.
   `tests/*_pg.py` via `tests/pgtest.py`, build/ scripts load via `tests/buildscript.py`.
 - **ADR [0001](docs/adr/0001-do-not-unify-twr-and-performance.md): do not unify
   `performance.py` and `twr.py`.** They're deliberately separate engines; they share only
-  `portfolio/xirr.py`.
+  `portfolio/xirr.py` and the flow classifier `portfolio/flows.py` (a gift is an external
+  contribution to the return rates but zero cost to the profit).
 - **One "today": `ingestion.prices.sg_today()` (SGT)** — price rows, the fold and the option
   parser use it. Nullable-field helpers (`num`, `rounded`, `iso`, `nulls_last`) live in
   `portfolio/nullable.py` and SQL→dicts is `db.fetch_dicts`; don't re-spell them per module.

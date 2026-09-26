@@ -44,8 +44,8 @@ Each design revealed the *same* failure mode from its own angle:
 
 Keep `performance` and `twr` as two separate modules. They share exactly what they already
 share — `_xirr` — plus the *concept* of external-flow-vs-return-in-kind classification, which
-is currently spelled twice (`performance.classify` + `CASH_TRADE`/`ZERO_CASH` vs twr's
-`RETURN_IN_KIND`/`COST_IN_KIND`/`NON_EXTERNAL`). We do **not** put snapshot P&L and
+was spelled twice when this was written (`performance.classify` + `CASH_TRADE`/`ZERO_CASH` vs
+twr's `RETURN_IN_KIND`/`COST_IN_KIND`/`NON_EXTERNAL`). We do **not** put snapshot P&L and
 daily-series TWR behind one interface.
 
 ## Consequences
@@ -60,7 +60,27 @@ sequenced so nothing touches the return engine unverified:
 2. **Extract one flow classifier** (`external / return-in-kind / cost-in-kind`) that both
    engines consume, ending the twice-named concept. Both taxonomies already have test
    coverage (`test_performance.py::classify*`, `test_twr.py` contribution tests), so the merge
-   is checkable on both sides.
+   is checkable on both sides. **Done:** `portfolio/flows.py` `flow_kind(action)`;
+   `twr.contributions` counts only its `external` rows and `performance.classify` reads its
+   return-in-kind and cost-in-kind answers (`tests/test_flows.py`). The rules it settles:
+   - **A gift is external.** Gifted-in shares are cash put in at their market value on the day,
+     in both XIRR and TWR. The headline profit and cost basis still take a gift at zero cost
+     (`performance.FREE_ACTION`): the rates and the profit answer different questions.
+   - **Return in kind is every explicit spelling of the holding paying itself** — stock
+     dividend, bonus, bonus issuance, scrip, scrip/script dividend. twr used to list only
+     `stock dividend` and `bonus issuance`, so the other spellings counted as money put in.
+   - **A generic `corp action` is external, priced or zero-priced**, as before: FSM's catch-all
+     covers a rights subscription, a bonus, a consolidation and an in-specie distribution under
+     one string, so the price cannot say the holding paid itself. `performance.classify` keeps
+     its own price rule for cost (priced `cash`, zero-priced `zero`). Known case: D05's 280
+     zero-priced FSM `corp action` shares are a bonus but still count as a contribution at
+     market value; classifying from `portfolio.cost_annotations`' condition instead of the
+     action string could handle it later.
+   - Anything unnamed is external, so an unknown action can never be minted as return.
+
+   performance's per-position XIRR is still the rate on that position's own P&L flows, so a gift
+   there adds value with no flow, as in the profit. Valuing it at market would need a dated
+   price, which this engine does not have (see the table above).
 3. **Give `compute_twr` an injectable price/FX seam** (a `PriceSource` port wrapping the live
    Yahoo `daily()` fetch and the DB fallback). The pure fold `_twr` is *already* separated and
    tested; the `compute_twr` fetch adapter reads the Postgres-only `current_position` view, so
@@ -68,7 +88,6 @@ sequenced so nothing touches the return engine unverified:
    makes that adapter testable with a fixture source and no database — the single
    highest-value change, and the precondition for doing (2) safely against the twr side.
 
-Not doing this leaves one real cost: the flow-classification concept lives in two places and
-can drift. That is accepted for now; the drift risk is bounded (both copies are unit-tested)
-and strictly smaller than the cost of a shallow unification that flattens the cadence
-distinction.
+Until (2) landed, the flow-classification concept lived in two places and drifted (the bonus
+spellings above). That was accepted as strictly smaller than the cost of a shallow unification
+that flattens the cadence distinction; sharing one classifier ends it without that unification.

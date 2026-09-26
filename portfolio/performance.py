@@ -18,6 +18,8 @@ from ingestion.prices import sg_today
 
 from .cost_annotations import annotation_map, condition_for, unmatched
 from .db import fx_map, latest_close, session_scope
+from .flows import (COST_IN_KIND, EXTERNAL, GIFT_IN_ACTIONS, RETURN_IN_KIND_ACTIONS,
+                    flow_kind)
 from .money import rate_to_sgd
 from .nullable import num, rounded
 from .xirr import xirr as solve_xirr
@@ -146,13 +148,20 @@ def cdp_cost(session=None):
 # actions where qty*price is real cash paid/received (CPF/SRS CSVs use 'open market' etc.)
 CASH_TRADE = {"buy", "sell", "open market", "ipo", "private placement",
               "rights", "rights issue", "subscription"}
-# free / non-cash (bonus, scrip, transfers, gifts, snapshot-diff opens, corp actions)
-ZERO_CASH = {"transfer_in", "transfer_out", "gift_in", "gifted stock in", "gifted stock out",
-             "bonus", "bonus issuance", "scrip", "script dividend", "scrip dividend",
-             "corp action", "corp_action", "open", "open/transfer_in", "transfer in",
-             "transfer out",   # spaced spelling the CPF/SRS CSVs emit
-             "sell/transfer_out", "sell/transfer", "stock dividend",
-             "switch_in"}      # fund-switch IN leg: units only; cost carries from predecessor
+# external but non-cash: units that moved without a trade (transfers, gifts, snapshot-diff opens)
+# and carry no cost of their own. The return-in-kind half of ZERO_CASH (bonus, scrip, stock
+# dividend) is `flows.flow_kind`'s, not a list here.
+MOVED_NOT_TRADED = CDP_TRANSFER | GIFT_IN_ACTIONS | {
+    "gifted stock out", "open", "open/transfer_in",
+    "sell/transfer_out", "sell/transfer",
+    "switch_in"}      # fund-switch IN leg: units only; cost carries from predecessor
+# 'corp action' is a catch-all in the FSM ledger. A PRICED row is an entitlement the holder paid
+# cash for — the ESR-LOGOS (UD1U) rights issues at 0.49 / 0.595 / 0.408, C38U, O5RU, S51. A
+# zero-priced row is a bonus or consolidation (D05's 280 bonus shares). Only the first costs money.
+# The price rule is cost basis only: `flows.flow_kind` calls every `corp action` external.
+CORP_ACTION = {"corp action", "corp_action"}
+# free / non-cash (the vocabulary as one set, for the ledger audit and models.py)
+ZERO_CASH = MOVED_NOT_TRADED | RETURN_IN_KIND_ACTIONS | CORP_ACTION
 # The zero-cash actions whose free-ness is not in doubt: the broker's own word for a gift or a
 # bonus issue. `open/transfer_in` and zero-priced `corp action` are deliberately NOT here — one
 # string covers a landed corporate-action carry, a real in-specie distribution and a windfall, so
@@ -161,11 +170,11 @@ ZERO_CASH = {"transfer_in", "transfer_out", "gift_in", "gifted stock in", "gifte
 # rows exist in `txn` (the four live in `cdp_cost_lot` with a negative amount and are already
 # invested), so listing them would be writing a rule the book has no use for — and if one ever
 # did appear, `unknown` is the polarity to meet it with.
-FREE_ACTION = {"gift_in", "gifted stock in", "bonus", "bonus issuance"}
-# 'corp action' is a catch-all in the FSM ledger. A PRICED row is an entitlement the holder paid
-# cash for — the ESR-LOGOS (UD1U) rights issues at 0.49 / 0.595 / 0.408, C38U, O5RU, S51. A
-# zero-priced row is a bonus or consolidation (D05's 280 bonus shares). Only the first costs money.
-PRICED_CORP_ACTION = {"corp action", "corp_action"}
+#
+# Free for COST, which is not the same as free for the RETURN RATES: a gift is zero cost here, so
+# the headline profit counts its value as gain, while `flows.flow_kind` calls it external and
+# /api/return's XIRR and TWR count it as cash put in at market (ADR 0001).
+FREE_ACTION = GIFT_IN_ACTIONS | {"bonus", "bonus issuance"}
 # The subset of the above that moves stock rather than trading it: the four CDP transfer
 # spellings, the FSM compound legs, fund-switch arrivals and gifts. #143 §9 rule 4 matches an
 # equal-and-opposite PAIR of these as one internal move contributing no net units at any date, so
@@ -174,12 +183,9 @@ PRICED_CORP_ACTION = {"corp action", "corp_action"}
 # once, rather than left for every reader to re-derive — re-deriving a rule that already exists is
 # how the options P/L went wrong. Every member is also in ZERO_CASH, the spaced
 # `transfer out` included. The leg moves stock either way.
-STOCK_MOVING_LEG = CDP_TRANSFER | {"open/transfer_in", "sell/transfer_out", "sell/transfer",
-                                   "gift_in", "gifted stock in", "gifted stock out", "switch_in"}
-# a fund fee paid by redeeming units (Endowus). No cash leaves the investor's pocket, so the
-# unit drop already carries the whole cost through market value — booking a cash outflow too
-# would charge the fee twice.
-COST_IN_KIND = {"fee"}
+STOCK_MOVING_LEG = CDP_TRANSFER | GIFT_IN_ACTIONS | {"open/transfer_in", "sell/transfer_out",
+                                                     "sell/transfer", "gifted stock out",
+                                                     "switch_in"}
 # XIRR annualises, so a position held for days turns a rounding move into a triple-digit rate
 # (1600 HEIM bought yesterday, -0.2% -> -79.6% p.a.). Below this span the number is noise.
 MIN_XIRR_DAYS = 30
@@ -197,11 +203,12 @@ def classify(act, px):
     """
     if act in CASH_TRADE:
         return "cash" if px else "uncosted"
-    if act in PRICED_CORP_ACTION:
+    if act in CORP_ACTION:
         return "cash" if px else "zero"
-    if act in COST_IN_KIND:
+    kind = flow_kind(act)
+    if kind == COST_IN_KIND:
         return "cost_in_kind"
-    if act in ZERO_CASH:
+    if kind != EXTERNAL or act in MOVED_NOT_TRADED:
         return "zero"
     return "unknown"
 
