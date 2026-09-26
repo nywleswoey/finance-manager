@@ -3,7 +3,7 @@
 Metrics (all SGD), with A = sum asset items, L = sum liability items, P = frozen portfolio:
     total_assets             = A + P
     total_liabilities        = L
-    liquid_assets            = sum(value_sgd where is_liquid)
+    liquid_assets            = sum(value_sgd of asset items where is_liquid)
     net_worth                = total_assets - total_liabilities
     net_worth_excl_housing   = net_worth - housing_assets + housing_liabilities
     net_worth_excl_hou_cpf   = net_worth_excl_housing - cpf_assets
@@ -80,7 +80,7 @@ VALUE_SOURCES = ("statement", "carried", "default_zero")
 
 def band(it: NwItem) -> str:
     """Which band of the composition a catalogue item belongs to, by precedence:
-    `is_housing` → housing, `is_cpf` → cpf, `is_liquid` → cash, else srs.
+    `is_housing` → housing, `is_cpf` → cpf, `is_liquid` → cash, and the `srs` item → srs.
 
     Derived, never stored. A `band` column would be a fourth grouping free to disagree with the
     three flags it is derived from, and this is deliberately not a SQL `CASE` ladder or a
@@ -92,7 +92,11 @@ def band(it: NwItem) -> str:
     summary tile to the cent only because every liability in the catalogue is a housing
     liability — netted into the Housing band, they cancel there and nowhere else. A car loan or
     a carried card balance would sit in an asset band as a negative and break that identity
-    without changing a single number's sign, so it fails here instead of drawing wrong."""
+    without changing a single number's sign, so it fails here instead of drawing wrong.
+
+    Raises on an **unflagged item other than `srs`**. No flag names the srs band, so it is
+    reached by code, not as a default: a new item nobody flagged would otherwise land in srs,
+    which `FOLDED_BANDS` draws inside Cash — wrong, and invisible at 1/44th of the band."""
     if it.kind == "liability" and not it.is_housing:
         raise ValueError(
             f"non-housing liability in the net-worth catalogue: {it.code!r} ({it.label!r}). "
@@ -104,7 +108,11 @@ def band(it: NwItem) -> str:
         return "cpf"
     if it.is_liquid:
         return "cash"
-    return "srs"
+    if it.code == "srs":
+        return "srs"
+    raise ValueError(
+        f"unflagged net-worth catalogue item: {it.code!r} ({it.label!r}). Only `srs` bands "
+        "without a flag; set is_liquid, is_cpf or is_housing, or extend the banding first.")
 
 
 def live_portfolio_by_bucket(s: Session) -> dict[str, Decimal]:
@@ -251,12 +259,12 @@ def metrics(snap: NwSnapshot) -> dict:
                 hou_a += sgd
             if it.is_cpf:
                 cpf_a += sgd
-        else:  # liability
+            if it.is_liquid:
+                liquid += sgd
+        else:  # liability — never liquid *assets*, whatever its flag says
             L += sgd
             if it.is_housing:
                 hou_l += sgd
-        if it.is_liquid:
-            liquid += sgd
     P = snap.portfolio_value_sgd or Decimal(0)
     total_assets = A + P
     net_worth = total_assets - L
@@ -278,10 +286,13 @@ def metrics(snap: NwSnapshot) -> dict:
 
 
 def _value_dict(v: NwValue) -> dict:
+    """`value_sgd` is display-only, so cents. `native_value` and `rate_to_sgd` round to their
+    columns' own scale (MONEY 4, RATE 8) instead: the edit form sends `native_value` straight
+    back, and cents there would re-save a sub-cent figure as a different number."""
     return {
         "item_id": v.item_id, "code": v.item.code, "label": v.item.label,
-        "kind": v.item.kind, "native_value": float(v.native_value or 0),
-        "currency": v.currency, "rate_to_sgd": float(v.rate_to_sgd or 1),
+        "kind": v.item.kind, "native_value": round(float(v.native_value or 0), 4),
+        "currency": v.currency, "rate_to_sgd": round(float(v.rate_to_sgd or 1), 8),
         "value_sgd": round(float(v.value_sgd or 0), 2),
         "is_manual": v.item.code not in AUTO_CODES,
     }

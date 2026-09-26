@@ -30,8 +30,8 @@ def _no_portfolio(s):
 
 
 def seed_items(s):
-    # One item in each of the four bands, deliberately: `srs` is the band no flag selects (it is
-    # the else-arm of the precedence), so a catalogue without an unflagged asset covers 3 of 4 and
+    # One item in each of the four bands, deliberately: `srs` is the band no flag selects (band()
+    # reaches it by the item's code), so a catalogue without the `srs` item covers 3 of 4 and
     # every test downstream of the banding inherits the hole.
     cat = [
         ("posb", "asset", "SGD", True, False, False),           # cash
@@ -120,6 +120,16 @@ class MetricsTest(unittest.TestCase):
         self.assertAlmostEqual(m["net_worth_excl_housing"], excl_h, 2)
         # excl housing & cpf: also remove CPF OA
         self.assertAlmostEqual(m["net_worth_excl_housing_cpf"], excl_h - 50000, 2)
+
+    def test_a_liquid_liability_is_not_a_liquid_asset(self):
+        # metrics() does not band, so the non-housing-liability guard in band() never sees this.
+        self.s.add(NwItem(code="card", label="card", kind="liability", currency_default="SGD",
+                          is_liquid=True, sort_order=99, active=True))
+        self.s.commit()
+        snap = build_snapshot(self.s, 0, {"posb": (10000, "SGD", 1), "card": (500, "SGD", 1)})
+        m = nw.metrics(snap)
+        self.assertAlmostEqual(m["liquid_assets"], 10000, 2)
+        self.assertAlmostEqual(m["total_liabilities"], 500, 2)
 
     def test_usd_fx_freeze(self):
         snap = build_snapshot(self.s, 0, {"tiger_usd": (1000, "USD", 1.34)})
@@ -229,8 +239,8 @@ class BandTest(unittest.TestCase):
         self.s = make_session()
         seed_items(self.s)
 
-    def item(self, **flags):
-        return NwItem(code="x", label="x", kind=flags.pop("kind", "asset"),
+    def item(self, code="x", **flags):
+        return NwItem(code=code, label=code, kind=flags.pop("kind", "asset"),
                       currency_default="SGD", is_liquid=flags.get("liquid", False),
                       is_housing=flags.get("housing", False), is_cpf=flags.get("cpf", False))
 
@@ -239,8 +249,18 @@ class BandTest(unittest.TestCase):
         self.assertEqual(nw.band(self.item(cpf=True)), "cpf")
         self.assertEqual(nw.band(self.item(liquid=True)), "cash")
 
-    def test_no_flag_falls_through_to_srs(self):
-        self.assertEqual(nw.band(self.item()), "srs")
+    def test_the_srs_item_bands_srs_without_a_flag(self):
+        self.assertEqual(nw.band(self.item(code="srs")), "srs")
+
+    def test_any_other_unflagged_item_raises(self):
+        """No flag selects srs, so an unflagged item used to fall through to it — and from there
+        into Cash via FOLDED_BANDS, where nothing on the chart would show it."""
+        with self.assertRaises(ValueError) as cm:
+            nw.band(self.item(code="new_asset"))
+        self.assertIn("new_asset", str(cm.exception))
+
+    def test_flags_outrank_the_srs_code(self):
+        self.assertEqual(nw.band(self.item(code="srs", liquid=True)), "cash")
 
     def test_housing_outranks_cpf_and_liquid(self):
         self.assertEqual(nw.band(self.item(housing=True, cpf=True, liquid=True)), "housing")
@@ -252,7 +272,7 @@ class BandTest(unittest.TestCase):
 
     def test_bands_declares_exactly_the_four_values_band_can_return(self):
         produced = {nw.band(self.item(**f)) for f in
-                    ({}, {"liquid": True}, {"cpf": True}, {"housing": True})}
+                    ({"code": "srs"}, {"liquid": True}, {"cpf": True}, {"housing": True})}
         self.assertEqual(produced, set(nw.BANDS))
 
     def test_non_housing_liability_raises(self):

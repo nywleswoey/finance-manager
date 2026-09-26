@@ -67,6 +67,20 @@ jobs:
       - name: requirements.txt pins match uv.lock
         run: uv run python scripts/sync_requirements.py --check
 
+      # tests/pgtest.py builds its schema from the models, not from migrations/, so nothing
+      # else notices the two drifting apart. Migrate a fresh database of its own — not
+      # `portfolio`, whose empty schema is what keeps tests/test_performance_live.py skipping —
+      # and fail if the models describe anything the migrations did not create.
+      - name: models match migrations
+        run: |
+          PGPASSWORD=portfolio psql -h localhost -p 5544 -U portfolio -d postgres \
+            -c 'CREATE DATABASE portfolio_migrations'
+          uv run alembic upgrade head
+          uv run alembic check
+        env:
+          PYTHONPATH: .
+          DATABASE_URL: postgresql+psycopg://portfolio:portfolio@localhost:5544/portfolio_migrations
+
       # The full suite, `pg` marks included — the Postgres-only SQL (to_char month bucketing
       # in spending.summary/trends) is precisely what a sqlalchemy or psycopg bump can break,
       # and it is invisible to the SQLite default run. `-rs` lists every skip with its reason,

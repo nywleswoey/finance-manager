@@ -75,7 +75,7 @@ class CorporateAction(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     security_id: Mapped[int | None] = mapped_column(ForeignKey("security.id"))  # informational
     date: Mapped[dt.date | None] = mapped_column(Date)                          # informational
-    type: Mapped[str] = mapped_column(String(16))                    # rename|split|consolidation|merger|distribution
+    type: Mapped[str] = mapped_column(String(16))                    # rename|split|consolidation|merger|switch (performance.CARRY_TYPES) | distribution
     from_ticker: Mapped[str | None] = mapped_column(String(24))
     to_ticker: Mapped[str | None] = mapped_column(String(24))
     ratio_num: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))  # informational
@@ -104,7 +104,7 @@ class Txn(Base):
     security_id: Mapped[int | None] = mapped_column(ForeignKey("security.id"))
     trade_date: Mapped[dt.date | None] = mapped_column(Date, index=True)
     settle_date: Mapped[dt.date | None] = mapped_column(Date)        # stored, no reader
-    action: Mapped[str] = mapped_column(String(24))                  # buy|sell|gift_in|rights|bonus|scrip|corp_action|transfer_in|transfer_out|fee|subscription
+    action: Mapped[str] = mapped_column(String(24))                  # broker's own spelling; performance.CASH_TRADE / ZERO_CASH are the vocabulary
     qty_signed: Mapped[Decimal] = mapped_column(QTY, default=0)
     price: Mapped[Decimal | None] = mapped_column(MONEY)
     gross_amount: Mapped[Decimal | None] = mapped_column(MONEY)
@@ -254,9 +254,11 @@ class OptionTrade(Base):
     underlying: Mapped[str] = mapped_column(String(24))                  # raw ticker from source (BABA, PLTR)
     market: Mapped[str | None] = mapped_column(String(4))                # US | HK
     option_type: Mapped[str] = mapped_column(String(4))                  # put | call
-    contracts: Mapped[Decimal] = mapped_column(QTY, default=0)
+    # Nullable with a server default, as `a1f2c3d4e5f6` created them; readers treat NULL as
+    # the default (`options.py`: `t.contracts or 0`, `t.multiplier or 100`).
+    contracts: Mapped[Decimal | None] = mapped_column(QTY, default=0, server_default="0")
     strike: Mapped[Decimal | None] = mapped_column(MONEY)
-    multiplier: Mapped[int] = mapped_column(Integer, default=100)
+    multiplier: Mapped[int | None] = mapped_column(Integer, default=100, server_default="100")
     open_date: Mapped[dt.date | None] = mapped_column(Date, index=True)
     expiry_date: Mapped[dt.date | None] = mapped_column(Date)
     close_date: Mapped[dt.date | None] = mapped_column(Date)
@@ -341,7 +343,7 @@ class NwSnapshot(Base):
     stays stable when prices move."""
     __tablename__ = "nw_snapshot"
     id: Mapped[int] = mapped_column(primary_key=True)
-    date: Mapped[dt.date] = mapped_column(Date, unique=True, index=True)
+    date: Mapped[dt.date] = mapped_column(Date, index=True)     # unique via uq_nw_snapshot_date
     note: Mapped[str | None] = mapped_column(String(256))
     portfolio_value_sgd: Mapped[Decimal] = mapped_column(MONEY, default=0)
     # The frozen portfolio's funding-bucket split, stamped at capture beside the total. NULL for
@@ -350,9 +352,12 @@ class NwSnapshot(Base):
     portfolio_cash_sgd: Mapped[Decimal | None] = mapped_column(MONEY)
     portfolio_cpf_sgd: Mapped[Decimal | None] = mapped_column(MONEY)
     portfolio_srs_sgd: Mapped[Decimal | None] = mapped_column(MONEY)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    created_at: Mapped[dt.datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     values: Mapped[list[NwValue]] = relationship(back_populates="snapshot", cascade="all, delete-orphan")
+    # A named constraint beside a plain index, as `b2c3d4e5f6a7` created them — not
+    # `unique=True, index=True`, which builds one unique index and no constraint.
+    __table_args__ = (UniqueConstraint("date", name="uq_nw_snapshot_date"),)
 
 
 class NwValue(Base):

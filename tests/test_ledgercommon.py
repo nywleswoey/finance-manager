@@ -121,10 +121,20 @@ def test_seed_never_seeds_a_symbols_csv_code_as_us():
     syms = seed.load_symbols()
     for c in syms:
         market = seed.fallback_market(c, syms)
-        assert market == ("HK" if c.isdigit() else "SG"), c
+        assert market == seed.MARKET.get(c, "HK" if c.isdigit() else "SG"), c
         assert MARKET_CCY[market] != "USD", c
     assert seed.fallback_market("SET", syms) == "SG"
     assert seed.fallback_market("AAPL", syms) == "US"
+
+
+def test_an_all_digit_code_that_is_not_hk_seeds_its_own_market():
+    """UMS (558) is an SGX counter and 3255 is on Bursa; by shape alone both read as HK."""
+    import scripts.seed as seed
+
+    syms = seed.load_symbols()
+    assert seed.fallback_market("558", syms) == "SG"
+    assert seed.fallback_market("3255", syms) == "MY"
+    assert seed.fallback_market("883", syms) == "HK"
 
 
 def test_cdp_dividend_sheet_books_only_the_listed_names():
