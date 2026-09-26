@@ -84,8 +84,9 @@ rather than averaged. **Derived at render, never stored and
 never served** — Holdings folds it client-side — so it is a presentation of several positions and
 never itself a Position. Not the **ticker fold** below, which is the server's, narrower, and the
 one the detail page reads; the two stay separate folds on purpose (#143 §3). XIRR is deliberately not folded: an IRR over merged cashflows cannot be
-averaged from its parts, so a consolidated row of two positions shows no return rather than a
-plausible one.
+averaged from its parts, so a consolidated row shows the server's `ticker_xirr` — one solve over
+every position's flows pooled, riding each position like the other whole-ticker figures — and
+`—` where any position's own XIRR is refused.
 _Avoid_: position (the fold's *input* is positions, and the whole point is that this is not one)
 
 **Leg**:
@@ -258,7 +259,8 @@ at once)
 
 **Money-weighted return (XIRR)**:
 The internal rate of return over a position's dated cashflows plus its current market value as a
-terminal inflow. Sensitive to contribution timing. Computed per position and portfolio-wide.
+terminal inflow. Sensitive to contribution timing. Computed per position, per security (its
+positions' flows pooled, for Holdings' consolidated row) and portfolio-wide.
 **Not on the ticker detail page** — an annualised rate and a lifetime return are different
 claims and no label reconciles them: across the 58 non-optioned legs carrying one, the two
 differ by a median 20 points and up to 367, and two names read a negative rate beside a

@@ -123,18 +123,19 @@ const netMark = ({ verdict, bound }) => {
  * answers it, and it is **render-time only** — nothing here is stored or served, so a consolidated
  * row is a presentation of several positions and never a position itself.
  *
- * Sum, pass through, or refuse — every column is one of the three:
+ * Sum or pass through — every column is one of the two:
  *
  *   - Sum: units, cost, MV, P/L, dividends, options, and the flows Net is built from. Options need
  *     no double-count guard, because `performance.py` attaches the per-underlying options stream to
  *     the `cash` row alone — a guard here would be dead code reading as if a hazard existed.
  *   - Pass through: price, currency, market, name. Both rows resolve the same `security_id`, so
  *     these are the same lookup; recomputing them would invent a disagreement that cannot exist.
- *   - Refuse: XIRR. It is an internal rate of return over dated cashflows, and the mean of two IRRs
- *     is not the IRR of the merged flows. The splits disagree sharply — D05 19.5% against 28.7% —
- *     so a weighted mean would be a fabricated figure wearing a measured one's clothes. The cell
- *     says `—` and the tooltip says why. Recomputing over merged flows is the real fix and needs a
- *     second fold keyed on the security alone, which is a backend read shape, not this.
+ *   - Pass through, never fold: XIRR. It is an internal rate of return over dated cashflows, and
+ *     the mean of two IRRs is not the IRR of the merged flows — D05 19.8% cash against 28.9% CPF
+ *     pools to 21.5%, which no weighting of the two produces. So this fold computes nothing: it
+ *     shows `ticker_xirr`, the server's one solve over every leg's flows pooled, which rides
+ *     every leg like `return_pct` and, like it, covers every leg of the name — a closed one the
+ *     checkbox hides included. Null where any leg's own XIRR is refused; the cell then says `—`.
  *
  * Avg cost is the interesting one: it folds **exactly**, not approximately. `cost_basis` is
  * `avg_cost × units`, so pooled cost basis over pooled units *is* the true weighted average
@@ -215,7 +216,7 @@ function mergeTicker(rows) {
     income_sgd: sumOf(rs, (r) => r.income_sgd),
     invested_sgd: sumOf(rs, (r) => r.invested_sgd),
     options_pl_sgd: sumOf(rs, (r) => r.options_pl_sgd),
-    xirr: null,                                              // refused — see the note above
+    xirr: first.ticker_xirr,                                 // pooled server-side — see above
     simple_return: null,
   };
 }
@@ -311,11 +312,11 @@ function DataRow({ r, onClick, max }) {
       <td className={cls(r.options_pl_sgd)} title="realised options (wheel) P/L">
         {r.options_pl_sgd ? sgd(r.options_pl_sgd) : "—"}</td>
       <NetCell net={net} verdict={verdict} bound={bound} max={max} />
-      {/* A pooled row's XIRR is refused, not blank-by-accident — say so on hover, since the dash
-          is the same glyph a position with too short a span already renders. */}
+      {/* A consolidated row's XIRR is one solve over every bucket's flows, not any bucket's own
+          — say so on hover, since the figure matches neither leg a grouped view shows. */}
       <td className={cls(r.xirr)}
-          title={r.xirr == null && r.buckets
-            ? "no pooled return — an IRR over merged cashflows can't be averaged from its parts"
+          title={r.buckets && r.buckets.length > 1
+            ? "one XIRR over every bucket's cashflows pooled"
             : undefined}>
         {r.xirr == null ? "—" : pct(r.xirr)}</td>
     </tr>

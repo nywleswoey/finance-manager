@@ -11,6 +11,7 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_performance_fold.py -q
 import datetime as dt
 
 from portfolio import performance as perf
+from portfolio.xirr import xirr
 
 D = dt.date
 TODAY = D(2024, 1, 1)
@@ -451,14 +452,15 @@ def test_a_leg_that_landed_by_the_close_is_the_leg_and_a_later_arrival_is_not():
 # four return fields — and `peak_car_date` is deliberately not among them (#143 Further Notes:
 # nothing on the page renders it, and absent beats null for a field with no consumer). #150
 # added the Net and its verdict, so the frontend renders them rather than composing them. #151
-# added `provenance` — null unless a corporate action carried onto the name.
+# added `provenance` — null unless a corporate action carried onto the name. `ticker_xirr` is
+# the name's one pooled XIRR, whole-ticker like the verdicts, for Holdings' ticker mode.
 ROW_FIELDS = {
     "bucket", "accounts", "ticker", "name", "market", "asset_type", "currency", "units", "price",
     "mv_native", "avg_cost", "cost_basis_native", "cost_basis_sgd", "unrealised_pl_sgd",
     "realised_pl_sgd", "stock_pl_sgd", "invested_native", "income_native", "fees_sgd",
     "cost_known",
     "cost_partition", "total_pl_native", "invested_sgd", "mv_sgd", "income_sgd", "pl_sgd",
-    "xirr", "simple_return", "options_pl_sgd",
+    "xirr", "ticker_xirr", "simple_return", "options_pl_sgd",
     "peak_car_sgd", "return_span_days", "return_pct", "return_verdict",
     "net_pl_sgd", "net_verdict", "provenance", "breakeven_price",
 }
@@ -1032,3 +1034,41 @@ def test_a_dated_book_does_not_warn_about_dates(caplog):
     _, msgs = _warnings(caplog, lambda: _fold([_txn(qty_signed=100, price=10.0)],
                                               price={10: 12.0}))
     assert not any("undated" in m for m in msgs), msgs
+
+
+# --------------------------------------------------------------------------------------
+# ticker_xirr — one XIRR per name, over every listed leg's flows pooled
+# --------------------------------------------------------------------------------------
+
+def _two_bucket_d05(cpf_price=20.0):
+    """D05's shape: one name held in the cash and the CPF bucket, bought at different times."""
+    return [_txn(qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
+            _txn(account_id=2, account="CPF", funding_bucket="cpf", qty_signed=100,
+                 price=cpf_price, trade_date=D(2022, 1, 1))]
+
+
+def test_a_name_in_two_buckets_pools_its_flows_into_one_xirr():
+    """Holdings' ticker row needs the IRR of the merged flows, which no mean of the two legs'
+    rates is. Every leg carries the one pooled figure; each keeps its own `xirr` beside it."""
+    rows = _fold(_two_bucket_d05(), price={10: 30.0})
+    cash, cpf = (next(r for r in rows if r["bucket"] == b) for b in ("cash", "cpf"))
+    pooled = xirr([(D(2020, 1, 1), -1000.0), (D(2022, 1, 1), -2000.0),
+                   (TODAY, 3000.0), (TODAY, 3000.0)])
+    assert cash["ticker_xirr"] == cpf["ticker_xirr"] == round(pooled, 4) == 0.2827
+    assert cash["xirr"] > cash["ticker_xirr"] > cpf["xirr"]
+    assert cash["ticker_xirr"] != round((cash["xirr"] + cpf["xirr"]) / 2, 4)
+
+
+def test_a_leg_its_own_gate_refuses_nulls_the_pooled_xirr():
+    """A leg whose units entered unpriced has no XIRR of its own, and pooling past it would be a
+    rate on a book without its money: the name's figure is null, the other leg's own survives."""
+    rows = _fold(_two_bucket_d05(cpf_price=None), price={10: 30.0})
+    cash, cpf = (next(r for r in rows if r["bucket"] == b) for b in ("cash", "cpf"))
+    assert cpf["xirr"] is None
+    assert cash["xirr"] is not None
+    assert cash["ticker_xirr"] is None and cpf["ticker_xirr"] is None
+
+
+def test_a_name_in_one_bucket_pools_to_its_own_xirr():
+    r = _only(_fold([_txn(qty_signed=100, price=10.0)], price={10: 12.0}))
+    assert r["ticker_xirr"] == r["xirr"] is not None

@@ -137,7 +137,7 @@ test("one row per ticker, and the heading counts what is on screen", async ({ pa
   await expect(page.locator(".pinned tbody tr.grouprow")).toHaveCount(0);
 });
 
-test("a split ticker sums its legs, pools avg cost exactly, and refuses a pooled return",
+test("a split ticker sums its legs, pools avg cost exactly, and shows the server's pooled XIRR",
   async ({ page }) => {
     const splits = [...byTicker(OPEN)].filter(([, rs]) => rs.length > 1);
     expect(splits.length).toBeGreaterThan(0);
@@ -154,13 +154,19 @@ test("a split ticker sums its legs, pools avg cost exactly, and refuses a pooled
       expect.soft(cells[4]).toContain((cost / units).toFixed(4));
       // every leg is one security, so every leg quotes one price
       expect.soft(new Set(legs.map((r) => r.price)).size).toBe(1);
-      // an IRR over merged cashflows cannot be averaged from its parts
-      expect.soft(cells[XIRR]).toBe("—");
+      // an IRR over merged cashflows cannot be averaged from its parts, so the row shows the
+      // server's one solve over them, which every leg carries identically
+      expect.soft(new Set(legs.map((r) => r.ticker_xirr)).size).toBe(1);
+      expect.soft(cells[XIRR]).toBe(legs[0].ticker_xirr == null ? "—"
+        : (legs[0].ticker_xirr * 100).toFixed(1) + "%");
       // …and each bucket the name is held in is still named
       for (const b of new Set(legs.map((r) => r.bucket))) {
         await expect.soft(row.locator(".pill", { hasText: new RegExp(`^${b}$`) })).toBeVisible();
       }
     }
+    // the fixture must still carry a split whose pooled XIRR is a number, or the gate above only
+    // ever compares dashes
+    expect(splits.some(([, legs]) => legs[0].ticker_xirr != null)).toBe(true);
     // a ticker held in one bucket keeps its own return untouched
     const [single] = [...byTicker(OPEN)].find(
       ([, rs]) => rs.length === 1 && rs[0].xirr != null);
@@ -352,15 +358,16 @@ test("Holdings' Net for a ticker is the Net that ticker's own page states", asyn
 
 test("the whole-ticker fields the fold passes through really are identical on every leg", () => {
   // THE ASSUMPTION `mergeTicker` RESTS ON, checked rather than trusted. It copies `net_verdict`,
-  // `provenance` and the four return figures from the largest leg instead of folding them,
-  // because `fold_positions` repeats them identically across a ticker's legs — a whole-ticker
-  // reading riding every row. If that ever stopped being true the merged row would report the
-  // biggest bucket's verdict as the name's, and nothing on screen would look wrong.
+  // `provenance`, the four return figures and the pooled XIRR from the largest leg instead of
+  // folding them, because `fold_positions` repeats them identically across a ticker's legs — a
+  // whole-ticker reading riding every row. If that ever stopped being true the merged row would
+  // report the biggest bucket's verdict as the name's, and nothing on screen would look wrong.
   //
   // The server keeps its own side of this (`tests/fold_invariants.py` — the verdicts and the
   // return fields agree across a ticker's legs); this is the consumer checking the fixture it
   // actually reads, which is the file the browser sees.
-  const whole = ["net_verdict", "return_verdict", "return_pct", "peak_car_sgd", "return_span_days"];
+  const whole = ["net_verdict", "return_verdict", "return_pct", "peak_car_sgd", "return_span_days",
+    "ticker_xirr"];
   const multi = [...byTicker(ALL)].filter(([, rs]) => rs.length > 1);
   expect(multi.length).toBeGreaterThan(0);
 
