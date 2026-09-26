@@ -20,11 +20,8 @@ every skip and why.
     PYTHONPATH=. .venv/bin/python -m pytest tests/test_performance_live.py -q -rs
 """
 import datetime as dt
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -255,7 +252,6 @@ class TestLiveBook(FoldInvariants, unittest.TestCase):
         self.assertEqual(got["C38U"]["net_verdict"], "bounded")
         self.assertEqual(got["0P0001OOJG"]["net_verdict"], "hero")
         self.assertIsNotNone(got["9CI"]["avg_cost"])            # bounded keeps its tiles
-
 
 
 def _fx_or_none():

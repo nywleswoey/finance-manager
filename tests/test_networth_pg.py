@@ -20,14 +20,11 @@ Marked `pg` — skips when no server answers, `-m "not pg"` deselects.
 Run: make db-up && PYTHONPATH=. .venv/bin/python -m pytest tests/test_networth_pg.py -q
 """
 import datetime as dt
-import os
-import sys
 import unittest
 from decimal import Decimal
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 

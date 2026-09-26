@@ -23,11 +23,8 @@ enforces (.github/workflows/ci.yml).
 `make db-up` is the Postgres these tests expect. Without it they skip, and the default run is
 unchanged — deselect them explicitly with `-m "not pg"`.
 """
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import create_engine, make_url, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker

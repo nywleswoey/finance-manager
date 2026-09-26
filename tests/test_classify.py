@@ -8,25 +8,16 @@ commit (its default SessionLocal path is the endpoint's).
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_classify.py -q
 """
-import os
-import sys
 import unittest
 from decimal import Decimal
 from types import SimpleNamespace
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select
 
 from portfolio import classify
 from portfolio.classify import _Compiled, _MoneyCond, _TextCond, _Unmappable
-from portfolio.models import Base, CashTxn, ClassificationRule, SpendCategory
-
-
-def make_session():
-    eng = create_engine("sqlite://")
-    Base.metadata.create_all(eng)
-    return sessionmaker(bind=eng, future=True)()
+from portfolio.models import CashTxn, ClassificationRule, SpendCategory
+from tests.sqlitetest import make_session
 
 
 def row(**kw):

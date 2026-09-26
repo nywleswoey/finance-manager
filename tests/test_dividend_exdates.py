@@ -8,30 +8,22 @@ Run: PYTHONPATH=. .venv/bin/python tests/test_dividend_exdates.py
 """
 import datetime as dt
 import os
-import sys
 import tempfile
 import unittest
 from decimal import Decimal
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import select
 
 import build.export_dividends_master as export
 import ingestion.load as load
 import scripts.snapshot_from_statements as snap
-from portfolio.models import Account, Base, Dividend, NwSnapshot, Security
+from portfolio.models import Account, Dividend, NwSnapshot, Security
+from tests.sqlitetest import make_session
 
 CSV = ("date,ex_date,ticker,rate_per_unit,currency\n"
        "2026-05-14,2026-04-29,F34,0.1,SGD\n"
        "2026-05-20,2026-05-11,D05,0.81,SGD\n"
        "2026-06-08,,C38U,0.0398,SGD\n")          # no ex-date known for this one
-
-
-def make_session():
-    eng = create_engine("sqlite://")
-    Base.metadata.create_all(eng)
-    return sessionmaker(bind=eng, future=True)()
 
 
 def seed(s):

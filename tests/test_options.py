@@ -3,11 +3,8 @@
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_options.py -q
 """
 import datetime as dt
-import os
-import sys
 import unittest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from ingestion.load import num as money
 from ingestion.parse_options import _SYM, _expiry, _reconcile, _und
 
