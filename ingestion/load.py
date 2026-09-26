@@ -149,6 +149,10 @@ def load_dividends(session, acct, alias):
         if not a:
             dropped[("account", r["account"])] += 1
             continue
+        # Unlike the ledger key, this one includes `gross`: a corrected amount is a NEW row
+        # (the old one is pruned below), not an update in place. The statements are the source
+        # of truth, so that is accepted; backfill_ex_dates() then restores ex_date from the
+        # master CSV, the one column a statement never carries.
         key = (r["account"], r["ticker"], r["date"], r["gross"], r["source"])
         dh = occ_hash(occ, key)
         payload.append(dict(
@@ -160,7 +164,9 @@ def load_dividends(session, acct, alias):
     # prune dividends that vanished from the CSV (e.g. dateless rows now reparsed with a date)
     prune_stale(session, Dividend, {p["dedup_hash"] for p in payload}, batch_id=b.id)
     _report_dropped(dropped, "dividends")
-    return upsert(session, Dividend, payload, ["gross", "net", "currency", "amount_per_unit", "units"])
+    # gross/net are omitted: both come from `gross`, which is in the key, so a conflicting row
+    # already has them.
+    return upsert(session, Dividend, payload, ["currency", "amount_per_unit", "units"])
 
 
 def backfill_ex_dates(session):
@@ -213,8 +219,9 @@ def count(session, model, where=None):
 
 
 def upsert(session, model, payload, update_cols):
-    """Idempotent on dedup_hash; mutable fields (amount/price/currency) are refreshed
-    so re-ingesting a corrected ledger updates rows in place. Returns count of NEW rows."""
+    """Idempotent on dedup_hash; `update_cols` are refreshed so re-ingesting a corrected row
+    updates it in place. A field that is part of the dedup key can't change this way: a new
+    value is a new hash, hence a new row. Returns count of NEW rows."""
     if not payload:
         return 0
     before = count(session, model)

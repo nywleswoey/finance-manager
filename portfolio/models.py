@@ -267,7 +267,7 @@ class OptionTrade(Base):
     fees_open: Mapped[Decimal | None] = mapped_column(MONEY)
     fees_close: Mapped[Decimal | None] = mapped_column(MONEY)
     realized_pl: Mapped[Decimal | None] = mapped_column(MONEY)           # native currency
-    currency: Mapped[str | None] = mapped_column(String(3))
+    currency: Mapped[str | None] = mapped_column(String(3))              # NULL -> options.option_currency()
     outcome: Mapped[str | None] = mapped_column(String(12))              # expired | closed | assigned
     source_file: Mapped[str | None] = mapped_column(String(256))
     batch_id: Mapped[int | None] = mapped_column(ForeignKey("import_batch.id"))

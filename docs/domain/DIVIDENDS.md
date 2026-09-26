@@ -101,8 +101,11 @@ data/**  (broker statements: tiger-prime, fsm, cdp-stocks, moomoo, cpf/srs …)
   │
   ├─ make load   ingestion.load  →  load_dividends()  ──►  Postgres `dividend` table
   │              │   idempotent upsert keyed on dedup_hash = h(account,ticker,date,gross,source,occ#);
-  │              │   mutable fields (gross/net/currency/rate/units) refreshed in place;
-  │              │   rows that vanish from the CSV are pruned; unknown accounts are named.
+  │              │   currency/rate/units refreshed in place; a changed gross is a new hash, so the
+  │              │   old row is pruned and a new one inserted; rows that vanish from the CSV are
+  │              │   pruned; unknown accounts are named.
+  │              ├─ backfill_ex_dates()  ◄──  data/dividends-master.csv   (restores ex_date on
+  │              │   rows that have none, e.g. one just re-inserted)
   │              └─ build/export_dividends_master.py  ──►  data/dividends-master.csv
   │                  (one row per distinct dividend event: date, ex_date, ticker, rate_per_unit, currency;
   │                   rate = gross / qty-at-ex-date, account-independent, deduped across accounts)
@@ -121,8 +124,8 @@ Normal case — the dividend **is already in a new statement**:
 
 1. Drop the new statement into its `data/<broker>/` folder (same as any position update).
 2. `make ingest` — reparse → `build/dividends.csv` → upsert into DB → re-export master.
-3. Only genuinely new payments insert; corrected amounts update in place. Check the printed
-   "NEW rows" count. Refresh the API/`app` to see it in the Dividends tab.
+3. Only genuinely new payments insert (plus any re-inserted with a corrected amount — see
+   below). Check the printed "NEW rows" count. Refresh the API/`app` to see it in the Dividends tab.
 
 Manual case — a payment **no statement carries** (e.g. a CPF/SRS holding, whose transaction
 files have no dividend lines):
@@ -134,8 +137,13 @@ files have no dividend lines):
 3. If it's a brand-new ticker, seed it first (`make seed`) so the loader can map the alias —
    otherwise `load_dividends()` maps `security_id=null` and it shows as **unmapped ticker**.
 
-Fixing a wrong amount: edit the source statement/tracker row and re-`make ingest`; the upsert
-overwrites (same dedup_hash) — do **not** hand-edit `data/dividends-master.csv`, it's regenerated.
+Fixing a wrong amount: edit the source statement/tracker row and re-`make ingest`. `gross` is part
+of the dedup_hash, so the corrected row gets a new hash: the old row is pruned and the new one
+inserted, not updated in place. That is deliberate — the statements are the source of truth, and
+the DB row is rebuilt from them. The new row's `ex_date` is restored by `backfill_ex_dates()` from
+`data/dividends-master.csv`, which `make load` re-exports after every load, so only an ex-date set
+in the DB since the last export would be lost. Do **not** hand-edit `data/dividends-master.csv`,
+it's regenerated.
 
 ### Manual-input flags
 

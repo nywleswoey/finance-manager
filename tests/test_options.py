@@ -88,6 +88,13 @@ class ReconcileTest(unittest.TestCase):
         self.assertEqual(r["contracts"], 4.0)
         self.assertAlmostEqual(r["premium_open"], (1.0 * 1 + 2.0 * 3) / 4)   # weighted = 1.75
 
+    def test_currency_from_market_else_the_option_default(self):
+        self.assertEqual(self.one([leg(market="HK", underlying="LNK")])["currency"], "HKD")
+        self.assertEqual(self.one([leg(market="US")])["currency"], "USD")
+        # a market with no currency mapping falls back to option_currency(): LNK is HKD
+        self.assertEqual(self.one([leg(market="", underlying="LNK")])["currency"], "HKD")
+        self.assertEqual(self.one([leg(market="", underlying="PLTR")])["currency"], "USD")
+
 
 if __name__ == "__main__":
     unittest.main()
