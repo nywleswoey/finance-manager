@@ -213,3 +213,11 @@ def test_a_divergence_leg_reaches_its_group_net(client, by):
 
     assert stock == round(sum(r["stock_pl_sgd"] or 0 for r in ROWS), 2)
     assert unsplit == round(CAVEAT["stock_pl_sgd"] + DIVERGENCE["stock_pl_sgd"], 2)
+
+
+def test_an_unmarketed_row_groups_under_the_key_options_use():
+    """`realized_by('market')` keys an unmarketed underlying '—', and Holdings looks its subtotal
+    up by that key, so `rollup()` has to file the stock side there too, not under None."""
+    from portfolio.performance import rollup
+    groups = rollup([_row(market=None)], "market")
+    assert list(groups) == ["—"]
