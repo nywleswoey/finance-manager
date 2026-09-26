@@ -1336,9 +1336,12 @@ def _build_row(k, p, m, fx, price, today, part, verdict):
     }
 
 
-def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
+def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=None):
     """Accumulate per-(funding_bucket, security) positions from the fold's inputs. Returns
     `(pos, meta)` — the raw accumulators and the last-seen metadata row per position.
+
+    `fx` restates a dividend paid in a currency other than the security's into the
+    security's currency, so `income` and the XIRR flow are both in one currency.
 
     Split out of fold_positions() so the accumulators are reachable without going through
     _build_row(): each one carries a dated `unit_events` / `cost_events` series beside the
@@ -1347,6 +1350,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
 
     `annotations` is the curated free/transferred map (portfolio.cost_annotations) the cost
     partition consults; it arrives as plain data like the corporate actions do."""
+    fx = fx or {}
     # group per (bucket, security): transfers within a bucket (e.g. CDP->FSM) keep the cost
     # together, so a position transferred into FSM still carries its original CDP purchase cost.
     # the partition counters ride alongside the cost accumulators: every entering unit is added
@@ -1413,6 +1417,15 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations):
         if k not in pos:
             continue
         amt = float(d["gross"] or 0)
+        sec_ccy = (meta.get(k) or {}).get("currency") or "SGD"
+        # absent currency means the payment was in the security's currency: the rows
+        # the fold was written against never carried one, and treating the absence as
+        # SGD would convert a USD dividend at 1:1.
+        div_ccy = d.get("currency") or sec_ccy
+        if div_ccy != sec_ccy:
+            # income and XIRR flows are in the security's currency, same as -qty*price.
+            # Leaving the gross unconverted counts a euro as a dollar.
+            amt = amt * rate_to_sgd(div_ccy, fx) / rate_to_sgd(sec_ccy, fx)
         pos[k]["income"] += amt
         pos[k]["flows"].append((d["pay_date"] or today, amt))
 
@@ -1436,7 +1449,8 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
 
       txns  — mapping rows: account_id, account, funding_bucket, security_id, canonical_ticker,
               name, market, asset_type, currency, trade_date, action, qty_signed, price, fees.
-      divs  — mapping rows: account_id, security_id, pay_date, gross.
+      divs  — mapping rows: account_id, security_id, pay_date, gross, and currency
+              when the payment is not in the security's currency.
       cdp   — {ticker: {flows, invested, buy_cost, buy_qty, cost_events, unit_lots}} from
               cdp_cost().
       corp_actions — iterable of (from_ticker, to_ticker, type), every `corporate_action` row;
@@ -1453,7 +1467,7 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
     today = today or dt.date.today()
     annotations = annotation_map() if annotations is None else annotations
     contracts = contracts or {}
-    pos, meta = _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations)
+    pos, meta = _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx)
     legs = legs_by_ticker(pos, meta)
     parts = {k: cost_partition(p) for k, p in pos.items() if k in meta}
     # the Net's verdict is a whole-ticker reading of SUMMED counts (#143 §8), and a leg's own

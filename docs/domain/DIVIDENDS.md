@@ -73,11 +73,12 @@ flags the row `no FX rate for <CCY>`; the other endpoints raise (BR4, no silent 
 
 ## Notes / caveats (for the DB Phase-2 cleanup)
 
-- **Currency**: Tiger has no dividend-currency column → inferred from market (HK→HKD,
-  SG→SGD, US→USD). The EUR REIT (SET/Cromwell→Stoneweg) Tiger payouts are therefore
-  labelled SGD; FSM's EUR ones are correct. Refine when prices/FX land. **Now that gross_sgd
-  converts off that label, those rows convert at 1:1 instead of the EUR rate — understated by
-  the EUR/SGD spread.** Fixing the inferred currency fixes the conversion for free.
+- **Currency**: Tiger's flex file carries the cash currency in its last column
+  (`tiger_currency`); a blank cell still infers from market (HK→HKD, SG→SGD, US→USD).
+  The EUR-named REIT (SET/CWBU) is not thereby EUR: the live Tiger rows are SGD, and the
+  amount equals quantity times the SGD gross rate. EUR distributions on SET and UD1U
+  arrive from CDP, FSM and SRS with their own currency already set. `gross_sgd` and
+  `income_sgd` both convert off that label.
 - **US withholding tax**: Tiger `Paid` amounts are taken as received (likely net of WHT);
   a separate `Withholding Tax` section exists to net gross vs net later.
 - **ADQU (Accordia Golf) SGD 28,264 on 2020-10-15** looks like a delisting/special capital

@@ -276,10 +276,9 @@ price drops); the two dates are a real distinction, not a discrepancy.
 _Avoid_: dividend date (name the basis — pay_date or ex_date — explicitly)
 
 **Income**:
-Dividends received, the third term of the Net. On the wire as `income_sgd`, per leg. **Known
-defect**: the fold sums the native `gross` amounts and converts once at the *security's* rate, so
-a name paid in a second currency is converted at the wrong one — UD1U is short 5,134.49 and SET
-307.08. It reaches every Net in the app; the runbook has the table and the fix.
+Dividends received, the third term of the Net. On the wire as `income_sgd`, per leg. Each
+payment converts at its own currency; the runbook has the rule and the two names (UD1U, SET)
+it was wrong on.
 _Avoid_: dividends (the rows are dividends; this is their folded SGD total), yield
 
 ### Money

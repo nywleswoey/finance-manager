@@ -359,7 +359,7 @@ def test_fetch_hands_the_fold_every_corporate_action(monkeypatch):
 
     seen = {}
 
-    def accumulate(txns, divs, cdp, corp, today, ann):
+    def accumulate(txns, divs, cdp, corp, today, ann, fx):
         seen["corp"] = [tuple(c) for c in corp]
         return {}, {}
 

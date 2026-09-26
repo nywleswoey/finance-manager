@@ -151,16 +151,15 @@ ENDPOINTS: list[tuple[str, str]] = [
     ("dividend-details", "/api/dividend-details"),
     ("accounts", "/api/accounts"),
     ("transactions", "/api/transactions?"),
-    # --- the detail page: eight tickers, and every one of them the only thing that reaches
+    # --- the detail page: nine tickers, and every one of them the only thing that reaches
     # what it reaches (#143, Testing Decisions tier 2). Not "a few representative names": each
     # line below closes a render state no other ticker in the book can.
     #
     # PLTR      the plain hero, the 3-row reconciliation block, and 73 option trades — the
     #           longest options history in the database, which is what makes this page the
     #           tallest view in the app (see PATHOLOGICAL).
-    # AAPL      the no-capital hero, and the ONLY fixture that reaches the Dividends row at
-    #           all: `holding-pltr.json`'s `dividends` is `[]` and PLTR structurally cannot
-    #           have one. Also a hero carrying latest FX.
+    # AAPL      the no-capital hero, and a Dividends row: `holding-pltr.json`'s `dividends`
+    #           is `[]` and PLTR structurally cannot have one. Also a hero carrying latest FX.
     # Q01       the caveat — `stock_pl_sgd` carrying a nulled realised/unrealised pair, tiles
     #           reading `not known`, the two-sided percentage sentence. The only caveat in the
     #           book whose uncosted lot is still HELD.
@@ -172,6 +171,8 @@ ENDPOINTS: list[tuple[str, str]] = [
     # 9CI       `bounded` with a LOWER bound (`≥`) — a split carry that landed here.
     # C38U      `bounded` with an UPPER bound (`≤`), naming a sibling the reader can reach.
     # ASTREA6B  the only refusal in the book, and the only page with no bottom line.
+    # UD1U      income paid in EUR and SGD on an SGD-quoted name. The fold converts each
+    #           dividend at its own currency; this payload is what a gate can see that on.
     ("holding-pltr", "/api/holding?ticker=PLTR"),
     ("holding-aapl", "/api/holding?ticker=AAPL"),
     ("holding-q01", "/api/holding?ticker=Q01"),
@@ -180,6 +181,7 @@ ENDPOINTS: list[tuple[str, str]] = [
     ("holding-9ci", "/api/holding?ticker=9CI"),
     ("holding-c38u", "/api/holding?ticker=C38U"),
     ("holding-astrea6b", "/api/holding?ticker=ASTREA6B"),
+    ("holding-ud1u", "/api/holding?ticker=UD1U"),
     # --- net worth ---
     ("networth-items", "/api/networth/items"),
     ("networth-snapshots", "/api/networth/snapshots"),

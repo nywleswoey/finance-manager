@@ -11,9 +11,9 @@
  * WHAT IT GATES. The page's whole claim is that the hero figure is *provable*: the ledger
  * directly beneath it is the only thing a reader can check, so it has to tie at zero tolerance.
  * That is the first test below, and it runs over **every captured holding** rather than over
- * PLTR alone — the eight payloads were captured precisely because they are eight different
- * shapes of that claim (a wheel, a windfall, a caveat, a two-bucket name, a closed name, two
- * carries, and the one refusal).
+ * PLTR alone — the payloads were captured because they are different shapes of that claim
+ * (a wheel, a windfall, a caveat, a two-bucket name, a closed name, two carries, the one
+ * refusal, and UD1U, paid in EUR and SGD).
  *
  * NO GATE HERE STATES A NUMERIC LITERAL FROM A FIXTURE. Every expectation is derived from the
  * payload the page was served, so a recapture moves the numbers and the gates keep meaning what
