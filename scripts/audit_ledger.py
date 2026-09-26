@@ -487,6 +487,7 @@ def fetch():
     """Read the book `DATABASE_URL` points at into a `Book`. Read-only."""
     from sqlalchemy import text
 
+    from ingestion.prices import sg_today
     from portfolio.cost_annotations import annotation_map
     from portfolio.db import fx_as_of, session_scope, valuation_as_of
     from portfolio.options import contracts_by_ticker, realized_by_ticker
@@ -499,7 +500,7 @@ def fetch():
     root.addHandler(collect)
     try:
         rows = compute()
-        today = dt.date.today()
+        today = sg_today()
         with session_scope() as s:
             def column(sql):
                 return [r[0] for r in s.execute(text(sql)).all()]

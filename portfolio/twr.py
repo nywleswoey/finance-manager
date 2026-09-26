@@ -23,7 +23,7 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
-from ingestion.prices import yahoo_symbol
+from ingestion.prices import sg_today, yahoo_symbol
 
 from .db import latest_close, session_scope
 from .nullable import rounded
@@ -370,7 +370,7 @@ def compute_twr(as_of=None, fetch=daily):
             {"ids": ids}).mappings().all()
         # last known close per security — covers what Yahoo can't price (funds, delisted tickers)
         last_px = latest_close(s)
-    return _returns(held, txns, divs, last_px, as_of or dt.date.today(), fetch)
+    return _returns(held, txns, divs, last_px, as_of or sg_today(), fetch)
 
 if __name__ == "__main__":
     print(compute_twr())
