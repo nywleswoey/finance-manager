@@ -1069,6 +1069,20 @@ def test_a_leg_its_own_gate_refuses_nulls_the_pooled_xirr():
     assert cash["ticker_xirr"] is None and cpf["ticker_xirr"] is None
 
 
+def test_a_days_old_lot_beside_a_long_held_one_still_pools():
+    """The span gate is the pool's, not each leg's: a lot too new to annualise alone has no
+    `xirr` of its own, but the name's flows span years and still solve."""
+    rows = _fold([_txn(qty_signed=100, price=10.0, trade_date=D(2020, 1, 1)),
+                  _txn(account_id=2, account="CPF", funding_bucket="cpf", qty_signed=100,
+                       price=20.0, trade_date=TODAY - dt.timedelta(days=10))],
+                 price={10: 30.0})
+    cash, cpf = (next(r for r in rows if r["bucket"] == b) for b in ("cash", "cpf"))
+    assert cpf["xirr"] is None
+    pooled = xirr([(D(2020, 1, 1), -1000.0), (TODAY - dt.timedelta(days=10), -2000.0),
+                   (TODAY, 3000.0), (TODAY, 3000.0)])
+    assert cash["ticker_xirr"] == cpf["ticker_xirr"] == round(pooled, 4)
+
+
 def test_a_name_in_one_bucket_pools_to_its_own_xirr():
     r = _only(_fold([_txn(qty_signed=100, price=10.0)], price={10: 12.0}))
     assert r["ticker_xirr"] == r["xirr"] is not None

@@ -86,7 +86,7 @@ never itself a Position. Not the **ticker fold** below, which is the server's, n
 one the detail page reads; the two stay separate folds on purpose (#143 §3). XIRR is deliberately not folded: an IRR over merged cashflows cannot be
 averaged from its parts, so a consolidated row shows the server's `ticker_xirr` — one solve over
 every position's flows pooled, riding each position like the other whole-ticker figures — and
-`—` where any position's own XIRR is refused.
+`—` where any position's cost is not fully known or the pooled flows span under 30 days.
 _Avoid_: position (the fold's *input* is positions, and the whole point is that this is not one)
 
 **Leg**:

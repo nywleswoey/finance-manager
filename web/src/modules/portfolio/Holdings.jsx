@@ -316,7 +316,9 @@ function DataRow({ r, onClick, max }) {
           — say so on hover, since the figure matches neither leg a grouped view shows. */}
       <td className={cls(r.xirr)}
           title={r.buckets && r.buckets.length > 1
-            ? "one XIRR over every bucket's cashflows pooled"
+            ? (r.xirr != null
+              ? "one XIRR over every bucket's cashflows pooled"
+              : "no pooled return — a bucket's cost is not fully known")
             : undefined}>
         {r.xirr == null ? "—" : pct(r.xirr)}</td>
     </tr>
