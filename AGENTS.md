@@ -33,7 +33,8 @@ plans.
 - **`docs/archive/`** holds historical/superseded docs (old plans). **`archive/`** at repo root
   holds retired AIDLC process trees (`aidlc-docs/`, `.aidlc-rule-details/`, `.wayfinder/`) kept
   for history, not live process — do not treat them as the active workflow or documentation
-  home.
+  home. The `SECURITY-NN` codes cited in `server/` are defined in DEPLOY.md § Security
+  register; add a line there before citing a new one.
 
 ## Maintaining this file
 

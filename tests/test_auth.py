@@ -201,3 +201,32 @@ def test_bypass_opens_gate(client, monkeypatch):
     monkeypatch.setattr(settings, "dev_auth_bypass", True)
     r = client.get("/api/overview")                    # no session cookie set
     assert r.status_code != 401                        # gate let it through (handler may 500 w/o DB)
+
+
+# ---------------- login logging + rate-limit bookkeeping ----------------
+
+def test_login_logs_never_carry_the_email(client, monkeypatch, caplog):
+    """SECURITY-03: success and denial log a hashed `email_ref`, not the address."""
+    for email in ("yes@gmail.com", "stranger@gmail.com"):
+        monkeypatch.setattr(auth, "verify_google",
+                            lambda cred, e=email: {"email": e, "email_verified": True,
+                                                   "iss": "accounts.google.com"})
+        with caplog.at_level("INFO", logger="auth"):
+            client.post("/api/auth/google", json={"credential": "x"})
+    logged = " ".join(r.getMessage() for r in caplog.records if r.name == "auth")
+    assert "email_ref=" + auth._email_ref("yes@gmail.com") in logged
+    assert "email_ref=" + auth._email_ref("stranger@gmail.com") in logged
+    assert "@" not in logged
+
+
+def test_rate_limit_forgets_idle_ips_and_still_limits(monkeypatch):
+    """An IP with nothing inside the window is dropped rather than kept for the worker's life;
+    the limit itself is unchanged."""
+    monkeypatch.setattr(auth, "_attempts", {"10.0.0.1": [0.0], "10.0.0.2": [0.0, 1.0]})
+    clock = [1000.0]
+    monkeypatch.setattr(auth.time, "time", lambda: clock[0])
+    assert all(auth._rate_ok("10.0.0.9") for _ in range(auth._RATE_MAX))
+    assert set(auth._attempts) == {"10.0.0.9"}
+    assert auth._rate_ok("10.0.0.9") is False              # the 11th inside the window
+    clock[0] += auth._RATE_WINDOW
+    assert auth._rate_ok("10.0.0.9") is True               # window passed: counted afresh

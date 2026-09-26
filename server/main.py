@@ -6,6 +6,7 @@ Run: PYTHONPATH=. .venv/bin/uvicorn server.main:app --reload --port 8000
 
 Locked behind Google OAuth: every /api/* route except the auth + health endpoints
 requires a valid session cookie (deny-by-default gate below). See server/auth.py.
+The SECURITY-NN codes cited here are defined in DEPLOY.md § Security register.
 """
 import hmac
 import logging

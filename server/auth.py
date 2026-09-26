@@ -2,6 +2,7 @@
 
 Security-critical logic is isolated in this module (SECURITY-11). The deny-by-default
 request gate lives in server.main. No secrets in source — everything via env (SECURITY-12).
+The SECURITY-NN codes are defined in DEPLOY.md § Security register.
 
 Flow:
   SPA does Google Sign-In -> gets a Google ID token (JWT) -> POST /api/auth/google.
@@ -12,6 +13,7 @@ Flow:
   env var revokes access immediately (no wait for token expiry).
 """
 import datetime as dt
+import hashlib
 import logging
 import time
 
@@ -143,6 +145,8 @@ def _clear_cookie(response: Response) -> None:
 # ---------------- best-effort rate limit on the login endpoint ----------------
 # In-memory; resets on cold start. Real protection is the signature check (a forged
 # token can't pass), this just blunts spray. Documented best-effort (SECURITY-11).
+# Bounded: an IP whose newest attempt is outside the window has nothing left to count, so it
+# is dropped on the next call instead of holding a dict entry for the life of the worker.
 _RATE_MAX = 10
 _RATE_WINDOW = 60.0
 _attempts: dict[str, list[float]] = {}
@@ -150,10 +154,20 @@ _attempts: dict[str, list[float]] = {}
 
 def _rate_ok(ip: str) -> bool:
     now = time.time()
+    for idle in [k for k, ts in _attempts.items() if now - ts[-1] >= _RATE_WINDOW]:
+        del _attempts[idle]
     q = [t for t in _attempts.get(ip, []) if now - t < _RATE_WINDOW]
     q.append(now)
     _attempts[ip] = q
     return len(q) <= _RATE_MAX
+
+
+def _email_ref(email: str) -> str:
+    """A stable tag for an email in log lines, so the address itself stays out (SECURITY-03).
+    Twelve hex chars of an unsalted SHA-256: enough to tell accounts apart and to match a line
+    against an address you already hold. A pseudonym, not a secret — a guessed address can be
+    confirmed against it."""
+    return hashlib.sha256(email.encode()).hexdigest()[:12]
 
 
 # ---------------- routes ----------------
@@ -178,10 +192,10 @@ def google_login(body: GoogleIn, request: Request, response: Response):
         raise HTTPException(401, "invalid credential")
     email = info["email"].lower()
     if email not in settings.allowed_email_set:
-        log.warning("auth denied: not allowlisted email=%s ip=%s", email, ip)
+        log.warning("auth denied: not allowlisted email_ref=%s ip=%s", _email_ref(email), ip)
         raise HTTPException(403, "not authorized")
     _set_cookie(response, mint_session(email, info.get("name")))
-    log.info("auth success email=%s", email)
+    log.info("auth success email_ref=%s", _email_ref(email))
     return {"email": email, "name": info.get("name")}
 
 
