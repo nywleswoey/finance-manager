@@ -1,4 +1,4 @@
-"""Recurring-spend timing helpers — pure-function tests (no DB).
+"""Recurring-spend: the timing helpers as pure functions, and the SQL on SQLite (DbTest).
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_recurring.py -q
 """
@@ -6,8 +6,14 @@ import datetime as dt
 import os
 import sys
 import unittest
+from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
+from portfolio import recurring
+from portfolio.models import Base, CashTxn
 from portfolio.recurring import (_add_months, _add_period, _status, _infer_cadence,
                                  _is_weekend, _shift_business, _infer_shift)
 
@@ -142,3 +148,88 @@ class InferShiftTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------- the SQL, against a real database ----------------
+# `RecurringDb` holds the cases; `DbTest` runs them on in-memory SQLite (always), and
+# tests/test_recurring_pg.py runs the same cases on the throwaway Postgres CI provides.
+
+class RecurringDb:
+    """Mixin: `self.s` is an empty session with the full schema. Needs `setUp` from a subclass."""
+
+    TODAY = dt.date(2026, 3, 20)
+
+    def _txn(self, day, amount, merchant, *, source="dbs-cc", description="d", is_spend=True):
+        self._n = getattr(self, "_n", 0) + 1
+        self.s.add(CashTxn(
+            source=source, account_label=source.upper(), txn_date=day, merchant=merchant,
+            description=description, amount_sgd=Decimal(str(amount)), direction="debit",
+            is_spend=is_spend, dedup_hash=f"h{self._n}"))
+        self.s.commit()
+
+    def _monthly(self, merchant, amount, *, months=(1, 2, 3), day=5, **kw):
+        for m in months:
+            self._txn(dt.date(2026, m, day), -amount, merchant, **kw)
+
+    def test_add_then_list_matches_occurrences_case_insensitively(self):
+        self._monthly("NETFLIX.COM", 18.98)
+        self._txn(dt.date(2026, 3, 9), -50, "NETFLIX.COM", is_spend=False)   # refund leg etc.
+        self._txn(None, -18.98, "NETFLIX.COM")                                # undated
+        rid = recurring.add("Netflix", "netflix", "monthly", 17.98, None, None, s=self.s)
+        [r] = recurring.list_recurring(s=self.s, today=self.TODAY)
+        self.assertEqual(r["id"], rid)
+        self.assertTrue(r["active"])
+        self.assertEqual(r["occurrences"], 3)
+        self.assertEqual(r["last_seen"], "2026-03-05")
+        self.assertEqual(r["last_amount"], 18.98)
+        self.assertEqual(r["amount_drift"], 1.0)
+        self.assertEqual(r["typical_day"], 5)
+        self.assertEqual(r["next_due"], "2026-04-06")        # Apr 5 is a Sunday -> next business day
+        self.assertEqual(r["shift"], "next")
+        self.assertEqual(r["status"], "on_track")
+
+    def test_unknown_cadence_is_stored_as_monthly(self):
+        recurring.add("Gym", "gym", "fortnightly", s=self.s)
+        [r] = recurring.list_recurring(s=self.s, today=self.TODAY)
+        self.assertEqual(r["cadence"], "monthly")
+        self.assertEqual(r["status"], "no_data")
+
+    def test_delete_removes_the_row(self):
+        rid = recurring.add("Gym", "gym", s=self.s)
+        recurring.delete(rid, s=self.s)
+        self.assertEqual(recurring.list_recurring(s=self.s, today=self.TODAY), [])
+
+    def test_detect_finds_card_and_giro_charges_only(self):
+        self._monthly("SPOTIFY", 9.99)                                         # card
+        self._monthly("SP GROUP", 120, source="dbs", description="GIRO SP GROUP")
+        self._monthly("PAYNOW ALICE", 50, source="dbs", description="PayNow transfer")
+        found = {c["merchant"]: c for c in recurring.detect_candidates(s=self.s)}
+        self.assertEqual(set(found), {"SPOTIFY", "SP GROUP"})
+        self.assertEqual(found["SPOTIFY"]["cadence"], "monthly")
+        self.assertEqual(found["SPOTIFY"]["occurrences"], 3)
+        self.assertEqual(found["SPOTIFY"]["last_seen"], "2026-03-05")
+
+    def test_detect_skips_registered_and_dismissed_merchants(self):
+        self._monthly("SPOTIFY", 9.99)
+        self._monthly("NETFLIX.COM", 18.98)
+        self._monthly("DISNEY PLUS", 11.98)
+        recurring.add("Netflix", "netflix", s=self.s)
+        recurring.dismiss("DISNEY PLUS", s=self.s)
+        recurring.dismiss("DISNEY PLUS", s=self.s)            # idempotent: ON CONFLICT DO NOTHING
+        self.assertEqual([c["merchant"] for c in recurring.detect_candidates(s=self.s)],
+                         ["SPOTIFY"])
+
+    def test_detect_skips_variable_amounts(self):
+        for m, amt in ((1, 10), (2, 80), (3, 25)):
+            self._txn(dt.date(2026, m, 5), -amt, "GRAB")
+        self.assertEqual(recurring.detect_candidates(s=self.s), [])
+
+
+class DbTest(RecurringDb, unittest.TestCase):
+    def setUp(self):
+        eng = create_engine("sqlite://")
+        Base.metadata.create_all(eng)
+        self.s = sessionmaker(bind=eng, future=True)()
+
+    def tearDown(self):
+        self.s.close()

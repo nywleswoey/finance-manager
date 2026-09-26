@@ -238,6 +238,32 @@ the 300s function ceiling. It stays sequential and unretried — a failed run is
 **Project → Settings → Cron Jobs → View Logs**, and the next run is 24h later.
 
 ## Security ops
+
+### Security register
+The `SECURITY-NN` codes cited in code comments. They began as an adopted baseline
+(`archive/.aidlc-rule-details/extensions/security/baseline/security-baseline.md`, retired);
+this list is the live one — add a line here before citing a new code.
+
+- **SECURITY-01** Encryption at rest and in transit — managed Postgres with TLS (§2).
+- **SECURITY-03** Logging, no secrets/tokens/PII in log output — one `logging.basicConfig` in
+  `server/main.py`; login events log a hashed `email_ref`, never the address (`server/auth.py`).
+- **SECURITY-04** HTTP security headers — the `security_headers` middleware in `server/main.py`;
+  inline styles are the documented exception.
+- **SECURITY-05** Every API input is bounded — pydantic `Field`/`Query` limits on the routes.
+- **SECURITY-08** Access control is server-side and deny-by-default — `auth_gate` in
+  `server/main.py` (401, then the spending 403); hiding UI is cosmetic.
+- **SECURITY-09** No internals on the wire — an unexpected error reaches the client as a
+  generic `detail` and the exception goes to the log (`_unhandled` in `server/main.py`).
+- **SECURITY-10** Supply chain — pinned lock files, Dependabot, the weekly audit workflow (below).
+- **SECURITY-11** Security logic isolated in `server/auth.py`; best-effort controls (the login
+  rate limit) say so where they live.
+- **SECURITY-12** No credentials in source — every secret comes from env (§3).
+- **SECURITY-13** Integrity of third-party code — Google Identity Services ships no SRI hash,
+  so its origin is pinned in the CSP instead.
+- **SECURITY-15** Fail closed — missing config, a bad token or an unexpected error denies or
+  returns a generic 500, never an open path.
+
+### Operations
 - **Dependency scan (SECURITY-10)**: `.github/workflows/audit.yml` runs
   `pip-audit -r requirements.txt` and `npm audit --audit-level=high` every Monday 07:00 SGT,
   so the scan no longer depends on remembering it before a deploy. Run it on demand from the

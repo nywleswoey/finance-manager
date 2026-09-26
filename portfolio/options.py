@@ -12,7 +12,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import select
 
-from portfolio.db import SessionLocal, fx_map
+from portfolio.db import fx_map, session_scope
 from portfolio.models import OptionTrade
 from portfolio.money import rate_to_sgd
 
@@ -56,9 +56,9 @@ def _realized_date(t):
 
 
 def compute():
-    s = SessionLocal()
-    fx = _fx(s)
-    trades = s.scalars(select(OptionTrade)).all()
+    with session_scope() as s:
+        fx = _fx(s)
+        trades = s.scalars(select(OptionTrade)).all()
 
     by_year, by_month, by_ticker, by_type, by_ccy = {}, {}, {}, {}, {}
     total_pl = total_prem = 0.0
@@ -107,7 +107,6 @@ def compute():
         out.sort(key=lambda r: r[sort_key], reverse=True)
         return out
 
-    s.close()
     return {
         "total_pl_sgd": round(total_pl, 2),
         "total_premium_sgd": round(total_prem, 2),
@@ -127,14 +126,11 @@ def compute():
 def _closed_trades():
     """Yield (trade, fx) for each closed (realized) trade — expired legs ARE realized.
     Opens the session and loads FX once; the session stays open until iteration finishes."""
-    s = SessionLocal()
-    fx = _fx(s)
-    try:
+    with session_scope() as s:
+        fx = _fx(s)
         for t in s.scalars(select(OptionTrade)).all():
             if not _is_open(t):
                 yield t, fx
-    finally:
-        s.close()
 
 
 def realized_by_ticker():
@@ -164,8 +160,7 @@ def contracts_by_ticker():
     resolved-vs-open: `SecurityDetail.jsx` re-deriving exactly that from `close_date` is the
     defect this whole page is being rebuilt around.
     """
-    s = SessionLocal()
-    try:
+    with session_scope() as s:
         out = {}
         for t in s.scalars(select(OptionTrade)).all():
             out.setdefault(t.underlying, []).append({
@@ -175,8 +170,6 @@ def contracts_by_ticker():
                 "expiry_date": t.expiry_date, "close_date": t.close_date,
                 "open": _is_open(t)})
         return out
-    finally:
-        s.close()
 
 
 def realized_by(dim):
@@ -196,11 +189,9 @@ def realized_by(dim):
 
 def _trade_dicts(stmt):
     """Run `stmt` (an OptionTrade select) and serialize each row to a dict at latest FX."""
-    s = SessionLocal()
-    fx = _fx(s)
-    out = [_trade_dict(t, fx) for t in s.scalars(stmt).all()]
-    s.close()
-    return out
+    with session_scope() as s:
+        fx = _fx(s)
+        return [_trade_dict(t, fx) for t in s.scalars(stmt).all()]
 
 
 def trades_for(underlying):

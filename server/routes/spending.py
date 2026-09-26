@@ -40,7 +40,7 @@ def spending_transactions(frm: str | None = Query(None, alias="from"),
                           to: str | None = Query(None, alias="to"),
                           group: str | None = None, subcategory: str | None = None,
                           source: str | None = None, include_excluded: bool = False,
-                          limit: int = 500):
+                          limit: int = Query(500, ge=1, le=2000)):         # SECURITY-05
     return spending.transactions(frm, to, group, subcategory, source, include_excluded, limit)
 
 
@@ -63,7 +63,6 @@ def spending_undated():
 class RecurringIn(BaseModel):
     name: str
     merchant_match: str | None = None
-    category: str | None = None
     cadence: str = "monthly"
     expected_amount: float | None = None
     expected_day: int | None = None
@@ -87,7 +86,7 @@ def recurring_add(body: RecurringIn):
     from portfolio.recurring import add
     if not body.name.strip():
         raise HTTPException(400, "name is required")
-    rid = add(body.name.strip(), body.merchant_match, body.category, body.cadence,
+    rid = add(body.name.strip(), body.merchant_match, body.cadence,
               body.expected_amount, body.expected_day, body.notes)
     return {"id": rid}
 

@@ -185,7 +185,7 @@ class FxAndCreateTest(unittest.TestCase):
 
     def test_duplicate_date_rejected(self):
         nw.create_snapshot(dt.date(2026, 6, 20), [], s=self.s)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(nw.SnapshotExists):             # the route's 409, by type
             nw.create_snapshot(dt.date(2026, 6, 20), [], s=self.s)
 
     def test_update_edits_only_supplied_and_refreezes(self):

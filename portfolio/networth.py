@@ -78,6 +78,11 @@ FUNDING_BUCKETS = ("cash", "cpf", "srs")
 VALUE_SOURCES = ("statement", "carried", "default_zero")
 
 
+class SnapshotExists(ValueError):
+    """A snapshot for that date is already recorded (BR1). A ValueError so existing callers
+    still catch it; the route catches it first and answers 409 instead of 400."""
+
+
 def band(it: NwItem) -> str:
     """Which band of the composition a catalogue item belongs to, by precedence:
     `is_housing` → housing, `is_cpf` → cpf, `is_liquid` → cash, and the `srs` item → srs.
@@ -424,7 +429,7 @@ def create_snapshot(date: dt.date, values: list[dict], note: str | None = None,
     Missing catalogue items default to 0 (BR2). Duplicate date rejected (BR1)."""
     with session_scope(s) as s:
         if s.scalar(select(NwSnapshot).where(NwSnapshot.date == date)):
-            raise ValueError(f"snapshot for {date} already exists")
+            raise SnapshotExists(f"snapshot for {date} already exists")
         items, by_id = _active_items(s)
         if not items:
             # One NwValue is written per catalogue item below, so an empty catalogue produced a
