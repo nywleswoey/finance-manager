@@ -111,7 +111,7 @@ def test_the_headline_is_the_book_net(client):
     assert body["dividends_sgd"] == 1019.01
     assert body["positions"] == 3
     # The allocation groups are still the open book. Moving them is a different change.
-    assert body["by_bucket"]["cash"]["pl_sgd"] == OPEN["pl_sgd"]
+    assert body["by_bucket"]["cash"]["invested_sgd"] == OPEN["invested_sgd"]
 
 
 def test_closed_rows_sort_by_net(client):
