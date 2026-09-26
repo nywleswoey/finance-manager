@@ -26,6 +26,7 @@ from sqlalchemy import text
 from ingestion.prices import sg_today, yahoo_symbol
 
 from .db import latest_close, session_scope
+from .flows import EXTERNAL, flow_kind
 from .nullable import rounded
 from .xirr import xirr as solve_xirr
 
@@ -53,15 +54,6 @@ def ffill(series, days):
         if last is not None:
             out[d] = last
     return out
-
-
-# unit inflows that are RETURN in kind, not an external contribution (keep them in the return)
-RETURN_IN_KIND = {"stock dividend", "bonus issuance"}
-# unit outflows that are a COST in kind (fund fee paid by redeeming units). No cash reaches the
-# investor, so this is not a withdrawal — leave it out of C_t and let the MV drop bite the return.
-COST_IN_KIND = {"fee"}
-# unit changes that are neither a contribution nor a withdrawal
-NON_EXTERNAL = RETURN_IN_KIND | COST_IN_KIND
 
 
 def fx_on(fx, ccy, day):
@@ -125,12 +117,13 @@ def contributions(txns, sids, px, ccy_of, fx):
     Values that day's net unit change at `px(sid, day)` — the same price used to value MV — so a
     new position nets out instead of registering as return. Valuing by unit delta rather than by
     txn price is what lets price-less rows (transfers, opens, snapshot-diff buys) carry a real
-    cost basis. RETURN_IN_KIND and COST_IN_KIND unit changes are not external flows."""
+    cost basis. Only `flow_kind` EXTERNAL rows count — a gift included, at market on the day;
+    return-in-kind and cost-in-kind unit changes are not flows (portfolio/flows.py)."""
     contrib = defaultdict(float)
     for sid in sids:
         per = defaultdict(float)
         for t in txns:
-            if t["security_id"] == sid and t["action"] not in NON_EXTERNAL:
+            if t["security_id"] == sid and flow_kind(t["action"], t["price"]) == EXTERNAL:
                 per[t["trade_date"]] += float(t["qty_signed"])
         for day, dq in per.items():
             if abs(dq) < 1e-9:

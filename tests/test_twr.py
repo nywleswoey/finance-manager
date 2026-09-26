@@ -75,11 +75,42 @@ def test_transfer_and_open_are_contributions():
         assert c[D(2020, 1, 1)] == pytest.approx(500.0), action
 
 
-def test_stock_dividend_is_return_not_contribution():
+def test_stock_dividend_bonus_and_scrip_are_return_not_contribution():
+    """Every return-in-kind spelling, not the two twr used to list: `bonus`, `scrip dividend`
+    and friends counted as money put in, while performance already called them free."""
     px = {D(2020, 1, 1): 10.0}
-    c = contributions([txn(1, D(2020, 1, 1), 50.0, action="stock dividend")], [1], _px(px),
-                      {1: "SGD"}, FX1)
+    for action in ("stock dividend", "bonus", "bonus issuance", "scrip", "scrip dividend",
+                   "script dividend"):
+        c = contributions([txn(1, D(2020, 1, 1), 50.0, action=action)], [1], _px(px),
+                          {1: "SGD"}, FX1)
+        assert c == {}, action
+
+
+def test_zero_priced_corp_action_is_a_bonus_not_a_contribution():
+    """D05's 280 FSM bonus shares arrive as a zero-priced `corp action` beside the cpf leg's
+    `bonus issuance` the same day; both are the holding paying itself."""
+    px = {D(2024, 4, 30): 35.0}
+    c = contributions([txn(1, D(2024, 4, 30), 280.0, action="corp action", price=0.0)], [1],
+                      _px(px), {1: "SGD"}, FX1)
     assert c == {}
+
+
+def test_priced_corp_action_is_a_contribution():
+    """A priced `corp action` is a rights subscription (UD1U at 0.49): cash the holder paid."""
+    px = {D(2020, 10, 23): 0.5}
+    c = contributions([txn(1, D(2020, 10, 23), 6400.0, action="corp action", price=0.49)], [1],
+                      _px(px), {1: "SGD"}, FX1)
+    assert c[D(2020, 10, 23)] == pytest.approx(3200.0)
+
+
+def test_gift_is_a_contribution_at_market_value():
+    """A gift is cash put in at its market value on the day, whatever price the row carries
+    (AMZN's gift rows say 0.0) — the headline profit's zero cost is a different question."""
+    px = {D(2024, 8, 31): 178.0}
+    for action in ("gifted stock in", "gift_in"):
+        c = contributions([txn(1, D(2024, 8, 31), 0.1162, action=action, price=0.0)], [1],
+                          _px(px), {1: "SGD"}, FX1)
+        assert c[D(2024, 8, 31)] == pytest.approx(0.1162 * 178.0), action
 
 
 def test_fee_units_are_a_cost_not_a_withdrawal():
