@@ -55,7 +55,8 @@ flags the row `no FX rate for <CCY>`; the other endpoints raise (BR4, no silent 
 
 `GET /api/dividend-details` returns one row per payment with:
 - **gross** (native, as paid) and **gross_sgd** (latest FX; null + flagged when the currency has
-  no rate). `total_sgd` sums the converted amounts across all rows.
+  no rate). `total_sgd` / `flagged_sgd` are the SGD totals of all rows / the flagged rows,
+  summed at full precision and rounded once (docstring: `details()` in `portfolio/dividends.py`).
 - **declared rate** (`amount_per_unit`) — the per-share rate stated in the statement.
   Captured where the PDF prints it: CDP (`… <qty> units @ SGD <rate>`) and Moomoo
   (`… CASH DIVIDEND @ <CCY> <rate>` / US `<qty> SHARES DIVIDENDS`). Tiger / FSM / the

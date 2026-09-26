@@ -168,7 +168,7 @@ null mean *not known* (units always entered, so those can be unmeasurable but ne
 still `0.0` on a name that never paid, so nothing can tell
 *never paid* from *paid zero*.
 _Avoid_: "n/a" (it reads as *not applicable*, i.e. impossible, on cells that mean *not known*;
-the detail page says the words instead since #156), empty (says which pixels
+the detail page says the words instead since #156, and Holdings does too), empty (says which pixels
 are blank, not which of the four facts is being stated)
 
 **Stock P/L**:
