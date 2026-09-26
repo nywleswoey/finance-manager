@@ -2,9 +2,15 @@
 
 Sources:
   build/ledger.csv  -> canonical ticker -> market (authoritative market mapping)
+  option legs       -> market for option underlyings never traded as stock
   symbols.csv       -> aliases (names + variant codes) per canonical
   curated below     -> display names, asset types, corporate actions (renames/splits)
 Idempotent: upserts by natural key, safe to re-run.
+
+Each security field takes the first source that has it (see main()):
+  market     ledger -> option legs -> fallback_market (MARKET, then ticker shape)
+  name       NAME -> symbols.csv's shortest clean name -> ledger raw name -> the ticker
+  asset_type ASSET_TYPE -> "reit" if in REITS -> "stock"
 """
 import csv
 import os
@@ -39,6 +45,9 @@ NAME = {
     "0P0001OOJG": "Amundi Prime USA Fund", "AMZN": "Amazon.com, Inc.",
 }
 ASSET_TYPE = {"0P0001OOJG": "fund", "0P00006FYT": "fund"}
+# symbols.csv codes whose shape lies: all-digit, so fallback_market would call them HK. Consulted
+# only when neither the ledger nor an option leg has the ticker.
+MARKET = {"558": "SG", "3255": "MY"}
 # CWBU is not a canonical ticker: `_ledgercommon.canon` rewrites it to SET, and
 # symbols.csv records it as an alias of SET. Membership is tested against canonicals.
 REITS = {"O5RU", "C38U", "UD1U", "N2IU", "CRPU", "SET", "BTOU", "S7OU", "P40U",
@@ -136,8 +145,10 @@ def load_symbols():
 
 def fallback_market(c, syms):
     """Market for a ticker neither the ledger nor an option leg has seen.
-    symbols.csv lists only SGX/HK counters, so its codes never fall to market_of's
-    letters-are-US shape rule."""
+    symbols.csv lists SGX/HK counters (plus the exceptions in MARKET), so its codes never fall
+    to market_of's letters-are-US shape rule."""
+    if c in MARKET:
+        return MARKET[c]
     if c in syms:
         return "HK" if c.isdigit() else "SG"
     return market_of(c)
@@ -168,6 +179,7 @@ def main():
     canon = {c for c in canon if is_security(c) and not c.startswith("SGXZ")}  # skip options + T-bills
 
     for c in sorted(canon):
+        # Precedence per field is in the module docstring.
         market = mkt.get(c) or opt_mkt.get(c) or fallback_market(c, syms)
         name = NAME.get(c) or (syms.get(c, {}).get("name")) or raw_names.get(c) or c
         atype = ASSET_TYPE.get(c) or ("reit" if c in REITS else "stock")

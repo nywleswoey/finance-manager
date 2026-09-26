@@ -13,7 +13,8 @@ plans.
   hits `/api/cron/refresh-prices` on the same app.
 - **Alembic lives in `migrations/`**, driven by `alembic.ini` (`script_location =
   %(here)s/migrations`). `env.py` imports `portfolio.config` and `portfolio.models.Base`. Don't
-  move `migrations/` or `portfolio.models`.
+  move `migrations/` or `portfolio.models`. The models must describe exactly what the migrations
+  create: CI runs `alembic check` on a freshly migrated DB (pg tests build from the models).
 - **`make ingest-all`** delta-ingests every source (brokers, spending, prices, net-worth
   snapshots); idempotent. See the README table for per-source commands.
 - **Frontend and HTTP routes are split by product; the domain package is not.**

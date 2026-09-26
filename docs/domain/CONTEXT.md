@@ -345,7 +345,8 @@ what its name implies.
 
 **Band**:
 The partition of the catalogue the composition chart stacks — derived from the item flags by
-precedence (`is_housing` → `is_cpf` → `is_liquid` → else), never stored. A stored band column
+precedence (`is_housing` → `is_cpf` → `is_liquid` → the `srs` item by code; any other unflagged
+item raises), never stored. A stored band column
 would be a fourth grouping free to disagree with the three that exist. Four values — `housing`,
 `cpf`, `cash`, `srs` — plus a synthetic `portfolio` that is not a catalogue item at all and is
 synthesised from the snapshot's frozen portfolio value.
