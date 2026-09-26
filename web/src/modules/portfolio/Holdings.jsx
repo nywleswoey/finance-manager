@@ -135,7 +135,8 @@ const netMark = ({ verdict, bound }) => {
  *     pools to 21.5%, which no weighting of the two produces. So this fold computes nothing: it
  *     shows `ticker_xirr`, the server's one solve over every leg's flows pooled, which rides
  *     every leg like `return_pct` and, like it, covers every leg of the name — a closed one the
- *     checkbox hides included. Null where any leg's own XIRR is refused; the cell then says `—`.
+ *     checkbox hides included. Null where any leg's cost is not fully known or the pooled
+ *     flows span under 30 days; the cell then says `—`.
  *
  * Avg cost is the interesting one: it folds **exactly**, not approximately. `cost_basis` is
  * `avg_cost × units`, so pooled cost basis over pooled units *is* the true weighted average
