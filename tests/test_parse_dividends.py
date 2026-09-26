@@ -1,26 +1,18 @@
-"""build.parse_dividends.tiger_currency — Tiger's flex currency column.
+"""build/parse_dividends.py — Tiger's flex currency column, ticker normalisation and CDP dates.
 
-The parser script runs as `python3 build/parse_dividends.py` and imports its
-siblings by bare name. Load it the same way, and do not execute `main()`: that
+Gates `tiger_currency`, `norm` (bare exchange code, then the canonical rename) and `_cdp_date`
+(Excel serials counted from 1899-12-30, the sheet's string formats, None when nothing parses).
+The script is loaded the way it runs (tests/buildscript.py), and `main()` is not executed: that
 reads statement files and writes build/dividends.csv.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_parse_dividends.py -q
 """
-import importlib.util
-import os
-import sys
+import pytest
 
-_BUILD = os.path.join(os.path.dirname(os.path.dirname(__file__)), "build")
-sys.path.insert(0, _BUILD)
-try:
-    _spec = importlib.util.spec_from_file_location(
-        "parse_dividends_under_test", os.path.join(_BUILD, "parse_dividends.py"))
-    _mod = importlib.util.module_from_spec(_spec)
-    _spec.loader.exec_module(_mod)
-finally:
-    sys.path.remove(_BUILD)
+from tests.buildscript import load_build_script
 
-tiger_currency = _mod.tiger_currency
+pd = load_build_script("parse_dividends")
+tiger_currency = pd.tiger_currency
 
 
 def test_an_explicit_currency_column_is_kept_on_an_sgx_symbol():
@@ -41,3 +33,28 @@ def test_a_blank_currency_cell_falls_back_to_the_market():
     assert tiger_currency("DBS (D05.SI)", "") == "SGD"
     assert tiger_currency("LINK REIT (00823)", "  ") == "HKD"
     assert tiger_currency("AAPL", None) == "USD"
+
+
+def test_norm_pulls_the_code_drops_suffixes_and_applies_canon():
+    assert pd.norm("Test Reit (00823)", "HK") == "00823"
+    assert pd.norm("700", "HK") == "00700"            # HK numerics zero-padded to 5
+    assert pd.norm("d05.si", "SG") == "D05"
+    assert pd.norm("CWBU.SI", "SG") == "SET"          # ALIAS rename
+    assert pd.norm("", "SG") == ""
+
+
+def test_cdp_date_excel_serial_counts_from_1899_12_30():
+    assert pd._cdp_date("123") is None                # 1-3 digits is not a serial
+    assert pd._cdp_date("45000") == "2023-03-15"
+    assert pd._cdp_date(" 44197 ") == "2021-01-01"
+
+
+@pytest.mark.parametrize("s", ["2023-03-15", "15-Mar-23", "15 Mar 2023", "15-Mar-2023",
+                               "15/03/2023"])
+def test_cdp_date_string_formats(s):
+    assert pd._cdp_date(s) == "2023-03-15"
+
+
+@pytest.mark.parametrize("s", ["", None, "   ", "Mar 15 2023", "31/02/2023", "n/a"])
+def test_cdp_date_is_none_when_nothing_parses(s):
+    assert pd._cdp_date(s) is None

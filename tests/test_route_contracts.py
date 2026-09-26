@@ -10,28 +10,15 @@ from contextlib import contextmanager
 from decimal import Decimal
 
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
 from portfolio import networth as nw
 from portfolio import recurring
 from portfolio import spending
-from portfolio.config import settings
-from portfolio.models import Account, Base, Security, Txn
+from portfolio.models import Account, Security, Txn
 
 from server import main
 from server.routes import portfolio as portfolio_routes
-
-
-@pytest.fixture
-def client(monkeypatch):
-    monkeypatch.delenv("VERCEL", raising=False)
-    monkeypatch.setattr(settings, "dev_auth_bypass", True)
-    main._cache.clear()
-    yield TestClient(main.app, raise_server_exceptions=False)
-    main._cache.clear()
+from tests.sqlitetest import make_sessionmaker
 
 
 # ---------------- /api/networth/snapshots: 409 is the duplicate date, by type ----------------
@@ -99,12 +86,7 @@ def test_recurring_add_does_not_take_a_category(client, monkeypatch):
 @pytest.fixture
 def ledger(monkeypatch):
     """Two accounts' statement trades on SQLite, plus two CDP rows from the stubbed cdp feed."""
-    # StaticPool: the handler runs on another thread, and each new connection to "sqlite://"
-    # would otherwise be a new, empty database.
-    eng = create_engine("sqlite://", poolclass=StaticPool,
-                        connect_args={"check_same_thread": False})
-    Base.metadata.create_all(eng)
-    Session = sessionmaker(bind=eng, future=True)
+    Session = make_sessionmaker()
     with Session() as s:
         s.add_all([Account(id=1, name="Tiger", funding_bucket="cash"),
                    Account(id=2, name="FSM", funding_bucket="cash"),

@@ -976,3 +976,18 @@ def test_a_group_with_nothing_unsplit_says_so_with_a_zero():
     stock P/L exactly, and a page keys its marker off that zero."""
     g = perf.rollup(_fold([_txn(qty_signed=100, price=10.0)], price={10: 12.0}), "bucket")["cash"]
     assert g["unsplit_pl_sgd"] == 0.0
+
+
+def test_an_unpriced_holding_reads_as_worth_nothing_and_says_price_none():
+    """A held, costed position with no `price` row. The fold values it at zero rather than
+    dropping it: `price` ships None, market value is 0, and so the unrealised P/L is minus the
+    whole cost basis — the Net reads as a total loss. Nothing else on the row marks it, so
+    `price is None` is the only signal a reader has; this pins that it stays there."""
+    r = _only(_fold([_txn(qty_signed=100, price=10.0)], price={}))
+
+    assert r["units"] == 100.0
+    assert r["price"] is None
+    assert (r["mv_native"], r["mv_sgd"]) == (0.0, 0.0)
+    assert r["cost_basis_native"] == 1000.0
+    assert r["unrealised_pl_sgd"] == -1000.0
+    assert r["net_pl_sgd"] == -1000.0
