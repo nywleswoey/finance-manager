@@ -1,20 +1,23 @@
-"""The cost partition against the LIVE book — the half of #148's acceptance the fabricated
-shapes in tests/test_performance_fold.py cannot reach.
+"""The fold against the LIVE book — the half of #148's acceptance the fabricated shapes in
+tests/test_performance_fold.py cannot reach.
 
 Two claims, deliberately gated differently:
 
-  - **The invariant** — `costed + free + unknown == units_in` on every position — is true of any
-    book, so it runs against whatever ledger is loaded. This is the one that must never drift:
-    `cost_partition`'s own self-check only logs, so without a test a mis-assignment ships.
+  - **The invariants** — tests/fold_invariants.py: the partition sums, the cost-basis family
+    answers together, Net is the sum of its components, … — are true of any book, so they run
+    against whatever ledger is loaded here. They are not only here: tests/test_fold_invariants.py
+    runs the same suite over a fabricated ledger and over the committed web fixture, which is
+    what CI sees, since CI has no ledger and every test in this file skips there.
   - **The measured totals** — 1,574,652 in / 1,538,274 costed / 545 free / 35,833 unknown, the
     caveat set, the refusal set — are a point-in-time reading of a 548-row ledger, so they are
     asserted only while the book is still that book. A ledger that has grown skips them rather
     than failing; re-measuring is a deliberate act, the way `capture_web_fixtures` is.
 
 Skips cleanly when no Postgres answers — the normal state of a checkout that has not run
-`make db-up`, and the same bargain tests/pgtest.py strikes. Run: `pytest -m pg`.
+`make db-up`, and the same bargain tests/pgtest.py strikes. Run: `pytest -m pg -rs`, which names
+every skip and why.
 
-    PYTHONPATH=. .venv/bin/python -m pytest tests/test_performance_live.py -q
+    PYTHONPATH=. .venv/bin/python -m pytest tests/test_performance_live.py -q -rs
 """
 import datetime as dt
 import os
@@ -28,10 +31,10 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from portfolio.cost_annotations import annotation_map
 from portfolio.db import session_scope
-from portfolio.options import contracts_by_ticker
+from portfolio.options import contracts_by_ticker, realized_by_ticker
 from portfolio.performance import (_accumulate_positions, _fx_and_price, cdp_cost, compute,
-                                   is_emptied_predecessor, is_leg, legs_by_ticker,
-                                   rollup, ticker_car)
+                                   legs_by_ticker, rollup, ticker_car)
+from tests.fold_invariants import FoldInvariants
 
 # The ledger #148 was measured against: 548 txn rows / 73 positions. The totals below are
 # readings of THAT book and nothing else.
@@ -98,42 +101,17 @@ def _rows_or_skip():
 
 
 @pytest.mark.pg
-class TestLiveBook(unittest.TestCase):
+class TestLiveBook(FoldInvariants, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.rows, cls.n_txn = _rows_or_skip()
+        cls.traded = set(realized_by_ticker())
 
     def _measured_book_or_skip(self):
         if self.n_txn != MEASURED_TXN_ROWS:
             raise unittest.SkipTest(
                 f"ledger has {self.n_txn} txn rows, not the {MEASURED_TXN_ROWS} these figures "
                 f"were measured against — re-measure deliberately, don't loosen the assertion")
-
-    def test_the_partition_sums_to_units_in_on_every_position(self):
-        """True of any book. The one assertion that is not a point-in-time reading."""
-        for r in self.rows:
-            p = r["cost_partition"]
-            self.assertAlmostEqual(p["costed"] + p["free"] + p["unknown"], p["units_in"], 4,
-                                   f"{r['bucket']}/{r['ticker']}: {p}")
-
-    def test_unknown_pct_agrees_with_the_counts_it_summarises(self):
-        for r in self.rows:
-            p = r["cost_partition"]
-            want = round(p["unknown"] / p["units_in"], 4) if p["units_in"] else 0.0
-            self.assertEqual(p["unknown_pct"], want, f"{r['bucket']}/{r['ticker']}: {p}")
-
-    def test_cost_known_is_false_exactly_where_every_entering_unit_is_unknown(self):
-        for r in self.rows:
-            p = r["cost_partition"]
-            all_unknown = p["units_in"] > 0 and p["unknown"] == p["units_in"]
-            self.assertEqual(r["cost_known"], not all_unknown and p["units_in"] > 0,
-                             f"{r['bucket']}/{r['ticker']}: {p}")
-
-    def test_uncosted_units_is_gone_and_invested_sgd_is_null_where_cost_is_unknown(self):
-        for r in self.rows:
-            self.assertNotIn("uncosted_units", r)
-            if not r["cost_known"]:
-                self.assertIsNone(r["invested_sgd"], r["ticker"])
 
     def test_the_book_totals(self):
         self._measured_book_or_skip()
@@ -167,83 +145,12 @@ class TestLiveBook(unittest.TestCase):
             total = (r["unrealised_pl_sgd"] + r["realised_pl_sgd"] + r["income_sgd"])
             self.assertAlmostEqual(total, want, 2, ticker)
 
-
     # -- the four cell states (#149) ------------------------------------------------------
-
-    def test_the_options_stream_is_absent_exactly_where_no_options_were_traded(self):
-        """True of any book. An optioned name may legitimately ship `0.0` — the stream exists
-        and measured zero — so the rule is about ABSENCE, not about the value."""
-        from portfolio.options import realized_by_ticker
-        traded = realized_by_ticker()
-        for r in self.rows:
-            want = r["bucket"] == "cash" and r["ticker"] in traded
-            self.assertEqual(r["options_pl_sgd"] is not None, want,
-                             f"{r['bucket']}/{r['ticker']}: {r['options_pl_sgd']!r}")
 
     def test_how_many_legs_the_options_row_leaves(self):
         """The measured size of the change: 61 of 73 legs stop carrying `Options 0`."""
         self._measured_book_or_skip()
         self.assertEqual(sum(1 for r in self.rows if r["options_pl_sgd"] is None), 61)
-
-    def test_a_closed_leg_ships_measured_zeros_not_nulls(self):
-        """True of any book. This is the one that decides whether a bucket column adds up:
-        every leg that sold out but priced every unit it ever held knows its basis is zero."""
-        for r in self.rows:
-            if r["units"] > 1e-6 or not r["cost_known"] or r["cost_partition"]["unknown"]:
-                continue
-            for f in ("cost_basis_native", "cost_basis_sgd", "unrealised_pl_sgd"):
-                self.assertEqual(r[f], 0.0, f"{r['bucket']}/{r['ticker']}.{f}")
-
-    def test_the_cost_basis_family_answers_together_or_not_at_all(self):
-        """True of any book. `avg_cost: null` beside `cost_basis: 0.0` would be one leg saying
-        both "not known" and "measured zero" of the same fact — which is what an emptied
-        predecessor (C31, 0P00006FYT) used to do."""
-        for r in self.rows:
-            answered = {f: r[f] is not None for f in
-                        ("avg_cost", "cost_basis_native", "cost_basis_sgd")}
-            self.assertEqual(len(set(answered.values())), 1, f"{r['ticker']}: {answered}")
-
-    def test_a_leg_holding_unknown_units_nulls_the_whole_cost_basis_family(self):
-        """True of any book: an average over a partly-priced lot is not a price, so every
-        field derived from one goes null together — never some of them."""
-        for r in self.rows:
-            family = ("avg_cost", "cost_basis_native", "cost_basis_sgd",
-                      "realised_pl_sgd", "unrealised_pl_sgd")
-            if r["cost_known"] and not r["cost_partition"]["unknown"]:
-                continue
-            self.assertEqual([r[f] for f in family], [None] * len(family),
-                             f"{r['bucket']}/{r['ticker']}")
-
-    def test_stock_pl_is_on_every_row_and_is_the_pair_wherever_the_pair_is_known(self):
-        """True of any book. `realised + unrealised ≡ proceeds − buy_cost + mv`, so the pair's
-        sum survives a split nobody can make — which is what lets a caveat show an exact Net."""
-        for r in self.rows:
-            self.assertIn("stock_pl_sgd", r)
-            # null only on a leg whose every unit is unknown AND whose name refuses: a leg like
-            # that beside real cost elsewhere is a caveat's, and a caveat's Net stands (#150).
-            self.assertEqual(r["stock_pl_sgd"] is None,
-                             not r["cost_known"] and r["net_verdict"] == "refuse", r["ticker"])
-            if r["realised_pl_sgd"] is not None and r["unrealised_pl_sgd"] is not None:
-                # exactly, with no tolerance: the field is rounded FROM the members, so §14's
-                # measured cent (UD1U, 00468, 01310, 01523, 00101 — `_build_row` rounding each
-                # component at 2dp) stays where it already is and does not open a second gap
-                # between this field and the two it is the sum of.
-                self.assertEqual(round(r["realised_pl_sgd"] + r["unrealised_pl_sgd"], 2),
-                                 r["stock_pl_sgd"], f"{r['bucket']}/{r['ticker']}")
-
-    def test_the_caveat_legs_keep_their_stock_pl_out_of_the_pair(self):
-        """The names the partition doubts: their components are `not known` and their Net is
-        exact — the whole reason the pair ships as a sum as well as as two members. Derived
-        from the partition rather than checked against `MEASURED_CAVEAT`, because the claim is
-        about every doubted leg, not about which legs this ledger happens to doubt."""
-        caveat = {r["ticker"]: r for r in self.rows
-                  if r["cost_known"] and r["cost_partition"]["unknown"] > 0}
-        self.assertTrue(caveat, "no doubted leg in this book — nothing to assert")
-        for t, r in caveat.items():
-            self.assertIsNone(r["realised_pl_sgd"], t)
-            self.assertIsNone(r["unrealised_pl_sgd"], t)
-            self.assertIsNotNone(r["stock_pl_sgd"], t)
-            self.assertIsNotNone(r["pl_sgd"], t)          # the Net is still exact
 
     def test_the_shapes_the_ticket_was_gated_on(self):
         """F34 (one open leg, one closed) and TSLA (closed, no units, real options P/L against
@@ -260,16 +167,6 @@ class TestLiveBook(unittest.TestCase):
         self.assertEqual((tsla["units"], tsla["cost_basis_sgd"], tsla["unrealised_pl_sgd"],
                           tsla["realised_pl_sgd"], tsla["pl_sgd"]), (0.0, 0.0, 0.0, 0.0, 0.0))
         self.assertNotEqual(tsla["options_pl_sgd"], 0.0)   # the stream exists and is real
-
-    def test_every_group_ties_its_two_members_and_its_unsplit_to_its_stock_pl(self):
-        """`Σ group net` must not move because four legs stopped splitting their stock P/L. The
-        group carries the whole sum and names the part neither member reached, so what a page
-        prints beside Net adds up to it — which is the claim a reader can check."""
-        for by in ("market", "bucket", "account"):
-            for k, v in rollup(self.rows, by).items():
-                self.assertAlmostEqual(v["realised_pl_sgd"] + v["unrealised_pl_sgd"]
-                                       + v["unsplit_pl_sgd"], v["stock_pl_sgd"],
-                                       delta=0.01, msg=f"{by}/{k}")
 
     def test_the_unsplit_amount_is_exactly_the_doubted_legs_stock_pl(self):
         """It is not a plug: every cent of it comes from a leg the partition doubts."""
@@ -295,16 +192,6 @@ class TestLiveBook(unittest.TestCase):
             raise unittest.SkipTest("fx_rate has moved since these amounts were read — the "
                                     "dates and the SGD names were still asserted")
 
-    def test_peak_car_ships_as_a_measured_zero_and_the_verdict_gates_the_render(self):
-        """True of any book: the field is never null, so nothing downstream can mistake "no
-        capital was ever at risk" for "nobody computed it"."""
-        for r in self.rows:
-            self.assertIsNotNone(r["peak_car_sgd"], r["ticker"])
-            self.assertIn(r["return_verdict"], ("ok", "caveat", "no_capital"), r["ticker"])
-            if r["return_verdict"] == "no_capital":
-                self.assertEqual(r["peak_car_sgd"], 0.0, r["ticker"])
-                self.assertIsNone(r["return_pct"], r["ticker"])
-
     def test_no_capital_fires_on_the_windfalls_and_not_on_the_gift_that_wrote_puts(self):
         """The live counterexample proving the rule is peak CAR and not `cost_known`: AMZN's
         entering units are 100% free and it still reads a real positive percentage, because
@@ -319,75 +206,7 @@ class TestLiveBook(unittest.TestCase):
         self.assertEqual(amzn["return_verdict"], "ok")
         self.assertGreater(amzn["return_pct"], 0)
 
-    def test_the_percentage_is_net_over_peak_car_on_every_ticker(self):
-        """True of any book, and the one arithmetic claim the hero makes. Summed across a
-        ticker's legs, because the figure is whole-ticker: on the one name held in three
-        buckets a per-leg reading is a different number entirely (3.9% against 31.2%)."""
-        by_ticker = {}
-        for r in self.rows:
-            by_ticker.setdefault(r["ticker"], []).append(r)
-        for ticker, rs in by_ticker.items():
-            r = rs[0]
-            if r["return_pct"] is None:
-                continue
-            # the Net that ships, and no second sum of components beside it (#150): exactly,
-            # because the numerator IS this sum.
-            net = round(sum(x["net_pl_sgd"] for x in rs), 2)
-            self.assertEqual(r["return_pct"], round(net / r["peak_car_sgd"], 4), ticker)
-
-    def test_the_return_fields_agree_across_every_leg_of_a_ticker(self):
-        """They are whole-ticker figures riding on per-leg rows, so a consumer holding any one
-        leg has the whole-ticker answer — and the four must never disagree between legs."""
-        seen = {}
-        for r in self.rows:
-            got = {k: r[k] for k in ("peak_car_sgd", "return_span_days", "return_pct",
-                                     "return_verdict")}
-            self.assertEqual(seen.setdefault(r["ticker"], got), got, r["ticker"])
-
     # -- two verdicts on two axes, and Net on the wire (#150) -----------------------------
-
-    def test_both_verdicts_ship_on_every_row_and_agree_across_a_tickers_legs(self):
-        """True of any book. Two enums, never one: a name can be hero-on-Net and no-capital-
-        on-return at once, and both are whole-ticker readings riding every leg."""
-        seen = {}
-        for r in self.rows:
-            self.assertIn(r["net_verdict"], ("hero", "caveat", "refuse", "bounded"),
-                          r["ticker"])
-            self.assertIn(r["return_verdict"], ("ok", "caveat", "no_capital"), r["ticker"])
-            self.assertEqual(seen.setdefault(r["ticker"], r["net_verdict"]), r["net_verdict"],
-                             r["ticker"])
-
-    def test_net_verdict_reads_the_tickers_summed_counts(self):
-        """True of any book — the rule restated over the live partitions, not over `cost_known`,
-        with the one input that is not a count: a split carry's bound overrides anything but a
-        refusal (#151)."""
-        counts = {}
-        for r in self.rows:
-            c = counts.setdefault(r["ticker"], [0.0, 0.0, r["net_verdict"], r["provenance"]])
-            c[0] += r["cost_partition"]["costed"]
-            c[1] += r["cost_partition"]["unknown"]
-        for ticker, (costed, unknown, verdict, prov) in counts.items():
-            want = "hero" if unknown <= 1e-6 else "caveat" if costed > 1e-6 else "refuse"
-            if prov and prov["bound"] and want != "refuse":
-                want = "bounded"
-            self.assertEqual(verdict, want, ticker)
-
-    def test_net_is_the_sum_of_the_components_as_shipped_with_zero_tolerance(self):
-        """True of any book, on every position: to the cent, not within one. The measured cent
-        §14 found lives between `pl_sgd` and the components, and `net_pl_sgd` follows the
-        components — so on this definition it stops existing between pages."""
-        for r in self.rows:
-            where = f"{r['bucket']}/{r['ticker']}"
-            if r["net_verdict"] == "refuse":
-                self.assertIsNone(r["net_pl_sgd"], where)
-                continue
-            if r["realised_pl_sgd"] is not None and r["unrealised_pl_sgd"] is not None:
-                stock = r["realised_pl_sgd"] + r["unrealised_pl_sgd"]
-            else:
-                stock = r["stock_pl_sgd"]
-            self.assertEqual(r["net_pl_sgd"],
-                             round(stock + r["income_sgd"] + (r["options_pl_sgd"] or 0.0), 2),
-                             where)
 
     def test_the_six_cost_unknown_positions_do_not_share_a_verdict(self):
         """#143 §8 names the six positions its `cost_known` read false on: the refusal, the
@@ -401,7 +220,6 @@ class TestLiveBook(unittest.TestCase):
             raise unittest.SkipTest(f"this book lacks {sorted(set(want) - set(got))}")
         self.assertEqual(got, want)
         self.assertGreater(len(set(got.values())), 1)
-
 
     # -- the dated carry, `bounded`, and provenance (#151) ---------------------------------
 
@@ -422,20 +240,6 @@ class TestLiveBook(unittest.TestCase):
         self.assertTrue(all(r["provenance"]["from_ticker"] == found[0] for r in self.rows
                             if r["ticker"] in bounded))
 
-    def test_a_split_carry_is_one_lower_bound_and_its_siblings_upper(self):
-        """True of any book: the cost of one event went to exactly one of its successors, and
-        every successor names the reachable others."""
-        by_event = {}
-        for r in self.rows:
-            p = r["provenance"]
-            if p and p["bound"]:
-                by_event.setdefault(p["from_ticker"], {})[r["ticker"]] = p
-        for frm, succ in by_event.items():
-            self.assertEqual(sorted(p["bound"] for p in succ.values()).count("lower"), 1, frm)
-            for tk, p in succ.items():
-                self.assertEqual({s["ticker"] for s in p["split_with"]}, set(succ) - {tk}, tk)
-                self.assertEqual(p["carried_sgd"] > 0, p["bound"] == "lower", tk)
-
     def test_the_three_carried_pages_disclose(self):
         """#143 §12's three pages, the exact 1:1 carry included. A reading of this book's
         corporate actions, so it skips where one is missing rather than failing."""
@@ -452,19 +256,6 @@ class TestLiveBook(unittest.TestCase):
         self.assertEqual(got["0P0001OOJG"]["net_verdict"], "hero")
         self.assertIsNotNone(got["9CI"]["avg_cost"])            # bounded keeps its tiles
 
-    def test_no_emptied_predecessor_is_leg(self):
-        """True of any book: every predecessor a carry emptied fails the listing rule, which is
-        what Holdings' absence rests on (#143 §13) — and `/api/holding` agrees it is a husk."""
-        preds = {r["provenance"]["from_ticker"] for r in self.rows
-                 if r["provenance"] and r["provenance"]["carried_sgd"] > 0}
-        if not preds:
-            raise unittest.SkipTest("no carry fired in this book — nothing to assert")
-        for r in self.rows:
-            if r["ticker"] in preds:
-                self.assertFalse(is_leg(r), f"{r['bucket']}/{r['ticker']}")
-                self.assertTrue(is_emptied_predecessor(r, self.rows), r["ticker"])
-            elif not is_leg(r):
-                self.assertFalse(is_emptied_predecessor(r, self.rows), r["ticker"])
 
 
 def _fx_or_none():

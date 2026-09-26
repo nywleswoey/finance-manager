@@ -40,8 +40,10 @@ dev = ["ruff>=0.16.3", "pytest>=8"]
 #                             cover is Postgres-only (`to_char` month bucketing has no SQLite
 #                             equivalent).
 #   test_performance_live.py — reads the APP database, because what it checks is the ledger
-#                             itself: the cost partition must sum on every real position, and
-#                             #148's measured book totals are a regression guard or nothing.
+#                             itself: tests/fold_invariants.py's any-book claims on every real
+#                             position, and #148's measured book totals. It skips in CI (no app
+#                             schema there); tests/test_fold_invariants.py runs the same claims
+#                             over a fabricated ledger and the committed web fixture, unmarked.
 markers = ["pg: needs a reachable Postgres (make db-up); skips when there is none"]
 # archive/ holds finished one-shots (and their tests). `pytest` from the repo root must
 # not collect them: a done promotion script is not a live column-tracking gate.

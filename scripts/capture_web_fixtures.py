@@ -102,11 +102,16 @@ current code disagree on the same book and pinned date, the change is behaviour.
 2026-09-25 recapture sorted this way had no unexplained value. AMD was input and then
 behaviour, and every other value was clock, input, or both.
 
-Should capture be checked rather than left to memory? Yes. Recommended, but not built: drift is
-silent, #213 was found by accident, and hand-edited values (#211 edited its spans by hand) mix
-captured and derived numbers in one file. A possible follow-up is a `--check` mode that
-captures into a temp directory, runs the sort above, and fails on any behaviour change or
-unexplained value. It needs the docker book, so it is a local pre-merge step, not a CI one.
+Should capture be checked rather than left to memory? Yes. One half is built: CI runs the fold's
+any-book invariants (tests/fold_invariants.py, the suite the live book is held to) over
+`positions-closed.json` in tests/test_fold_invariants.py, so a recapture or hand edit that ships
+rows contradicting each other — a Net that is not the sum of its components, legs of one ticker
+disagreeing on a verdict — fails. It cannot see a value that is consistent but stale, which is
+what #213 was. The other half is recommended, but not built: drift is silent, #213 was found by
+accident, and hand-edited values (#211 edited its spans by hand) mix captured and derived
+numbers in one file. A possible follow-up is a `--check` mode that captures into a temp
+directory, runs the sort above, and fails on any behaviour change or unexplained value. It needs
+the docker book, so it is a local pre-merge step, not a CI one.
 Until then, recapture rather than hand-edit when a change moves a fixture value.
 
     PYTHONPATH=. .venv/bin/python -m uvicorn server.main:app --port 8123 &

@@ -320,7 +320,7 @@ test("the whole-ticker fields the fold passes through really are identical on ev
   // reading riding every row. If that ever stopped being true the merged row would report the
   // biggest bucket's verdict as the name's, and nothing on screen would look wrong.
   //
-  // The server keeps its own side of this (`tests/test_performance_live.py` — the verdicts and the
+  // The server keeps its own side of this (`tests/fold_invariants.py` — the verdicts and the
   // return fields agree across a ticker's legs); this is the consumer checking the fixture it
   // actually reads, which is the file the browser sees.
   const whole = ["net_verdict", "return_verdict", "return_pct", "peak_car_sgd", "return_span_days"];

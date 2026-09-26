@@ -476,7 +476,7 @@ keeps no leg) rather than a summary that would read `hero` with a Net of zero. A
 fail it too (#153) and no longer does (#155): it is a refusal, not a husk, and the rule now asks
 about unknown entering units as well — so it lists with `net_pl_sgd: null` and its page is served.
 `is_emptied_predecessor` names the husks among the remaining misses
-(`tests/test_holding_husk.py`, `tests/test_performance_live.py`). No verdict value, no successor
+(`tests/test_holding_husk.py`, `tests/fold_invariants.py`). No verdict value, no successor
 link. **Trigger:** if the detail page gains a URL, a bookmark or a search box, a husk becomes
 reachable and a redirect to the successor is the obvious answer.
 

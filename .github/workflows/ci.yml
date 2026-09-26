@@ -29,8 +29,11 @@ jobs:
       # tests/pgtest.py derives its URL from portfolio.config's default
       # (postgresql+psycopg://portfolio:portfolio@localhost:5544/portfolio), appends `_test`
       # to the database name and CREATEs it itself. Matching docker-compose.yml here — same
-      # image, same credentials, same host port 5544 — is what makes the `pg`-marked
-      # tests run in CI instead of skipping, so no env var is needed or wanted.
+      # image, same credentials, same host port 5544 — is what makes the `*_pg.py` tests
+      # run in CI instead of skipping, so no env var is needed or wanted. The other
+      # `pg`-marked file, tests/test_performance_live.py, reads the app database, which has
+      # no schema here, so it skips: its any-book invariants run in CI through
+      # tests/test_fold_invariants.py instead.
       postgres:
         image: postgres:16-alpine
         env:
@@ -66,9 +69,10 @@ jobs:
 
       # The full suite, `pg` marks included — the Postgres-only SQL (to_char month bucketing
       # in spending.summary/trends) is precisely what a sqlalchemy or psycopg bump can break,
-      # and it is invisible to the SQLite default run.
+      # and it is invisible to the SQLite default run. `-rs` lists every skip with its reason,
+      # so a test that silently stopped running shows up in the log instead of in a count.
       - name: pytest
-        run: uv run pytest -q
+        run: uv run pytest -q -rs
         env:
           PYTHONPATH: .
 
