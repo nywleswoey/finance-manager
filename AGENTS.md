@@ -30,7 +30,11 @@ plans.
   in-handler imports
   (ruff E402, ignored repo-wide) break real import cycles, not accidental ones.
 - **ADR [0001](docs/adr/0001-do-not-unify-twr-and-performance.md): do not unify
-  `performance.py` and `twr.py`.** They're deliberately separate engines.
+  `performance.py` and `twr.py`.** They're deliberately separate engines; they share only
+  `portfolio/xirr.py`.
+- **One "today": `ingestion.prices.sg_today()` (SGT)** — price rows, the fold and the option
+  parser use it. Nullable-field helpers (`num`, `rounded`, `iso`, `nulls_last`) live in
+  `portfolio/nullable.py` and SQL→dicts is `db.fetch_dicts`; don't re-spell them per module.
 - **`docs/archive/`** holds historical/superseded docs (old plans). **`archive/`** at repo root
   holds retired AIDLC process trees (`aidlc-docs/`, `.aidlc-rule-details/`, `.wayfinder/`) kept
   for history, not live process — do not treat them as the active workflow or documentation

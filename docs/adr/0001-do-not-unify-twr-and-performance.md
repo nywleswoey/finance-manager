@@ -55,7 +55,8 @@ sequenced so nothing touches the return engine unverified:
 
 1. **Promote `_xirr`** from a private in `performance.py` to a public `portfolio/xirr.py`, so
    `twr.py` stops importing another module's private. Already directly unit-tested
-   (`tests/test_twr.py`), so this is a low-risk, verifiable move.
+   (`tests/test_twr.py`), so this is a low-risk, verifiable move. **Done:** both engines import
+   `portfolio.xirr.xirr`.
 2. **Extract one flow classifier** (`external / return-in-kind / cost-in-kind`) that both
    engines consume, ending the twice-named concept. Both taxonomies already have test
    coverage (`test_performance.py::classify*`, `test_twr.py` contribution tests), so the merge

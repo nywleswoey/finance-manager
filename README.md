@@ -92,7 +92,7 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
 | `data/` | raw statements (immutable) |
 | `build/` | statement parsers → `ledger.csv`, `dividends.csv`, `symbols.csv` |
 | `ingestion/` | DB loaders (`load.py`) + market data (`prices.py`) + options (`parse_options.py`) |
-| `portfolio/` | models, db, config, money (shared kernel); `performance.py`, `twr.py`, `dividends.py`, `options.py` (portfolio); `networth.py` (net worth); `spending.py`, `classify.py`, `recurring.py`, `spend_categories.py` (spending) |
+| `portfolio/` | models, db, config, money, nullable (shared kernel); `performance.py`, `twr.py`, `xirr.py` (shared by both), `dividends.py`, `options.py` (portfolio); `networth.py` (net worth); `spending.py`, `classify.py`, `recurring.py`, `spend_categories.py` (spending) |
 | `migrations/` | Alembic schema |
 | `scripts/seed.py` | reference-data seed |
 | `scripts/snapshot_from_statements.py` | net-worth snapshot from statements (`--all-new` delta) |

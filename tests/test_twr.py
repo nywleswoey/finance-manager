@@ -1,4 +1,4 @@
-"""Unit tests for the return engine: _xirr (money-weighted) and _twr (time-weighted).
+"""Unit tests for the return engine: xirr (money-weighted) and _twr (time-weighted).
 
 Both are pure once contributions and dividends are passed in, so nothing here touches the
 database or Yahoo. `_returns` — the whole `/api/return` body below the DB read — is tested
@@ -8,8 +8,8 @@ import datetime as dt
 
 import pytest
 
-from portfolio.performance import _xirr
 from portfolio.twr import _returns, _twr, contributions, fx_on
+from portfolio.xirr import xirr
 
 D = dt.date
 
@@ -23,21 +23,21 @@ def txn(sid, day, qty, action="buy", price=None):
             "qty_signed": qty, "price": price, "currency": "SGD"}
 
 
-# --------------------------------------------------------------------------- _xirr
+# --------------------------------------------------------------------------- xirr
 
 def test_xirr_known_answer():
-    r = _xirr([(D(2020, 1, 1), -100.0), (D(2020, 12, 31), 110.0)])
+    r = xirr([(D(2020, 1, 1), -100.0), (D(2020, 12, 31), 110.0)])
     assert r == pytest.approx(0.10, abs=1e-3)
 
 
 def test_xirr_sign_flip_is_negative():
-    r = _xirr([(D(2020, 1, 1), -100.0), (D(2020, 12, 31), 90.0)])
+    r = xirr([(D(2020, 1, 1), -100.0), (D(2020, 12, 31), 90.0)])
     assert r == pytest.approx(-0.10, abs=1e-3)
 
 
 def test_xirr_needs_both_signs():
-    assert _xirr([(D(2020, 1, 1), -100.0), (D(2021, 1, 1), -50.0)]) is None
-    assert _xirr([(D(2020, 1, 1), 100.0)]) is None
+    assert xirr([(D(2020, 1, 1), -100.0), (D(2021, 1, 1), -50.0)]) is None
+    assert xirr([(D(2020, 1, 1), 100.0)]) is None
 
 
 # --------------------------------------------------------------------------- fx_on

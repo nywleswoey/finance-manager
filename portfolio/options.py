@@ -6,15 +6,12 @@ type, with win-rate and premium-collected. Money-weighted return isn't meaningfu
 cash-secured premium selling (no stable capital base), so we report realized P&L, premium
 collected, and yield-style ratios instead.
 """
-import os
-import sys
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import select
 
-from portfolio.db import fx_map, session_scope
-from portfolio.models import OptionTrade
-from portfolio.money import rate_to_sgd
+from .db import fx_map, session_scope
+from .models import OptionTrade
+from .money import rate_to_sgd
+from .nullable import iso, num
 
 
 def _fx(s):
@@ -27,16 +24,6 @@ def _sgd(v, ccy, fx):
     # None premium/realized -> 0.0 (this book's convention); otherwise convert through the
     # one money policy, which raises on a missing foreign rate instead of silently using 1.0.
     return 0.0 if v is None else float(v) * rate_to_sgd(ccy, fx)
-
-
-def _f(x):
-    """float(x), passing None through (nullable numeric column -> nullable output)."""
-    return float(x) if x is not None else None
-
-
-def _d(x):
-    """x.isoformat() for a truthy date/datetime, else None (nullable date -> nullable ISO string)."""
-    return x.isoformat() if x else None
 
 
 def _is_open(t):
@@ -165,7 +152,7 @@ def contracts_by_ticker():
         for t in s.scalars(select(OptionTrade)).all():
             out.setdefault(t.underlying, []).append({
                 "type": t.option_type, "contracts": float(t.contracts or 0),
-                "strike": _f(t.strike), "multiplier": int(t.multiplier or 100),
+                "strike": num(t.strike), "multiplier": int(t.multiplier or 100),
                 "currency": t.currency, "open_date": t.open_date,
                 "expiry_date": t.expiry_date, "close_date": t.close_date,
                 "open": _is_open(t)})
@@ -204,13 +191,13 @@ def trades_for(underlying):
 def _trade_dict(t, fx):
     return {
         "underlying": t.underlying, "type": t.option_type,
-        "contracts": float(t.contracts or 0), "strike": _f(t.strike),
-        "open_date": _d(t.open_date),
-        "expiry": _d(t.expiry_date),
-        "close_date": _d(t.close_date),
-        "premium_open": _f(t.premium_open),
-        "premium_close": _f(t.premium_close),
-        "realized_native": _f(t.realized_pl),
+        "contracts": float(t.contracts or 0), "strike": num(t.strike),
+        "open_date": iso(t.open_date),
+        "expiry": iso(t.expiry_date),
+        "close_date": iso(t.close_date),
+        "premium_open": num(t.premium_open),
+        "premium_close": num(t.premium_close),
+        "realized_native": num(t.realized_pl),
         "realized_sgd": round(_sgd(t.realized_pl, t.currency, fx), 2),
         "currency": t.currency, "outcome": t.outcome,
         # `_is_open()`'s ANSWER, not its inputs. `outcome` and `close_date` stay on the wire and

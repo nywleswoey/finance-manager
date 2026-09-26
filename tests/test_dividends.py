@@ -152,7 +152,7 @@ class TestDetails(unittest.TestCase):
         self.assertEqual(dividends.details(self.s)["total_sgd"], 200.0)
 
     def test_rows_sorted_pay_date_desc_nulls_first(self):
-        # newest-first (reverse=True) over _date_key, which sorts null dates last ascending ->
+        # newest-first (reverse=True) over nulls_last, which sorts null dates last ascending ->
         # first descending. Undated dividends surface at the top for manual attention.
         self._div(D(2024, 1, 1), 10, declared=1, units=1)
         self._div(D(2024, 9, 1), 20, declared=1, units=1)

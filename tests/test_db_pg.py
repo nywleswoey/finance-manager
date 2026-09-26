@@ -72,8 +72,9 @@ class TestFxMap(PgCase):
         assert fx_map(self.s) == {"USD": 1.2901, "HKD": 0.1645}
 
     def test_one_entry_per_currency(self):
-        """Callers do `fx.get(ccy, 1.0)` against a flat map — five dated rows must not become
-        five entries, and must not depend on which one collapsed the others."""
+        """Callers look one rate up per currency (`money.rate_to_sgd`) in a flat map — five dated
+        rows must not become five entries, and must not depend on which one collapsed the
+        others."""
         self.fx(*[("USD", D(2026, 7, d), 1.29 + d / 10000) for d in (25, 10, 9, 8, 1)])
 
         assert list(fx_map(self.s)) == ["USD"]

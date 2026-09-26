@@ -28,7 +28,7 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_spending.py tests/test_s
 """
 from sqlalchemy import text
 
-from .db import session_scope
+from .db import fetch_dicts, session_scope
 
 
 def _where(*, spend_only=True, frm=None, to=None, group=None, subcategory=None, source=None):
@@ -50,12 +50,6 @@ def _where(*, spend_only=True, frm=None, to=None, group=None, subcategory=None, 
     if source:
         w.append("source = :src"); p["src"] = source
     return (" AND ".join(w) or "1=1"), p
-
-
-def _rows(s, sql, p):
-    """Run a text() query and return its rows as plain dicts (materialized before the
-    session closes)."""
-    return [dict(r) for r in s.execute(text(sql), p).mappings().all()]
 
 
 #: Every month-bucketed query carries this on top of `_where`. txn_date is nullable and
@@ -88,13 +82,13 @@ def summary(frm=None, to=None, s=None):
     with session_scope(s) as s:
         total = s.execute(
             text(f"SELECT COALESCE(SUM(-amount_sgd),0) FROM cash_txn WHERE {where}"), p).scalar()
-        by_group = _rows(s,
+        by_group = fetch_dicts(s,
             f"SELECT category, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n FROM cash_txn "
             f"WHERE {where} GROUP BY category ORDER BY v DESC", p)
-        by_sub = _rows(s,
+        by_sub = fetch_dicts(s,
             f"SELECT category, subcategory, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n FROM cash_txn "
             f"WHERE {where} GROUP BY category, subcategory ORDER BY v DESC", p)
-        by_month = _rows(s,
+        by_month = fetch_dicts(s,
             f"SELECT to_char(txn_date,'YYYY-MM') ym, ROUND(SUM(-amount_sgd),2) v FROM cash_txn "
             f"WHERE {where} AND {DATED} GROUP BY ym ORDER BY ym", p)
     months = len(by_month) or 1
@@ -176,7 +170,7 @@ def transactions(frm=None, to=None, group=None, subcategory=None, source=None,
                       subcategory=subcategory, source=source)
     p["lim"] = min(limit, 2000)
     with session_scope(s) as s:
-        return _rows(s,
+        return fetch_dicts(s,
             f"SELECT txn_date, source, account_label, merchant, description, amount_sgd, "
             f"direction, is_spend, exclude_reason, category, subcategory "
             f"FROM cash_txn WHERE {where} "
@@ -217,7 +211,7 @@ def categories(s=None):
     """Every (category, subcategory) with its counted spend and line count."""
     where, p = _where()
     with session_scope(s) as s:
-        return _rows(s,
+        return fetch_dicts(s,
             f"SELECT category, subcategory, ROUND(SUM(-amount_sgd),2) v, COUNT(*) n "
             f"FROM cash_txn WHERE {where} GROUP BY category, subcategory ORDER BY category, v DESC", p)
 
@@ -416,11 +410,11 @@ def window(s=None):
     share, instead of vanishing from the payload."""
     where, p = _where()
     with session_scope(s) as s:
-        coverage = _rows(s,
+        coverage = fetch_dicts(s,
             f"SELECT source, MIN(txn_date) first_txn, MAX(txn_date) last_txn, "
             f"COALESCE(SUM(CASE WHEN {DATED} THEN -amount_sgd ELSE 0 END),0) total_sgd "
             f"FROM cash_txn WHERE {where} GROUP BY source", p)
-        presence = _rows(s,
+        presence = fetch_dicts(s,
             f"SELECT to_char(txn_date,'YYYY-MM') ym, source, COUNT(*) n, "
             f"ROUND(SUM(-amount_sgd),2) v FROM cash_txn "
             f"WHERE {where} AND {DATED} GROUP BY ym, source ORDER BY ym, source", p)

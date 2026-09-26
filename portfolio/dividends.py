@@ -22,22 +22,9 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
-from .db import fx_map, session_scope
+from .db import fetch_dicts, fx_map, session_scope
 from .money import to_sgd
-
-
-def _f(x):
-    """float(x), passing None through unchanged — for nullable numeric fields."""
-    return float(x) if x is not None else None
-
-
-def _date_key(field):
-    """Sort key over a nullable date `field`: null dates sort last (ascending)."""
-    return lambda r: (r[field] is None, str(r[field] or ""))
-
-
-def _rows(s, sql, p=None):
-    return [dict(r) for r in s.execute(text(sql), p or {}).mappings().all()]
+from .nullable import nulls_last, num
 
 
 # ---------------- the shared pay_date attribution primitives ----------------
@@ -72,7 +59,7 @@ def details(s=None):
     so one unpriced currency can't blank the whole tab."""
     with session_scope(s) as s:
         fx = fx_map(s)
-        divs = _rows(s,
+        divs = fetch_dicts(s,
             "SELECT d.id, d.pay_date, a.id account_id, a.name account, a.funding_bucket bucket, "
             "d.security_id, COALESCE(sec.name, d.source_file) name, sec.canonical_ticker ticker, "
             "d.gross, d.currency, d.amount_per_unit declared_rate, d.units stated_units "
@@ -88,8 +75,8 @@ def details(s=None):
     out = []
     for d in divs:
         gross = float(d["gross"] or 0)
-        declared = _f(d["declared_rate"])
-        stated = _f(d["stated_units"])
+        declared = num(d["declared_rate"])
+        stated = num(d["stated_units"])
         held = None
         if d["security_id"] is not None:
             held = units_at(d["pay_date"], by.get((d["account_id"], d["security_id"]), []))
@@ -117,7 +104,7 @@ def details(s=None):
             "rate_source": ("declared" if declared is not None else ("implied" if implied is not None else None)),
             "flags": flags,
         })
-    out.sort(key=_date_key("pay_date"), reverse=True)
+    out.sort(key=nulls_last("pay_date"), reverse=True)
     return {"rows": out, "flagged": sum(1 for r in out if r["flags"]), "total": len(out),
             "total_sgd": round(sum(r["gross_sgd"] or 0 for r in out), 2)}
 
