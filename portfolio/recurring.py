@@ -12,6 +12,11 @@ import statistics
 from sqlalchemy import text
 
 from portfolio.db import SessionLocal
+from portfolio.spending import CARD_SOURCES
+
+# The card half of detect_candidates' payment-channel filter. GIRO stays a
+# separate `source = 'dbs'` clause; it is a bank instruction, not a card.
+_CARD_IN = ", ".join(f"'{s}'" for s in CARD_SOURCES)
 
 # cadence -> nominal period length in days (for next-due + detection buckets)
 CADENCE_DAYS = {"weekly": 7, "monthly": 30, "quarterly": 91, "annual": 365}
@@ -188,8 +193,8 @@ def detect_candidates(min_occurrences=3):
     merchant with >= min_occurrences spend rows whose median gap maps to a known cadence and
     whose per-occurrence amount is stable (low spread).
 
-    Only recurring PAYMENT CHANNELS are considered — credit-card charges (sources dbs-cc /
-    hsbc / trust) and DBS GIRO / standing instructions — so one-off transfers, PayNow, ATM
+    Only recurring PAYMENT CHANNELS are considered — credit-card charges
+    (`CARD_SOURCES`) and DBS GIRO / standing instructions — so one-off transfers, PayNow, ATM
     withdrawals etc. never surface as suggestions. Merchants the user has dismissed are
     excluded so a rejected suggestion never reappears."""
     with SessionLocal() as s:
@@ -200,7 +205,7 @@ def detect_candidates(min_occurrences=3):
         rows = s.execute(text(
             "SELECT merchant, txn_date, -amount_sgd AS amt FROM cash_txn "
             "WHERE is_spend AND merchant IS NOT NULL AND txn_date IS NOT NULL "
-            "AND (source IN ('dbs-cc', 'hsbc', 'trust') "                    # credit-card charge
+            f"AND (source IN ({_CARD_IN}) "                                  # credit-card charge
             "     OR (source = 'dbs' AND description ILIKE '%giro%')) "      # DBS GIRO + standing instr.
             "ORDER BY merchant, txn_date")).all()
         by_merchant = {}

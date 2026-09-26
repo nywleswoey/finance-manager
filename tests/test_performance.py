@@ -52,8 +52,9 @@ class TestClassify(unittest.TestCase):
         self.assertEqual(perf.classify("fee", 145.62), "cost_in_kind")
 
     def test_transfers_and_bonuses_are_zero_cash(self):
-        for act in ("transfer in", "transfer_in", "sell/transfer_out", "sell/transfer",
-                    "open", "open/transfer_in", "switch_in", "stock dividend", "bonus issuance"):
+        for act in ("transfer in", "transfer_in", "transfer out", "sell/transfer_out",
+                    "sell/transfer", "open", "open/transfer_in", "switch_in",
+                    "stock dividend", "bonus issuance"):
             self.assertEqual(perf.classify(act, 26.17), "zero", act)
 
     def test_unrecognised_action_is_unknown_not_free(self):

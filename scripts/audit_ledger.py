@@ -65,7 +65,7 @@ from typing import Callable, NamedTuple
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from portfolio.money import rate_to_sgd  # noqa: E402
-from portfolio.performance import fold_ticker  # noqa: E402
+from portfolio.performance import CDP_ACCOUNT, fold_ticker  # noqa: E402
 
 EPS = 1e-6
 
@@ -145,9 +145,8 @@ def _one_multi_successor(book):
 
 
 def _transfer_out_only_in_cost_lots(book):
-    """`transfer out` with a space is `CDP_TRANSFER`'s job and never reaches `classify()`, which
-    calls it `unknown` (#143 §7). Arriving in `txn`, it would reach `classify()` and leave its
-    units uncosted."""
+    """`transfer out` with a space belongs on `cdp_cost_lot`. `classify()` treats that
+    spelling as zero cash; a `txn` row carrying it is still the wrong table."""
     out = []
     for table, actions in sorted(book.actions.items()):
         if table == "cdp_cost_lot":
@@ -487,7 +486,7 @@ def fetch():
             cost_lot_tickers = set(cdp)
             cdp_txn_tickers = set(column(
                 "SELECT DISTINCT sec.canonical_ticker FROM txn t JOIN account a ON a.id = t.account_id "
-                "JOIN security sec ON sec.id = t.security_id WHERE a.name = 'CDP'"))
+                f"JOIN security sec ON sec.id = t.security_id WHERE a.name = '{CDP_ACCOUNT}'"))
             counts = {t: s.execute(text(f"SELECT count(*) FROM {t}")).scalar()
                       for t in ("txn", "cdp_cost_lot", "dividend", "option_trade", "corporate_action")}
             counts["positions"] = len(rows)
@@ -507,10 +506,10 @@ def fetch():
             divs = [dict(r) for r in s.execute(text(
                 "SELECT account_id, security_id, pay_date, gross, currency FROM dividend"
             )).mappings().all()]
-        # `compute()`'s carry filter, over the rows already read
-        corp = [c for c in corporate_actions
-                if c[2] in ("rename", "split", "consolidation", "merger", "switch")]
-        pos, meta = _accumulate_positions(txns, divs, cdp, corp, today, annotation_map())
+        # every row, not only the carry types: a split is counted over all of them,
+        # the same rows compute_with_fx hands the fold.
+        pos, meta = _accumulate_positions(
+            txns, divs, cdp, corporate_actions, today, annotation_map())
         contracts = contracts_by_ticker()
         car = {}
         for tk, legs in legs_by_ticker(pos, meta).items():

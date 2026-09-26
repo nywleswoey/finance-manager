@@ -5,9 +5,8 @@ Writes build/cash_ledger.csv      (enriched: is_spend, exclude_reason, category,
 
 Rules (in order, per row):
   1. Inflows (amount_sgd >= 0) are never spend.
-       - on a card source (trust/hsbc) -> reason 'cc_payment' (a repayment/refund)
-       - on dbs                         -> categorized as Income (Salary/Dividends/...),
-                                           reason 'income'
+       - on a CARD_SOURCES row other than ITEMISED_CARD -> reason 'cc_payment'
+       - on dbs -> categorized as Income, reason 'income'
   2. Outflows matching exclusions.yaml -> is_spend=false + that reason
      (cc_payment for the HSBC/Trust card bills we itemise elsewhere; brokerage/internal
      transfers; investment). Bill payments to cards we DON'T itemise stay as spend.
@@ -24,6 +23,7 @@ import yaml
 
 from _csvout import write_csv
 from _dates import try_date
+from portfolio.spending import CARD_SOURCES, ITEMISED_CARD
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RAW = os.path.join(ROOT, "build", "cash_ledger_raw.csv")
@@ -147,7 +147,7 @@ def classify(rows, cats, excl, overrides, oexcl, corrections=None):
         if ckey in corrections:                       # exact per-record fix wins over all
             out.append(_apply_correction(o, corrections[ckey]))
             continue
-        if r["source"] == "dbs-cc":
+        if r["source"] == ITEMISED_CARD:
             # itemised card: every line is spend (debits) or an offset (refund/instalment
             # adjustment credits, kept as spend so they net within their category).
             o["is_spend"] = "true"
@@ -161,7 +161,7 @@ def classify(rows, cats, excl, overrides, oexcl, corrections=None):
             continue
         if amt >= 0:  # inflow
             o["is_spend"] = "false"
-            if r["source"] in ("trust", "hsbc"):
+            if r["source"] in CARD_SOURCES and r["source"] != ITEMISED_CARD:
                 o["exclude_reason"] = "cc_payment"
                 o["category"], o["subcategory"] = "Income", "Card Repayment"
             else:

@@ -29,31 +29,20 @@ import sys
 from collections import Counter, defaultdict
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+from build._ledgercommon import MARKET_CCY, TIGER_FEE_COLS
 from portfolio.db import SessionLocal
 from portfolio.models import OptionTrade
 from ingestion.load import ROOT, batch, count, maps, num, occ_hash, pdate, prune_stale, upsert
 
 TIGER_GLOBS = ["data/tiger-prime/*.csv", "data/tiger-cash-boost/*.csv"]
 IBKR_SRC = os.path.join(ROOT, "data", "ibkr-options", "options.csv")
-CCY = {"US": "USD", "HK": "HKD"}
 MULT = {"US": 100, "HK": 1}                  # HK contract sizes vary; default 1 (rare here)
 
 # option symbol: bare "AMD 20210917 PUT 77.5" OR wrapped "Advanced Micro Devices (AMD ... )".
 _SYM = re.compile(r"([A-Z0-9.]+)\s+(\d{8})\s+(PUT|CALL)\s+([\d.]+)")
 
-# fee columns in the Tiger flex Trades section (everything between Amount and Realized P/L,
-# EXCLUDING 'Accrued Interest in Trade'). Summed by NAME so shifting offsets don't matter.
-_FEE_COLS = {
-    "Transaction Fee", "Other Tripartite fees", "Settlement Fee", "SEC Fee",
-    "Option Regulatory Fee", "Stamp Duty", "Transaction Levy", "Clearing Fee",
-    "Trading Activity Fee", "Exchange Fee", "Future Regulatory Fee", "Commission",
-    "Platform Fee", "Option Settlement Fee", "Subscription Fee", "Redemption Fee",
-    "Switching Fee", "PH Stock Transaction Tax", "Tax Service Fee", "AFRC Transaction Levy",
-    "Trading Tariff", "Brokerage fee", "Handing Fee", "Securities Management Fee",
-    "Transfer Fees (CSDC)", "Transfer Fees (HKSCC)", "Stamp Duty On Stock Borrowing",
-    "Consolidated Audit Trail Fee", "Processing Fee", "CM DA SI Fee", "DVP SI Fee",
-    "IPO Transaction Fee", "IPO Process Fee", "Ipo Settle Fee", "IPO Channel Fee", "GST",
-}
+# Fee columns summed by name so shifting offsets don't matter. TIGER_FEE_COLS is
+# that list; 'Accrued Interest in Trade' is not one of them.
 
 
 def money(s):
@@ -114,7 +103,7 @@ def _flex_option_legs():
                     underlying=_und(und), expiry=_expiry(exp), option_type=typ.lower(),
                     strike=float(strike), market=mkt, mult=MULT.get(mkt, 100),
                     qty=abs(qty), price=num(g("Trade Price")) or 0.0,
-                    fees=abs(sum(num(g(n)) or 0.0 for n in _FEE_COLS if n in hdr)),
+                    fees=abs(sum(num(g(n)) or 0.0 for n in TIGER_FEE_COLS if n in hdr)),
                     realized=num(g("Realized P/L")) or 0.0,
                     trade_date=pdate((g("Trade Time") or "")[:10]),
                     is_open=is_open,
@@ -174,7 +163,7 @@ def _reconcile(legs, a, alias):
             open_date=open_d, expiry_date=exp, close_date=close_d,
             premium_open=prem_open, premium_close=prem_close,
             fees_open=d["open_fees"], fees_close=d["close_fees"], realized_pl=realized,
-            currency=CCY.get(d["market"], "USD"), outcome=outcome,
+            currency=MARKET_CCY.get(d["market"], "USD"), outcome=outcome,
             source_file="tiger-flex/options", dedup_hash=occ_hash(occ, key),
         ))
     return payload
@@ -211,7 +200,7 @@ def _archive_legs(src, a, alias):
             market=market or None, option_type=otype, contracts=contracts or 0, strike=strike,
             multiplier=mult, open_date=open_d, expiry_date=expiry, close_date=close_d,
             premium_open=prem_open, premium_close=prem_close, fees_open=fees_open,
-            fees_close=fees_close, realized_pl=realized, currency=CCY.get(market, "USD"),
+            fees_close=fees_close, realized_pl=realized, currency=MARKET_CCY.get(market, "USD"),
             outcome=outcome, source_file="ibkr-options/options.csv", dedup_hash=occ_hash(occ, key),
         ))
     return payload

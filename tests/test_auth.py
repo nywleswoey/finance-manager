@@ -101,6 +101,22 @@ def test_health_is_public(client):
     assert client.get("/api/health").status_code == 200
 
 
+def test_public_paths_follow_the_routers():
+    """The cookie gate's auth paths are the auth router's own routes, and the
+    spending check is that router's prefix. A copied literal can drift from either."""
+    from server import main
+    from server.routes.spending import router as spending_router
+
+    assert {p for p in main._PUBLIC_PATHS if p.startswith("/api/auth")} == {
+        "/api/auth/google", "/api/auth/me", "/api/auth/logout"}
+    assert "/api/health" in main._PUBLIC_PATHS
+    assert "/api/cron/refresh-prices" in main._PUBLIC_PATHS
+    prefix = spending_router.prefix.rstrip("/")
+    assert main._is_spending(prefix) is True
+    assert main._is_spending(prefix + "/summary") is True
+    assert main._is_spending(prefix + "-export") is False
+
+
 def test_protected_route_denied_without_session(client):
     # gate rejects before the handler -> no DB hit
     assert client.get("/api/overview").status_code == 401

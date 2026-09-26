@@ -10,7 +10,12 @@ Now there is one home, so the contract each caller relied on is pinned here:
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_ledgercommon.py -q
 """
-from build._ledgercommon import canon, is_transfer_in, is_transfer_out, norm_ticker, num
+import os
+
+from build._ledgercommon import (
+    MARKET_CCY, TIGER_FEE_COLS, canon, cdp_dividend_ticker, is_transfer_in, is_transfer_out, market_of,
+    name_to_ticker, norm_ticker, num,
+)
 
 
 def test_num_strips_separators_and_symbols():
@@ -65,3 +70,93 @@ def test_transfer_predicates_accept_both_spellings():
     assert is_transfer_out("transfer_out") and is_transfer_out("transfer out")
     assert is_transfer_in("transfer_in") and is_transfer_in("transfer in")
     assert not is_transfer_out("buy")
+
+
+def test_market_of_sgx_alnum_without_si_is_sg_not_us():
+    """A Tiger dividend symbol `DBS (D05)` has no `.SI`. The old dividend
+    parser sent every non-digit code to US, so that dividend was booked USD."""
+    assert market_of("D05") == "SG"
+    assert market_of("DBS (D05)") == "SG"
+    assert market_of("C38U") == "SG"
+    assert market_of("9CI") == "SG"
+    assert market_of("D05.SI") == "SG"
+    assert market_of("DBS (D05.SI)") == "SG"
+
+
+def test_tiger_dividend_symbol_currency():
+    """A Tiger dividend's currency is MARKET_CCY[market_of(symbol)]. An SGX code
+    without `.SI` is SGD; a bare display name with no code stays USD as before."""
+    assert MARKET_CCY[market_of("DBS (D05)")] == "SGD"
+    for name in ("Apple Inc", "Coca-Cola Co", "AT&T Inc", "McDonald's Corp", "3M Co",
+                 "Alphabet Inc, Class A"):
+        assert MARKET_CCY[market_of(name)] == "USD", name
+    assert MARKET_CCY[market_of("Apple Inc (AAPL)")] == "USD"
+
+
+def test_market_of_letters_are_us_and_digits_are_hk():
+    """The Tiger-transfer and viewer spellings. A letters-only SGX code is
+    indistinguishable from a US ticker; seed keeps the ledger's market when it
+    has one and only then falls through to this."""
+    assert market_of("AAPL") == "US"
+    assert market_of("BRK.B") == "US"
+    assert market_of("SpaceX (SPCX)") == "US"
+    assert market_of("SET") == "US"
+    assert market_of("00823") == "HK"
+    assert market_of("Link Reit (00823)") == "HK"
+    assert market_of("5") == "HK"
+
+
+def test_market_currency_and_fee_columns():
+    assert MARKET_CCY["MY"] == "MYR"
+    assert MARKET_CCY["SG"] == "SGD"
+    assert "GST" in TIGER_FEE_COLS
+    assert "Accrued Interest in Trade" not in TIGER_FEE_COLS
+
+
+def test_seed_never_seeds_a_symbols_csv_code_as_us():
+    """symbols.csv lists only SGX/HK counters. A letters-only one (SET) the ledger
+    has not seen must seed as SG/SGD, not fall to market_of's US shape rule."""
+    import scripts.seed as seed
+
+    syms = seed.load_symbols()
+    for c in syms:
+        market = seed.fallback_market(c, syms)
+        assert market == ("HK" if c.isdigit() else "SG"), c
+        assert MARKET_CCY[market] != "USD", c
+    assert seed.fallback_market("SET", syms) == "SG"
+    assert seed.fallback_market("AAPL", syms) == "US"
+
+
+def test_cdp_dividend_sheet_books_only_the_listed_names():
+    """symbols.csv resolves more names than the CDP dividend map did. A T-bill or
+    a holding outside that map must stay skipped, not become a cash dividend."""
+    assert name_to_ticker("T Bills") is not None
+    assert name_to_ticker("Seatrium Ltd") is not None
+    assert cdp_dividend_ticker("T Bills") is None
+    assert cdp_dividend_ticker("Seatrium Ltd") is None
+    assert cdp_dividend_ticker("dbs") is None
+    assert cdp_dividend_ticker("DBS") == "D05"
+    assert cdp_dividend_ticker("Stoneweg European Trust EUR") == "SET"
+    assert cdp_dividend_ticker("Comfort Delgro") == "C52"
+
+
+def test_stoneweg_display_names_resolve_to_one_ticker():
+    """The CDP statement map sent Stoneweg to CWBU; the dividend map sent it to
+    SET. symbols.csv's canonical is SET, and both names resolve there."""
+    assert name_to_ticker("STONEWEG EUTRUST") == "SET"
+    assert name_to_ticker("Stoneweg European Trust EUR") == "SET"
+    assert name_to_ticker("CROMWELL REIT EU") == "SET"
+    assert name_to_ticker("QAF") == "Q01"
+    assert name_to_ticker("DBS") == "D05"
+    assert name_to_ticker("hock lian seng") == "J2T"
+    assert name_to_ticker("(label alias)") is None
+    assert name_to_ticker("not a holding") is None
+
+
+def test_cdp_statement_names_use_symbols_csv():
+    import sys
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "build"))
+    import parse_cdp
+    assert parse_cdp.code_of("STONEWEG EUTRUST") == "SET"
+    assert parse_cdp.code_of("QAF") == "Q01"
+    assert parse_cdp.code_of("NOT A REAL NAME") != "SET"

@@ -48,8 +48,24 @@ if settings.auth_bypass_active:
 # /api/cron/refresh-prices is "public" only in the sense that the cookie gate must not answer
 # it — a Vercel Cron request carries no session. It authenticates itself against CRON_SECRET
 # inside the handler and fails closed when that env var is unset.
-_PUBLIC_PATHS = {"/api/auth/google", "/api/auth/me", "/api/auth/logout", "/api/health",
-                 "/api/cron/refresh-prices"}
+def _router_paths(router):
+    """Full URL paths of a router's HTTP routes. The gate reads these so a prefix
+    change cannot leave a copied literal behind."""
+    out = set()
+    for route in router.routes:
+        path = getattr(route, "path", None)
+        if not path or not getattr(route, "methods", None):
+            continue
+        if path.startswith(router.prefix):
+            out.add(path)
+        else:
+            out.add(router.prefix.rstrip("/") + path)
+    return out
+
+
+# Auth routes are the login entry, so every route on that router is public.
+# Health and cron are declared on this app, not on a prefixed router.
+_PUBLIC_PATHS = _router_paths(auth.router) | {"/api/health", "/api/cron/refresh-prices"}
 
 # HTML security headers for both the API and the static SPA — this middleware is the only
 # place they are set (vercel.json exists, but carries the cron schedule and nothing else).
@@ -68,7 +84,8 @@ _CSP = ("default-src 'self'; "
 
 def _is_spending(path: str) -> bool:
     # exact-or-child only: a bare startswith would also swallow a future "/api/spending-export"
-    return path == "/api/spending" or path.startswith("/api/spending/")
+    prefix = spending_router.prefix.rstrip("/")
+    return path == prefix or path.startswith(prefix + "/")
 
 
 @app.middleware("http")

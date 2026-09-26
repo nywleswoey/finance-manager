@@ -13,8 +13,9 @@ import csv, glob, os, re
 from collections import defaultdict
 from _csvout import write_csv
 from _dates import try_date
-from _ledgercommon import (canon, fsm_amount_is_into_product, fsm_cash_flow, is_transfer_in,
-                           is_transfer_out, norm_ticker, num, trade_cash_flow)
+from _ledgercommon import (MARKET_CCY, TIGER_FEE_COLS, canon, fsm_amount_is_into_product,
+                           fsm_cash_flow, is_transfer_in, is_transfer_out, market_of,
+                           norm_ticker, num, trade_cash_flow)
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -26,7 +27,6 @@ def parse_date(s):
     return d.isoformat() if d else s  # leave raw if unknown
 
 LEDGER = []
-MARKET_CCY = {"SG": "SGD", "US": "USD", "HK": "HKD", "MY": "MYR"}
 def add(**k):
     k.setdefault("price", ""); k.setdefault("amount", ""); k.setdefault("fees", "")
     k.setdefault("currency", ""); k.setdefault("market", ""); k.setdefault("ticker", "")
@@ -71,19 +71,6 @@ def load_simple():
                 currency=(r.get("Currency") or "").strip(), source=rel, raw=r.get("Stock Name", ""))
 
 # ---------- Tiger flex statements (prime + cash boost) ----------
-# Per-trade fee columns in the Tiger flex Trades section (mirrors ingestion.parse_options._FEE_COLS;
-# kept local because build/ runs as a bare script without the repo root on sys.path).
-TIGER_FEE_COLS = [
-    "Transaction Fee", "Other Tripartite fees", "Settlement Fee", "SEC Fee",
-    "Option Regulatory Fee", "Stamp Duty", "Transaction Levy", "Clearing Fee",
-    "Trading Activity Fee", "Exchange Fee", "Future Regulatory Fee", "Commission",
-    "Platform Fee", "Option Settlement Fee", "Subscription Fee", "Redemption Fee",
-    "Switching Fee", "PH Stock Transaction Tax", "Tax Service Fee", "AFRC Transaction Levy",
-    "Trading Tariff", "Brokerage fee", "Handing Fee", "Securities Management Fee",
-    "Transfer Fees (CSDC)", "Transfer Fees (HKSCC)", "Stamp Duty On Stock Borrowing",
-    "Consolidated Audit Trail Fee", "Processing Fee", "CM DA SI Fee", "DVP SI Fee",
-    "IPO Transaction Fee", "IPO Process Fee", "Ipo Settle Fee", "IPO Channel Fee", "GST",
-]
 TIGER = [("tiger-prime/*.csv", "Tiger Prime"),
          ("tiger-cash-boost/*.csv", "Tiger Cash Boost")]
 def load_tiger():
@@ -137,7 +124,7 @@ def load_tiger():
                     method = row[7].strip()
                     # symbol may be bare ("BABA") or display form ("SpaceX (SPCX)") -> classify on the code
                     sym = row[5]; code = norm_ticker(sym, "")
-                    mkt = "US" if re.fullmatch(r"[A-Z.]+", code) else ("HK" if code.isdigit() else "SG")
+                    mkt = market_of(code)
                     q = num(row[10]) * (-1 if "OUT" in method.upper() else 1)
                     add(date=parse_date(row[6]), account=acct, market=mkt,
                         ticker=canon(norm_ticker(sym, mkt)), asset_type="stock",

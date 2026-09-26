@@ -16,7 +16,7 @@ from collections import defaultdict
 from _pdf import raw_text
 from _csvout import write_csv
 from _dates import try_date
-from _ledgercommon import canon, norm_ticker, num
+from _ledgercommon import MARKET_CCY, canon, cdp_dividend_ticker, market_of, norm_ticker, num
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -25,12 +25,6 @@ DATA = os.path.join(HERE, "..", "data")
 def norm(sym, market):
     return canon(norm_ticker(sym, market))
 
-def market_of(sym):
-    if ".SI" in sym: return "SG"
-    inner = sym.split("(")[-1].strip(") ")
-    return "HK" if (inner.isdigit() or sym.strip().isdigit()) else "US"
-
-CCY = {"HK": "HKD", "SG": "SGD", "US": "USD"}
 DIV = []
 def add(**k): DIV.append(k)
 
@@ -47,7 +41,7 @@ def tiger():
                 sym = row[6].strip(); mkt = market_of(sym)
                 add(date=row[4], account=acct, market=mkt, ticker=norm(sym, mkt),
                     name=re.sub(r"\s*\(.*\)$", "", sym), kind="cash",
-                    gross=num(row[10]), currency=CCY[mkt], source="tiger (dividends)")
+                    gross=num(row[10]), currency=MARKET_CCY[mkt], source="tiger (dividends)")
 
 # ---------- FSM / iFast ----------
 def fsm():
@@ -77,20 +71,6 @@ def fsm():
 # unfilled and skipped. Native amount + currency are stored; SGD conversion happens downstream.
 import datetime as _dt
 _XL_EPOCH = _dt.date(1899, 12, 30)
-# CDP holding name -> canonical ticker (SGX codes; foreign trusts are SGX-listed in USD/EUR)
-CDP_NAME2TK = {
-    "AIMS APAC Reit": "O5RU", "Accordia Golf Tr": "ADQU", "Advancer Global": "43Q",
-    "Asian Pay Tv Tr": "S7OU", "CapitaLandInvest": "9CI", "Centurion": "OU8",
-    "Capitaland Integrated Commercial Trust": "C38U", "Comfort Delgro": "C52", "DBS": "D05",
-    "Eagle Htrust USD": "LIW", "GuocoLand": "F17", "HRnetGroup": "CHZ", "Hock Lian Seng": "J2T",
-    "Hongkong Land Holdings": "H78", "Hyphens Pharma": "1J5", "IREIT Global": "UD1U",
-    "Jumbo": "42R", "Keppel Pacific Oak US Reit": "CMOU", "Manulife US Reit": "BTOU",
-    "Mapletree PanAsia Com Tr": "N2IU", "Nordic": "MR7", "OCBC": "O39", "QAF": "Q01",
-    "SBS Transit": "S61", "Sasseur Reit": "CRPU", "Sembcorp Industries": "U96",
-    "Silverlake Axis": "5CP", "SingTel": "Z74", "Soibuild Biz Reit": "SV3U",
-    "Starhill Global Reit": "P40U", "Stoneweg European Trust EUR": "SET", "Top Glove": "BVA",
-    "UMS": "558", "Wilmar": "F34",
-}
 # foreign-currency CDP holdings (others are SGD); used when native != SGD column
 CDP_FCCY = {"LIW": "USD", "SET": "EUR", "BTOU": "USD", "CMOU": "USD", "H78": "USD", "UD1U": "EUR"}
 # manual corrections to the CDP sheet, keyed by (ticker, ISO pay-date). The sheet is a broader
@@ -136,7 +116,7 @@ def cdp():
         natg, sgdg = num(nat), num(sgd)
         if natg == 0 and sgdg == 0:                       # declared but no amount -> skip
             continue
-        tk = CDP_NAME2TK.get(name)
+        tk = cdp_dividend_ticker(name)
         date = _cdp_date(d)
         if tk is None or date is None:
             continue
