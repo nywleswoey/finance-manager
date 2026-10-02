@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(no-mistakes axi sync --check:*)",
+      "Bash(no-mistakes axi sync --recover:*)",
+      "Bash(no-mistakes axi sync --recover --keep-local:*)",
+      "Bash(no-mistakes axi run:*)",
+      "Bash(no-mistakes axi status:*)",
+      "Bash(no-mistakes rerun:*)"
+    ]
+  }
+}
