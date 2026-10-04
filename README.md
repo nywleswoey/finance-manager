@@ -22,8 +22,10 @@ make setup     # db + schema + seed + ingest statements + fetch prices/FX (local
 make build-web && make api-local   # serve the docker DB on http://localhost:8001
 ```
 
-`make api` / `make app` (:8000) instead serve the **deployed** Neon DB, read from `.env.local`
-(`vercel env pull`) — they fail without it. Those servers can write to it (refresh, snapshot
+`make api` / `make app` (:8000) instead serve the **deployed** Neon DB, read from `ENV_FILE`
+(an explicit `ENV_FILE` wins, else `./.env.local` in this checkout, else the one real
+`~/personal/portofolio/.env.local` — see the Makefile's `ENV_FILE` comment; `vercel env pull`
+writes it) — they fail without it. Those servers can write to it (refresh, snapshot
 delete, spending classify), so treat them as prod. `api-local` serves its own built `web/dist`;
 the vite dev server proxies to :8000, so it does not work with `api-local`.
 Running both ports side by side shares one session cookie (cookies are not port-scoped), so logging
@@ -53,7 +55,7 @@ do; parsing it the next morning is not. See
 
 Web-app edits (snapshot edits, spending classifications) exist only in production. `make
 sync-from-prod` replaces the local docker DB with an exact copy of production, which it only
-reads (needs `.env.local`; asks first unless `CONFIRM=1`) — see
+reads (needs `ENV_FILE` resolved, see above; asks first unless `CONFIRM=1`) — see
 [DEPLOY.md § Operations](DEPLOY.md#operations).
 
 One-off / backdated net-worth snapshot for a specific month:

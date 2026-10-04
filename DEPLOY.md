@@ -275,7 +275,7 @@ this list is the live one — add a line here before citing a new code.
   production waits for you. See [§Dependency updates](#dependency-updates) below.
 - **Local dev**: copy `.env.example` → `.env` (`COOKIE_SECURE=false` for http), and
   `web/.env.example` → `web/.env.local`. Two APIs: `make api` (:8000) serves the **deployed**
-  Neon DB (`DATABASE_URL` from the repo-root `.env.local`, `vercel env pull`; fails without it)
+  Neon DB (`DATABASE_URL` from `ENV_FILE`, `vercel env pull`; fails without it)
   and its mutating routes write to it; `make api-local` (:8001) serves the docker DB, and only
   its own built `web/dist` (`make build-web` first). `npm run dev` (Vite proxies `/api` **and**
   `/ingest` → 8000, so the same-origin cookie works and PostHog traffic takes the same proxy
@@ -286,7 +286,7 @@ this list is the live one — add a line here before citing a new code.
   what statements on this machine can produce; it never carries over snapshot edits or spending
   classifications made in the web app, which land only in the deployed (Neon) DB. `make
   sync-from-prod` makes the local docker DB an exact copy of production instead: it reads
-  `DATABASE_URL_UNPOOLED` from `.env.local` (falling back to `DATABASE_URL`, as `api` reads it;
+  `DATABASE_URL_UNPOOLED` from `ENV_FILE` (falling back to `DATABASE_URL`, as `api` reads it;
   so it needs `vercel env pull` run first), opens every session against it read-only
   (`PGOPTIONS='-c default_transaction_read_only=on'`), `pg_dump`s it (via a version-matched
   `postgres:<major>-alpine` container when Neon's major version is ahead of the local `pg_dump`
