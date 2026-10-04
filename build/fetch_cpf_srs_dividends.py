@@ -21,11 +21,14 @@ goal: prefer info already in the files) and only reach online for genuine gaps:
 Units held at each ex-date are replayed from the CPF/SRS ledger; gross = units * rate.
 SGX supplies the authoritative currency per distribution (e.g. IREIT switched SGD->EUR).
 """
-import csv, os, re, time, json, urllib.request, urllib.parse, datetime as dt
+import csv, os, re, sys, time, datetime as dt
 from collections import defaultdict
 
 from _csvout import write_csv
 from _dates import try_date
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from portfolio.sgx import _get, epoch_date, sgx_schedule
 
 HERE = os.path.dirname(__file__)
 ROOT = os.path.join(HERE, "..")
@@ -44,15 +47,6 @@ SEC = {
 }
 ACCOUNTS = {"CPF": "cpf-stocks/transactions.csv", "SRS": "srs-stocks/transactions.csv"}
 DIV_TICKERS = set(SEC)
-
-
-def _get(url):
-    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    return json.load(urllib.request.urlopen(req, timeout=30))
-
-
-def epoch_date(ms):
-    return dt.date.fromtimestamp(ms / 1000) if ms else None
 
 
 def pdate(s):
@@ -135,36 +129,7 @@ def load_implied(units_ev):
     return out
 
 
-# ---------- online rate source #3/#4: SGX (spine) + Yahoo (last resort) ----------
-RATE_RX = re.compile(r"\b(SGD|USD|EUR|HKD)\s*([0-9]+(?:\.[0-9]+)?)")
-
-
-def sgx_schedule(name):
-    """{exDate: {pay, ccy, inline, has_opt}} — see module docstring; supplies the date spine."""
-    url = "https://api.sgx.com/corporateactions/v1.0?cat=DIVIDEND&name=" + urllib.parse.quote(name)
-    data = _get(url).get("data") or []
-    by_ex, seen = {}, set()
-    for r in data:
-        if r.get("name") != name or r.get("anncType") != "DIVIDEND":
-            continue
-        ex = epoch_date(r.get("exDate"))
-        if not ex:
-            continue
-        slot = by_ex.setdefault(ex, {"pay": epoch_date(r.get("datePaid")) or epoch_date(r.get("recDate")) or ex,
-                                     "ccy": None, "inline": 0.0, "has_opt": False})
-        part = r.get("particulars") or ""
-        if "Cash Option" in part or "Scrip" in part:
-            slot["has_opt"] = True
-        m = RATE_RX.search(part)
-        if m:
-            dkey = (ex, m.group(1), round(float(m.group(2)), 8))
-            if dkey in seen:
-                continue
-            seen.add(dkey)
-            slot["ccy"] = slot["ccy"] or m.group(1)
-            slot["inline"] = round(slot["inline"] + float(m.group(2)), 8)
-    return by_ex
-
+# ---------- online rate source #3/#4: SGX (spine, portfolio.sgx.sgx_schedule) + Yahoo ----------
 
 def yahoo_divs(sym):
     url = (f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}.SI"

@@ -4,17 +4,23 @@ import { get, fmt, sgd, money } from "../../api.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
 const BUCKET_LABEL = { cash: "Cash", srs: "SRS", cpf: "CPF" };
+const BASIS_LABEL = { announced: "SGX announced", last_year_pattern: "last year's pattern", none: "—", "not held": "not held", unmapped: "unmapped" };
 
 export default function Dividends() {
   const [ann, setAnn] = useState(null);
   const [det, setDet] = useState(null);
+  const [proj, setProj] = useState(null);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
   const phone = usePhone();
   useEffect(() => {
     get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {}, yoy_pct: {} }));
     get("/api/dividend-details").then(setDet).catch(() => setDet({ rows: [], flagged: 0, total: 0, total_sgd: 0, flagged_sgd: 0 }));
+    get("/api/dividends-projected").then(setProj).catch(() => setProj(null));
   }, []);
   if (!ann) return <div className="loading">Loading…</div>;
+  // Only holdings with a real number to show — the many zero-dividend growth names (AAPL,
+  // NVDA, …) would otherwise pad the breakdown with rows that say nothing.
+  const projRows = proj ? proj.holdings.filter((h) => h.received_sgd || h.expected_remaining_sgd) : [];
   const rows = det ? (onlyFlagged ? det.rows.filter((r) => r.flags.length) : det.rows) : [];
   // The count and total of what is listed, both the server's: it ships one pair per filter
   // state, the total summed at full precision and rounded once. A sum of the cent-rounded rows
@@ -92,6 +98,51 @@ export default function Dividends() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {proj && (
+        <div className="card">
+          <h3>{proj.year} Expected&nbsp;<span className="pill">projected full year</span></h3>
+          {/* Received so far is the SAME figure as the Total row above for this year — this
+              card adds the rest of the year's expected payments beside it, it never replaces
+              that received-so-far total. */}
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", margin: "8px 0 16px" }}>
+            <div><div className="mut" style={{ fontSize: ".8em" }}>Received so far</div>
+              <div style={{ fontSize: "1.2em" }}>{sgd(proj.received_sgd)}</div></div>
+            <div><div className="mut" style={{ fontSize: ".8em" }}>+ Expected remaining</div>
+              <div style={{ fontSize: "1.2em" }}>{sgd(proj.expected_remaining_sgd)}</div></div>
+            <div><div className="mut" style={{ fontSize: ".8em" }}>= Projected total</div>
+              <div className="pos" style={{ fontSize: "1.2em" }}>{sgd(proj.projected_total_sgd)}</div></div>
+          </div>
+          {/* Per-holding breakdown — the headline above is a sum of these rows, so this is
+              where it's checked: "announced" uses an SGX-declared rate for the rest of the
+              year, "last year's pattern" uses last year's same-months payments at today's
+              units, and a holding with neither shows no remainder at all. Pattern A, like the
+              crosstab above it rather than the payment ledger below: one row per holding is
+              six numbers-and-a-word, not enough fields to earn a card, and the column (not
+              the row) is what a reader compares here. */}
+          <div className="pinned hscroll">
+            <table>
+              <thead><tr>
+                <th className="l">Security</th><th>Units held</th>
+                <th>Received</th><th>+ Expected remaining</th><th>= Projected total</th>
+                <th className="l">Basis</th>
+              </tr></thead>
+              <tbody>
+                {projRows.map((h) => (
+                  <tr key={h.ticker ?? "unmapped"}>
+                    <td className="l">{h.name} {h.ticker && <span className="pill">{h.ticker}</span>}</td>
+                    <td>{h.units == null ? "—" : fmt(h.units, 0)}</td>
+                    <td>{money(h.received_sgd, "SGD", 2)}</td>
+                    <td className={h.expected_remaining_sgd ? "pos" : "mut"}>{money(h.expected_remaining_sgd, "SGD", 2)}</td>
+                    <td>{money(h.projected_total_sgd, "SGD", 2)}</td>
+                    <td className="l mut">{BASIS_LABEL[h.basis] || h.basis}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="card">
         <h3>Dividend Detail — qty held &amp; declared rate&nbsp;

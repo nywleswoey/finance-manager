@@ -259,6 +259,11 @@ def dividends_annual():
     return dividends.annual()
 
 
+@router.get("/api/dividends-projected")
+def dividends_projected():
+    return dividends.projected()
+
+
 @router.get("/api/transactions")
 def transactions(account: str | None = None, ticker: str | None = None,
                  limit: int = Query(500, ge=1, le=2000)):

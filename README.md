@@ -44,6 +44,7 @@ lands. Per-source commands below if you want to run just one pipeline.
 | `data/` broker statements (Tiger / Moomoo / FSM / CDP / Endowus) | `make ingest` | re-parse → `txn` + `dividend` (only net-new rows land) |
 | `data/*-cc`, bank/card statements | `make spending` | parse → classify → spending ledger |
 | — (market data) | `make prices` | refresh latest prices + FX (needs network) |
+| — (SGX corporate actions) | `make dividend-announcements` | refresh SGX-declared dividends for current SG holdings, feeding the Dividends tab's `<year> expected` projection (needs network) |
 | `data/dbs-consolidated-statements/dbs_YYYYMM.pdf` (+ latest `data/tiger-prime/`) | `make snapshot` → `make snapshot-commit` | preview, then write a net-worth snapshot for the one DBS month newer than the latest one (month-end dated); refuses a multi-month or stale catch-up |
 
 Unattended, against the **deployed** database: `make schedule-install` loads a launchd agent

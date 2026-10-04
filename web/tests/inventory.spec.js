@@ -36,7 +36,7 @@ function sourceFiles(dir) {
 const stripComments = (src) =>
   src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-test("the table inventory is 22", () => {
+test("the table inventory is 23", () => {
   // The same count `RESPONSIVE.md` asks a human to run by hand:
   //     grep -ro "<table" web/src | wc -l
   // A table added or removed without updating the per-view assignment table makes that
@@ -46,7 +46,7 @@ test("the table inventory is 22", () => {
     .map((f) => (fs.readFileSync(f, "utf8").match(/<table/g) ?? []).length)
     .reduce((a, b) => a + b, 0);
   expect(tables, "web/src table count — update RESPONSIVE.md's per-view table if this moved")
-    .toBe(22);
+    .toBe(23);
 });
 
 test("exactly one donut implementation exists", () => {

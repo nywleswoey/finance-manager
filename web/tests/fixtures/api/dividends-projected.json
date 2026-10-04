@@ -1,0 +1,473 @@
+{
+ "year": 2026,
+ "as_of": "2026-10-04",
+ "received_sgd": 28762.72,
+ "expected_remaining_sgd": 8587.96,
+ "projected_total_sgd": 37350.68,
+ "holdings": [
+  {
+   "ticker": "D05",
+   "name": "DBS Group Holdings Ltd",
+   "units": 4290.0,
+   "currency": "SGD",
+   "received_sgd": 6949.8,
+   "expected_remaining_sgd": 6435.0,
+   "projected_total_sgd": 13384.8,
+   "basis": "last_year_pattern",
+   "detail": [
+    {
+     "pay_date": "2025-11-24",
+     "rate": 0.15,
+     "currency": "SGD",
+     "amount_sgd": 643.5
+    },
+    {
+     "pay_date": "2025-11-24",
+     "rate": 0.6,
+     "currency": "SGD",
+     "amount_sgd": 2574.0
+    },
+    {
+     "pay_date": "2025-11-24",
+     "rate": 0.75,
+     "currency": "SGD",
+     "amount_sgd": 3217.5
+    }
+   ]
+  },
+  {
+   "ticker": "O5RU",
+   "name": "AIMS APAC REIT",
+   "units": 42800.0,
+   "currency": "SGD",
+   "received_sgd": 1082.84,
+   "expected_remaining_sgd": 2088.64,
+   "projected_total_sgd": 3171.48,
+   "basis": "last_year_pattern",
+   "detail": [
+    {
+     "pay_date": "2025-12-24",
+     "rate": 0.01998,
+     "currency": "SGD",
+     "amount_sgd": 855.14
+    },
+    {
+     "pay_date": "2025-12-24",
+     "rate": 0.00442,
+     "currency": "SGD",
+     "amount_sgd": 189.18
+    },
+    {
+     "pay_date": "2025-12-24",
+     "rate": 0.0244,
+     "currency": "SGD",
+     "amount_sgd": 1044.32
+    }
+   ]
+  },
+  {
+   "ticker": "N2IU",
+   "name": "Mapletree Com Tr",
+   "units": 3200.0,
+   "currency": "SGD",
+   "received_sgd": 126.4,
+   "expected_remaining_sgd": 64.32,
+   "projected_total_sgd": 190.72,
+   "basis": "last_year_pattern",
+   "detail": [
+    {
+     "pay_date": "2025-12-04",
+     "rate": 0.0154,
+     "currency": "SGD",
+     "amount_sgd": 49.28
+    },
+    {
+     "pay_date": "2025-12-04",
+     "rate": 0.0044,
+     "currency": "SGD",
+     "amount_sgd": 14.08
+    },
+    {
+     "pay_date": "2025-12-04",
+     "rate": 0.0003,
+     "currency": "SGD",
+     "amount_sgd": 0.96
+    }
+   ]
+  },
+  {
+   "ticker": "00010",
+   "name": "Hang Lung Group",
+   "units": 7000.0,
+   "currency": "HKD",
+   "received_sgd": 981.26,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 981.26,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "00101",
+   "name": "Hang Lung Properties",
+   "units": 18000.0,
+   "currency": "HKD",
+   "received_sgd": 1525.68,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 1525.68,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "00788",
+   "name": "CHINA TOWER",
+   "units": 29500.0,
+   "currency": "HKD",
+   "received_sgd": 1092.09,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 1092.09,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "00823",
+   "name": "LINK REIT",
+   "units": 6000.0,
+   "currency": "HKD",
+   "received_sgd": 2273.49,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 2273.49,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "01038",
+   "name": "Cheung Kong Infrastructure",
+   "units": 1500.0,
+   "currency": "HKD",
+   "received_sgd": 643.04,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 643.04,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "01310",
+   "name": "HKBN",
+   "units": 27000.0,
+   "currency": "HKD",
+   "received_sgd": 1513.94,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 1513.94,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "01523",
+   "name": null,
+   "units": null,
+   "currency": null,
+   "received_sgd": 2314.86,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 2314.86,
+   "basis": "not held",
+   "detail": []
+  },
+  {
+   "ticker": "01883",
+   "name": "CITIC Telecom",
+   "units": 11000.0,
+   "currency": "HKD",
+   "received_sgd": 322.74,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 322.74,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "0P0001OOJG",
+   "name": "Amundi Prime USA Fund",
+   "units": 406.10918,
+   "currency": "SGD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "1J5",
+   "name": "HYPHENS PHARMA",
+   "units": 3000.0,
+   "currency": "SGD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "3255",
+   "name": "Heineken Malaysia Bhd",
+   "units": 1600.0,
+   "currency": "MYR",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "42R",
+   "name": "Jumbo",
+   "units": 3000.0,
+   "currency": "SGD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "5E2",
+   "name": "Seatrium",
+   "units": 1.0,
+   "currency": "SGD",
+   "received_sgd": 0.03,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.03,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "9CI",
+   "name": "CapitaLandInvest",
+   "units": 2700.0,
+   "currency": "SGD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "AAPL",
+   "name": "AAPL",
+   "units": 1.0,
+   "currency": "USD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "AMZN",
+   "name": "Amazon.com, Inc.",
+   "units": 100.3486,
+   "currency": "USD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "BABA",
+   "name": "Alibaba",
+   "units": 1001.0,
+   "currency": "USD",
+   "received_sgd": 807.05,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 807.05,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "C38U",
+   "name": "CapitaMall Trust",
+   "units": 6700.0,
+   "currency": "SGD",
+   "received_sgd": 532.58,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 532.58,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "C52",
+   "name": "ComfortDelGro",
+   "units": 13200.0,
+   "currency": "SGD",
+   "received_sgd": 840.48,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 840.48,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "CMOU",
+   "name": "Keppel Pacific Oak US Reit",
+   "units": 34800.0,
+   "currency": "SGD",
+   "received_sgd": 287.95,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 287.95,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "COIN",
+   "name": "Coinbase",
+   "units": 400.0,
+   "currency": "USD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "CRPU",
+   "name": "SASSEUR REIT",
+   "units": 12000.0,
+   "currency": "SGD",
+   "received_sgd": 169.57,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 169.57,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "F34",
+   "name": "Wilmar",
+   "units": 7200.0,
+   "currency": "SGD",
+   "received_sgd": 1025.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 1025.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "HMN",
+   "name": "CapitaLand Ascott Trust",
+   "units": 153.0,
+   "currency": "SGD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "J2T",
+   "name": "Hock Lian Seng",
+   "units": 700.0,
+   "currency": "SGD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "NVDA",
+   "name": "NVIDIA",
+   "units": 100.0,
+   "currency": "USD",
+   "received_sgd": 31.97,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 31.97,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "O39",
+   "name": "OCBC BANK",
+   "units": 919.0,
+   "currency": "SGD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "PLTR",
+   "name": "Palantir",
+   "units": 5.0,
+   "currency": "USD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "Q01",
+   "name": "QAF",
+   "units": 17000.0,
+   "currency": "SGD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "RIVN",
+   "name": "Rivian",
+   "units": 1500.0,
+   "currency": "USD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "S61",
+   "name": "SBS Transit",
+   "units": 5400.0,
+   "currency": "SGD",
+   "received_sgd": 2195.1,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 2195.1,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "SET",
+   "name": "Stoneweg European Reit",
+   "units": 14500.0,
+   "currency": "SGD",
+   "received_sgd": 2591.63,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 2591.63,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "SPCX",
+   "name": "SpaceX",
+   "units": 0.1023,
+   "currency": "USD",
+   "received_sgd": 0.0,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 0.0,
+   "basis": "none",
+   "detail": []
+  },
+  {
+   "ticker": "UD1U",
+   "name": "IREIT Global",
+   "units": 266105.0,
+   "currency": "SGD",
+   "received_sgd": 1455.22,
+   "expected_remaining_sgd": 0.0,
+   "projected_total_sgd": 1455.22,
+   "basis": "none",
+   "detail": []
+  }
+ ]
+}

@@ -110,8 +110,13 @@ data/**  (broker statements: tiger-prime, fsm, cdp-stocks, moomoo, cpf/srs …)
   │                  (one row per distinct dividend event: date, ex_date, ticker, rate_per_unit, currency;
   │                   rate = gross / qty-at-ex-date, account-independent, deduped across accounts)
   │
-  └─ server/routes/portfolio.py   /api/dividend-details · /api/dividends-annual
-                                  web/src/modules/portfolio/Dividends.jsx  (annual matrix + per-payment detail table)
+  ├─ server/routes/portfolio.py   /api/dividend-details · /api/dividends-annual
+  │                               web/src/modules/portfolio/Dividends.jsx  (annual matrix + per-payment detail table)
+  │
+  └─ make dividend-announcements   ingestion.dividend_announcements  ──►  Postgres
+                 `dividend_announcement` table (SGX-declared rates for current SG holdings)
+                 /api/dividends-projected  ──►  Dividends.jsx's `<year> expected` card — see
+                 "`<year> expected`" below
 ```
 
 `make ingest` runs `flat` then `load` in one shot. `make ingest-all` also folds in spending,
@@ -154,3 +159,48 @@ Resolve by adding the missing rate/date/units to the source tracker row and re-i
 
 This is **Phase 2 (dividends) of [PLAN.md](../archive/PLAN.md) front-loaded** — `dividends.csv` maps
 directly onto the `dividend` table and makes total-return computable.
+
+## `<year> expected` (the full-year projection)
+
+The Annual Dividend Income table's current-year column is **payments received so far**, not a
+forecast — see the rest of this doc. `GET /api/dividends-projected`
+(`portfolio.dividends.projected()`) adds a separate, non-replacing figure: received so far
+(exactly `annual()`'s current-year total) **plus**, for each CURRENTLY HELD security, the rest
+of the year's expected payments. Per holding, in order of preference:
+
+1. **announced** — `dividend_announcement` rows paid (pay_date, else ex_date) between today and
+   year end — bucketed like received money, by pay date — and not already received, rate ×
+   TODAY's units (not the units at ex-date, since the rate is account/time-independent and the
+   question is "what would I get now").
+2. **last_year_pattern** — last year's distinct payments (one per pay date, however many
+   accounts or statement lines carried it — `_payments()`) not yet matched by this year's (`unreceived_last_year()`): each payment
+   received this year consumes at most one last-year payment, the one whose anniversary is
+   nearest within ±45 days (`DRIFT_DAYS`); an unmatched one is projected if its anniversary is no
+   more than 45 days before today — so a monthly payer's receipt cancels exactly one payment, a
+   payment running late is kept, and a past payment the holding was never positioned for is
+   not. Each row's rate (declared, else gross/units-held-then — reuses `details()`'s per-row
+   computation rather than re-replaying the ledger) × TODAY's units.
+3. **none** — neither exists (e.g. a security that already paid its only distribution for the
+   year, or pays no cash dividend at all).
+
+It always projects the current SGT year (`sg_today()`); there is no year parameter. A ticker
+that received a payment this year but is no longer held keeps its `received_sgd` with basis
+`"not held"` and no projected remainder; dividends with no mapped security are one `ticker: null`
+row with basis `"unmapped"`, so the per-holding `received_sgd` column sums to the headline. A
+currency with no `fx_rate` row degrades to a flagged, unpriced row (`_sgd_or_none`) rather than
+raising — unlike `annual()` (BR4) — because an estimate must not crash the page over one
+unpriced holding.
+
+**The online source**: `dividend_announcement` is filled by `ingestion.dividend_announcements`
+(`make dividend-announcements`, folded non-fatally into `make ingest-all` beside `prices`),
+cached rather than fetched per page load. SGX's corporate-actions API
+(`api.sgx.com/corporateactions/v1.0?cat=DIVIDEND&name=`) filters only by a security's *exact*
+legal name — there is no ticker/code parameter, and an unrecognized name silently returns the
+WHOLE unfiltered history rather than nothing (`portfolio.sgx.sgx_schedule`'s docstring). There is
+no curated name table: each currently-held SG security (excluding funds) tries its own
+`security.name` and every `security_alias` as a candidate and keeps the first SGX actually
+recognizes, since broker statement text routinely already echoes the exchange's registered name
+on a dividend line. A security with no matching candidate — or outside SG, or a cash/scrip
+election SGX's regex-summed rate can't be trusted for — simply has nothing in
+`dividend_announcement`, and `projected()` falls back to `last_year_pattern` for it. That is the
+graceful degradation, not a special case.

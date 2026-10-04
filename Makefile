@@ -1,4 +1,4 @@
-.PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net \
+.PHONY: db-up db-down migrate seed flat load prices dividend-announcements ingest api web build-web app psql reset net \
         flat-cash load-cash spending snapshot snapshot-commit ingest-all test-web capture-web-fixtures \
         api-local sync-from-prod \
         schedule-install schedule-status schedule-uninstall schedule-test sync-requirements
@@ -31,6 +31,8 @@ load:         ## load ledger + dividends into DB (idempotent)
 	$(PY) build/export_dividends_master.py
 prices:       ## fetch latest prices + FX (needs network)
 	$(PY) -m ingestion.prices
+dividend-announcements:   ## fetch SGX-declared dividends for current SG holdings (needs network)
+	$(PY) -m ingestion.dividend_announcements
 
 ingest: flat seed load   ## full ingest: statements -> flat -> seed -> DB
 	@# seed runs BETWEEN flat and load: it reads build/ledger.csv for the ticker->market
@@ -54,6 +56,7 @@ ingest-all:   ## delta-ingest EVERY source: brokers + spending + prices + net-wo
 	$(MAKE) ingest        # tiger-prime, tiger-cash-boost, moomoo, fsm, cdp-statements, endowus -> txn/dividend
 	$(MAKE) spending      # dbs-cc, trust-cc, dbs-consolidated -> spending ledger
 	-$(MAKE) prices       # endowus NAV + FX (needs network; non-fatal if offline)
+	-$(MAKE) dividend-announcements   # SGX declared dividends for current SG holdings (needs network; non-fatal if offline)
 	$(MAKE) snapshot-commit   # one new DBS month (+ tiger-prime) -> net-worth snapshot; refuses a mis-dated catch-up
 
 # `ingest-all` only ever adds what the statements on this machine can produce. Snapshot edits
