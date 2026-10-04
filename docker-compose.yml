@@ -1,3 +1,6 @@
+# Pinned (not a typo): the existing portfolio_db container/volume were created when the checkout
+# folder was named "portofolio". Without this, any other folder name derives a different project
+# and `up` fails with "container name /portfolio_db already in use". COMPOSE_PROJECT_NAME still wins.
 name: portofolio
 
 services:

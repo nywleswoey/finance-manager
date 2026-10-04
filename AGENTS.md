@@ -51,16 +51,12 @@ plans.
   outside CI; default 4173). With several worktrees open that can be another checkout's build,
   so tests run against stale code. Set `PREVIEW_PORT` to a port you have checked is free.
 - **`docker-compose.yml`'s `container_name: portfolio_db` is global, not worktree-scoped.**
-  `docker compose up -d` from any checkout attaches to that same container (and its volume) if
-  one is already running — there is no per-worktree isolation the way the named volume alone
-  would give you. Never run `make db-up`/`reset`/`migrate`/`sync-from-prod` for real in a
+  The file pins the compose project `name: portofolio` (why: comment there), so `docker compose
+  up -d` from any checkout attaches to that same container and volume — there is no
+  per-worktree isolation. Never run `make db-up`/`reset`/`migrate`/`sync-from-prod` for real in a
   throwaway worktree without first checking `docker ps` for a container named `portfolio_db`
   that predates your session; test destructive DB targets against your own plain `docker run`
-  containers (distinct name, distinct port) instead. The compose file pins top-level
-  `name: portofolio` (the project's original folder name, which is how the existing
-  `portfolio_db` container/volume got labeled) so every checkout/worktree — regardless of its
-  own folder name — resolves to that same compose project and container without needing
-  `COMPOSE_PROJECT_NAME=portofolio` set manually; an explicit `COMPOSE_PROJECT_NAME` still wins.
+  containers (distinct name, distinct port) instead.
 - **No per-worktree `.env.local` is needed.** The Makefile's `ENV_FILE` macro resolves it once:
   an explicit `ENV_FILE` (make var or env) wins, else `./.env.local` in the current checkout,
   else the one real `~/personal/portofolio/.env.local`. `ENV_LOCAL`/`NEON_ENV` (used by `api`,
