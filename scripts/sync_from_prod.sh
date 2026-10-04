@@ -1,7 +1,7 @@
 #!/bin/bash
 # Overwrite the local docker DB with an exact copy of production. Invoked by `make
-# sync-from-prod`, which resolves SOURCE_DATABASE_URL from .env.local (unpooled by preference,
-# never expanded by make, never echoed). The destination is always the docker-compose DB.
+# sync-from-prod`, which resolves SOURCE_DATABASE_URL from the Makefile's ENV_FILE (unpooled by
+# preference, never expanded by make, never echoed). The destination is always the docker-compose DB.
 #
 # Production is read-only throughout: every session opened against SOURCE_DATABASE_URL carries
 # PGOPTIONS='-c default_transaction_read_only=on', and nothing here ever writes through it.

@@ -59,10 +59,11 @@ ingest-all:   ## delta-ingest EVERY source: brokers + spending + prices + net-wo
 # `ingest-all` only ever adds what the statements on this machine can produce. Snapshot edits
 # and spending classifications made in the web app land only in the deployed (Neon) DB — this
 # target makes the local docker DB an exact copy of it instead of a parallel, diverging one.
-# Production is READ-ONLY throughout: this recipe resolves SOURCE_DATABASE_URL from .env.local
-# preferring DATABASE_URL_UNPOOLED (a dump is one long session, and the pooler can drop the
-# `options` startup parameter) and falling back to NEON_ENV's DATABASE_URL (never expanded by
-# make, never echoed), and hands it to the script as an env var; every session the script
+# Production is READ-ONLY throughout: this recipe resolves SOURCE_DATABASE_URL from ENV_FILE
+# (see its definition below — the real .env.local, shared across worktrees unless this checkout
+# has its own) preferring DATABASE_URL_UNPOOLED (a dump is one long session, and the pooler can
+# drop the `options` startup parameter) and falling back to NEON_ENV's DATABASE_URL (never
+# expanded by make, never echoed), and hands it to the script as an env var; every session the script
 # opens against it is `PGOPTIONS='-c default_transaction_read_only=on'`. The destination is always the docker-compose
 # DB above, guarded the same way as reset/migrate/api-local (LOCAL_GUARD refuses a
 # non-localhost DATABASE_URL exported in the shell). It replaces every row locally, so it asks
@@ -82,21 +83,26 @@ schedule-uninstall: ## remove the agent
 schedule-test:      ## run the agent right now
 	scripts/schedule.sh test
 
-# The local API reads the DEPLOYED Neon DB (DATABASE_URL from .env.local) so local shows the same
-# data as prod. Only `api`/`app` do: every other make target — reset, migrate, seed, ingest,
+# The local API reads the DEPLOYED Neon DB (DATABASE_URL from ENV_FILE, see below) so local shows
+# the same data as prod. Only `api`/`app` do: every other make target — reset, migrate, seed, ingest,
 # tests — stays on the docker DB via .env, so no destructive make TARGET can reach prod. The
 # running `api`/`app` server is a different matter: it serves mutating routes (refresh, snapshot
 # POST/PATCH/DELETE, the spending classify/recurring writes) against the deployed DB, and a local
 # DEV_AUTH_BYPASS authorises every localhost request. Deleting a snapshot in the local UI deletes
 # it in prod.
+# ENV_FILE resolves once, so every treehouse worktree/checkout shares the one real .env.local
+# instead of each needing its own copy: an explicit ENV_FILE (make var or environment) wins;
+# else ./.env.local if present in the current checkout; else the real one kept at
+# ~/personal/portofolio/.env.local. Trade-off accepted: a worker in any copy can read that file.
+ENV_FILE := $(if $(ENV_FILE),$(ENV_FILE),$(if $(wildcard ./.env.local),./.env.local,$(HOME)/personal/portofolio/.env.local))
 # The URL carries the password, so it is read inside the recipe's shell and never expanded by make:
 # `make -n` / `make -d` show only the sed, never the value.
 # Last DATABASE_URL line wins; `export ` prefix, CRLF, and one surrounding pair of either quote style are
 # tolerated, and nothing inside the value is touched. A value that is bare or double-quoted (what
 # `vercel env pull` writes) resolves exactly as before. Anything odder still fails closed: an empty
 # result hits the FATAL, and a garbled URL is simply not a reachable database.
-ENV_LOCAL = $$(sed -nE 's/^(export +)?$(1)=//p' .env.local 2>/dev/null | tail -n 1 | tr -d '\r' | sed -E -e 's/^"(.*)"$$/\1/' -e "s/^'(.*)'$$/\1/")
-NEON_ENV = u=$(call ENV_LOCAL,DATABASE_URL); test -n "$$u" || { echo "FATAL: no DATABASE_URL in .env.local (vercel env pull)"; exit 1; }
+ENV_LOCAL = $$(sed -nE 's/^(export +)?$(1)=//p' $(ENV_FILE) 2>/dev/null | tail -n 1 | tr -d '\r' | sed -E -e 's/^"(.*)"$$/\1/' -e "s/^'(.*)'$$/\1/")
+NEON_ENV = u=$(call ENV_LOCAL,DATABASE_URL); test -n "$$u" || { echo "FATAL: no DATABASE_URL in $(ENV_FILE) (vercel env pull)"; exit 1; }
 # An exported DATABASE_URL beats .env, so it would reach reset/migrate/api-local. Refuse a
 # non-localhost one, as scripts/scheduled_run.sh does in the other direction. Unset is fine.
 LOCAL_GUARD = case "$$DATABASE_URL" in ""|*localhost*|*127.0.0.1*) ;; *) echo "FATAL: DATABASE_URL in the environment is not the local docker DB — refusing"; exit 1 ;; esac
