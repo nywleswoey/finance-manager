@@ -18,10 +18,13 @@ import datetime as dt
 from decimal import Decimal
 
 import pytest
+from sqlalchemy import text
 
+from ingestion.prices import sg_today
 from portfolio import dividends
-from portfolio.models import Account, Dividend, FxRate, Security
+from portfolio.models import Account, Dividend, DividendAnnouncement, FxRate, Security, Txn
 from tests import pgtest
+from tests.sqlitetest import current_position_sql
 
 pytestmark = pytest.mark.pg
 
@@ -83,3 +86,153 @@ class TestAnnual(pgtest.Case):
     def test_no_dividends_is_an_empty_matrix(self):
         assert dividends.annual(s=self.s) == {"currency": "SGD", "years": [], "buckets": [],
                                               "matrix": {}, "totals": {}, "yoy_pct": {}}
+
+
+# today, so-far-this-year and last-year-after-cutoff all read off the real clock (same
+# convention tests/test_performance.py uses for sg_today()) rather than a frozen date —
+# projected() calls sg_today() itself and cannot be handed a fake one.
+TODAY = sg_today()
+YEAR = TODAY.year
+CUTOFF_LAST_YEAR = dividends.same_day_last_year(TODAY)
+AFTER_CUTOFF_LAST_YEAR = CUTOFF_LAST_YEAR + dt.timedelta(days=1)
+BEFORE_CUTOFF_LAST_YEAR = CUTOFF_LAST_YEAR - dt.timedelta(days=10)
+
+
+class TestProjected(pgtest.Case):
+    """`<year> expected` = received so far (exactly `annual()`'s figure) + each current
+    holding's rest-of-year estimate — SGX-announced where `dividend_announcement` covers it,
+    else last year's payment after today's same month/day at TODAY's units, else nothing.
+
+    `current_position` is alembic-only (see test_twr_pg.py), so it is created here from the
+    migration's own SQL rather than a copy."""
+    TABLES = ("dividend", "dividend_announcement", "txn", "fx_rate", "account", "security")
+
+    def setUp(self):
+        super().setUp()
+        with self.engine.begin() as c:
+            c.execute(text("DROP VIEW IF EXISTS current_position"))
+            c.execute(text(current_position_sql()))
+        self.s.add(Account(id=1, name="FSM", funding_bucket="cash"))
+        self.s.add_all([
+            Security(id=1, canonical_ticker="D05", name="DBS", market="SG",
+                     asset_type="stock", currency="SGD"),
+            Security(id=2, canonical_ticker="UD1U", name="IREIT", market="SG",
+                     asset_type="reit", currency="EUR"),
+            Security(id=3, canonical_ticker="SOLD", name="Sold Out", market="SG",
+                     asset_type="stock", currency="SGD"),
+            Security(id=4, canonical_ticker="NOPAT", name="No Pattern", market="SG",
+                     asset_type="stock", currency="SGD"),
+            Security(id=5, canonical_ticker="NOFX", name="No Fx Row", market="SG",
+                     asset_type="stock", currency="XXX"),
+        ])
+        self.s.add(FxRate(date=TODAY, currency="EUR", rate_to_sgd=Decimal("0.5")))
+        self.s.commit()
+        self._n = 0
+
+    def _buy(self, sid, day, qty):
+        self._n += 1
+        self.s.add(Txn(account_id=1, security_id=sid, trade_date=day, action="buy",
+                       qty_signed=Decimal(str(qty)), dedup_hash=f"t{self._n}"))
+
+    def _div(self, sid, pay, gross, *, rate=None, units=None, ccy="SGD"):
+        self._n += 1
+        self.s.add(Dividend(account_id=1, security_id=sid, pay_date=pay, kind="cash",
+                            gross=Decimal(str(gross)),
+                            amount_per_unit=None if rate is None else Decimal(str(rate)),
+                            units=None if units is None else Decimal(str(units)),
+                            currency=ccy, source_file="unmapped-src", dedup_hash=f"d{self._n}"))
+
+    def _announce(self, sid, ex, rate, ccy):
+        self.s.add(DividendAnnouncement(security_id=sid, ex_date=ex, pay_date=ex,
+                                        amount_per_unit=Decimal(str(rate)), currency=ccy))
+
+    def _holdings(self, out):
+        return {h["ticker"]: h for h in out["holdings"]}
+
+    def test_a_currently_held_ticker_with_no_announcement_falls_back_to_last_years_pattern(self):
+        self._buy(1, D(2024, 1, 1), 1000)                          # 1000 units of D05 held
+        self._div(1, TODAY, 100, rate=0.5, units=200)               # received this year
+        self._div(1, AFTER_CUTOFF_LAST_YEAR, 600, rate=0.6, units=1000)   # last year, after cutoff
+        self.s.commit()
+
+        h = self._holdings(dividends.projected(s=self.s, year=YEAR))["D05"]
+        assert h["basis"] == "last_year_pattern"
+        assert h["received_sgd"] == 100.0
+        assert h["expected_remaining_sgd"] == 600.0                # 0.6 rate x 1000 TODAY units
+        assert h["projected_total_sgd"] == 700.0
+
+    def test_an_announced_rate_wins_over_last_years_pattern(self):
+        self._buy(2, D(2024, 1, 1), 500)                            # 500 units of UD1U held
+        self._div(2, TODAY, 5, ccy="EUR")                           # received this year, 2.5 SGD
+        self._announce(2, ex=TODAY, rate=0.02, ccy="EUR")           # covers the rest of the year
+        self.s.commit()
+
+        out = dividends.projected(s=self.s, year=YEAR)
+        h = self._holdings(out)["UD1U"]
+        assert h["basis"] == "announced"
+        assert h["received_sgd"] == 2.5
+        assert h["expected_remaining_sgd"] == 5.0                  # 0.02 rate x 500 units @ 0.5 fx
+        assert h["projected_total_sgd"] == 7.5
+
+    def test_a_currency_with_no_fx_rate_flags_the_remaining_row_rather_than_crashing(self):
+        self._buy(5, D(2024, 1, 1), 10)
+        self._announce(5, ex=TODAY, rate=1.0, ccy="XXX")            # no fx_rate row for XXX
+        self.s.commit()
+
+        out = dividends.projected(s=self.s, year=YEAR)
+        h = self._holdings(out)["NOFX"]
+        assert h["basis"] == "announced"                            # an announcement DID exist
+        assert h["expected_remaining_sgd"] == 0.0                   # just couldn't be priced
+        assert h["detail"][0]["amount_sgd"] is None
+        assert h["detail"][0]["flag"] == "no FX rate for XXX"
+
+    def test_a_ticker_no_longer_held_keeps_its_received_total_with_no_projected_remainder(self):
+        self._buy(3, D(2024, 1, 1), 100)
+        self._buy(3, D(2024, 6, 1), -100)                           # fully sold -> not in current_position
+        self._div(3, TODAY, 50, rate=0.5, units=100)
+        self.s.commit()
+
+        h = self._holdings(dividends.projected(s=self.s, year=YEAR))["SOLD"]
+        assert h["basis"] == "not held"
+        assert h["received_sgd"] == 50.0
+        assert h["expected_remaining_sgd"] == 0.0
+        assert h["projected_total_sgd"] == 50.0
+
+    def test_a_held_ticker_with_nothing_after_the_cutoff_either_year_projects_nothing_more(self):
+        self._buy(4, D(2024, 1, 1), 300)
+        self._div(4, BEFORE_CUTOFF_LAST_YEAR, 90, rate=0.3, units=300)   # too early to count
+        self.s.commit()
+
+        h = self._holdings(dividends.projected(s=self.s, year=YEAR))["NOPAT"]
+        assert h["basis"] == "none"
+        assert h["received_sgd"] == 0.0
+        assert h["expected_remaining_sgd"] == 0.0
+
+    def test_the_headline_received_figure_is_exactly_annuals(self):
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._div(1, TODAY, 100, rate=0.5, units=200)
+        self.s.commit()
+
+        out = dividends.projected(s=self.s, year=YEAR)
+        assert out["received_sgd"] == dividends.annual(s=self.s)["totals"][YEAR]
+
+    def test_totals_are_the_sum_of_the_per_holding_breakdown(self):
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._div(1, TODAY, 100, rate=0.5, units=200)
+        self._div(1, AFTER_CUTOFF_LAST_YEAR, 600, rate=0.6, units=1000)
+        self._buy(2, D(2024, 1, 1), 500)
+        self._div(2, TODAY, 5, ccy="EUR")
+        self._announce(2, ex=TODAY, rate=0.02, ccy="EUR")
+        self.s.commit()
+
+        out = dividends.projected(s=self.s, year=YEAR)
+        received_sum = round(sum(h["received_sgd"] for h in out["holdings"]), 2)
+        remaining_sum = round(sum(h["expected_remaining_sgd"] for h in out["holdings"]), 2)
+        assert out["received_sgd"] == received_sum
+        assert out["expected_remaining_sgd"] == remaining_sum
+        assert out["projected_total_sgd"] == round(received_sum + remaining_sum, 2)
+
+    def test_no_holdings_and_no_dividends_is_an_empty_breakdown(self):
+        out = dividends.projected(s=self.s, year=YEAR)
+        assert out == {"year": YEAR, "as_of": str(TODAY), "received_sgd": 0.0,
+                       "expected_remaining_sgd": 0.0, "projected_total_sgd": 0.0, "holdings": []}

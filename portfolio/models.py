@@ -137,6 +137,23 @@ class Dividend(Base):
     __table_args__ = (UniqueConstraint("dedup_hash", name="uq_div_dedup"),)
 
 
+class DividendAnnouncement(Base):
+    """An SGX-declared dividend (ex-date, rate, currency) for a currently-held security —
+    the online-sourced half of the Dividends tab's `<year> expected` projection
+    (portfolio.dividends.projected). Fetched by ingestion.dividend_announcements and cached
+    here rather than hit per page load, matching ingestion.prices' pattern for `price`/
+    `fx_rate`. Only unambiguous cash rates land here: a cash/scrip election is skipped, the
+    same caution build/fetch_cpf_srs_dividends.py takes with the online SGX rate."""
+    __tablename__ = "dividend_announcement"
+    security_id: Mapped[int] = mapped_column(ForeignKey("security.id"), primary_key=True)
+    ex_date: Mapped[dt.date] = mapped_column(Date, primary_key=True)
+    pay_date: Mapped[dt.date | None] = mapped_column(Date)
+    amount_per_unit: Mapped[Decimal] = mapped_column(RATE)
+    currency: Mapped[str] = mapped_column(String(3))
+    source: Mapped[str] = mapped_column(String(16), default="sgx")
+    fetched_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 # ---------------- spending (cash-flow ledger) ----------------
 class CashTxn(Base):
     """One bank/credit-card cash-flow line — the spending ledger (distinct from the

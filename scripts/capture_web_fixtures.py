@@ -157,6 +157,7 @@ ENDPOINTS: list[tuple[str, str]] = [
     ("performance-asset_type", "/api/performance?by=asset_type"),
     ("dividends-annual", "/api/dividends-annual"),
     ("dividend-details", "/api/dividend-details"),
+    ("dividends-projected", "/api/dividends-projected"),
     ("accounts", "/api/accounts"),
     ("transactions", "/api/transactions?"),
     # --- the detail page: nine tickers, and every one of them the only thing that reaches

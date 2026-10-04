@@ -1,7 +1,7 @@
 /**
  * Pattern A: the pinned identity column, and the scroll ownership that comes with it.
  *
- * Fourteen tables across ten views are read through a window below 1024px: the identity
+ * Fifteen tables across ten views are read through a window below 1024px: the identity
  * column is pinned, the rest scrolls horizontally inside a wrapper, and the header stays put
  * while the rows go by. This file is the gate on all three halves plus the traps that make
  * them fragile.
@@ -12,7 +12,7 @@
  * it — strictly worse than the phone. So every gate here runs at seven of the ten viewports,
  * and the other three assert the inverse: that nothing changed above the tier.
  *
- * EIGHT OF THE FOURTEEN EXIST BECAUSE A TABLE IS READ DOWN A COLUMN. The other six are the
+ * NINE OF THE FIFTEEN EXIST BECAUSE A TABLE IS READ DOWN A COLUMN. The other six are the
  * tablet tier's one rule: any table that overflows between 640 and 1024 is pinned regardless
  * of its phone assignment, so both `Transactions` ledgers, `SecurityDetail`'s two histories,
  * `Spending › Overview`'s top line items and `Dividends`' detail ledger joined — all of them
@@ -82,12 +82,15 @@ const PINNED = [
   { view: "Portfolio › Holdings", tables: [{ pin: "Security", cols: 13 }], groupBy: "asset_type" },
   { view: "Portfolio › Performance", tables: [{ pin: "market", cols: 9 }] },
   {
-    // The crosstab, then the detail ledger — which the tablet tier reached and which had
-    // been hiding behind an inline `{ maxHeight: 520, overflow: "auto" }`: contained, so the
-    // pane ratchet read zero for this view, and unpinned, so scrolling that box sideways at
-    // 640 lost the security name along with the date.
+    // The crosstab, then the `<year> expected` per-holding breakdown (also pattern A — six
+    // numbers-and-a-word per row, not enough fields to earn a card), then the detail ledger
+    // — which the tablet tier reached and which had been hiding behind an inline
+    // `{ maxHeight: 520, overflow: "auto" }`: contained, so the pane ratchet read zero for
+    // this view, and unpinned, so scrolling that box sideways at 640 lost the security name
+    // along with the date.
     view: "Portfolio › Dividends",
-    tables: [{ pin: "Bucket", cols: null }, { pin: "Date", cols: 8, cardsBelow: true }],
+    tables: [{ pin: "Bucket", cols: null }, { pin: "Security", cols: 6 },
+             { pin: "Date", cols: 8, cardsBelow: true }],
   },
   { view: "Portfolio › Options", tables: [{ pin: "Underlying", cols: 8 }] },
   {
