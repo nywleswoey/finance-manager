@@ -157,7 +157,10 @@ export const VIEWS = [
   },
   {
     name: "Portfolio › Dividends",
-    open: (page) => openTab(page, "Portfolio", "Dividends", (p) => p.getByText("Annual Dividend Income")),
+    // The `<year> Expected` card is anchored rather than the crosstab: it is fetched on its
+    // own and renders last, so anchoring the crosstab counted the view's tables one short.
+    open: (page) => openTab(page, "Portfolio", "Dividends",
+      (p) => p.getByRole("heading", { name: /^\d{4} Expected/ })),
   },
   {
     name: "Portfolio › Options",
