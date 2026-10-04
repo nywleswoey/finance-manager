@@ -28,7 +28,7 @@ fi
 
 DUMP_FILE="$(mktemp -t sync-from-prod)"
 RESTORE_LOG="$(mktemp -t sync-from-prod-restore-log)"
-trap 'rc=$?; rm -f "$DUMP_FILE" "$RESTORE_LOG"; exit $rc' EXIT
+trap 'rm -f "$DUMP_FILE" "$RESTORE_LOG"' EXIT
 
 RO='-c default_transaction_read_only=on'
 
