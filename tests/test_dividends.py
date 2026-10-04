@@ -69,6 +69,13 @@ class TestUnreceivedLastYear(unittest.TestCase):
         last_year = [(D(2025, 11, 20), 0.54), (D(2025, 11, 20), 0.54)]
         self.assertEqual(self._remaining(last_year, set()), [D(2025, 11, 20)])
 
+    def test_component_lines_and_a_combined_row_are_one_payment_at_the_combined_rate(self):
+        rows = [{"pay_date": D(2025, 11, 20), "rate": 0.60, "account": "FSM"},
+                {"pay_date": D(2025, 11, 20), "rate": 0.15, "account": "FSM"},
+                {"pay_date": D(2025, 11, 20), "rate": 0.75, "account": "CPF"}]
+        remaining = dividends.unreceived_last_year(rows, set(), self.TODAY)
+        self.assertEqual([(r["pay_date"], r["rate"]) for r in remaining], [(D(2025, 11, 20), 0.75)])
+
 
 class TestSgdOrNone(unittest.TestCase):
     def test_converts_when_the_currency_has_a_rate(self):

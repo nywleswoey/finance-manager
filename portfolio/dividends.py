@@ -167,9 +167,21 @@ def annual(s=None):
 
 
 def _payments(rows):
-    """One entry per distinct payment, oldest first: `details()` returns a row per (account,
-    payment), so the same distribution held in two accounts is keyed once on (pay_date, rate)."""
-    return sorted({(r["pay_date"], r["rate"]): r for r in rows}.values(), key=lambda r: r["pay_date"])
+    """One entry per distinct payment (one ticker's rows), oldest first, keyed on pay_date.
+
+    `details()` returns a row per (account, statement line): a statement may split one
+    distribution into component lines (0.60 + 0.15) that sum to the rate, while another account
+    holding the same distribution carries the combined declared rate (0.75). So per account the
+    lines are summed, and across accounts the largest per-account rate is the payment's rate."""
+    per_account = defaultdict(float)
+    first = {}
+    for r in rows:
+        per_account[(r["pay_date"], r.get("account"))] += r["rate"]
+        first.setdefault(r["pay_date"], r)
+    rate = defaultdict(float)
+    for (d, _), v in per_account.items():
+        rate[d] = max(rate[d], v)
+    return [{**first[d], "rate": round(rate[d], 6)} for d in sorted(first)]
 
 
 def _anniversary(d, year):
