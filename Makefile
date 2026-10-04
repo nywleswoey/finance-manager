@@ -7,7 +7,7 @@ PY = PYTHONPATH=. .venv/bin/python
 AL = PYTHONPATH=. .venv/bin/alembic
 
 db-up:        ## start postgres
-	docker compose up -d
+	docker compose up -d --wait
 db-down:      ## stop postgres
 	docker compose down
 migrate:      ## apply alembic migrations
@@ -60,15 +60,16 @@ ingest-all:   ## delta-ingest EVERY source: brokers + spending + prices + net-wo
 # and spending classifications made in the web app land only in the deployed (Neon) DB — this
 # target makes the local docker DB an exact copy of it instead of a parallel, diverging one.
 # Production is READ-ONLY throughout: this recipe resolves SOURCE_DATABASE_URL from .env.local
-# via NEON_ENV, same as `api` (never expanded by make, never echoed), and hands it to the
-# script as an env var; every session the script opens against it is
-# `PGOPTIONS='-c default_transaction_read_only=on'`. The destination is always the docker-compose
+# preferring DATABASE_URL_UNPOOLED (a dump is one long session, and the pooler can drop the
+# `options` startup parameter) and falling back to NEON_ENV's DATABASE_URL (never expanded by
+# make, never echoed), and hands it to the script as an env var; every session the script
+# opens against it is `PGOPTIONS='-c default_transaction_read_only=on'`. The destination is always the docker-compose
 # DB above, guarded the same way as reset/migrate/api-local (LOCAL_GUARD refuses a
 # non-localhost DATABASE_URL exported in the shell). It replaces every row locally, so it asks
 # for confirmation unless CONFIRM=1.
 sync-from-prod: db-up   ## make the local docker DB an exact copy of production (prod stays read-only; replaces local data; CONFIRM=1 skips the prompt)
 	@$(LOCAL_GUARD)
-	@$(NEON_ENV); SOURCE_DATABASE_URL="$$u" scripts/sync_from_prod.sh
+	@u=$(call ENV_LOCAL,DATABASE_URL_UNPOOLED); test -n "$$u" || { $(NEON_ENV); }; SOURCE_DATABASE_URL="$$u" scripts/sync_from_prod.sh
 
 schedule-install:   ## install the launchd agent: ingest-all daily 06:15
 	@# Runs against the DEPLOYED (Neon) database, not the local docker one — the point of
@@ -94,7 +95,8 @@ schedule-test:      ## run the agent right now
 # tolerated, and nothing inside the value is touched. A value that is bare or double-quoted (what
 # `vercel env pull` writes) resolves exactly as before. Anything odder still fails closed: an empty
 # result hits the FATAL, and a garbled URL is simply not a reachable database.
-NEON_ENV = u=$$(sed -nE 's/^(export +)?DATABASE_URL=//p' .env.local 2>/dev/null | tail -n 1 | tr -d '\r' | sed -E -e 's/^"(.*)"$$/\1/' -e "s/^'(.*)'$$/\1/"); test -n "$$u" || { echo "FATAL: no DATABASE_URL in .env.local (vercel env pull)"; exit 1; }
+ENV_LOCAL = $$(sed -nE 's/^(export +)?$(1)=//p' .env.local 2>/dev/null | tail -n 1 | tr -d '\r' | sed -E -e 's/^"(.*)"$$/\1/' -e "s/^'(.*)'$$/\1/")
+NEON_ENV = u=$(call ENV_LOCAL,DATABASE_URL); test -n "$$u" || { echo "FATAL: no DATABASE_URL in .env.local (vercel env pull)"; exit 1; }
 # An exported DATABASE_URL beats .env, so it would reach reset/migrate/api-local. Refuse a
 # non-localhost one, as scripts/scheduled_run.sh does in the other direction. Unset is fine.
 LOCAL_GUARD = case "$$DATABASE_URL" in ""|*localhost*|*127.0.0.1*) ;; *) echo "FATAL: DATABASE_URL in the environment is not the local docker DB — refusing"; exit 1 ;; esac
