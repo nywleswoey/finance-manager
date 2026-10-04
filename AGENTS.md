@@ -57,6 +57,11 @@ plans.
   throwaway worktree without first checking `docker ps` for a container named `portfolio_db`
   that predates your session; test destructive DB targets against your own plain `docker run`
   containers (distinct name, distinct port) instead.
+- **No per-worktree `.env.local` is needed.** The Makefile's `ENV_FILE` macro resolves it once:
+  an explicit `ENV_FILE` (make var or env) wins, else `./.env.local` in the current checkout,
+  else the one real `~/personal/portofolio/.env.local`. `ENV_LOCAL`/`NEON_ENV` (used by `api`,
+  `app`, `sync-from-prod`) read through it. Never read, print, or commit that file's contents;
+  test resolution with a throwaway fake file in a temp dir instead.
 
 ## Maintaining this file
 
