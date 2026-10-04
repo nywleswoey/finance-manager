@@ -41,6 +41,35 @@ class TestImpliedRate(unittest.TestCase):
         self.assertIsNone(dividends.implied_rate(100, None))
 
 
+class TestUnreceivedLastYear(unittest.TestCase):
+    TODAY = D(2026, 10, 4)
+
+    def _remaining(self, last_year, paid):
+        rows = [{"pay_date": d, "rate": r} for d, r in last_year]
+        return [r["pay_date"] for r in dividends.unreceived_last_year(rows, paid, self.TODAY)]
+
+    def test_a_monthly_receipt_consumes_exactly_one_nearby_payment(self):
+        last_year = [(D(2025, m, 30 if m != 2 else 28), 0.1) for m in range(8, 13)]
+        paid = {D(2026, 8, 30), D(2026, 9, 30)}
+        self.assertEqual(self._remaining(last_year, paid),
+                         [D(2025, 10, 30), D(2025, 11, 30), D(2025, 12, 30)])
+
+    def test_a_late_payment_within_the_drift_window_is_still_projected(self):
+        self.assertEqual(self._remaining([(D(2025, 9, 28), 0.5)], set()), [D(2025, 9, 28)])
+
+    def test_bought_mid_year_payments_long_past_are_not_projected(self):
+        last_year = [(D(2025, 5, 12), 0.5), (D(2025, 7, 20), 0.6)]
+        self.assertEqual(self._remaining(last_year, set()), [])
+
+    def test_a_partial_last_year_still_projects_its_late_year_payment(self):
+        paid = {D(2026, 5, 10), D(2026, 8, 15)}
+        self.assertEqual(self._remaining([(D(2025, 11, 20), 0.6)], paid), [D(2025, 11, 20)])
+
+    def test_one_payment_held_in_two_accounts_is_projected_once(self):
+        last_year = [(D(2025, 11, 20), 0.54), (D(2025, 11, 20), 0.54)]
+        self.assertEqual(self._remaining(last_year, set()), [D(2025, 11, 20)])
+
+
 class TestSgdOrNone(unittest.TestCase):
     def test_converts_when_the_currency_has_a_rate(self):
         self.assertEqual(dividends._sgd_or_none(100, "HKD", {"HKD": 0.17}), (17.0, None))

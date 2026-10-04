@@ -180,7 +180,28 @@ def _anniversary(d, year):
         return d.replace(year=year, day=28)
 
 
-DRIFT_DAYS = 45   # a last-year payment counts as already received within this many days of its anniversary
+DRIFT_DAYS = 45   # how far a payment's date may drift from last year's and still be the same payment
+
+
+def unreceived_last_year(last_year_rows, paid_dates, today):
+    """Last year's distinct payments still to come this year.
+
+    Each payment received this year consumes at most one of last year's payments — the one whose
+    anniversary is nearest, within DRIFT_DAYS — nearest pairs first. A last-year payment left
+    unmatched is still to come if its anniversary is no more than DRIFT_DAYS before `today`, so a
+    payment running late this year is kept while one the holding was never positioned for is not."""
+    payments = _payments(last_year_rows)
+    anniversaries = [_anniversary(r["pay_date"], today.year) for r in payments]
+    pairs = sorted((abs((p - a).days), i, p) for i, a in enumerate(anniversaries)
+                   for p in set(paid_dates) if abs((p - a).days) <= DRIFT_DAYS)
+    matched, used = set(), set()
+    for _, i, p in pairs:
+        if i not in matched and p not in used:
+            matched.add(i)
+            used.add(p)
+    earliest = today - dt.timedelta(days=DRIFT_DAYS)
+    return [r for i, (r, a) in enumerate(zip(payments, anniversaries))
+            if i not in matched and a >= earliest]
 
 
 def projected(s=None, today=None):
@@ -191,8 +212,7 @@ def projected(s=None, today=None):
 
     A holding's remaining payments use the SGX-declared rate from `dividend_announcement` for
     announcements paid (pay_date, else ex_date) between today and year end and not already
-    received (`basis` "announced"); otherwise last year's payments at TODAY's units whose
-    same date this year is today or later and has no payment received within DRIFT_DAYS
+    received (`basis` "announced"); otherwise `unreceived_last_year()`'s payments at TODAY's units
     (`basis` "last_year_pattern") — ingestion.dividend_announcements' online fetch degrading
     to this is exactly what makes that degradation graceful rather than a crash. A holding with
     neither gets `basis` "none". A ticker that received a payment this year but is no longer
@@ -274,10 +294,8 @@ def projected(s=None, today=None):
                                    "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
                                    **({"flag": flag} if flag else {})})
             else:
-                paid = paid_this_year.get(ticker, set())
-                rows = [r for r in _payments(last_year.get(ticker) or [])
-                        if (ann := _anniversary(r["pay_date"], yr)) >= today
-                        and not any(abs((p - ann).days) <= DRIFT_DAYS for p in paid)]
+                rows = unreceived_last_year(last_year.get(ticker) or [],
+                                            paid_this_year.get(ticker, set()), today)
                 if rows:
                     basis = "last_year_pattern"
                     for r in rows:
