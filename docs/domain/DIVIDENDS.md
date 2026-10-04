@@ -172,8 +172,8 @@ of the year's expected payments. Per holding, in order of preference:
    year end — bucketed like received money, by pay date — and not already received, rate ×
    TODAY's units (not the units at ex-date, since the rate is account/time-independent and the
    question is "what would I get now").
-2. **last_year_pattern** — last year's distinct payments (one per pay date and rate, however
-   many accounts held it) not yet matched by this year's (`unreceived_last_year()`): each payment
+2. **last_year_pattern** — last year's distinct payments (one per pay date, however many
+   accounts or statement lines carried it — `_payments()`) not yet matched by this year's (`unreceived_last_year()`): each payment
    received this year consumes at most one last-year payment, the one whose anniversary is
    nearest within ±45 days (`DRIFT_DAYS`); an unmatched one is projected if its anniversary is no
    more than 45 days before today — so a monthly payer's receipt cancels exactly one payment, a
