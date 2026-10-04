@@ -282,6 +282,20 @@ this list is the live one — add a line here before citing a new code.
   path as production) therefore goes with `make api`, not `api-local`. `reset`, `migrate` and
   `api-local` refuse a non-localhost `DATABASE_URL` exported in the shell. Both APIs at once share
   one `session` cookie (not port-scoped), so logging out of one logs out the other.
+- **Keeping the local docker DB in sync with production**: `make ingest-all` only ever adds
+  what statements on this machine can produce; it never carries over snapshot edits or spending
+  classifications made in the web app, which land only in the deployed (Neon) DB. `make
+  sync-from-prod` makes the local docker DB an exact copy of production instead: it reads
+  `DATABASE_URL` from `.env.local` the same way `api` does (so it needs `vercel env pull` run
+  first), opens every session against it read-only (`PGOPTIONS='-c
+  default_transaction_read_only=on'`), `pg_dump`s it (via a version-matched
+  `postgres:<major>-alpine` container when Neon's major version is ahead of the local `pg_dump`
+  on `PATH`), and `pg_restore --clean`s that into the docker DB — leaving it on the same alembic
+  revision as production, since `alembic_version` comes over with everything else. The
+  destination is guarded like `reset`/`migrate` (refuses a non-localhost `DATABASE_URL`
+  exported in the shell) and it replaces every row locally, so it asks `Type 'yes' to continue`
+  unless `CONFIRM=1`. Prints a one-line row-count summary (`txn`, `dividend`, `cash_txn`,
+  `nw_snapshot`) when done. See `scripts/sync_from_prod.sh`.
 - **Headers**: HTTP security headers (CSP/HSTS/X-Content-Type-Options/X-Frame-Options/
   Referrer-Policy) are set by the FastAPI middleware in `server/main.py`, which serves both
   the API and the static SPA. CSP allows `accounts.google.com` for Google Identity Services

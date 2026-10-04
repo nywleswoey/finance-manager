@@ -1,6 +1,6 @@
 .PHONY: db-up db-down migrate seed flat load prices ingest api web build-web app psql reset net \
         flat-cash load-cash spending snapshot snapshot-commit ingest-all test-web capture-web-fixtures \
-        api-local \
+        api-local sync-from-prod \
         schedule-install schedule-status schedule-uninstall schedule-test sync-requirements
 
 PY = PYTHONPATH=. .venv/bin/python
@@ -55,6 +55,20 @@ ingest-all:   ## delta-ingest EVERY source: brokers + spending + prices + net-wo
 	$(MAKE) spending      # dbs-cc, trust-cc, dbs-consolidated -> spending ledger
 	-$(MAKE) prices       # endowus NAV + FX (needs network; non-fatal if offline)
 	$(MAKE) snapshot-commit   # one new DBS month (+ tiger-prime) -> net-worth snapshot; refuses a mis-dated catch-up
+
+# `ingest-all` only ever adds what the statements on this machine can produce. Snapshot edits
+# and spending classifications made in the web app land only in the deployed (Neon) DB — this
+# target makes the local docker DB an exact copy of it instead of a parallel, diverging one.
+# Production is READ-ONLY throughout: this recipe resolves SOURCE_DATABASE_URL from .env.local
+# via NEON_ENV, same as `api` (never expanded by make, never echoed), and hands it to the
+# script as an env var; every session the script opens against it is
+# `PGOPTIONS='-c default_transaction_read_only=on'`. The destination is always the docker-compose
+# DB above, guarded the same way as reset/migrate/api-local (LOCAL_GUARD refuses a
+# non-localhost DATABASE_URL exported in the shell). It replaces every row locally, so it asks
+# for confirmation unless CONFIRM=1.
+sync-from-prod: db-up   ## make the local docker DB an exact copy of production (prod stays read-only; replaces local data; CONFIRM=1 skips the prompt)
+	@$(LOCAL_GUARD)
+	@$(NEON_ENV); SOURCE_DATABASE_URL="$$u" scripts/sync_from_prod.sh
 
 schedule-install:   ## install the launchd agent: ingest-all daily 06:15
 	@# Runs against the DEPLOYED (Neon) database, not the local docker one — the point of
