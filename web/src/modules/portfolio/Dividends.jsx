@@ -4,7 +4,7 @@ import { get, fmt, sgd, money } from "../../api.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
 const BUCKET_LABEL = { cash: "Cash", srs: "SRS", cpf: "CPF" };
-const BASIS_LABEL = { announced: "SGX announced", last_year_pattern: "last year's pattern", none: "—", "not held": "not held" };
+const BASIS_LABEL = { announced: "SGX announced", last_year_pattern: "last year's pattern", none: "—", "not held": "not held", unmapped: "unmapped" };
 
 export default function Dividends() {
   const [ann, setAnn] = useState(null);
@@ -129,7 +129,7 @@ export default function Dividends() {
               </tr></thead>
               <tbody>
                 {projRows.map((h) => (
-                  <tr key={h.ticker}>
+                  <tr key={h.ticker ?? "unmapped"}>
                     <td className="l">{h.name} {h.ticker && <span className="pill">{h.ticker}</span>}</td>
                     <td>{h.units == null ? "—" : fmt(h.units, 0)}</td>
                     <td>{money(h.received_sgd, "SGD", 2)}</td>

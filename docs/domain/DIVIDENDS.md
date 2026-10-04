@@ -168,20 +168,25 @@ forecast — see the rest of this doc. `GET /api/dividends-projected`
 (exactly `annual()`'s current-year total) **plus**, for each CURRENTLY HELD security, the rest
 of the year's expected payments. Per holding, in order of preference:
 
-1. **announced** — `dividend_announcement` rows with an ex-date still ahead this year, rate ×
+1. **announced** — `dividend_announcement` rows paid (pay_date, else ex_date) between today and
+   year end — bucketed like received money, by pay date — and not already received, rate ×
    TODAY's units (not the units at ex-date, since the rate is account/time-independent and the
    question is "what would I get now").
-2. **last_year_pattern** — last year's dividend payments after today's same month/day (the
-   "remaining of the year" analogue), each row's rate (declared, else gross/units-held-then —
-   reuses `details()`'s per-row computation rather than re-replaying the ledger) × TODAY's
-   units.
+2. **last_year_pattern** — last year's distinct payments (one per pay date and rate, however
+   many accounts held it), skipping the oldest N where N is how many payments the ticker has
+   already received this year, so a payment whose date drifts across "today" is counted exactly
+   once. Each row's rate (declared, else gross/units-held-then — reuses `details()`'s per-row
+   computation rather than re-replaying the ledger) × TODAY's units.
 3. **none** — neither exists (e.g. a security that already paid its only distribution for the
    year, or pays no cash dividend at all).
 
-A ticker that received a payment this year but is no longer held keeps its `received_sgd` with
-basis `"not held"` and no projected remainder. A currency with no `fx_rate` row degrades to a
-flagged, unpriced row (`_sgd_or_none`) rather than raising — unlike `annual()` (BR4) — because an
-estimate must not crash the page over one unpriced holding.
+It always projects the current SGT year (`sg_today()`); there is no year parameter. A ticker
+that received a payment this year but is no longer held keeps its `received_sgd` with basis
+`"not held"` and no projected remainder; dividends with no mapped security are one `ticker: null`
+row with basis `"unmapped"`, so the per-holding `received_sgd` column sums to the headline. A
+currency with no `fx_rate` row degrades to a flagged, unpriced row (`_sgd_or_none`) rather than
+raising — unlike `annual()` (BR4) — because an estimate must not crash the page over one
+unpriced holding.
 
 **The online source**: `dividend_announcement` is filled by `ingestion.dividend_announcements`
 (`make dividend-announcements`, folded non-fatally into `make ingest-all` beside `prices`),

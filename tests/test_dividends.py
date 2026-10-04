@@ -41,14 +41,6 @@ class TestImpliedRate(unittest.TestCase):
         self.assertIsNone(dividends.implied_rate(100, None))
 
 
-class TestSameDayLastYear(unittest.TestCase):
-    def test_shifts_back_one_year(self):
-        self.assertEqual(dividends.same_day_last_year(D(2026, 10, 4)), D(2025, 10, 4))
-
-    def test_feb_29_on_a_non_leap_target_clamps_to_feb_28(self):
-        self.assertEqual(dividends.same_day_last_year(D(2024, 2, 29)), D(2023, 2, 28))
-
-
 class TestSgdOrNone(unittest.TestCase):
     def test_converts_when_the_currency_has_a_rate(self):
         self.assertEqual(dividends._sgd_or_none(100, "HKD", {"HKD": 0.17}), (17.0, None))

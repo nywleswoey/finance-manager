@@ -48,15 +48,6 @@ def implied_rate(gross, qty):
     return round(float(gross or 0) / qty, 6) if qty and qty > 1e-6 else None
 
 
-def same_day_last_year(d):
-    """`d` shifted back one year, Feb 29 -> Feb 28 on a non-leap target — the "same months"
-    cutoff `projected()` uses to pick out last year's remaining-of-year payments."""
-    try:
-        return d.replace(year=d.year - 1)
-    except ValueError:
-        return d.replace(year=d.year - 1, day=28)
-
-
 def _sgd_or_none(value, ccy, fx):
     """`(to_sgd(value, ccy, fx), None)`, or `(None, flag)` when `ccy` has no FX rate.
 
@@ -175,30 +166,38 @@ def annual(s=None):
     }
 
 
-def projected(s=None, year=None):
-    """`<year> expected`: what `annual()` already shows as received so far this year, PLUS,
-    for each CURRENT holding, the rest of the year's expected payments — never a
+def _payments(rows):
+    """One entry per distinct payment, oldest first: `details()` returns a row per (account,
+    payment), so the same distribution held in two accounts is keyed once on (pay_date, rate)."""
+    return sorted({(r["pay_date"], r["rate"]): r for r in rows}.values(), key=lambda r: r["pay_date"])
+
+
+def projected(s=None, today=None):
+    """`<year> expected` for the current year: what `annual()` already shows as received so
+    far, PLUS, for each CURRENT holding, the rest of the year's expected payments — never a
     replacement for the received-so-far total, which stays exactly `annual()`'s (#captain's
     intent: 2026 looked lower than 2025 only because nothing projected the remaining months).
 
-    A holding's remaining payments use the SGX-declared rate from `dividend_announcement`
-    where one covers the rest of the year (`basis` "announced"); otherwise last year's
-    payments after today's same month/day, at TODAY's units (`basis` "last_year_pattern") —
-    ingestion.dividend_announcements' online fetch degrading to this is exactly what makes
-    that degradation graceful rather than a crash. A holding with neither — paid everything
-    already this cycle, or SGX has nothing and neither did last year after the cutoff — gets
-    `basis` "none". A ticker that received a payment this year but is no longer held keeps its
-    `received_sgd` (that cash is real) with `basis` "not held" and no projected remainder.
+    A holding's remaining payments use the SGX-declared rate from `dividend_announcement` for
+    announcements paid (pay_date, else ex_date) between today and year end and not already
+    received (`basis` "announced"); otherwise last year's payments at TODAY's units, skipping
+    the oldest N where N is how many payments the ticker has already received this year
+    (`basis` "last_year_pattern") — ingestion.dividend_announcements' online fetch degrading
+    to this is exactly what makes that degradation graceful rather than a crash. A holding with
+    neither gets `basis` "none". A ticker that received a payment this year but is no longer
+    held keeps its `received_sgd` (that cash is real) with `basis` "not held" and no projected
+    remainder; dividends with no mapped security are one `ticker` None row, `basis`
+    "unmapped".
 
     Every holding's own breakdown is returned (not just the totals) so the headline figure is
     auditable: each is `received_sgd` + `expected_remaining_sgd`, and `detail` lists the
-    underlying announced/last-year rows the remainder was built from."""
+    underlying announced/last-year rows the remainder was built from. `today` defaults to
+    `sg_today()`."""
+    today = today or sg_today()
+    yr = today.year
+    year_end = dt.date(yr, 12, 31)
     with session_scope(s) as s:
         fx = fx_map(s)
-        today = sg_today()
-        yr = year or today.year
-        cutoff_last_year = same_day_last_year(today)
-        year_end = dt.date(yr, 12, 31)
 
         current_units, meta = defaultdict(float), {}
         for h in fetch_dicts(s,
@@ -209,42 +208,51 @@ def projected(s=None, year=None):
 
         received_rows = fetch_dicts(s,
             "SELECT sec.canonical_ticker ticker, d.gross, d.currency FROM dividend d "
+            "JOIN account a ON a.id=d.account_id "
             "LEFT JOIN security sec ON sec.id=d.security_id "
             "WHERE d.pay_date IS NOT NULL AND EXTRACT(YEAR FROM d.pay_date)::int = :yr",
             {"yr": yr})
         received = defaultdict(float)
         for r in received_rows:
-            if r["ticker"] is not None:
-                amt, _ = _sgd_or_none(r["gross"] or 0, r["currency"], fx)
-                received[r["ticker"]] += amt or 0.0
+            amt, _ = _sgd_or_none(r["gross"] or 0, r["currency"], fx)
+            received[r["ticker"]] += amt or 0.0
 
         announced_rows = fetch_dicts(s,
             "SELECT sec.canonical_ticker ticker, da.ex_date, da.pay_date, "
             "da.amount_per_unit rate, da.currency FROM dividend_announcement da "
             "JOIN security sec ON sec.id=da.security_id "
-            "WHERE da.ex_date >= :today AND da.ex_date <= :year_end",
+            "WHERE COALESCE(da.pay_date, da.ex_date) BETWEEN :today AND :year_end",
             {"today": today, "year_end": year_end})
-        announced = defaultdict(list)
-        for r in announced_rows:
-            announced[r["ticker"]].append(r)
 
-        # last year's rate per payment (declared, else gross/units-held-then) — details()
-        # already derives it per row; reused here rather than re-replaying the ledger.
-        last_year = defaultdict(list)
+        # per-payment rate (declared, else gross/units-held-then) — details() already derives
+        # it per row; reused here rather than re-replaying the ledger.
+        this_year, last_year = defaultdict(list), defaultdict(list)
         for r in details(s)["rows"]:
-            if (r["ticker"] is not None and r["rate"] is not None and r["pay_date"] is not None
-                    and r["pay_date"].year == yr - 1 and r["pay_date"] > cutoff_last_year):
+            if r["ticker"] is None or r["pay_date"] is None:
+                continue
+            if r["pay_date"].year == yr:
+                this_year[r["ticker"]].append(r)
+            elif r["pay_date"].year == yr - 1 and r["rate"] is not None:
                 last_year[r["ticker"]].append(r)
 
         received_total = annual(s)["totals"].get(yr, 0.0)   # the EXACT figure the tab shows
 
+    paid_this_year = {t: _payments(rows) for t, rows in this_year.items()}
+    announced = defaultdict(list)
+    for r in announced_rows:
+        paid_dates = {p["pay_date"] for p in paid_this_year.get(r["ticker"], [])}
+        if (r["pay_date"] or r["ex_date"]) not in paid_dates:
+            announced[r["ticker"]].append(r)
+
     holdings, remaining_total, full_remaining = [], 0.0, {}
-    for ticker in sorted(set(current_units) | set(received)):
+    for ticker in sorted(set(current_units) | set(received), key=lambda t: (t is None, t or "")):
         units = current_units.get(ticker, 0.0)
         rec_sgd = round(received.get(ticker, 0.0), 2)
         basis, detail, remaining_sgd = "not held", [], 0.0
-        if units > 1e-6:
-            basis, detail = "none", []
+        if ticker is None:
+            basis = "unmapped"
+        elif units > 1e-6:
+            basis = "none"
             rows = announced.get(ticker) or []
             if rows:
                 basis = "announced"
@@ -256,7 +264,7 @@ def projected(s=None, year=None):
                                    "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
                                    **({"flag": flag} if flag else {})})
             else:
-                rows = last_year.get(ticker) or []
+                rows = _payments(last_year.get(ticker) or [])[len(paid_this_year.get(ticker, [])):]
                 if rows:
                     basis = "last_year_pattern"
                     for r in rows:
@@ -270,13 +278,14 @@ def projected(s=None, year=None):
         remaining_total += remaining_sgd
         meta_r = meta.get(ticker, {})
         holdings.append({
-            "ticker": ticker, "name": meta_r.get("name"), "units": units or None,
-            "currency": meta_r.get("currency"),
+            "ticker": ticker,
+            "name": meta_r.get("name") if ticker is not None else "Unmapped dividends",
+            "units": units or None, "currency": meta_r.get("currency"),
             "received_sgd": rec_sgd, "expected_remaining_sgd": round(remaining_sgd, 2),
             "projected_total_sgd": round(received.get(ticker, 0.0) + remaining_sgd, 2),
             "basis": basis, "detail": detail,
         })
-    holdings.sort(key=lambda h: (-full_remaining[h["ticker"]], h["ticker"]))
+    holdings.sort(key=lambda h: (-full_remaining[h["ticker"]], h["ticker"] is None, h["ticker"] or ""))
 
     return {
         "year": yr, "as_of": str(today),

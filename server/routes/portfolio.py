@@ -260,8 +260,8 @@ def dividends_annual():
 
 
 @router.get("/api/dividends-projected")
-def dividends_projected(year: int | None = None):
-    return dividends.projected(year=year)
+def dividends_projected():
+    return dividends.projected()
 
 
 @router.get("/api/transactions")
