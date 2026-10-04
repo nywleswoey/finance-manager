@@ -173,9 +173,11 @@ of the year's expected payments. Per holding, in order of preference:
    TODAY's units (not the units at ex-date, since the rate is account/time-independent and the
    question is "what would I get now").
 2. **last_year_pattern** — last year's distinct payments (one per pay date and rate, however
-   many accounts held it), skipping the oldest N where N is how many payments the ticker has
-   already received this year, so a payment whose date drifts across "today" is counted exactly
-   once. Each row's rate (declared, else gross/units-held-then — reuses `details()`'s per-row
+   many accounts held it) whose same date this year is today or later and has no payment for
+   the ticker already received this year within ±45 days (`DRIFT_DAYS`) of it — so a payment
+   that arrived a little early isn't projected again, a past payment the holding was never
+   positioned for isn't projected at all, and a partial-year history doesn't drop an upcoming
+   one. Each row's rate (declared, else gross/units-held-then — reuses `details()`'s per-row
    computation rather than re-replaying the ledger) × TODAY's units.
 3. **none** — neither exists (e.g. a security that already paid its only distribution for the
    year, or pays no cash dividend at all).

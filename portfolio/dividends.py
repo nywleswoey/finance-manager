@@ -172,6 +172,17 @@ def _payments(rows):
     return sorted({(r["pay_date"], r["rate"]): r for r in rows}.values(), key=lambda r: r["pay_date"])
 
 
+def _anniversary(d, year):
+    """`d` moved to `year`, Feb 29 -> Feb 28 on a non-leap target."""
+    try:
+        return d.replace(year=year)
+    except ValueError:
+        return d.replace(year=year, day=28)
+
+
+DRIFT_DAYS = 45   # a last-year payment counts as already received within this many days of its anniversary
+
+
 def projected(s=None, today=None):
     """`<year> expected` for the current year: what `annual()` already shows as received so
     far, PLUS, for each CURRENT holding, the rest of the year's expected payments — never a
@@ -180,8 +191,8 @@ def projected(s=None, today=None):
 
     A holding's remaining payments use the SGX-declared rate from `dividend_announcement` for
     announcements paid (pay_date, else ex_date) between today and year end and not already
-    received (`basis` "announced"); otherwise last year's payments at TODAY's units, skipping
-    the oldest N where N is how many payments the ticker has already received this year
+    received (`basis` "announced"); otherwise last year's payments at TODAY's units whose
+    same date this year is today or later and has no payment received within DRIFT_DAYS
     (`basis` "last_year_pattern") — ingestion.dividend_announcements' online fetch degrading
     to this is exactly what makes that degradation graceful rather than a crash. A holding with
     neither gets `basis` "none". A ticker that received a payment this year but is no longer
@@ -237,11 +248,10 @@ def projected(s=None, today=None):
 
         received_total = annual(s)["totals"].get(yr, 0.0)   # the EXACT figure the tab shows
 
-    paid_this_year = {t: _payments(rows) for t, rows in this_year.items()}
+    paid_this_year = {t: {r["pay_date"] for r in rows} for t, rows in this_year.items()}
     announced = defaultdict(list)
     for r in announced_rows:
-        paid_dates = {p["pay_date"] for p in paid_this_year.get(r["ticker"], [])}
-        if (r["pay_date"] or r["ex_date"]) not in paid_dates:
+        if (r["pay_date"] or r["ex_date"]) not in paid_this_year.get(r["ticker"], set()):
             announced[r["ticker"]].append(r)
 
     holdings, remaining_total, full_remaining = [], 0.0, {}
@@ -264,7 +274,10 @@ def projected(s=None, today=None):
                                    "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
                                    **({"flag": flag} if flag else {})})
             else:
-                rows = _payments(last_year.get(ticker) or [])[len(paid_this_year.get(ticker, [])):]
+                paid = paid_this_year.get(ticker, set())
+                rows = [r for r in _payments(last_year.get(ticker) or [])
+                        if (ann := _anniversary(r["pay_date"], yr)) >= today
+                        and not any(abs((p - ann).days) <= DRIFT_DAYS for p in paid)]
                 if rows:
                     basis = "last_year_pattern"
                     for r in rows:

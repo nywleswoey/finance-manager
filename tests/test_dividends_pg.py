@@ -96,7 +96,8 @@ EARLIER_THIS_YEAR = D(2026, 5, 10)
 class TestProjected(pgtest.Case):
     """`<year> expected` = received so far (exactly `annual()`'s figure) + each current
     holding's rest-of-year estimate — SGX-announced where `dividend_announcement` covers it,
-    else last year's payments not yet matched by this year's at TODAY's units, else nothing.
+    else last year's payments still ahead this year and not yet received, at TODAY's units,
+    else nothing.
 
     `current_position` is alembic-only (see test_twr_pg.py), so it is created here from the
     migration's own SQL rather than a copy."""
@@ -173,15 +174,37 @@ class TestProjected(pgtest.Case):
         assert h["basis"] == "none"
         assert h["expected_remaining_sgd"] == 0.0
 
-    def test_a_payment_that_drifts_after_today_is_still_projected(self):
+    def test_a_payment_not_yet_arrived_this_year_is_still_projected(self):
         self._buy(1, D(2024, 1, 1), 1000)
         self._div(1, EARLIER_THIS_YEAR, 500, rate=0.5, units=1000)
         self._div(1, D(2025, 5, 12), 500, rate=0.5, units=1000)
-        self._div(1, D(2025, 10, 1), 600, rate=0.6, units=1000)     # last year's Oct, before today's date
+        self._div(1, D(2025, 10, 6), 600, rate=0.6, units=1000)     # anniversary just after today
         self.s.commit()
 
         h = self._holdings(self._projected())["D05"]
         assert h["basis"] == "last_year_pattern"
+        assert h["expected_remaining_sgd"] == 600.0
+
+    def test_last_years_payments_already_past_this_year_are_not_projected(self):
+        self._buy(1, D(2026, 8, 1), 1000)                           # bought mid-year this year
+        self._div(1, D(2025, 5, 12), 500, rate=0.5, units=1000)
+        self._div(1, D(2025, 7, 20), 600, rate=0.6, units=1000)
+        self.s.commit()
+
+        h = self._holdings(self._projected())["D05"]
+        assert h["basis"] == "none"
+        assert h["expected_remaining_sgd"] == 0.0
+
+    def test_a_partial_last_year_still_projects_its_upcoming_payment(self):
+        self._buy(1, D(2025, 8, 1), 1000)                           # bought mid-year last year
+        self._div(1, D(2025, 11, 20), 600, rate=0.6, units=1000)    # last year's only payment
+        self._div(1, EARLIER_THIS_YEAR, 500, rate=0.5, units=1000)
+        self._div(1, D(2026, 8, 15), 550, rate=0.55, units=1000)
+        self.s.commit()
+
+        h = self._holdings(self._projected())["D05"]
+        assert h["basis"] == "last_year_pattern"
+        assert [d["pay_date"] for d in h["detail"]] == [D(2025, 11, 20)]
         assert h["expected_remaining_sgd"] == 600.0
 
     def test_a_payment_held_in_two_accounts_is_projected_once_at_total_units(self):
