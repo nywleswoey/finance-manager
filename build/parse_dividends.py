@@ -5,7 +5,8 @@ Sources:
   Tiger flex  : 'Dividends' section, rows with status 'Paid' (currency from the
                 flex column; market inference only when that cell is blank)
   FSM/iFast   : 'Stock Dividend' rows that are 'Cash Dividend' / 'Cash in Lieu' (SGD)
-  CDP         : 'Summary of Payments' in the monthly PDFs (SG)
+  CDP         : the data/cdp-stocks/dividends.csv tracker; unfilled amounts backfilled
+                from the statement-derived CDP position (see cdp())
   Moomoo      : dividend lines in the monthly PDFs (SG/US)
 Endowus Amundi fund is accumulating -> no distributions.
 
@@ -84,8 +85,9 @@ def fsm():
 # data/cdp-stocks/dividends.csv is the authoritative CDP dividend ledger (the prior
 # PDF-statement parser missed whole years and every foreign-currency holding). Columns:
 #   Date, Year, Month, Stock Name, Dividends (native), Dividends (SGD), Quantity, Dividend (rate)
-# Dates are mixed "DD-Mon-YY" / Excel serials. Rows with a zero amount are declared-but-
-# unfilled and skipped. Native amount + currency are stored; SGD conversion happens downstream.
+# Dates are mixed "DD-Mon-YY" / Excel serials. A zero-amount row is backfilled as rate x the
+# CDP custody position (see LEDGER_CSV) when one is held, else skipped as declared-but-unfilled.
+# Native amount + currency are stored; SGD conversion happens downstream.
 import datetime as _dt
 _XL_EPOCH = _dt.date(1899, 12, 30)
 # foreign-currency CDP holdings (others are SGD); used when native != SGD column
@@ -108,12 +110,55 @@ def _cdp_date(d):
     dd = try_date(d, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d-%b-%Y", "%d/%m/%Y"))
     return dd.isoformat() if dd else None
 
+# build/ledger.csv (parse_cdp.py's statement snapshot-diff, via build_ledger.py — see the
+# `flat` Makefile target order) holds the CDP custody position. The tracker sheet stopped
+# having a human fill in its amount/quantity columns at some point (left '#N/A' or '0' while
+# still recording the per-unit rate); a row like that is backfilled from the statement
+# position instead of being dropped, so overridable in tests as pd.LEDGER_CSV.
+LEDGER_CSV = os.path.join(HERE, "ledger.csv")
+
+def _cdp_statement_months():
+    """YYYY-MM of every CDP statement PDF on disk (the months parse_cdp.py snapshots)."""
+    months = set()
+    for f in glob.glob(os.path.join(DATA, "cdp-statements", "*.pdf")):
+        m = re.search(r"(\d{4})(\d{2})", os.path.basename(f))
+        if m:
+            months.add(f"{m.group(1)}-{m.group(2)}")
+    return months
+
+def _cdp_snapshot_month(iso_date):
+    """The statement month whose -28 ledger leg is the latest on or before `iso_date`.
+    Across a statement gap that leg lumps every change in the gap, so the position on a
+    date whose snapshot month has no statement is stale and must not be backfilled."""
+    dd = _dt.date.fromisoformat(iso_date)
+    if dd.day < 28:
+        dd = dd.replace(day=1) - _dt.timedelta(days=1)
+    return f"{dd.year:04d}-{dd.month:02d}"
+
+def _cdp_position_on(positions, ticker, iso_date):
+    """Shares of `ticker` the CDP account held on `iso_date` (ISO), from a cumulative
+    sum of every dated qty_signed up to and including that date."""
+    return sum(q for d, q in positions.get(ticker, ()) if d <= iso_date)
+
+def _load_cdp_positions():
+    pos = defaultdict(list)
+    if not os.path.exists(LEDGER_CSV):
+        return pos
+    for r in csv.DictReader(open(LEDGER_CSV)):
+        if r["account"] != "CDP":
+            continue
+        pos[r["ticker"]].append((r["date"], num(r["qty_signed"])))
+    return pos
+
 def cdp():
     """CDP cash dividends from the maintained tracker. The sheet is broader than CDP —
     it also lists holdings tracked by broker statements (Tiger/FSM/SRS), and keeps tracking
     a holding after it's transferred to another custodian. To avoid double-counting, a row
-    is emitted only when NO broker-statement dividend exists for the same ticker within ±7
-    days (those are already ingested). Runs LAST so DIV holds the other sources to dedup against."""
+    with a sheet-stated amount is emitted only when NO broker-statement dividend exists for
+    the same ticker within ±7 days (those are already ingested). A backfilled row is exempt:
+    its gross is rate x the CDP-only position, so it can't overlap another broker's payout.
+    Backfill only uses a position backed by a statement (see _cdp_snapshot_month). Runs
+    LAST so DIV holds the other sources to dedup against."""
     p = os.path.join(DATA, "cdp-stocks", "dividends.csv")
     if not os.path.exists(p):
         return
@@ -125,19 +170,29 @@ def cdp():
     def tracked_elsewhere(tk, iso):
         dx = _dt.date.fromisoformat(iso)
         return any(abs((dx - e).days) <= 7 for e in elsewhere.get(tk, []))
+    positions = _load_cdp_positions()
+    statements = _cdp_statement_months()
     for r in csv.reader(open(p)):
         if len(r) < 8 or r[0].strip() in ("", "Date", "﻿Date"):
             continue
         d, _yr, _mo, name, nat, sgd, qty, rate = r[:8]
         name = name.strip()
         natg, sgdg = num(nat), num(sgd)
-        if natg == 0 and sgdg == 0:                       # declared but no amount -> skip
-            continue
         tk = cdp_dividend_ticker(name)
         date = _cdp_date(d)
+        backfilled = False
+        if natg == 0 and tk and date and _cdp_snapshot_month(date) in statements:
+            # the sheet knows the per-unit rate but never filled the amount -> recover it
+            # from the statement-derived custody position instead of dropping the payout.
+            held = _cdp_position_on(positions, tk, date)
+            rate_num = num(rate)
+            if held > 0 and rate_num:
+                natg, qty, backfilled = round(rate_num * held, 2), held, True
+        if natg == 0 and sgdg == 0:                       # still nothing -> declared but unfilled
+            continue
         if tk is None or date is None:
             continue
-        if tracked_elsewhere(tk, date):                   # already in a broker statement -> skip
+        if not backfilled and tracked_elsewhere(tk, date):  # already in a broker statement
             continue
         fix = CDP_DIV_FIX.get((tk, date))                 # manual corrections (see dict above)
         if fix is None and (tk, date) in CDP_DIV_FIX:     # explicit drop
