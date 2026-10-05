@@ -5,8 +5,10 @@ Sources:
   Tiger flex  : 'Dividends' section, rows with status 'Paid' (currency from the
                 flex column; market inference only when that cell is blank)
   FSM/iFast   : 'Stock Dividend' rows that are 'Cash Dividend' / 'Cash in Lieu' (SGD)
-  CDP         : the data/cdp-stocks/dividends.csv tracker; unfilled amounts backfilled
-                from the statement-derived CDP position (see cdp())
+  CDP         : the Cash Transaction section of each CDP statement PDF (see
+                cdp_statements()); the data/cdp-stocks/dividends.csv tracker fills in
+                for any payout whose month has no statement, and the tracker's own
+                amount-backfill (see cdp())
   Moomoo      : dividend lines in the monthly PDFs (SG/US)
 Endowus Amundi fund is accumulating -> no distributions.
 
@@ -18,7 +20,8 @@ from collections import defaultdict
 from _pdf import raw_text
 from _csvout import write_csv
 from _dates import try_date
-from _ledgercommon import MARKET_CCY, canon, cdp_dividend_ticker, market_of, norm_ticker, num
+from _ledgercommon import (MARKET_CCY, canon, cdp_dividend_ticker, market_of, name_to_ticker,
+                           norm_ticker, num)
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -81,9 +84,65 @@ def fsm():
             name=name, kind="cash", gross=amt,
             currency=ccy, source="fsm (stock dividend)")
 
-# ---------- CDP cash dividends (maintained spreadsheet export) ----------
-# data/cdp-stocks/dividends.csv is the authoritative CDP dividend ledger (the prior
-# PDF-statement parser missed whole years and every foreign-currency holding). Columns:
+# ---------- CDP cash dividends (statement PDFs, authoritative) ----------
+# Each CDP statement PDF's "Cash Transaction" section lists every cash dividend CDP paid
+# that month: "<DD/MM/YYYY>  <ISSUER NAME> [Final/Interim/Special] Cash Dividend - <units>
+# units @ <CCY> <rate>   <amount>" (REIT distributions sometimes read "<issuer> [Interim]
+# Dividend Option - ..." instead of "Cash Dividend"). "Capital Distribution"/"Redemption"
+# rows share the same column shape but are not dividend income, so the kind suffix is part
+# of the match, not stripped first. "Payment Made" settlement legs have no "units @" clause
+# and never match.
+_CASH_DIV_LINE = re.compile(
+    r"^\s*(\d{2})/(\d{2})/(\d{4})\s+(.+?(?:Cash Dividend|Dividend Option))\s+-\s+"
+    r"([\d,]+)\s+units\s+@\s+([A-Z]{3})\s*([\d.]+)\s+([\d,]+\.\d{2})\s*$")
+_CASH_DIV_KIND = re.compile(r"\s+(?:Final|Interim|Special)?\s*(?:Cash Dividend|Dividend Option)\s*$",
+                            re.I)
+
+def cdp_statement_issuer(name_and_kind):
+    """Strip the trailing Final/Interim/Special Cash Dividend / Dividend Option words off
+    a Cash Transaction description, leaving the issuer name symbols.csv's `names` column
+    maps (the same display names parse_cdp.py resolves for the holdings table)."""
+    return _CASH_DIV_KIND.sub("", name_and_kind).strip()
+
+def cdp_statements():
+    """CDP cash dividends read straight from every data/cdp-statements/*.pdf's Cash
+    Transaction section. This is the authoritative record — CDP pays cash straight into
+    the account, so every payout appears there. Runs BEFORE cdp() (the tracker-sheet
+    fallback below) so that function's existing ±7-day ticker dedup (see tracked_elsewhere)
+    skips any tracker row already booked here, instead of a separate month-level rule."""
+    unmapped = set()
+    for f in sorted(glob.glob(os.path.join(DATA, "cdp-statements", "*.pdf"))):
+        txt = raw_text(f) or ""
+        lines = txt.splitlines()
+        start = end = None
+        for i, ln in enumerate(lines):
+            if start is None and "Cash Transaction" in ln:
+                start = i
+            elif start is not None and re.search(r"Your Securities Account|- END -", ln):
+                end = i
+                break
+        if start is None:
+            continue
+        for ln in lines[start:end]:
+            m = _CASH_DIV_LINE.match(ln)
+            if not m:
+                continue
+            dd, mm, yyyy, name_kind, units, ccy, rate, amt = m.groups()
+            name = cdp_statement_issuer(name_kind)
+            tk = name_to_ticker(name)
+            if tk is None:
+                unmapped.add(name)
+                continue
+            add(date=f"{yyyy}-{mm}-{dd}", account="CDP", market="SG", ticker=tk,
+                name=name, kind="cash", gross=num(amt), units=num(units), rate=num(rate),
+                currency=ccy, source="cdp (cash dividend, statement)")
+    if unmapped:
+        print("CDP statement dividends: UNMAPPED issuer names (review):", sorted(unmapped))
+
+# ---------- CDP cash dividends (maintained spreadsheet, fallback) ----------
+# data/cdp-stocks/dividends.csv only fills in months with no statement PDF on disk (old
+# statements, or a gap in what's been downloaded) — cdp_statements() above now reads every
+# covered month straight from the authoritative Cash Transaction section. Columns:
 #   Date, Year, Month, Stock Name, Dividends (native), Dividends (SGD), Quantity, Dividend (rate)
 # Dates are mixed "DD-Mon-YY" / Excel serials. A zero-amount row is backfilled as rate x the
 # CDP custody position (see LEDGER_CSV) when one is held, else skipped as declared-but-unfilled.
@@ -151,25 +210,37 @@ def _load_cdp_positions():
     return pos
 
 def cdp():
-    """CDP cash dividends from the maintained tracker. The sheet is broader than CDP —
-    it also lists holdings tracked by broker statements (Tiger/FSM/SRS), and keeps tracking
-    a holding after it's transferred to another custodian. To avoid double-counting, a row
-    with a sheet-stated amount is emitted only when NO broker-statement dividend exists for
-    the same ticker within ±7 days (those are already ingested). A backfilled row is exempt:
-    its gross is rate x the CDP-only position, so it can't overlap another broker's payout.
-    Backfill only uses a position backed by a statement (see _cdp_snapshot_month). Runs
-    LAST so DIV holds the other sources to dedup against."""
+    """CDP cash dividends from the maintained tracker — now only a fallback for a payout
+    cdp_statements() didn't already read straight off a statement PDF (an older statement
+    with no Cash Transaction section, a month with no PDF on disk at all, or a Cash
+    Transaction line a future statement layout change breaks). Any row within ±7 days of a
+    cdp_statements() row for the same ticker is skipped outright, backfilled or not: a
+    blended per-unit sheet rate can cover two same-day REIT tranches, or bake in a
+    capital-return component the statement text itself does not, so the direct reading
+    wins whenever one exists. The sheet is also broader than CDP — it lists holdings
+    tracked by broker statements (Tiger/FSM/SRS) too, and keeps tracking a holding after
+    it's transferred to another custodian — so beyond that, a sheet-stated amount is
+    emitted only when no broker-statement dividend exists for the same ticker within ±7
+    days (those are already ingested); a backfilled row is exempt from only that broker
+    check, since its gross is rate x the CDP-only position and so can't overlap a payout
+    booked at a different custodian. Backfill only uses a position backed by a statement
+    (see _cdp_snapshot_month). Runs LAST so DIV holds the other sources to dedup against."""
     p = os.path.join(DATA, "cdp-stocks", "dividends.csv")
     if not os.path.exists(p):
         return
-    elsewhere = defaultdict(list)                         # ticker -> [date] from broker statements
+    elsewhere = defaultdict(list)            # ticker -> [date] from a broker's own statement
+    from_statement = defaultdict(list)       # ticker -> [date] cdp_statements() already read
     for x in DIV:
         iso = _cdp_date(x.get("date", ""))
-        if iso:
-            elsewhere[x["ticker"]].append(_dt.date.fromisoformat(iso))
-    def tracked_elsewhere(tk, iso):
+        if not iso:
+            continue
+        bucket = from_statement if x["source"] == "cdp (cash dividend, statement)" else elsewhere
+        bucket[x["ticker"]].append(_dt.date.fromisoformat(iso))
+    def _within_7_days(tk, iso, bucket):
         dx = _dt.date.fromisoformat(iso)
-        return any(abs((dx - e).days) <= 7 for e in elsewhere.get(tk, []))
+        return any(abs((dx - e).days) <= 7 for e in bucket.get(tk, []))
+    def tracked_elsewhere(tk, iso):
+        return _within_7_days(tk, iso, elsewhere)
     positions = _load_cdp_positions()
     statements = _cdp_statement_months()
     for r in csv.reader(open(p)):
@@ -180,6 +251,13 @@ def cdp():
         natg, sgdg = num(nat), num(sgd)
         tk = cdp_dividend_ticker(name)
         date = _cdp_date(d)
+        if tk and date and _within_7_days(tk, date, from_statement):
+            # cdp_statements() already read this exact payout straight off the statement's
+            # own Cash Transaction section. Checked (and skipped) even for a row the sheet
+            # would otherwise backfill: real data shows the sheet's one blended rate can
+            # cover two same-day REIT distribution tranches, or bake in a capital-return
+            # component the Cash Transaction line does not — the statement reading wins.
+            continue
         backfilled = False
         if natg == 0 and tk and date and _cdp_snapshot_month(date) in statements:
             # the sheet knows the per-unit rate but never filled the amount -> recover it
@@ -207,8 +285,11 @@ def cdp():
 # ---------- Moomoo (PDF) ----------
 def moomoo():
     seen = set()
-    # "<TKR> CASH DIVIDEND @ <CCY> <rate>" — currency + per-share rate stated explicitly
-    rx = re.compile(r"([A-Z0-9]{2,6})\s+CASH DIVIDEND\s+@\s+([A-Z]{3})\s*([\d.]+)?")
+    # "<TKR> CASH DIVIDEND @|AT <CCY> <rate>" — currency + per-share rate stated explicitly.
+    # Moomoo's own export has flip-flopped between "@" and "AT" (and upper/lower case) across
+    # statement months, so both are accepted; only the connector + "CASH DIVIDEND" wording is
+    # case-insensitive — the ticker and currency stay upper-case-only matches.
+    rx = re.compile(r"([A-Z0-9]{2,6})\s+(?i:CASH DIVIDEND\s+(?:@|AT))\s+([A-Z]{3})\s*([\d.]+)?")
     for f in sorted(glob.glob(os.path.join(DATA, "moomoo/moomoo_*.pdf"))):
         mo = re.search(r"(\d{6})", f).group(1); ym = f"{mo[:4]}-{mo[4:]}"
         txt = raw_text(f)
@@ -218,9 +299,13 @@ def moomoo():
             if not m: continue
             tkr = canon(m.group(1)); ccy = m.group(2)
             rate = num(m.group(3)) if m.group(3) else ""
-            # amount: nearest "Corporate Action  +<amt>" in surrounding lines
+            # amount: nearest "Corporate Action  +<amt>" at or after this line (same line
+            # when the two share it; a line or two later when a long rate — e.g. several
+            # tranches on one statement — pushes the rate text past the amount column).
+            # Forward-only: scanning backward too would, for two same-ticker tranches a
+            # few lines apart, grab the EARLIER tranche's amount for the second match.
             amt = 0.0
-            for j in range(max(0, i - 3), min(len(lines), i + 3)):
+            for j in range(i, min(len(lines), i + 3)):
                 a = re.search(r"Corporate Action\s+\+([\d,]+\.\d+)", lines[j])
                 if a: amt = num(a.group(1)); break
             if amt <= 0: continue
@@ -231,16 +316,23 @@ def moomoo():
             add(date=ym + "-15", account="Moomoo", market=mkt, ticker=tkr,
                 name=tkr, kind="cash", gross=amt, currency=ccy, rate=rate,
                 source="moomoo (cash dividend)")
-        # US dividends use "<TKR> ... SHARES DIVIDENDS" + "US Dividend Paying +<gross>"
-        rxus = re.compile(r"([A-Z]{1,5})\s+([\d.]+)\s+SHARES DIVIDENDS")
+        # US dividends: a "<TKR> <units> SHARES[ DIVIDENDS]" anchor is immediately followed by
+        # its own "US Dividend Paying"/"Corporate Action" entry carrying the signed amount — a
+        # receipt (+) is the dividend, the same-shaped "WITHHOLDING TAX" leg right after it (-)
+        # is skipped. Which label is used, and whether "DIVIDENDS" sits on the anchor line or
+        # wraps onto the amount line instead, has both varied across statement months; requiring
+        # the word "DIVIDEND" somewhere in the pair (rather than on a fixed line) keeps both eras
+        # working and keeps an unrelated SHARES-shaped corporate action (e.g. a split) unbooked.
+        rxus = re.compile(r"([A-Z]{1,5})\s+([\d.]+)\s+SHARES\b")
+        amtus = re.compile(r"(?:US Dividend Paying|Corporate Action)\s+([+-][\d,]+\.\d+)")
         for i, ln in enumerate(lines):
             mu = rxus.search(ln)
             if not mu: continue
-            tkr = canon(mu.group(1)); units = num(mu.group(2)); amt = 0.0
-            for j in range(max(0, i - 2), min(len(lines), i + 4)):
-                a = re.search(r"US Dividend Paying\s+\+([\d,]+\.\d+)", lines[j])  # positive = gross
-                if a: amt = num(a.group(1)); break
-            if amt <= 0: continue
+            tkr = canon(mu.group(1)); units = num(mu.group(2)); amt = 0.0; pair = ln
+            for j in range(i, min(len(lines), i + 4)):
+                a = amtus.search(lines[j])
+                if a: amt = num(a.group(1)); pair += lines[j]; break
+            if amt <= 0 or "DIVIDEND" not in pair.upper(): continue
             key = (ym, tkr, amt, "us")
             if key in seen: continue
             seen.add(key)
@@ -278,8 +370,9 @@ def apply_corrections():
 
 def main():
     DIV.clear()
-    # cdp() last: dedups vs the rest
-    tiger(); fsm(); moomoo(); cpf_srs(); cdp(); apply_corrections()
+    # cdp() last: dedups vs the rest (including cdp_statements(), so a tracker-sheet row
+    # for a month already read straight off a statement is skipped, not double-counted)
+    tiger(); fsm(); moomoo(); cpf_srs(); cdp_statements(); cdp(); apply_corrections()
     out = os.path.join(HERE, "dividends.csv")
     cols = ["date", "account", "market", "ticker", "name", "kind", "gross", "units", "rate", "currency", "source"]
     write_csv(out, cols, DIV, extrasaction="ignore")
