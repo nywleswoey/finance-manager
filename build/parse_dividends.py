@@ -108,6 +108,28 @@ def _cdp_date(d):
     dd = try_date(d, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d-%b-%Y", "%d/%m/%Y"))
     return dd.isoformat() if dd else None
 
+# build/ledger.csv (parse_cdp.py's statement snapshot-diff, via build_ledger.py — see the
+# `flat` Makefile target order) holds the CDP custody position. The tracker sheet stopped
+# having a human fill in its amount/quantity columns at some point (left '#N/A' or '0' while
+# still recording the per-unit rate); a row like that is backfilled from the statement
+# position instead of being dropped, so overridable in tests as pd.LEDGER_CSV.
+LEDGER_CSV = os.path.join(HERE, "ledger.csv")
+
+def _cdp_position_on(positions, ticker, iso_date):
+    """Shares of `ticker` the CDP account held on `iso_date` (ISO), from a cumulative
+    sum of every dated qty_signed up to and including that date."""
+    return sum(q for d, q in positions.get(ticker, ()) if d <= iso_date)
+
+def _load_cdp_positions():
+    pos = defaultdict(list)
+    if not os.path.exists(LEDGER_CSV):
+        return pos
+    for r in csv.DictReader(open(LEDGER_CSV)):
+        if r["account"] != "CDP":
+            continue
+        pos[r["ticker"]].append((r["date"], num(r["qty_signed"])))
+    return pos
+
 def cdp():
     """CDP cash dividends from the maintained tracker. The sheet is broader than CDP —
     it also lists holdings tracked by broker statements (Tiger/FSM/SRS), and keeps tracking
@@ -125,16 +147,24 @@ def cdp():
     def tracked_elsewhere(tk, iso):
         dx = _dt.date.fromisoformat(iso)
         return any(abs((dx - e).days) <= 7 for e in elsewhere.get(tk, []))
+    positions = _load_cdp_positions()
     for r in csv.reader(open(p)):
         if len(r) < 8 or r[0].strip() in ("", "Date", "﻿Date"):
             continue
         d, _yr, _mo, name, nat, sgd, qty, rate = r[:8]
         name = name.strip()
         natg, sgdg = num(nat), num(sgd)
-        if natg == 0 and sgdg == 0:                       # declared but no amount -> skip
-            continue
         tk = cdp_dividend_ticker(name)
         date = _cdp_date(d)
+        if natg == 0 and sgdg == 0 and tk and date:
+            # the sheet knows the per-unit rate but never filled the amount -> recover it
+            # from the statement-derived custody position instead of dropping the payout.
+            held = _cdp_position_on(positions, tk, date)
+            rate_num = num(rate)
+            if held > 0 and rate_num:
+                natg, qty = round(rate_num * held, 2), held
+        if natg == 0 and sgdg == 0:                       # still nothing -> declared but unfilled
+            continue
         if tk is None or date is None:
             continue
         if tracked_elsewhere(tk, date):                   # already in a broker statement -> skip

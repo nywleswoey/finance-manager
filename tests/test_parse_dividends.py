@@ -70,7 +70,11 @@ CDP_HEADER = ["Date", "Year", "Month", "Stock Name", "Dividends (native)", "Divi
               "Quantity", "Dividend (rate)"]
 
 
-def _cdp(tmp_path, monkeypatch, sheet, already=()):
+LEDGER_HEADER = ["date", "account", "market", "ticker", "asset_type", "action",
+                  "qty_signed", "price", "amount", "currency", "fees", "source", "raw"]
+
+
+def _cdp(tmp_path, monkeypatch, sheet, already=(), ledger=None):
     (tmp_path / "cdp-stocks").mkdir()
     with open(tmp_path / "cdp-stocks" / "dividends.csv", "w", newline="") as fh:
         w = csv.writer(fh)
@@ -78,6 +82,16 @@ def _cdp(tmp_path, monkeypatch, sheet, already=()):
         w.writerows(sheet)
     monkeypatch.setattr(pd, "DATA", str(tmp_path))
     monkeypatch.setattr(pd, "DIV", [dict(x) for x in already])
+    # ledger.csv is a real build artifact (build/ledger.csv) that would otherwise leak
+    # into these tests from a developer's own `make flat` run; point it at an explicit,
+    # by-default absent, tmp_path file so the backfill only fires when a test asks for it.
+    ledger_path = tmp_path / "ledger.csv"
+    if ledger is not None:
+        with open(ledger_path, "w", newline="") as fh:
+            w = csv.writer(fh)
+            w.writerow(LEDGER_HEADER)
+            w.writerows(ledger)
+    monkeypatch.setattr(pd, "LEDGER_CSV", str(ledger_path))
     pd.cdp()
     return [(d["ticker"], d["date"], d["gross"]) for d in pd.DIV
             if d["source"] == "cdp (cash dividend)"]
@@ -110,3 +124,55 @@ def test_cdp_div_fix_drops_and_rescales_the_named_rows(tmp_path, monkeypatch):
 def test_a_zero_amount_row_is_declared_but_unpaid(tmp_path, monkeypatch):
     assert _cdp(tmp_path, monkeypatch, [
         ["17-May-24", "2024", "5", "DBS", "0", "0", "300", "0.5"]]) == []
+
+
+# ---------- CDP tracker: backfill from the statement-derived custody position ----------
+# From late 2023 the sheet stopped having its amount/quantity columns filled by hand (left
+# "#N/A" or "0" while the per-unit rate kept being recorded) — the bug this reproduces and
+# fixes. The rate x the CDP position in build/ledger.csv (via LEDGER_CSV) recovers the gross.
+
+def test_an_unfilled_amount_is_backfilled_from_the_cdp_position(tmp_path, monkeypatch):
+    ledger = [
+        ["2021-03-28", "CDP", "SG", "D05", "stock", "open", "300", "", "", "", "", "x", "DBS"],
+    ]
+    got = _cdp(tmp_path, monkeypatch, [
+        ["17-May-24", "2024", "5", "DBS", "#N/A", "#N/A", "#N/A", "0.5"],
+    ], ledger=ledger)
+    assert got == [("D05", "2024-05-17", 150.0)]
+    assert next(d for d in pd.DIV if d["ticker"] == "D05")["currency"] == "SGD"
+
+
+def test_backfill_sums_every_ledger_leg_up_to_the_pay_date(tmp_path, monkeypatch):
+    """Two statement legs (an opening balance, then a later buy) must both count toward
+    the position on the pay date; a leg dated after the pay date must not."""
+    ledger = [
+        ["2021-03-28", "CDP", "SG", "D05", "stock", "open", "200", "", "", "", "", "x", "DBS"],
+        ["2023-03-28", "CDP", "SG", "D05", "stock", "buy", "100", "", "", "", "", "x", "DBS"],
+        ["2024-06-28", "CDP", "SG", "D05", "stock", "buy", "500", "", "", "", "", "x", "DBS"],
+    ]
+    got = _cdp(tmp_path, monkeypatch, [
+        ["17-May-24", "2024", "5", "DBS", "0", "0", "0", "0.5"],
+    ], ledger=ledger)
+    assert got == [("D05", "2024-05-17", 150.0)]        # (200 + 100) x 0.5, not + the June 500
+
+
+def test_backfill_keeps_the_native_fx_currency(tmp_path, monkeypatch):
+    """SET is EUR-denominated (CDP_FCCY); a backfilled gross is still the native amount,
+    not converted to SGD."""
+    ledger = [
+        ["2021-03-28", "CDP", "SG", "SET", "stock", "open", "1400", "", "", "", "", "x",
+         "Stoneweg European Trust EUR"],
+    ]
+    got = _cdp(tmp_path, monkeypatch, [
+        ["28-Mar-24", "2024", "3", "Stoneweg European Trust EUR", "#N/A", "#N/A", "#N/A",
+         "0.07903"],
+    ], ledger=ledger)
+    assert got == [("SET", "2024-03-28", 110.64)]       # 1400 x 0.07903, rounded
+    assert next(d for d in pd.DIV if d["ticker"] == "SET")["currency"] == "EUR"
+
+
+def test_backfill_does_not_fire_without_a_held_position(tmp_path, monkeypatch):
+    """No CDP leg at all (position 0) -> still declared-but-unfilled, same as before."""
+    assert _cdp(tmp_path, monkeypatch, [
+        ["17-May-24", "2024", "5", "DBS", "#N/A", "#N/A", "#N/A", "0.5"],
+    ], ledger=[]) == []
