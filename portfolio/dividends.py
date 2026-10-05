@@ -79,7 +79,7 @@ def details(s=None):
     with session_scope(s) as s:
         fx = fx_map(s)
         divs = fetch_dicts(s,
-            "SELECT d.id, d.pay_date, a.id account_id, a.name account, a.funding_bucket bucket, "
+            "SELECT d.id, d.ex_date, d.pay_date, a.id account_id, a.name account, a.funding_bucket bucket, "
             "d.security_id, COALESCE(sec.name, d.source_file) name, sec.canonical_ticker ticker, "
             "d.gross, d.currency, d.amount_per_unit declared_rate, d.units stated_units "
             "FROM dividend d JOIN account a ON a.id=d.account_id "
@@ -115,7 +115,7 @@ def details(s=None):
             gross_sgd = None
             flags.append(f"no FX rate for {d['currency']}")
         out.append({
-            "id": d["id"], "pay_date": d["pay_date"], "account": d["account"],
+            "id": d["id"], "ex_date": d["ex_date"], "pay_date": d["pay_date"], "account": d["account"],
             "name": d["name"], "ticker": d["ticker"], "gross": gross,
             "gross_sgd": gross_sgd, "currency": d["currency"],
             "qty": qty, "qty_source": ("statement" if stated else ("ledger" if held else None)),
@@ -247,7 +247,9 @@ def projected(s=None, today=None):
     Separately, `unreceived_last_year()`'s `overdue` rows — a last-year payment whose anniversary
     is already more than DRIFT_DAYS behind `today` with no match this year — are real money the
     projection isn't owed to add (the pattern doesn't say it recurs that late), but almost always
-    did happen and is just missing from the ledger. Those surface as each holding's `overdue`
+    did happen and is just missing from the ledger. Each is priced at the units held on its
+    date this year (the anniversary of last year's ex_date, else of its pay_date, replayed via
+    `units_at`) and dropped when nothing was held then. Those surface as each holding's `overdue`
     list (and the top-level `overdue_sgd` / `overdue_count`) WITHOUT being added to
     `expected_remaining_sgd` or `projected_total_sgd` — an estimate of money already paid in
     reality that this app hasn't ingested yet, not a projection of money still to come."""
@@ -295,6 +297,12 @@ def projected(s=None, today=None):
 
         received_total = annual(s)["totals"].get(yr, 0.0)   # the EXACT figure the tab shows
 
+        ledger = defaultdict(list)
+        for t, td, q in s.execute(text(
+                "SELECT sec.canonical_ticker, t.trade_date, t.qty_signed FROM txn t "
+                "JOIN security sec ON sec.id=t.security_id")).all():
+            ledger[t].append((td, float(q)))
+
     paid_this_year = {t: {r["pay_date"] for r in rows} for t, rows in this_year.items()}
     announced = defaultdict(list)
     for r in announced_rows:
@@ -315,7 +323,11 @@ def projected(s=None, today=None):
             still, overdue = unreceived_last_year(last_year.get(ticker) or [],
                                                    paid_this_year.get(ticker, set()), today)
             for r in overdue:
-                amt_sgd, flag = _sgd_or_none(r["rate"] * units, r["currency"], fx)
+                held = units_at(_anniversary(r.get("ex_date") or r["pay_date"], yr),
+                                ledger.get(ticker, []))
+                if held <= 1e-6:
+                    continue
+                amt_sgd, flag = _sgd_or_none(r["rate"] * held, r["currency"], fx)
                 overdue_detail.append({"expected_date": r["expected_date"], "rate": r["rate"],
                                         "currency": r["currency"],
                                         "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,

@@ -131,9 +131,9 @@ class TestProjected(pgtest.Case):
         self.s.add(Txn(account_id=account, security_id=sid, trade_date=day, action="buy",
                        qty_signed=Decimal(str(qty)), dedup_hash=f"t{self._n}"))
 
-    def _div(self, sid, pay, gross, *, rate=None, units=None, ccy="SGD", account=1):
+    def _div(self, sid, pay, gross, *, rate=None, units=None, ccy="SGD", account=1, ex=None):
         self._n += 1
-        self.s.add(Dividend(account_id=account, security_id=sid, pay_date=pay, kind="cash",
+        self.s.add(Dividend(account_id=account, security_id=sid, ex_date=ex, pay_date=pay, kind="cash",
                             gross=Decimal(str(gross)),
                             amount_per_unit=None if rate is None else Decimal(str(rate)),
                             units=None if units is None else Decimal(str(units)),
@@ -330,10 +330,9 @@ class TestProjected(pgtest.Case):
                        "overdue_sgd": 0.0, "overdue_count": 0, "holdings": []}
 
     def test_a_payment_past_the_drift_window_is_overdue_not_dropped(self):
-        # same scenario as test_last_years_payments_already_past_this_year_are_not_projected:
         # the ledger never got a 2026 row for either last-year payment. That shouldn't vanish —
         # it's very likely real money already paid and just not ingested yet.
-        self._buy(1, D(2026, 8, 1), 1000)
+        self._buy(1, D(2024, 1, 1), 1000)
         self._div(1, D(2025, 5, 12), 500, rate=0.5, units=1000)
         self._div(1, D(2025, 7, 20), 600, rate=0.6, units=1000)
         self.s.commit()
@@ -347,8 +346,31 @@ class TestProjected(pgtest.Case):
         assert out["overdue_sgd"] == 1100.0                        # 0.5x1000 + 0.6x1000
         assert out["overdue_count"] == 2
 
+    def test_a_holding_bought_after_the_expected_date_is_not_overdue(self):
+        self._buy(1, D(2026, 8, 1), 1000)                           # bought after both anniversaries
+        self._div(1, D(2025, 5, 12), 500, rate=0.5, units=1000)
+        self._div(1, D(2025, 7, 20), 600, rate=0.6, units=1000)
+        self.s.commit()
+
+        out = self._projected()
+        assert self._holdings(out)["D05"]["overdue"] == []
+        assert out["overdue_sgd"] == 0.0
+        assert out["overdue_count"] == 0
+
+    def test_an_overdue_payment_is_priced_at_the_units_held_on_its_ex_date_anniversary(self):
+        self._buy(1, D(2024, 1, 1), 400)
+        self._buy(1, D(2026, 7, 10), 600)                           # after ex anniversary, before pay
+        self._div(1, D(2025, 7, 20), 240, rate=0.6, units=400, ex=D(2025, 7, 1))
+        self.s.commit()
+
+        out = self._projected()
+        h = self._holdings(out)["D05"]
+        assert [(d["expected_date"], d["amount_sgd"]) for d in h["overdue"]] == \
+            [(D(2026, 7, 20), 240.0)]                               # 0.6 x 400 held then, not 1000
+        assert out["overdue_sgd"] == 240.0
+
     def test_an_overdue_payment_does_not_affect_projected_total(self):
-        self._buy(1, D(2026, 8, 1), 1000)
+        self._buy(1, D(2024, 1, 1), 1000)
         self._div(1, D(2025, 7, 20), 600, rate=0.6, units=1000)
         self.s.commit()
 
