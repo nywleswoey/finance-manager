@@ -206,7 +206,9 @@ def unreceived_last_year(last_year_rows, paid_dates, today):
     holding wasn't projected to still owe it by pattern alone, but the payment almost always still
     happened — it's just missing from this app's ledger (the statement hasn't been imported yet).
     That gap is real money the captain can't see, so it comes back as `overdue` (each row carries
-    `expected_date`, the anniversary) rather than being dropped silently."""
+    `expected_date`, the anniversary) rather than being dropped silently. `still_to_come` rows
+    carry that same `expected_date` — so the captain can tell which month a projected payment is
+    expected in, not just which holding."""
     payments = _payments(last_year_rows)
     anniversaries = [_anniversary(r["pay_date"], today.year) for r in payments]
     pairs = sorted((abs((p - a).days), i, p) for i, a in enumerate(anniversaries)
@@ -218,7 +220,7 @@ def unreceived_last_year(last_year_rows, paid_dates, today):
             used.add(p)
     earliest = today - dt.timedelta(days=DRIFT_DAYS)
     unmatched = [(r, a) for i, (r, a) in enumerate(zip(payments, anniversaries)) if i not in matched]
-    still_to_come = [r for r, a in unmatched if a >= earliest]
+    still_to_come = [{**r, "expected_date": a} for r, a in unmatched if a >= earliest]
     overdue = [{**r, "expected_date": a} for r, a in unmatched if a < earliest]
     return still_to_come, overdue
 
@@ -241,8 +243,10 @@ def projected(s=None, today=None):
 
     Every holding's own breakdown is returned (not just the totals) so the headline figure is
     auditable: each is `received_sgd` + `expected_remaining_sgd`, and `detail` lists the
-    underlying announced/last-year rows the remainder was built from. `today` defaults to
-    `sg_today()`.
+    underlying announced/last-year rows the remainder was built from — a "last_year_pattern" row
+    carries `expected_date`, last year's payment replayed onto this year (the same anniversary
+    `unreceived_last_year()` uses), so the captain can tell which month it's expected in; an
+    "announced" row already has its own `pay_date`/`ex_date`. `today` defaults to `sg_today()`.
 
     Separately, `unreceived_last_year()`'s `overdue` rows — a last-year payment whose anniversary
     is already more than DRIFT_DAYS behind `today` with no match this year — are real money the
@@ -347,8 +351,8 @@ def projected(s=None, today=None):
                 for r in still:
                     amt_sgd, flag = _sgd_or_none(r["rate"] * units, r["currency"], fx)
                     remaining_sgd += amt_sgd or 0.0
-                    detail.append({"pay_date": r["pay_date"], "rate": r["rate"],
-                                   "currency": r["currency"],
+                    detail.append({"pay_date": r["pay_date"], "expected_date": r["expected_date"],
+                                   "rate": r["rate"], "currency": r["currency"],
                                    "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
                                    **({"flag": flag} if flag else {})})
         full_remaining[ticker] = remaining_sgd

@@ -205,6 +205,7 @@ class TestProjected(pgtest.Case):
         h = self._holdings(self._projected())["D05"]
         assert h["basis"] == "last_year_pattern"
         assert [d["pay_date"] for d in h["detail"]] == [D(2025, 11, 20)]
+        assert [d["expected_date"] for d in h["detail"]] == [D(2026, 11, 20)]  # replayed onto this year
         assert h["expected_remaining_sgd"] == 600.0
 
     def test_a_payment_held_in_two_accounts_is_projected_once_at_total_units(self):
