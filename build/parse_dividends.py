@@ -116,6 +116,24 @@ def _cdp_date(d):
 # position instead of being dropped, so overridable in tests as pd.LEDGER_CSV.
 LEDGER_CSV = os.path.join(HERE, "ledger.csv")
 
+def _cdp_statement_months():
+    """YYYY-MM of every CDP statement PDF on disk (the months parse_cdp.py snapshots)."""
+    months = set()
+    for f in glob.glob(os.path.join(DATA, "cdp-statements", "*.pdf")):
+        m = re.search(r"(\d{4})(\d{2})", os.path.basename(f))
+        if m:
+            months.add(f"{m.group(1)}-{m.group(2)}")
+    return months
+
+def _cdp_snapshot_month(iso_date):
+    """The statement month whose -28 ledger leg is the latest on or before `iso_date`.
+    Across a statement gap that leg lumps every change in the gap, so the position on a
+    date whose snapshot month has no statement is stale and must not be backfilled."""
+    dd = _dt.date.fromisoformat(iso_date)
+    if dd.day < 28:
+        dd = dd.replace(day=1) - _dt.timedelta(days=1)
+    return f"{dd.year:04d}-{dd.month:02d}"
+
 def _cdp_position_on(positions, ticker, iso_date):
     """Shares of `ticker` the CDP account held on `iso_date` (ISO), from a cumulative
     sum of every dated qty_signed up to and including that date."""
@@ -137,7 +155,9 @@ def cdp():
     a holding after it's transferred to another custodian. To avoid double-counting, a row
     with a sheet-stated amount is emitted only when NO broker-statement dividend exists for
     the same ticker within ±7 days (those are already ingested). A backfilled row is exempt:
-    its gross is rate x the CDP-only position, so it can't overlap another broker's payout. Runs LAST so DIV holds the other sources to dedup against."""
+    its gross is rate x the CDP-only position, so it can't overlap another broker's payout.
+    Backfill only uses a position backed by a statement (see _cdp_snapshot_month). Runs
+    LAST so DIV holds the other sources to dedup against."""
     p = os.path.join(DATA, "cdp-stocks", "dividends.csv")
     if not os.path.exists(p):
         return
@@ -150,6 +170,7 @@ def cdp():
         dx = _dt.date.fromisoformat(iso)
         return any(abs((dx - e).days) <= 7 for e in elsewhere.get(tk, []))
     positions = _load_cdp_positions()
+    statements = _cdp_statement_months()
     for r in csv.reader(open(p)):
         if len(r) < 8 or r[0].strip() in ("", "Date", "﻿Date"):
             continue
@@ -159,7 +180,7 @@ def cdp():
         tk = cdp_dividend_ticker(name)
         date = _cdp_date(d)
         backfilled = False
-        if natg == 0 and sgdg == 0 and tk and date:
+        if natg == 0 and tk and date and _cdp_snapshot_month(date) in statements:
             # the sheet knows the per-unit rate but never filled the amount -> recover it
             # from the statement-derived custody position instead of dropping the payout.
             held = _cdp_position_on(positions, tk, date)
