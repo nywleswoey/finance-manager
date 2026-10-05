@@ -244,6 +244,15 @@ class TestProjected(pgtest.Case):
         assert [d["pay_date"] for d in h["detail"]] == [D(2026, 10, 28)]
         assert h["expected_remaining_sgd"] == 500.0
 
+    def test_announced_detail_is_earliest_payment_first(self):
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._announce(1, ex=D(2026, 12, 1), pay=D(2026, 12, 20), rate=0.7, ccy="SGD")
+        self._announce(1, ex=D(2026, 11, 1), pay=D(2026, 11, 20), rate=0.5, ccy="SGD")
+        self.s.commit()
+
+        h = self._holdings(self._projected())["D05"]
+        assert [d["pay_date"] for d in h["detail"]] == [D(2026, 11, 20), D(2026, 12, 20)]
+
     def test_an_announced_payment_already_received_is_not_projected_again(self):
         self._buy(1, D(2024, 1, 1), 1000)
         self._div(1, TODAY, 500, rate=0.5, units=1000)

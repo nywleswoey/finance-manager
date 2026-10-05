@@ -6,7 +6,7 @@ import { Cards, RowCard, usePhone } from "../../cards.jsx";
 const BUCKET_LABEL = { cash: "Cash", srs: "SRS", cpf: "CPF" };
 const BASIS_LABEL = { announced: "SGX announced", last_year_pattern: "last year's pattern", none: "—", "not held": "not held", unmapped: "unmapped" };
 // A detail row's own date if it has one (announced), else the anniversary `expected_date`
-// unreceived_last_year() replayed onto this year (last_year_pattern / overdue) — either way,
+// unreceived_last_year() replayed onto this year (last_year_pattern) — either way,
 // the month a reader checks the statement for.
 const expectedMonth = (d) => monthYear(Date.parse(d.expected_date || d.pay_date || d.ex_date));
 
@@ -152,8 +152,8 @@ export default function Dividends() {
                           first to go check the statement. */}
                       {h.overdue?.length > 0 &&
                         <span className="pill" style={{ marginLeft: 6, color: "var(--warn)" }}
-                              title={h.overdue.map((o) => `${expectedMonth(o)}: ${money(o.amount_sgd, "SGD", 2)}`).join("; ")}>
-                          overdue {expectedMonth(h.overdue[0])} · {sgd(h.overdue.reduce((t, o) => t + (o.amount_sgd || 0), 0))}
+                              title={h.overdue.map((o) => `${o.expected_date}: ${money(o.amount_sgd, "SGD", 2)}`).join("; ")}>
+                          overdue {h.overdue[0].expected_date} · {sgd(h.overdue.reduce((t, o) => t + (o.amount_sgd || 0), 0))}
                         </span>}
                     </td>
                     <td>{h.units == null ? "—" : fmt(h.units, 0)}</td>

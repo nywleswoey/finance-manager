@@ -285,7 +285,8 @@ def projected(s=None, today=None):
             "SELECT sec.canonical_ticker ticker, da.ex_date, da.pay_date, "
             "da.amount_per_unit rate, da.currency FROM dividend_announcement da "
             "JOIN security sec ON sec.id=da.security_id "
-            "WHERE COALESCE(da.pay_date, da.ex_date) BETWEEN :today AND :year_end",
+            "WHERE COALESCE(da.pay_date, da.ex_date) BETWEEN :today AND :year_end "
+            "ORDER BY COALESCE(da.pay_date, da.ex_date)",
             {"today": today, "year_end": year_end})
 
         # per-payment rate (declared, else gross/units-held-then) — details() already derives
