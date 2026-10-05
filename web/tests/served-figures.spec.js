@@ -36,16 +36,18 @@ test.describe("Portfolio › Dividends", () => {
       await expect(title).toContainText(asSgd(det.flagged_sgd));
     });
 
-  test("the Expected card's remaining cell titles each payment's own expected month",
+  test("the Expected card's remaining cell shows each payment's own expected month inline",
     async ({ page, baseURL }) => {
       // `expected_date` is the anniversary unreceived_last_year() replayed onto this year —
-      // a reader hovers the figure to see which month to go check the statement for.
+      // visible at a glance (not only on hover) so a reader can verify which month to check
+      // the statement for.
       await openView(page, baseURL, "Portfolio › Dividends");
       const expectedCard = page.locator(".card").filter({ hasText: /Expected/ }).first();
       const row = expectedCard.locator("tbody tr").filter({ hasText: "D05" });
-      const title = await row.locator("td").nth(3).getAttribute("title");
+      const cell = row.locator("td").nth(3);
 
-      expect(title).toContain("Nov 2026");   // D05's detail: 2025-11-24 replayed onto 2026-11-24
+      await expect(cell).toContainText("Nov 2026");   // D05's detail: 2025-11-24 → 2026-11-24
+      await expect(cell).toHaveAttribute("title", /Nov 2026/);
     });
 
   test("the YoY row is the server's, year by year", async ({ page, baseURL }) => {

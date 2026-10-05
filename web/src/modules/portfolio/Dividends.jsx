@@ -158,12 +158,16 @@ export default function Dividends() {
                     </td>
                     <td>{h.units == null ? "—" : fmt(h.units, 0)}</td>
                     <td>{money(h.received_sgd, "SGD", 2)}</td>
-                    {/* The month each detail row (last year's pattern, replayed onto this year,
-                        or an SGX-announced date) is expected in — so a reader can go check the
-                        statement for that month rather than taking the total on faith. */}
+                    {/* The earliest detail row's month (last year's pattern, replayed onto this
+                        year, or an SGX-announced date) shown inline — at a glance, not just on
+                        hover — with the rest in the tooltip when there's more than one. */}
                     <td className={h.expected_remaining_sgd ? "pos" : "mut"}
                         title={h.detail.map((d) => `${expectedMonth(d)}: ${money(d.amount_sgd, "SGD", 2)}`).join("; ")}>
                       {money(h.expected_remaining_sgd, "SGD", 2)}
+                      {h.detail.length > 0 &&
+                        <span className="mut" style={{ fontSize: ".85em", marginLeft: 4 }}>
+                          ({expectedMonth(h.detail[0])})
+                        </span>}
                     </td>
                     <td>{money(h.projected_total_sgd, "SGD", 2)}</td>
                     <td className="l mut">{BASIS_LABEL[h.basis] || h.basis}</td>
