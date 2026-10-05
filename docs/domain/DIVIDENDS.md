@@ -179,7 +179,8 @@ of the year's expected payments. Per holding, in order of preference:
    more than 45 days before today — so a monthly payer's receipt cancels exactly one payment, a
    payment running late is kept, and one further behind is not projected (it is **overdue**,
    below). Each row's rate (declared, else gross/units-held-then — reuses `details()`'s per-row
-   computation rather than re-replaying the ledger) × TODAY's units.
+   computation rather than re-replaying the ledger) × TODAY's units. Each `detail` row carries
+   `expected_date` (the anniversary), so the card can show the month to check the statement for.
 3. **none** — neither exists (e.g. a security that already paid its only distribution for the
    year, or pays no cash dividend at all).
 

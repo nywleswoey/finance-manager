@@ -49,6 +49,12 @@ class TestUnreceivedLastYear(unittest.TestCase):
         still, _ = dividends.unreceived_last_year(rows, paid, self.TODAY)
         return [r["pay_date"] for r in still]
 
+    def test_a_still_to_come_payment_carries_its_expected_date(self):
+        # the anniversary replayed onto this year, so a reader can tell which month it's due.
+        rows = [{"pay_date": D(2025, 9, 28), "rate": 0.5}]
+        still, _ = dividends.unreceived_last_year(rows, set(), self.TODAY)
+        self.assertEqual([r["expected_date"] for r in still], [D(2026, 9, 28)])
+
     def _overdue(self, last_year, paid):
         rows = [{"pay_date": d, "rate": r} for d, r in last_year]
         _, overdue = dividends.unreceived_last_year(rows, paid, self.TODAY)

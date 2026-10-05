@@ -19,19 +19,22 @@
      "pay_date": "2025-11-24",
      "rate": 0.15,
      "currency": "SGD",
-     "amount_sgd": 643.5
+     "amount_sgd": 643.5,
+     "expected_date": "2026-11-24"
     },
     {
      "pay_date": "2025-11-24",
      "rate": 0.6,
      "currency": "SGD",
-     "amount_sgd": 2574.0
+     "amount_sgd": 2574.0,
+     "expected_date": "2026-11-24"
     },
     {
      "pay_date": "2025-11-24",
      "rate": 0.75,
      "currency": "SGD",
-     "amount_sgd": 3217.5
+     "amount_sgd": 3217.5,
+     "expected_date": "2026-11-24"
     }
    ]
   },
@@ -49,19 +52,22 @@
      "pay_date": "2025-12-24",
      "rate": 0.01998,
      "currency": "SGD",
-     "amount_sgd": 855.14
+     "amount_sgd": 855.14,
+     "expected_date": "2026-12-24"
     },
     {
      "pay_date": "2025-12-24",
      "rate": 0.00442,
      "currency": "SGD",
-     "amount_sgd": 189.18
+     "amount_sgd": 189.18,
+     "expected_date": "2026-12-24"
     },
     {
      "pay_date": "2025-12-24",
      "rate": 0.0244,
      "currency": "SGD",
-     "amount_sgd": 1044.32
+     "amount_sgd": 1044.32,
+     "expected_date": "2026-12-24"
     }
    ]
   },
@@ -79,19 +85,22 @@
      "pay_date": "2025-12-04",
      "rate": 0.0154,
      "currency": "SGD",
-     "amount_sgd": 49.28
+     "amount_sgd": 49.28,
+     "expected_date": "2026-12-04"
     },
     {
      "pay_date": "2025-12-04",
      "rate": 0.0044,
      "currency": "SGD",
-     "amount_sgd": 14.08
+     "amount_sgd": 14.08,
+     "expected_date": "2026-12-04"
     },
     {
      "pay_date": "2025-12-04",
      "rate": 0.0003,
      "currency": "SGD",
-     "amount_sgd": 0.96
+     "amount_sgd": 0.96,
+     "expected_date": "2026-12-04"
     }
    ]
   },

@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
-import { get, fmt, sgd, money } from "../../api.js";
+import { get, fmt, sgd, money, monthYear } from "../../api.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
 const BUCKET_LABEL = { cash: "Cash", srs: "SRS", cpf: "CPF" };
 const BASIS_LABEL = { announced: "SGX announced", last_year_pattern: "last year's pattern", none: "—", "not held": "not held", unmapped: "unmapped" };
+// A detail row's own date if it has one (announced), else the anniversary `expected_date`
+// unreceived_last_year() replayed onto this year (last_year_pattern) — either way,
+// the month a reader checks the statement for.
+const expectedMonth = (d) => monthYear(Date.parse(d.expected_date || d.pay_date || d.ex_date));
 
 export default function Dividends() {
   const [ann, setAnn] = useState(null);
@@ -154,7 +158,17 @@ export default function Dividends() {
                     </td>
                     <td>{h.units == null ? "—" : fmt(h.units, 0)}</td>
                     <td>{money(h.received_sgd, "SGD", 2)}</td>
-                    <td className={h.expected_remaining_sgd ? "pos" : "mut"}>{money(h.expected_remaining_sgd, "SGD", 2)}</td>
+                    {/* The earliest detail row's month (last year's pattern, replayed onto this
+                        year, or an SGX-announced date) shown inline — at a glance, not just on
+                        hover — with the rest in the tooltip when there's more than one. */}
+                    <td className={h.expected_remaining_sgd ? "pos" : "mut"}
+                        title={h.detail.map((d) => `${expectedMonth(d)}: ${money(d.amount_sgd, "SGD", 2)}`).join("; ")}>
+                      {money(h.expected_remaining_sgd, "SGD", 2)}
+                      {h.detail.length > 0 &&
+                        <span className="mut" style={{ fontSize: ".85em", marginLeft: 4 }}>
+                          ({expectedMonth(h.detail[0])})
+                        </span>}
+                    </td>
                     <td>{money(h.projected_total_sgd, "SGD", 2)}</td>
                     <td className="l mut">{BASIS_LABEL[h.basis] || h.basis}</td>
                   </tr>
