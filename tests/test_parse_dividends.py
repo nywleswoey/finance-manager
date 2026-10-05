@@ -1,8 +1,11 @@
-"""build/parse_dividends.py — Tiger's flex currency column, ticker normalisation and CDP dates.
+"""build/parse_dividends.py — Tiger's flex currency column, ticker normalisation, CDP dates,
+the CDP statement/tracker split and the Moomoo PDF dividend regexes.
 
 Gates `tiger_currency`, `cdp()` (the ±7-day dedup and CDP_DIV_FIX), `norm` (bare exchange
-code, then the canonical rename) and `_cdp_date` (Excel serials counted from 1899-12-30, the
-sheet's string formats, None when nothing parses).
+code, then the canonical rename), `_cdp_date` (Excel serials counted from 1899-12-30, the
+sheet's string formats, None when nothing parses), `cdp_statements()` (the Cash Transaction
+line regex and issuer-name stripping) and `moomoo()` (the SG "@"/"AT" dividend line and the
+US SHARES-anchor + signed-amount pairing).
 The script is loaded the way it runs (tests/buildscript.py), and `main()` is not executed: that
 reads statement files and writes build/dividends.csv.
 
@@ -215,3 +218,244 @@ def test_a_filled_sgd_amount_with_no_native_amount_is_still_backfilled(tmp_path,
         statements=["202406", "202603"])
     assert got == [("SET", "2026-03-31", 95.72)]        # 1400 x 0.06837
     assert next(d for d in pd.DIV if d["source"] == "cdp (cash dividend)")["currency"] == "EUR"
+
+
+# ---------- CDP tracker: a row cdp_statements() already read is never doubled ----------
+# cdp_statements() isn't called by the `_cdp` fixture (it only exercises cdp()), so these
+# feed a fake "cdp (cash dividend, statement)" row through `already`, exactly the shape
+# cdp_statements() would have added to DIV ahead of cdp() in main().
+
+def test_a_tracker_row_matching_a_statement_row_is_skipped_but_others_are_kept(
+        tmp_path, monkeypatch):
+    stmt = {"date": "2026-05-22", "ticker": "Q01", "source": "cdp (cash dividend, statement)"}
+    got = _cdp(tmp_path, monkeypatch, [
+        ["22-May-26", "2026", "5", "QAF", "680", "680", "17000", "0.04"],       # same payout
+        ["15-May-26", "2026", "5", "Hock Lian Seng", "7.88", "7.88", "700", "0.01125"],
+    ], already=[stmt])
+    assert got == [("J2T", "2026-05-15", 7.88)]
+
+
+def test_a_tracker_row_dated_by_ex_date_is_still_matched_to_the_statement_pay_date(
+        tmp_path, monkeypatch):
+    """Real data: the sheet dates Asian Pay TV's 2019 payout 20-Jun-19 while the statement's
+    Cash Transaction line pays it 28/06/2019 — 8 days apart, still the same payout."""
+    stmt = {"date": "2019-06-28", "ticker": "S7OU", "source": "cdp (cash dividend, statement)"}
+    got = _cdp(tmp_path, monkeypatch, [
+        ["20-Jun-19", "2019", "6", "Asian Pay Tv Tr", "324", "324", "108000", "0.003"],
+    ], already=[stmt])
+    assert got == []
+
+
+def test_a_statement_row_skips_the_trackers_backfill_too(tmp_path, monkeypatch):
+    """Real CDP data shows the sheet's one blended per-unit rate can cover two same-day
+    REIT distribution tranches (so its rate x position backfill overstates or splits the
+    payout differently from the statement). The statement reading wins outright, even over
+    a backfill that would otherwise be exempt from the broker-statement dedup."""
+    stmt = {"date": "2025-03-28", "ticker": "SET", "source": "cdp (cash dividend, statement)"}
+    got = _cdp(tmp_path, monkeypatch, [
+        ["28-Mar-25", "2025", "3", SET_NAME, "#N/A", "#N/A", "#N/A", "0.07903"],
+    ], already=[stmt], ledger=[_leg("2024-06-28", "SET", 1400, SET_NAME)],
+        statements=["202406", "202503"])
+    assert got == []
+
+
+# ---------- CDP cash dividends straight from the statement PDF ----------
+# cdp_statements() is not reached by the `_cdp`/`_leg` fixtures above (those only exercise
+# cdp()); `raw_text` is patched directly here, the same way tests/test_parse_moomoo.py gates
+# build/parse_moomoo.py. The path only needs a real file on disk for glob() to find — its
+# bytes are never read.
+
+def _cdp_statements(tmp_path, monkeypatch, text):
+    (tmp_path / "cdp-statements").mkdir()
+    (tmp_path / "cdp-statements" / "202605.pdf").write_bytes(b"")
+    monkeypatch.setattr(pd, "DATA", str(tmp_path))
+    monkeypatch.setattr(pd, "DIV", [])
+    monkeypatch.setattr(pd, "raw_text", lambda path: text)
+    pd.cdp_statements()
+    return [(d["ticker"], d["date"], d["gross"], d["currency"], d["units"], d["rate"])
+            for d in pd.DIV]
+
+
+CASH_TXN_HEADER = " Cash Transaction\n\nDate            Description                            Amount         Paid\n"
+CASH_TXN_FOOTER = "\n Your Securities Account is Linked To\n"
+
+
+def test_cdp_statement_issuer_strips_the_kind_suffix():
+    assert pd.cdp_statement_issuer("OCBC BANK Final Cash Dividend") == "OCBC BANK"
+    assert pd.cdp_statement_issuer("OCBC BANK Special Cash Dividend") == "OCBC BANK"
+    assert pd.cdp_statement_issuer("SASSEUR REIT Cash Dividend") == "SASSEUR REIT"       # no qualifier
+    assert pd.cdp_statement_issuer(
+        "AIMS APAC REIT Interim Dividend Option") == "AIMS APAC REIT"
+    assert pd.cdp_statement_issuer("CROMWELLREIT EUR Dividend Option") == "CROMWELLREIT EUR"
+
+
+def test_cdp_statements_reads_final_interim_and_special_cash_dividend_lines(tmp_path, monkeypatch):
+    text = CASH_TXN_HEADER + (
+        "22/05/2026      QAF Final Cash Dividend - 17,000 units @ SGD 0.04"
+        "                                         680.00\n"
+        "22/05/2026      HYPHENS PHARMA Final Cash Dividend - 3,000 units @ SGD 0.015"
+        "                               45.00\n"
+        "28/05/2026      JUMBO Interim Cash Dividend - 3,000 units @ SGD 0.005"
+        "                                      15.00\n"
+    ) + CASH_TXN_FOOTER
+    got = _cdp_statements(tmp_path, monkeypatch, text)
+    assert got == [
+        ("Q01", "2026-05-22", 680.0, "SGD", 17000.0, 0.04),
+        ("1J5", "2026-05-22", 45.0, "SGD", 3000.0, 0.015),
+        ("42R", "2026-05-28", 15.0, "SGD", 3000.0, 0.005),
+    ]
+
+
+def test_cdp_statements_reads_a_bare_cash_dividend_and_a_dividend_option_line(tmp_path, monkeypatch):
+    """REIT distributions sometimes carry no Final/Interim/Special qualifier at all
+    ("Cash Dividend"), and a scrip-election REIT reads "Dividend Option" instead."""
+    text = CASH_TXN_HEADER + (
+        "24/09/2026      SASSEUR REIT Cash Dividend - 6,500 units @ SGD 0.03366"
+        "                                      218.79\n"
+        "31/03/2026      STONEWEG EUTRUST Dividend Option - 1,400 units @ EUR 0.06837"
+        "                            95.72\n"
+    ) + CASH_TXN_FOOTER
+    got = _cdp_statements(tmp_path, monkeypatch, text)
+    assert got == [
+        ("CRPU", "2026-09-24", 218.79, "SGD", 6500.0, 0.03366),
+        ("SET", "2026-03-31", 95.72, "EUR", 1400.0, 0.06837),
+    ]
+
+
+def test_cdp_statements_ignores_capital_distribution_redemption_and_payment_made_lines(
+        tmp_path, monkeypatch):
+    """Capital Distribution / bond Redemption rows share the dividend lines' column shape
+    but are not dividend income; "Payment Made" settlement legs have no "units @" clause."""
+    text = CASH_TXN_HEADER + (
+        "26/03/2026      SASSEUR REIT Capital Distribution - 6,500 units @ SGD 0.01"
+        "                                 65.00\n"
+        "15/03/2026      ASTREAVIB310318 Redemption - 100 units @ SGD 100.00"
+        "                                     10,000.00\n"
+        "22/05/2026      Payment Made - REF: DCS - A-1YX-BOUC-J09"
+        "                                                      -680.00\n"
+    ) + CASH_TXN_FOOTER
+    assert _cdp_statements(tmp_path, monkeypatch, text) == []
+
+
+def test_cdp_statements_skips_an_unmapped_issuer_name(tmp_path, monkeypatch, capsys):
+    text = CASH_TXN_HEADER + (
+        "01/01/2026      SOME NEW CO Final Cash Dividend - 100 units @ SGD 0.10"
+        "                                      10.00\n"
+    ) + CASH_TXN_FOOTER
+    assert _cdp_statements(tmp_path, monkeypatch, text) == []
+    assert "SOME NEW CO" in capsys.readouterr().out
+
+
+def test_cdp_statements_only_reads_inside_the_cash_transaction_section(tmp_path, monkeypatch):
+    """A line shaped like a dividend outside the Cash Transaction .. Your Securities Account
+    bounds (e.g. in the holdings table some other section of the statement prints) is not
+    picked up."""
+    text = (
+        "15/01/2026      QAF Final Cash Dividend - 17,000 units @ SGD 0.04"
+        "                                         680.00\n"
+    ) + CASH_TXN_HEADER + CASH_TXN_FOOTER
+    assert _cdp_statements(tmp_path, monkeypatch, text) == []
+
+
+# ---------- Moomoo (PDF) dividend lines ----------
+# `raw_text` is patched the same way tests/test_parse_moomoo.py gates build/parse_moomoo.py;
+# the path only needs a real file on disk for glob() to find a YYYYMM to key the pay date.
+
+def _moomoo(tmp_path, monkeypatch, text, ym="202605"):
+    (tmp_path / "moomoo").mkdir()
+    (tmp_path / "moomoo" / f"moomoo_{ym}.pdf").write_bytes(b"")
+    monkeypatch.setattr(pd, "DATA", str(tmp_path))
+    monkeypatch.setattr(pd, "DIV", [])
+    monkeypatch.setattr(pd, "raw_text", lambda path: text)
+    pd.moomoo()
+    return [(d["ticker"], d["date"], d["gross"], d["currency"], d["source"]) for d in pd.DIV]
+
+
+def test_moomoo_sg_dividend_with_the_at_connector_uppercase(tmp_path, monkeypatch):
+    """moomoo_202605.pdf's real text: "9CI CASH DIVIDEND AT SGD 0.12", the connector that
+    broke the old "@"-only regex."""
+    text = "\n".join([
+        "   Ending Unsettled Cash    0.00                     9CI CASH DIVIDEND AT SGD 0.12",
+        "                              2026/05/15 09:03:34   Corporate Action    +324.00",
+    ])
+    assert _moomoo(tmp_path, monkeypatch, text) == [
+        ("9CI", "2026-05-15", 324.0, "SGD", "moomoo (cash dividend)")]
+
+
+def test_moomoo_sg_dividend_with_the_at_connector_lower_case(tmp_path, monkeypatch):
+    """moomoo_202205.pdf's real text: "9CI Cash Dividend at SGD 0.03" / "...0.12" — two
+    same-day tranches, each its own row."""
+    text = "\n".join([
+        "  2022/05/23 09:37:08   Corporate Action   +81.00    9CI Cash Dividend at SGD 0.03",
+        "  2022/05/23 10:12:49   Corporate Action   +324.00   9CI Cash Dividend at SGD 0.12",
+    ])
+    assert _moomoo(tmp_path, monkeypatch, text, ym="202205") == [
+        ("9CI", "2022-05-15", 81.0, "SGD", "moomoo (cash dividend)"),
+        ("9CI", "2022-05-15", 324.0, "SGD", "moomoo (cash dividend)"),
+    ]
+
+
+def test_moomoo_sg_dividend_still_reads_the_older_at_sign_connector(tmp_path, monkeypatch):
+    text = "\n".join([
+        "   Ending Unsettled Cash    0.00                   HMN CASH DIVIDEND @ SGD 0.00415",
+        "                              2023/08/01 00:00:00   Corporate Action    +10.00",
+    ])
+    assert _moomoo(tmp_path, monkeypatch, text, ym="202308") == [
+        ("HMN", "2023-08-15", 10.0, "SGD", "moomoo (cash dividend)")]
+
+
+def test_moomoo_sg_dividend_whose_rate_wraps_onto_the_next_line(tmp_path, monkeypatch):
+    """moomoo_202606.pdf's real text: three C38U tranches whose rate text ("0.0006 / 0.0027
+    / 0.0365 PER") wraps past the ticker/currency line, leaving no rate on it — the amount
+    is still found via the nearby "Corporate Action" line, with rate left blank."""
+    text = "\n".join([
+        "   Ending Unsettled Cash    0.00                                  C38U CASH DIVIDEND AT SGD",
+        "                              2026/06/09 08:40:26   Corporate Action    +0.30     0.0006 / 0.0027 / 0.0365 PER",
+        "                                                                                   SHARE",
+    ])
+    got = _moomoo(tmp_path, monkeypatch, text, ym="202606")
+    assert got == [("C38U", "2026-06-15", 0.3, "SGD", "moomoo (cash dividend)")]
+    assert next(d for d in pd.DIV)["rate"] == ""
+
+
+def test_moomoo_us_dividend_old_format_shares_dividends_on_the_anchor_line(tmp_path, monkeypatch):
+    """moomoo_202305.pdf's real text: the anchor line itself says "SHARES DIVIDENDS", the
+    amount is on the next "US Dividend Paying" line, and the withholding-tax leg right
+    after it (its own "AAPL ... SHARES" anchor, no DIVIDENDS, negative amount) is skipped."""
+    text = "\n".join([
+        "   Ending Unsettled Cash    0.00                      AAPL 1.00000000 SHARES DIVIDENDS",
+        "        2023/05/19 17:30:55    US Dividend Paying    +0.24",
+        "                                                      0.24 USD PER SHARE",
+        "                                                      AAPL 1.00000000 SHARES",
+        "        2023/05/19 17:44:35    US Dividend Paying    -0.07   WITHHOLDING TAX -0.07200001 USD",
+    ])
+    assert _moomoo(tmp_path, monkeypatch, text, ym="202305") == [
+        ("AAPL", "2023-05-15", 0.24, "USD", "moomoo (cash dividend)")]
+
+
+def test_moomoo_us_dividend_new_format_dividend_word_wraps_onto_the_amount_line(
+        tmp_path, monkeypatch):
+    """moomoo_202605.pdf's real text: the anchor line now says only "SHARES" (no DIVIDENDS),
+    and "DIVIDENDS" instead sits on the following "Corporate Action" line carrying the
+    amount — the regression this fixes alongside the SG "AT" connector."""
+    text = "\n".join([
+        "   Ending Unsettled Cash    0.00                                    AAPL 1.00000000 SHARES",
+        "      2026/05/15 15:02:09   Corporate Action   +0.27   DIVIDENDS 0.26999998 USD PER",
+        "                                                       SHARE",
+        "                                                       AAPL 1.00000000 SHARES",
+        "      2026/05/15 15:23:41   Corporate Action   -0.08   WITHHOLDING TAX -0.08099999 USD PER",
+        "                                                       SHARE - TAX",
+    ])
+    assert _moomoo(tmp_path, monkeypatch, text, ym="202605") == [
+        ("AAPL", "2026-05-15", 0.27, "USD", "moomoo (cash dividend)")]
+    assert next(d for d in pd.DIV)["units"] == 1.0
+
+
+def test_moomoo_us_shares_anchor_without_a_dividend_word_is_not_booked(tmp_path, monkeypatch):
+    """A SHARES-shaped corporate action that is never tied to the word "DIVIDEND" anywhere
+    in its pair of lines (e.g. a split) must not be booked as income."""
+    text = "\n".join([
+        "TSLA 5.00000000 SHARES",
+        "      2026/01/01 00:00:00   Corporate Action   +10.00   STOCK SPLIT ADJUSTMENT",
+    ])
+    assert _moomoo(tmp_path, monkeypatch, text, ym="202601") == []
