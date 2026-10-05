@@ -196,12 +196,17 @@ DRIFT_DAYS = 45   # how far a payment's date may drift from last year's and stil
 
 
 def unreceived_last_year(last_year_rows, paid_dates, today):
-    """Last year's distinct payments still to come this year.
+    """Last year's distinct payments not yet matched this year, split into `(still_to_come,
+    overdue)`.
 
     Each payment received this year consumes at most one of last year's payments — the one whose
     anniversary is nearest, within DRIFT_DAYS — nearest pairs first. A last-year payment left
-    unmatched is still to come if its anniversary is no more than DRIFT_DAYS before `today`, so a
-    payment running late this year is kept while one the holding was never positioned for is not."""
+    unmatched is `still_to_come` if its anniversary is no more than DRIFT_DAYS before `today` (a
+    payment running late this year); once its anniversary is further behind than that, the
+    holding wasn't projected to still owe it by pattern alone, but the payment almost always still
+    happened — it's just missing from this app's ledger (the statement hasn't been imported yet).
+    That gap is real money the captain can't see, so it comes back as `overdue` (each row carries
+    `expected_date`, the anniversary) rather than being dropped silently."""
     payments = _payments(last_year_rows)
     anniversaries = [_anniversary(r["pay_date"], today.year) for r in payments]
     pairs = sorted((abs((p - a).days), i, p) for i, a in enumerate(anniversaries)
@@ -212,8 +217,10 @@ def unreceived_last_year(last_year_rows, paid_dates, today):
             matched.add(i)
             used.add(p)
     earliest = today - dt.timedelta(days=DRIFT_DAYS)
-    return [r for i, (r, a) in enumerate(zip(payments, anniversaries))
-            if i not in matched and a >= earliest]
+    unmatched = [(r, a) for i, (r, a) in enumerate(zip(payments, anniversaries)) if i not in matched]
+    still_to_come = [r for r, a in unmatched if a >= earliest]
+    overdue = [{**r, "expected_date": a} for r, a in unmatched if a < earliest]
+    return still_to_come, overdue
 
 
 def projected(s=None, today=None):
@@ -235,7 +242,15 @@ def projected(s=None, today=None):
     Every holding's own breakdown is returned (not just the totals) so the headline figure is
     auditable: each is `received_sgd` + `expected_remaining_sgd`, and `detail` lists the
     underlying announced/last-year rows the remainder was built from. `today` defaults to
-    `sg_today()`."""
+    `sg_today()`.
+
+    Separately, `unreceived_last_year()`'s `overdue` rows — a last-year payment whose anniversary
+    is already more than DRIFT_DAYS behind `today` with no match this year — are real money the
+    projection isn't owed to add (the pattern doesn't say it recurs that late), but almost always
+    did happen and is just missing from the ledger. Those surface as each holding's `overdue`
+    list (and the top-level `overdue_sgd` / `overdue_count`) WITHOUT being added to
+    `expected_remaining_sgd` or `projected_total_sgd` — an estimate of money already paid in
+    reality that this app hasn't ingested yet, not a projection of money still to come."""
     today = today or sg_today()
     yr = today.year
     year_end = dt.date(yr, 12, 31)
@@ -287,14 +302,24 @@ def projected(s=None, today=None):
             announced[r["ticker"]].append(r)
 
     holdings, remaining_total, full_remaining = [], 0.0, {}
+    overdue_total, overdue_count = 0.0, 0
     for ticker in sorted(set(current_units) | set(received), key=lambda t: (t is None, t or "")):
         units = current_units.get(ticker, 0.0)
         rec_sgd = round(received.get(ticker, 0.0), 2)
         basis, detail, remaining_sgd = "not held", [], 0.0
+        overdue_detail = []
         if ticker is None:
             basis = "unmapped"
         elif units > 1e-6:
             basis = "none"
+            still, overdue = unreceived_last_year(last_year.get(ticker) or [],
+                                                   paid_this_year.get(ticker, set()), today)
+            for r in overdue:
+                amt_sgd, flag = _sgd_or_none(r["rate"] * units, r["currency"], fx)
+                overdue_detail.append({"expected_date": r["expected_date"], "rate": r["rate"],
+                                        "currency": r["currency"],
+                                        "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
+                                        **({"flag": flag} if flag else {})})
             rows = announced.get(ticker) or []
             if rows:
                 basis = "announced"
@@ -305,20 +330,19 @@ def projected(s=None, today=None):
                                    "rate": num(r["rate"]), "currency": r["currency"],
                                    "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
                                    **({"flag": flag} if flag else {})})
-            else:
-                rows = unreceived_last_year(last_year.get(ticker) or [],
-                                            paid_this_year.get(ticker, set()), today)
-                if rows:
-                    basis = "last_year_pattern"
-                    for r in rows:
-                        amt_sgd, flag = _sgd_or_none(r["rate"] * units, r["currency"], fx)
-                        remaining_sgd += amt_sgd or 0.0
-                        detail.append({"pay_date": r["pay_date"], "rate": r["rate"],
-                                       "currency": r["currency"],
-                                       "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
-                                       **({"flag": flag} if flag else {})})
+            elif still:
+                basis = "last_year_pattern"
+                for r in still:
+                    amt_sgd, flag = _sgd_or_none(r["rate"] * units, r["currency"], fx)
+                    remaining_sgd += amt_sgd or 0.0
+                    detail.append({"pay_date": r["pay_date"], "rate": r["rate"],
+                                   "currency": r["currency"],
+                                   "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
+                                   **({"flag": flag} if flag else {})})
         full_remaining[ticker] = remaining_sgd
         remaining_total += remaining_sgd
+        overdue_total += sum(d["amount_sgd"] or 0.0 for d in overdue_detail)
+        overdue_count += len(overdue_detail)
         meta_r = meta.get(ticker, {})
         holdings.append({
             "ticker": ticker,
@@ -326,7 +350,7 @@ def projected(s=None, today=None):
             "units": units or None, "currency": meta_r.get("currency"),
             "received_sgd": rec_sgd, "expected_remaining_sgd": round(remaining_sgd, 2),
             "projected_total_sgd": round(received.get(ticker, 0.0) + remaining_sgd, 2),
-            "basis": basis, "detail": detail,
+            "basis": basis, "detail": detail, "overdue": overdue_detail,
         })
     holdings.sort(key=lambda h: (-full_remaining[h["ticker"]], h["ticker"] is None, h["ticker"] or ""))
 
@@ -335,5 +359,7 @@ def projected(s=None, today=None):
         "received_sgd": round(received_total, 2),
         "expected_remaining_sgd": round(remaining_total, 2),
         "projected_total_sgd": round(received_total + remaining_total, 2),
+        "overdue_sgd": round(overdue_total, 2),
+        "overdue_count": overdue_count,
         "holdings": holdings,
     }

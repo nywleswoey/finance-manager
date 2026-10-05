@@ -326,4 +326,45 @@ class TestProjected(pgtest.Case):
     def test_no_holdings_and_no_dividends_is_an_empty_breakdown(self):
         out = self._projected()
         assert out == {"year": YEAR, "as_of": str(TODAY), "received_sgd": 0.0,
-                       "expected_remaining_sgd": 0.0, "projected_total_sgd": 0.0, "holdings": []}
+                       "expected_remaining_sgd": 0.0, "projected_total_sgd": 0.0,
+                       "overdue_sgd": 0.0, "overdue_count": 0, "holdings": []}
+
+    def test_a_payment_past_the_drift_window_is_overdue_not_dropped(self):
+        # same scenario as test_last_years_payments_already_past_this_year_are_not_projected:
+        # the ledger never got a 2026 row for either last-year payment. That shouldn't vanish —
+        # it's very likely real money already paid and just not ingested yet.
+        self._buy(1, D(2026, 8, 1), 1000)
+        self._div(1, D(2025, 5, 12), 500, rate=0.5, units=1000)
+        self._div(1, D(2025, 7, 20), 600, rate=0.6, units=1000)
+        self.s.commit()
+
+        out = self._projected()
+        h = self._holdings(out)["D05"]
+        assert h["basis"] == "none"
+        assert h["expected_remaining_sgd"] == 0.0                  # overdue never inflates this
+        assert [(d["expected_date"], d["rate"]) for d in h["overdue"]] == \
+            [(D(2026, 5, 12), 0.5), (D(2026, 7, 20), 0.6)]
+        assert out["overdue_sgd"] == 1100.0                        # 0.5x1000 + 0.6x1000
+        assert out["overdue_count"] == 2
+
+    def test_an_overdue_payment_does_not_affect_projected_total(self):
+        self._buy(1, D(2026, 8, 1), 1000)
+        self._div(1, D(2025, 7, 20), 600, rate=0.6, units=1000)
+        self.s.commit()
+
+        h = self._holdings(self._projected())["D05"]
+        assert h["expected_remaining_sgd"] == 0.0
+        assert h["projected_total_sgd"] == h["received_sgd"]       # overdue adds nothing here
+
+    def test_an_announced_holding_can_still_carry_an_overdue_older_payment(self):
+        # overdue is independent of basis: an older unmatched payment can sit alongside a
+        # separate, currently-announced one for the same ticker.
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._div(1, D(2025, 7, 20), 600, rate=0.6, units=1000)    # long overdue, no 2026 match
+        self._announce(1, ex=D(2026, 11, 1), rate=0.5, ccy="SGD")  # separate, still-due payment
+        self.s.commit()
+
+        h = self._holdings(self._projected())["D05"]
+        assert h["basis"] == "announced"
+        assert h["expected_remaining_sgd"] == 500.0
+        assert [d["expected_date"] for d in h["overdue"]] == [D(2026, 7, 20)]
