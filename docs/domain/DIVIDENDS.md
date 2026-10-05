@@ -11,8 +11,8 @@ per security in the web app (the Dividends tab and the security page).
 |---|---|---|
 | Tiger flex | `Dividends` (status = `Paid` only; accruals skipped) | HK, SG, US |
 | FSM / iFast | `Stock Dividend` rows that are `Cash Dividend` / `Cash in Lieu` | SG (+ USD/EUR REITs) |
-| CDP | tracker sheet `data/cdp-stocks/dividends.csv` (`cdp()`); a row with a rate but no amount is backfilled as rate × the CDP position in `ledger.csv`, except on pay dates inside a CDP statement gap | SG (+ USD/EUR) |
-| Moomoo | `… CASH DIVIDEND` lines | SG, US |
+| CDP | statement PDFs' `Cash Transaction` section (`cdp_statements()`, authoritative); tracker sheet `data/cdp-stocks/dividends.csv` (`cdp()`) is a fallback, skipped within ±31 days of a statement row for the same ticker. A tracker row with a rate but no amount is backfilled as rate × the CDP position in `ledger.csv`, except on pay dates inside a CDP statement gap | SG (+ USD/EUR) |
+| Moomoo | SG: `… CASH DIVIDEND @/AT …` lines; US: `<TKR> <units> SHARES` + signed `US Dividend Paying`/`Corporate Action` amount | SG, US |
 | CPF / SRS | backfilled (no dividend lines in their transaction files) | SG (+ EUR REIT) |
 | Endowus | — (Amundi fund accumulates; no distributions) | — |
 
@@ -136,7 +136,8 @@ Manual case — a payment **no statement carries** (e.g. a CPF/SRS holding, whos
 files have no dividend lines):
 
 1. Add the row to the relevant hand-tracker CSV — `data/cpf-srs-dividends.csv` for CPF/SRS,
-   or `data/cdp-stocks/dividends.csv` for CDP — matching its column layout
+   or `data/cdp-stocks/dividends.csv` for CDP (ignored when a statement row for the same ticker
+   is within ±31 days) — matching its column layout
    (`date, account, market, ticker, name, kind, gross, units, rate, currency, source`).
 2. `make ingest` picks it up via the parser's `cpf_srs()` / `cdp()` readers.
 3. If it's a brand-new ticker, seed it first (`make seed`) so the loader can map the alias —
