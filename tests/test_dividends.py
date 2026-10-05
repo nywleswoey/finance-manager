@@ -46,20 +46,31 @@ class TestUnreceivedLastYear(unittest.TestCase):
 
     def _remaining(self, last_year, paid):
         rows = [{"pay_date": d, "rate": r} for d, r in last_year]
-        return [r["pay_date"] for r in dividends.unreceived_last_year(rows, paid, self.TODAY)]
+        still, _ = dividends.unreceived_last_year(rows, paid, self.TODAY)
+        return [r["pay_date"] for r in still]
+
+    def _overdue(self, last_year, paid):
+        rows = [{"pay_date": d, "rate": r} for d, r in last_year]
+        _, overdue = dividends.unreceived_last_year(rows, paid, self.TODAY)
+        return [(r["pay_date"], r["expected_date"]) for r in overdue]
 
     def test_a_monthly_receipt_consumes_exactly_one_nearby_payment(self):
         last_year = [(D(2025, m, 30 if m != 2 else 28), 0.1) for m in range(8, 13)]
         paid = {D(2026, 8, 30), D(2026, 9, 30)}
         self.assertEqual(self._remaining(last_year, paid),
                          [D(2025, 10, 30), D(2025, 11, 30), D(2025, 12, 30)])
+        self.assertEqual(self._overdue(last_year, paid), [])
 
     def test_a_late_payment_within_the_drift_window_is_still_projected(self):
         self.assertEqual(self._remaining([(D(2025, 9, 28), 0.5)], set()), [D(2025, 9, 28)])
 
-    def test_bought_mid_year_payments_long_past_are_not_projected(self):
+    def test_bought_mid_year_payments_long_past_are_overdue_not_projected(self):
+        # these payments almost always already happened — just not in the ledger yet — so
+        # they move to `overdue` instead of vanishing from both received and projected.
         last_year = [(D(2025, 5, 12), 0.5), (D(2025, 7, 20), 0.6)]
         self.assertEqual(self._remaining(last_year, set()), [])
+        self.assertEqual(self._overdue(last_year, set()),
+                         [(D(2025, 5, 12), D(2026, 5, 12)), (D(2025, 7, 20), D(2026, 7, 20))])
 
     def test_a_partial_last_year_still_projects_its_late_year_payment(self):
         paid = {D(2026, 5, 10), D(2026, 8, 15)}
@@ -73,8 +84,16 @@ class TestUnreceivedLastYear(unittest.TestCase):
         rows = [{"pay_date": D(2025, 11, 20), "rate": 0.60, "account": "FSM"},
                 {"pay_date": D(2025, 11, 20), "rate": 0.15, "account": "FSM"},
                 {"pay_date": D(2025, 11, 20), "rate": 0.75, "account": "CPF"}]
-        remaining = dividends.unreceived_last_year(rows, set(), self.TODAY)
-        self.assertEqual([(r["pay_date"], r["rate"]) for r in remaining], [(D(2025, 11, 20), 0.75)])
+        still, _ = dividends.unreceived_last_year(rows, set(), self.TODAY)
+        self.assertEqual([(r["pay_date"], r["rate"]) for r in still], [(D(2025, 11, 20), 0.75)])
+
+    def test_a_matched_payment_is_never_also_overdue(self):
+        # a payment more than DRIFT_DAYS stale that nonetheless matched this year's receipt
+        # (e.g. a holding bought back after a long gap) is consumed, not double-counted as overdue.
+        paid = {D(2026, 1, 15)}
+        last_year = [(D(2025, 1, 10), 0.4)]
+        self.assertEqual(self._remaining(last_year, paid), [])
+        self.assertEqual(self._overdue(last_year, paid), [])
 
 
 class TestSgdOrNone(unittest.TestCase):

@@ -177,11 +177,19 @@ of the year's expected payments. Per holding, in order of preference:
    received this year consumes at most one last-year payment, the one whose anniversary is
    nearest within ±45 days (`DRIFT_DAYS`); an unmatched one is projected if its anniversary is no
    more than 45 days before today — so a monthly payer's receipt cancels exactly one payment, a
-   payment running late is kept, and a past payment the holding was never positioned for is
-   not. Each row's rate (declared, else gross/units-held-then — reuses `details()`'s per-row
+   payment running late is kept, and one further behind is not projected (it is **overdue**,
+   below). Each row's rate (declared, else gross/units-held-then — reuses `details()`'s per-row
    computation rather than re-replaying the ledger) × TODAY's units.
 3. **none** — neither exists (e.g. a security that already paid its only distribution for the
    year, or pays no cash dividend at all).
+
+**Overdue** — an unmatched last-year payment whose anniversary is more than `DRIFT_DAYS` before
+today is almost always money already paid but not yet ingested, so it is reported, never
+projected: each held security's `overdue` list (`expected_date` = the anniversary, `amount_sgd`)
+and the top-level `overdue_sgd` / `overdue_count`, shown as the card's "Overdue (not in totals)"
+figure and an amber per-row tag. It is priced at the units held on the anniversary of last year's
+ex_date (else pay_date) via `units_at`, and dropped when none were held then. It is never added to
+`expected_remaining_sgd` or `projected_total_sgd`.
 
 It always projects the current SGT year (`sg_today()`); there is no year parameter. A ticker
 that received a payment this year but is no longer held keeps its `received_sgd` with basis

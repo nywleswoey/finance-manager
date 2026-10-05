@@ -20,7 +20,9 @@ export default function Dividends() {
   if (!ann) return <div className="loading">Loading…</div>;
   // Only holdings with a real number to show — the many zero-dividend growth names (AAPL,
   // NVDA, …) would otherwise pad the breakdown with rows that say nothing.
-  const projRows = proj ? proj.holdings.filter((h) => h.received_sgd || h.expected_remaining_sgd) : [];
+  const projRows = proj
+    ? proj.holdings.filter((h) => h.received_sgd || h.expected_remaining_sgd || h.overdue?.length)
+    : [];
   const rows = det ? (onlyFlagged ? det.rows.filter((r) => r.flags.length) : det.rows) : [];
   // The count and total of what is listed, both the server's: it ships one pair per filter
   // state, the total summed at full precision and rounded once. A sum of the cent-rounded rows
@@ -112,6 +114,16 @@ export default function Dividends() {
               <div style={{ fontSize: "1.2em" }}>{sgd(proj.expected_remaining_sgd)}</div></div>
             <div><div className="mut" style={{ fontSize: ".8em" }}>= Projected total</div>
               <div className="pos" style={{ fontSize: "1.2em" }}>{sgd(proj.projected_total_sgd)}</div></div>
+            {/* Separate from the add-up above on purpose: overdue is last year's payment past
+                its DRIFT_DAYS window with no 2026 match — almost certainly already paid in real
+                life and just missing from this app's ledger, not a projection of money still to
+                come. Folding it into "expected remaining" would overstate what's genuinely
+                ahead; it only shows up here when there's something to flag. */}
+            {proj.overdue_count > 0 &&
+              <div><div className="mut" style={{ fontSize: ".8em" }}>Overdue (not in totals)</div>
+                <div style={{ fontSize: "1.2em", color: "var(--warn)" }}>
+                  {sgd(proj.overdue_sgd)} <span className="pill">{proj.overdue_count}</span>
+                </div></div>}
           </div>
           {/* Per-holding breakdown — the headline above is a sum of these rows, so this is
               where it's checked: "announced" uses an SGX-declared rate for the rest of the
@@ -130,7 +142,16 @@ export default function Dividends() {
               <tbody>
                 {projRows.map((h) => (
                   <tr key={h.ticker ?? "unmapped"}>
-                    <td className="l">{h.name} {h.ticker && <span className="pill">{h.ticker}</span>}</td>
+                    <td className="l">{h.name} {h.ticker && <span className="pill">{h.ticker}</span>}
+                      {/* One tag per holding, not per overdue payment: the row's job is to flag
+                          the holding, and the earliest expected date is the one a reader needs
+                          first to go check the statement. */}
+                      {h.overdue?.length > 0 &&
+                        <span className="pill" style={{ marginLeft: 6, color: "var(--warn)" }}
+                              title={h.overdue.map((o) => `${o.expected_date}: ${money(o.amount_sgd, "SGD", 2)}`).join("; ")}>
+                          overdue {h.overdue[0].expected_date} · {sgd(h.overdue.reduce((t, o) => t + (o.amount_sgd || 0), 0))}
+                        </span>}
+                    </td>
                     <td>{h.units == null ? "—" : fmt(h.units, 0)}</td>
                     <td>{money(h.received_sgd, "SGD", 2)}</td>
                     <td className={h.expected_remaining_sgd ? "pos" : "mut"}>{money(h.expected_remaining_sgd, "SGD", 2)}</td>
