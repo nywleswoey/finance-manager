@@ -108,8 +108,8 @@ def cdp_statements():
     """CDP cash dividends read straight from every data/cdp-statements/*.pdf's Cash
     Transaction section. This is the authoritative record — CDP pays cash straight into
     the account, so every payout appears there. Runs BEFORE cdp() (the tracker-sheet
-    fallback below) so that function's existing ±7-day ticker dedup (see tracked_elsewhere)
-    skips any tracker row already booked here, instead of a separate month-level rule."""
+    fallback below) so that function's ±31-day ticker dedup skips any tracker row already
+    booked here, instead of a separate month-level rule."""
     unmapped = set()
     for f in sorted(glob.glob(os.path.join(DATA, "cdp-statements", "*.pdf"))):
         txt = raw_text(f) or ""
@@ -213,8 +213,10 @@ def cdp():
     """CDP cash dividends from the maintained tracker — now only a fallback for a payout
     cdp_statements() didn't already read straight off a statement PDF (an older statement
     with no Cash Transaction section, a month with no PDF on disk at all, or a Cash
-    Transaction line a future statement layout change breaks). Any row within ±7 days of a
-    cdp_statements() row for the same ticker is skipped outright, backfilled or not: a
+    Transaction line a future statement layout change breaks). Any row within ±31 days of a
+    cdp_statements() row for the same ticker is skipped outright, backfilled or not (the
+    sheet can date a payout by its ex/announcement date, a week or more before the
+    statement's pay date): a
     blended per-unit sheet rate can cover two same-day REIT tranches, or bake in a
     capital-return component the statement text itself does not, so the direct reading
     wins whenever one exists. The sheet is also broader than CDP — it lists holdings
@@ -236,11 +238,11 @@ def cdp():
             continue
         bucket = from_statement if x["source"] == "cdp (cash dividend, statement)" else elsewhere
         bucket[x["ticker"]].append(_dt.date.fromisoformat(iso))
-    def _within_7_days(tk, iso, bucket):
+    def _within(tk, iso, bucket, days):
         dx = _dt.date.fromisoformat(iso)
-        return any(abs((dx - e).days) <= 7 for e in bucket.get(tk, []))
+        return any(abs((dx - e).days) <= days for e in bucket.get(tk, []))
     def tracked_elsewhere(tk, iso):
-        return _within_7_days(tk, iso, elsewhere)
+        return _within(tk, iso, elsewhere, 7)
     positions = _load_cdp_positions()
     statements = _cdp_statement_months()
     for r in csv.reader(open(p)):
@@ -251,7 +253,7 @@ def cdp():
         natg, sgdg = num(nat), num(sgd)
         tk = cdp_dividend_ticker(name)
         date = _cdp_date(d)
-        if tk and date and _within_7_days(tk, date, from_statement):
+        if tk and date and _within(tk, date, from_statement, 31):
             # cdp_statements() already read this exact payout straight off the statement's
             # own Cash Transaction section. Checked (and skipped) even for a row the sheet
             # would otherwise backfill: real data shows the sheet's one blended rate can

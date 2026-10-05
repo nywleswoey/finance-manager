@@ -235,6 +235,17 @@ def test_a_tracker_row_matching_a_statement_row_is_skipped_but_others_are_kept(
     assert got == [("J2T", "2026-05-15", 7.88)]
 
 
+def test_a_tracker_row_dated_by_ex_date_is_still_matched_to_the_statement_pay_date(
+        tmp_path, monkeypatch):
+    """Real data: the sheet dates Asian Pay TV's 2019 payout 20-Jun-19 while the statement's
+    Cash Transaction line pays it 28/06/2019 — 8 days apart, still the same payout."""
+    stmt = {"date": "2019-06-28", "ticker": "S7OU", "source": "cdp (cash dividend, statement)"}
+    got = _cdp(tmp_path, monkeypatch, [
+        ["20-Jun-19", "2019", "6", "Asian Pay Tv Tr", "324", "324", "108000", "0.003"],
+    ], already=[stmt])
+    assert got == []
+
+
 def test_a_statement_row_skips_the_trackers_backfill_too(tmp_path, monkeypatch):
     """Real CDP data shows the sheet's one blended per-unit rate can cover two same-day
     REIT distribution tranches (so its rate x position backfill overstates or splits the
