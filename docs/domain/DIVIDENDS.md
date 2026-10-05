@@ -11,7 +11,7 @@ per security in the web app (the Dividends tab and the security page).
 |---|---|---|
 | Tiger flex | `Dividends` (status = `Paid` only; accruals skipped) | HK, SG, US |
 | FSM / iFast | `Stock Dividend` rows that are `Cash Dividend` / `Cash in Lieu` | SG (+ USD/EUR REITs) |
-| CDP | `Summary of Payments` (2017-18 3-line block + 2019+ layout) | SG |
+| CDP | tracker sheet `data/cdp-stocks/dividends.csv` (`cdp()`); a row with a rate but no amount is backfilled as rate × the CDP position in `ledger.csv`, except on pay dates inside a CDP statement gap | SG (+ USD/EUR) |
 | Moomoo | `… CASH DIVIDEND` lines | SG, US |
 | CPF / SRS | backfilled (no dividend lines in their transaction files) | SG (+ EUR REIT) |
 | Endowus | — (Amundi fund accumulates; no distributions) | — |

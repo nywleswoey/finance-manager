@@ -5,7 +5,8 @@ Sources:
   Tiger flex  : 'Dividends' section, rows with status 'Paid' (currency from the
                 flex column; market inference only when that cell is blank)
   FSM/iFast   : 'Stock Dividend' rows that are 'Cash Dividend' / 'Cash in Lieu' (SGD)
-  CDP         : 'Summary of Payments' in the monthly PDFs (SG)
+  CDP         : the data/cdp-stocks/dividends.csv tracker; unfilled amounts backfilled
+                from the statement-derived CDP position (see cdp())
   Moomoo      : dividend lines in the monthly PDFs (SG/US)
 Endowus Amundi fund is accumulating -> no distributions.
 
