@@ -84,8 +84,9 @@ def fsm():
 # data/cdp-stocks/dividends.csv is the authoritative CDP dividend ledger (the prior
 # PDF-statement parser missed whole years and every foreign-currency holding). Columns:
 #   Date, Year, Month, Stock Name, Dividends (native), Dividends (SGD), Quantity, Dividend (rate)
-# Dates are mixed "DD-Mon-YY" / Excel serials. Rows with a zero amount are declared-but-
-# unfilled and skipped. Native amount + currency are stored; SGD conversion happens downstream.
+# Dates are mixed "DD-Mon-YY" / Excel serials. A zero-amount row is backfilled as rate x the
+# CDP custody position (see LEDGER_CSV) when one is held, else skipped as declared-but-unfilled.
+# Native amount + currency are stored; SGD conversion happens downstream.
 import datetime as _dt
 _XL_EPOCH = _dt.date(1899, 12, 30)
 # foreign-currency CDP holdings (others are SGD); used when native != SGD column
@@ -134,8 +135,9 @@ def cdp():
     """CDP cash dividends from the maintained tracker. The sheet is broader than CDP —
     it also lists holdings tracked by broker statements (Tiger/FSM/SRS), and keeps tracking
     a holding after it's transferred to another custodian. To avoid double-counting, a row
-    is emitted only when NO broker-statement dividend exists for the same ticker within ±7
-    days (those are already ingested). Runs LAST so DIV holds the other sources to dedup against."""
+    with a sheet-stated amount is emitted only when NO broker-statement dividend exists for
+    the same ticker within ±7 days (those are already ingested). A backfilled row is exempt:
+    its gross is rate x the CDP-only position, so it can't overlap another broker's payout. Runs LAST so DIV holds the other sources to dedup against."""
     p = os.path.join(DATA, "cdp-stocks", "dividends.csv")
     if not os.path.exists(p):
         return
@@ -156,18 +158,19 @@ def cdp():
         natg, sgdg = num(nat), num(sgd)
         tk = cdp_dividend_ticker(name)
         date = _cdp_date(d)
+        backfilled = False
         if natg == 0 and sgdg == 0 and tk and date:
             # the sheet knows the per-unit rate but never filled the amount -> recover it
             # from the statement-derived custody position instead of dropping the payout.
             held = _cdp_position_on(positions, tk, date)
             rate_num = num(rate)
             if held > 0 and rate_num:
-                natg, qty = round(rate_num * held, 2), held
+                natg, qty, backfilled = round(rate_num * held, 2), held, True
         if natg == 0 and sgdg == 0:                       # still nothing -> declared but unfilled
             continue
         if tk is None or date is None:
             continue
-        if tracked_elsewhere(tk, date):                   # already in a broker statement -> skip
+        if not backfilled and tracked_elsewhere(tk, date):  # already in a broker statement
             continue
         fix = CDP_DIV_FIX.get((tk, date))                 # manual corrections (see dict above)
         if fix is None and (tk, date) in CDP_DIV_FIX:     # explicit drop

@@ -176,3 +176,18 @@ def test_backfill_does_not_fire_without_a_held_position(tmp_path, monkeypatch):
     assert _cdp(tmp_path, monkeypatch, [
         ["17-May-24", "2024", "5", "DBS", "#N/A", "#N/A", "#N/A", "0.5"],
     ], ledger=[]) == []
+
+
+def test_a_backfilled_row_is_kept_beside_another_brokers_payout(tmp_path, monkeypatch):
+    """A backfilled gross is rate x the CDP-only position, so a same-ticker payout at
+    another broker (here Tiger, for its own shares) is not a duplicate of it."""
+    ledger = [
+        ["2021-03-28", "CDP", "SG", "SET", "stock", "open", "1400", "", "", "", "", "x",
+         "Stoneweg European Trust EUR"],
+    ]
+    tiger = {"date": "2024-03-28", "ticker": "SET", "source": "tiger (dividends)"}
+    got = _cdp(tmp_path, monkeypatch, [
+        ["28-Mar-24", "2024", "3", "Stoneweg European Trust EUR", "#N/A", "#N/A", "#N/A",
+         "0.07903"],
+    ], already=[tiger], ledger=ledger)
+    assert got == [("SET", "2024-03-28", 110.64)]
