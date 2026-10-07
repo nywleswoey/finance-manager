@@ -218,6 +218,23 @@ def test_foreign_currency_converts_at_fx():
     assert r["mv_sgd"] == 204.0                     # 1200 * 0.17
 
 
+def test_a_position_whose_currency_has_no_fx_rate_is_left_out_not_raised():
+    # A closed JPY position (e.g. a long-sold holding ingestion.prices never priced because
+    # it isn't in current_position) must not 500 the whole fold — overview/positions/
+    # performance all share this one call. It's left out of the result with a warning,
+    # same policy as an orphan dividend matching no position.
+    txns = [_txn(security_id=10, canonical_ticker="JPYSEC", currency="JPY",
+                 action="buy", qty_signed=100, price=500.0, trade_date=D(2019, 1, 1)),
+            _txn(security_id=10, canonical_ticker="JPYSEC", currency="JPY",
+                 action="sell", qty_signed=-100, price=600.0, trade_date=D(2019, 6, 1)),
+            _txn(security_id=11, canonical_ticker="D05", currency="SGD",
+                 qty_signed=100, price=10.0)]
+    rows = _fold(txns, fx={}, price={10: 700.0, 11: 12.0})   # no JPY rate in fx
+    tickers = {r["ticker"] for r in rows}
+    assert "JPYSEC" not in tickers
+    assert tickers == {"D05"}                       # the SGD position still folds fine
+
+
 # ---------------------------------------------------------------------------
 # Dated accumulators (#147). The fold keeps a dated unit series and a dated cost series
 # beside the undated scalars it already kept, so peak capital-at-risk (#143 §9) and the

@@ -1518,7 +1518,17 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
         m = meta.get(k)
         if not m:
             continue
-        r = _build_row(k, p, m, fx, price, today, parts[k], verdicts[m["canonical_ticker"]])
+        try:
+            r = _build_row(k, p, m, fx, price, today, parts[k], verdicts[m["canonical_ticker"]])
+        except ValueError:
+            # rate_to_sgd fails loud on a currency `fx` has no rate for (BR4: never a silent
+            # 1.0). One position's missing rate must not 500 every caller of this shared fold
+            # (overview/positions/performance all read it) — so that position is left out of
+            # every total until ingestion.prices picks up a rate for its currency, the same way
+            # an orphan dividend (no matching position) is already dropped with a warning below.
+            log.warning("no FX rate for %s (security_id=%s) — leaving it out of totals",
+                        m["currency"], k[1])
+            continue
         out.append(r)
         # the legs Holdings lists, so the pool is the name a consolidated row stands for; noise
         # rows `is_leg` drops carry no money to pool.
