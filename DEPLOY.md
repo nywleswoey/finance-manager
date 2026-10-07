@@ -233,7 +233,7 @@ psql "$DATABASE_URL_UNPOOLED" -c "select max(date) from price; select max(date) 
 | Logs show `404` | Path typo; Vercel still invokes and still logs it |
 | Ran, but `price.date` did not move | Read the JSON in the log: all-`fail` means Yahoo refused the deployment's IP, not a scheduling problem |
 
-Duration is not a concern in practice: 36 held securities + 4 FX pairs run in ~19s against
+Duration is not a concern in practice: 36 held securities + an FX pair per ledger currency (4 when measured) run in ~19s against
 the 300s function ceiling. It stays sequential and unretried — a failed run is visible in
 **Project → Settings → Cron Jobs → View Logs**, and the next run is 24h later.
 
