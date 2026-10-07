@@ -1496,6 +1496,19 @@ def fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today=None
     today = today or sg_today()
     annotations = annotation_map() if annotations is None else annotations
     contracts = contracts or {}
+    # rate_to_sgd fails loud on a currency `fx` has no rate for (BR4: never a silent 1.0), and
+    # overview/positions/performance all share this one fold — so every txn, dividend and put
+    # in such a currency is left out here, once, before any step converts it, until
+    # ingestion.prices picks up a rate for it.
+    unrated = ({r["currency"] for r in txns} | {d.get("currency") for d in divs}
+               | {c.get("currency") for cs in contracts.values() for c in cs}) \
+        - {None, "SGD"} - fx.keys()
+    if unrated:
+        log.warning("no FX rate for %s — leaving those positions out of totals", sorted(unrated))
+        txns = [r for r in txns if r["currency"] not in unrated]
+        divs = [d for d in divs if d.get("currency") not in unrated]
+        contracts = {tk: [c for c in cs if c.get("currency") not in unrated]
+                     for tk, cs in contracts.items()}
     pos, meta = _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx)
     legs = legs_by_ticker(pos, meta)
     parts = {k: cost_partition(p) for k, p in pos.items() if k in meta}

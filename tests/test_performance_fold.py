@@ -218,6 +218,38 @@ def test_foreign_currency_converts_at_fx():
     assert r["mv_sgd"] == 204.0                     # 1200 * 0.17
 
 
+def test_a_position_whose_currency_has_no_fx_rate_is_left_out_not_raised():
+    # A closed JPY position (e.g. a long-sold holding ingestion.prices never priced because
+    # it isn't in current_position) must not 500 the whole fold — overview/positions/
+    # performance all share this one call. It's left out of the result with a warning,
+    # same policy as an orphan dividend matching no position.
+    txns = [_txn(security_id=10, canonical_ticker="JPYSEC", currency="JPY",
+                 action="buy", qty_signed=100, price=500.0, trade_date=D(2019, 1, 1)),
+            _txn(security_id=10, canonical_ticker="JPYSEC", currency="JPY",
+                 action="sell", qty_signed=-100, price=600.0, trade_date=D(2019, 6, 1)),
+            _txn(security_id=11, canonical_ticker="D05", currency="SGD",
+                 qty_signed=100, price=10.0)]
+    rows = _fold(txns, fx={}, price={10: 700.0, 11: 12.0})   # no JPY rate in fx
+    tickers = {r["ticker"] for r in rows}
+    assert "JPYSEC" not in tickers
+    assert tickers == {"D05"}                       # the SGD position still folds fine
+
+
+def test_a_dividend_or_put_whose_currency_has_no_fx_rate_is_left_out_not_raised():
+    # the same missing rate reached through a dividend paid in another currency, or a put's
+    # collateral, must not 500 the fold either.
+    txns = [_txn(security_id=11, canonical_ticker="D05", currency="SGD",
+                 qty_signed=100, price=10.0)]
+    divs = [{"account_id": 1, "security_id": 11, "pay_date": D(2021, 6, 1), "gross": 50,
+             "currency": "EUR"}]
+    contracts = {"D05": [{"type": "put", "open_date": D(2021, 1, 1), "open": True,
+                          "strike": 10.0, "contracts": 1, "currency": "JPY"}]}
+    r = _only(perf.fold_positions(txns, divs, {}, [], {}, {}, {11: 12.0}, TODAY,
+                                  contracts=contracts))
+    assert r["ticker"] == "D05"
+    assert r["income_sgd"] == 0
+
+
 # ---------------------------------------------------------------------------
 # Dated accumulators (#147). The fold keeps a dated unit series and a dated cost series
 # beside the undated scalars it already kept, so peak capital-at-risk (#143 §9) and the

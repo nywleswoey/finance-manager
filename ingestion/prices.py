@@ -2,7 +2,9 @@
 
 Stocks  -> Yahoo Finance (SG: <code>.SI, HK: <4-digit>.HK, MY: <code>.KL, US: <ticker>)
 Fund    -> latest Endowus NAV (Amundi Prime USA)
-FX      -> Yahoo (USDSGD=X, HKDSGD=X, EURSGD=X); SGD = 1
+FX      -> Yahoo (<CCY>SGD=X) for every non-SGD currency the ledger has ever held (security,
+           txn, dividend — open or closed), so a closed foreign-currency position is never
+           left without a rate; SGD = 1
 Only prices held securities (current_position). Run:
   PYTHONPATH=. .venv/bin/python -m ingestion.prices
 """
@@ -70,6 +72,19 @@ def upsert_price(s, security_id, d, close, ccy):
     s.merge(Price(security_id=security_id, date=d, close=close, currency=ccy, source="yahoo"))
 
 
+def ledger_currencies(s):
+    """Every non-SGD currency the ledger has ever booked money in — security, txn, and
+    dividend — open or closed positions alike. performance.fold_positions builds a row for
+    every position it has EVER held, not only current_position, and portfolio.money.
+    rate_to_sgd fails loud on any currency `fx_map()` has no rate for, so a currency that
+    only ever appeared on a now-closed position still needs a rate or the whole shared fold
+    (overview/positions/performance) 500s over that one row."""
+    return sorted({c for c, in s.execute(text(
+        "SELECT currency FROM security WHERE currency IS NOT NULL "
+        "UNION SELECT currency FROM txn WHERE currency IS NOT NULL "
+        "UNION SELECT currency FROM dividend WHERE currency IS NOT NULL")).all()} - {"SGD"})
+
+
 def main(today=None):
     s = SessionLocal()
     today = today or sg_today()
@@ -91,9 +106,9 @@ def main(today=None):
             fail += 1
             failed.append(tk)
             print(f"  price fail {tk} ({market}): {type(e).__name__}")
-    # FX -> SGD
+    # FX -> SGD, for every currency the ledger has ever held (see ledger_currencies).
     s.merge(FxRate(date=today, currency="SGD", rate_to_sgd=1))
-    for ccy in ("USD", "HKD", "EUR", "MYR"):
+    for ccy in ledger_currencies(s):
         try:
             rate, _ = yahoo_price(f"{ccy}SGD=X")
             s.merge(FxRate(date=today, currency=ccy, rate_to_sgd=rate))
