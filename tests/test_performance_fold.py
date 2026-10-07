@@ -235,6 +235,21 @@ def test_a_position_whose_currency_has_no_fx_rate_is_left_out_not_raised():
     assert tickers == {"D05"}                       # the SGD position still folds fine
 
 
+def test_a_dividend_or_put_whose_currency_has_no_fx_rate_is_left_out_not_raised():
+    # the same missing rate reached through a dividend paid in another currency, or a put's
+    # collateral, must not 500 the fold either.
+    txns = [_txn(security_id=11, canonical_ticker="D05", currency="SGD",
+                 qty_signed=100, price=10.0)]
+    divs = [{"account_id": 1, "security_id": 11, "pay_date": D(2021, 6, 1), "gross": 50,
+             "currency": "EUR"}]
+    contracts = {"D05": [{"type": "put", "open_date": D(2021, 1, 1), "open": True,
+                          "strike": 10.0, "contracts": 1, "currency": "JPY"}]}
+    r = _only(perf.fold_positions(txns, divs, {}, [], {}, {}, {11: 12.0}, TODAY,
+                                  contracts=contracts))
+    assert r["ticker"] == "D05"
+    assert r["income_sgd"] == 0
+
+
 # ---------------------------------------------------------------------------
 # Dated accumulators (#147). The fold keeps a dated unit series and a dated cost series
 # beside the undated scalars it already kept, so peak capital-at-risk (#143 §9) and the
