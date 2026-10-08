@@ -20,6 +20,7 @@ import datetime as dt
 import json
 import urllib.request
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 from sqlalchemy import text
 
@@ -31,6 +32,31 @@ from .nullable import rounded
 from .xirr import xirr as solve_xirr
 
 UA = {"User-Agent": "Mozilla/5.0"}
+
+# Each `daily()` call is one blocking Yahoo round-trip; fetched serially across ~30-40 held
+# securities + FX pairs, /api/return's cold path was mostly network wait. A modest worker
+# cap, not one thread per symbol: Yahoo is the shared bottleneck, not CPU.
+MAX_FETCH_WORKERS = 12
+
+
+def _fetch_concurrent(items, fetch):
+    """Run fetch(symbol) for every (key, symbol) in `items` concurrently; returns {key: series}.
+
+    A failed fetch yields {} for that key, same as the serial `except Exception: {}` it
+    replaces — a Yahoo outage on one symbol must not take down the others. Assignment back
+    to `key` happens after the call returns, so which thread finishes first never matters;
+    only `items`' order (the caller's) decides which series lands on which key."""
+    out = {}
+    if not items:
+        return out
+    with ThreadPoolExecutor(max_workers=min(MAX_FETCH_WORKERS, len(items))) as ex:
+        futures = {ex.submit(fetch, sym): key for key, sym in items}
+        for fut, key in futures.items():
+            try:
+                out[key] = fut.result()
+            except Exception:
+                out[key] = {}
+    return out
 
 
 def daily(sym, rng="10y"):
@@ -214,20 +240,13 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
     # day behind it. It also leaves the FX series out, unlike /api/positions, which folds in the
     # `fx_rate` date — the two legs there are separate table writes that can and do land on
     # different days, where these come back from one Yahoo fetch in one call.
-    prices, ccy_of, newest_close = {}, {}, None
+    ccy_of = {}
+    sec_items = []                         # (sid, yahoo symbol) for every non-fund holding
     for sid, tk, market, atype, ccy in held:
         ccy_of[sid] = ccy or "SGD"
         if atype == "fund":
             continue  # fund: no daily series (Endowus monthly) -> skip from TWR
-        try:
-            series = fetch(yahoo_symbol(tk, market))
-            prices[sid] = ffill(series, days)
-        except Exception:
-            series, prices[sid] = {}, {}
-        printed = [d for d in series if d <= as_of]
-        if printed:
-            newest_close = max(printed + ([newest_close] if newest_close else []))
-    fx = {"SGD": {d: 1.0 for d in days}}
+        sec_items.append((sid, yahoo_symbol(tk, market)))
     # Every currency converted below, not a fixed USD/HKD/EUR list. MYR had no series, so
     # fx_on returned None and every amount in that currency was skipped. Dividends and fees
     # carry their own currency: an SGD REIT can pay in EUR.
@@ -239,11 +258,23 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
     for t in txns:
         if t["fees"]:
             ccys_of[t["security_id"]].add(t["currency"])
-    for c in sorted(set().union(*ccys_of.values()) - {None, "", "SGD"}):
-        try:
-            fx[c] = ffill(fetch(f"{c}SGD=X"), days)
-        except Exception:
-            fx[c] = {}
+    fx_ccys = sorted(set().union(*ccys_of.values()) - {None, "", "SGD"})
+    fetched = _fetch_concurrent(
+        [(("sec", sid), sym) for sid, sym in sec_items]
+        + [(("fx", c), f"{c}SGD=X") for c in fx_ccys],
+        fetch,
+    )
+
+    prices, newest_close = {}, None
+    for sid, _sym in sec_items:
+        series = fetched[("sec", sid)]
+        prices[sid] = ffill(series, days)
+        printed = [d for d in series if d <= as_of]
+        if printed:
+            newest_close = max(printed + ([newest_close] if newest_close else []))
+    fx = {"SGD": {d: 1.0 for d in days}}
+    for c in fx_ccys:
+        fx[c] = ffill(fetched[("fx", c)], days)
     # No daily Yahoo series (a fund is skipped on purpose; see the note), or no FX series for
     # its currency or for a dividend or fee on it. Either one used to drop the amount with
     # nothing on the response.
