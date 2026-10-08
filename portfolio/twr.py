@@ -247,16 +247,6 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
         if atype == "fund":
             continue  # fund: no daily series (Endowus monthly) -> skip from TWR
         sec_items.append((sid, yahoo_symbol(tk, market)))
-    fetched = _fetch_concurrent(sec_items, fetch)
-
-    prices, newest_close = {}, None
-    for sid, _sym in sec_items:
-        series = fetched[sid]
-        prices[sid] = ffill(series, days)
-        printed = [d for d in series if d <= as_of]
-        if printed:
-            newest_close = max(printed + ([newest_close] if newest_close else []))
-    fx = {"SGD": {d: 1.0 for d in days}}
     # Every currency converted below, not a fixed USD/HKD/EUR list. MYR had no series, so
     # fx_on returned None and every amount in that currency was skipped. Dividends and fees
     # carry their own currency: an SGD REIT can pay in EUR.
@@ -269,10 +259,22 @@ def _returns(held, txns, divs, last_px, as_of, fetch=daily):
         if t["fees"]:
             ccys_of[t["security_id"]].add(t["currency"])
     fx_ccys = sorted(set().union(*ccys_of.values()) - {None, "", "SGD"})
-    fx_items = [(c, f"{c}SGD=X") for c in fx_ccys]
-    fetched_fx = _fetch_concurrent(fx_items, fetch)
+    fetched = _fetch_concurrent(
+        [(("sec", sid), sym) for sid, sym in sec_items]
+        + [(("fx", c), f"{c}SGD=X") for c in fx_ccys],
+        fetch,
+    )
+
+    prices, newest_close = {}, None
+    for sid, _sym in sec_items:
+        series = fetched[("sec", sid)]
+        prices[sid] = ffill(series, days)
+        printed = [d for d in series if d <= as_of]
+        if printed:
+            newest_close = max(printed + ([newest_close] if newest_close else []))
+    fx = {"SGD": {d: 1.0 for d in days}}
     for c in fx_ccys:
-        fx[c] = ffill(fetched_fx[c], days)
+        fx[c] = ffill(fetched[("fx", c)], days)
     # No daily Yahoo series (a fund is skipped on purpose; see the note), or no FX series for
     # its currency or for a dividend or fee on it. Either one used to drop the amount with
     # nothing on the response.
