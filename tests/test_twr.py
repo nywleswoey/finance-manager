@@ -5,6 +5,8 @@ database or Yahoo. `_returns` — the whole `/api/return` body below the DB read
 here too, with the Yahoo fetch injected, which is what makes the clock isolatable.
 """
 import datetime as dt
+import time
+from collections import Counter
 
 import pytest
 
@@ -348,7 +350,44 @@ def test_a_myr_position_is_in_the_money_figures():
     assert both["unpriced"] == []
     assert sgd["unpriced"] == []
     # SGD needs no FX pair. The Bursa code is 3255.KL, owned by ingestion.prices.yahoo_symbol.
-    assert calls == ["AAA.SI", "AAA.SI", "3255.KL", "MYRSGD=X"]
+    # Fetches now run concurrently (ThreadPoolExecutor), so only the multiset of calls is
+    # guaranteed, not their completion order.
+    assert Counter(calls) == Counter(["AAA.SI", "AAA.SI", "3255.KL", "MYRSGD=X"])
+
+
+def test_concurrent_fetch_preserves_per_security_assignment():
+    """Regression for the serial->concurrent fetch change: AAA.SI deliberately finishes last
+    under real thread concurrency, and its series must still land on AAA, not get swapped
+    with whichever symbol happened to finish first."""
+    def fetch(sym):
+        if sym == "AAA.SI":
+            time.sleep(0.05)
+        return _priced_book(sym)
+
+    as_of = D(2026, 1, 1)
+    both = _returns(HELD + MYR_HELD, TXNS + MYR_TXN, MYR_DIV, {}, as_of, fetch=fetch)
+
+    assert both["invested_sgd"] == 1005 + MYR_INVESTED
+    assert both["value_plus_income_sgd"] == 1200 + MYR_VALUE
+    assert both["unpriced"] == []
+
+
+def test_a_failed_fetch_among_concurrent_ones_only_drops_its_own_security():
+    """Regression: a slow, failing fetch for one symbol must not corrupt or block the
+    concurrently-fetched series for the others (AAA.SI's own fetch succeeds in parallel)."""
+    def fetch(sym):
+        if sym in ("3255.KL", "MYRSGD=X"):
+            time.sleep(0.05)
+            raise RuntimeError("yahoo down")
+        return _priced_book(sym)
+
+    as_of = D(2026, 1, 1)
+    sgd = _returns(HELD, TXNS, [], {}, as_of, fetch=_priced_book)
+    dropped = _returns(HELD + MYR_HELD, TXNS + MYR_TXN, MYR_DIV, {}, as_of, fetch=fetch)
+
+    assert dropped["invested_sgd"] == sgd["invested_sgd"]
+    assert dropped["value_plus_income_sgd"] == sgd["value_plus_income_sgd"]
+    assert dropped["unpriced"] == [{"ticker": "3255", "market": "MY", "currency": "MYR"}]
 
 
 def test_a_failed_yahoo_fetch_names_the_position_it_dropped():
