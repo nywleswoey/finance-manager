@@ -125,15 +125,23 @@ class TestResolve(unittest.TestCase):
         self.s.commit()
 
         with patch.object(da, "sgx_schedule", side_effect=urllib.error.URLError("boom")) as mock_sgx:
-            with self.assertRaises(RuntimeError):
+            with self.assertRaises(da.SgxUnavailable):
                 da._resolve(self.s, 1)
 
         mock_sgx.assert_called_once()   # stopped at the own name, never tried the "DBS" alias
 
+    def test_a_non_transport_error_propagates_unwrapped(self):
+        self.s.add(Security(id=1, canonical_ticker="D05", name="DBS Group Holdings Ltd", market="SG"))
+        self.s.commit()
+
+        with patch.object(da, "sgx_schedule", side_effect=KeyError("exDate")):
+            with self.assertRaises(KeyError):
+                da._resolve(self.s, 1)
+
 
 class TestMainTransportFailure(unittest.TestCase):
-    """main() must stop the whole fetch on the first transport failure: one request, one log
-    line, no partial writes - never a retry-every-candidate-for-every-holding storm."""
+    """main() must stop the whole fetch on the first transport failure: no retry storm across
+    every candidate of every holding, while still committing the holdings already resolved."""
 
     def _seed(self, s):
         s.execute(text(current_position_sql()))
@@ -144,31 +152,71 @@ class TestMainTransportFailure(unittest.TestCase):
             Security(id=2, canonical_ticker="O39", name="OCBC Bank", market="SG",
                       asset_type="stock"),
         ])
+        s.add(SecurityAlias(security_id=2, alias="Oversea-Chinese Banking Corp", source="symbols"))
         s.add_all([
             Txn(account_id=1, security_id=1, action="buy", qty_signed=100, dedup_hash="a"),
             Txn(account_id=1, security_id=2, action="buy", qty_signed=50, dedup_hash="b"),
         ])
         s.commit()
 
-    def test_stops_after_one_request_logs_once_and_writes_nothing(self):
+    def _run(self, Session, sgx):
+        with patch.object(da, "SessionLocal", Session), \
+             patch.object(da, "sgx_schedule", side_effect=sgx) as mock_sgx, \
+             patch.object(da.time, "sleep"), \
+             patch("builtins.print") as mock_print:
+            result = da.main(today=dt.date(2025, 6, 1))
+        return result, mock_sgx, mock_print
+
+    def test_commits_resolved_holdings_and_stops_at_the_first_failure(self):
+        Session = make_sessionmaker()
+        with Session() as s:
+            self._seed(s)
+        sched = {dt.date(2025, 2, 14): {"pay": dt.date(2025, 3, 1), "ccy": "SGD",
+                                         "inline": 0.12, "has_opt": False}}
+        first = []
+
+        def sgx(name):
+            if not first:
+                first.append(name)
+                return sched
+            raise urllib.error.URLError("boom")
+
+        result, mock_sgx, mock_print = self._run(Session, sgx)
+
+        self.assertEqual(mock_sgx.call_count, 2)           # never tried the failing one's alias
+        mock_print.assert_called_once()
+        self.assertIn("1 unresolved holdings fall back to last year's pattern",
+                      mock_print.call_args[0][0])
+        self.assertEqual(len(result["matched"]), 1)
+        self.assertEqual(result["unmatched"], [])
+        self.assertEqual(result["rows"], 1)
+
+        with Session() as s:
+            rows = s.query(DividendAnnouncement).all()
+            self.assertEqual([(r.ex_date, float(r.amount_per_unit)) for r in rows],
+                             [(dt.date(2025, 2, 14), 0.12)])
+
+    def test_failure_on_the_first_request_writes_nothing(self):
         Session = make_sessionmaker()
         with Session() as s:
             self._seed(s)
 
-        with patch.object(da, "SessionLocal", Session), \
-             patch.object(da, "sgx_schedule",
-                           side_effect=urllib.error.URLError("boom")) as mock_sgx, \
-             patch("builtins.print") as mock_print:
-            result = da.main(today=dt.date(2025, 6, 1))
+        result, mock_sgx, mock_print = self._run(Session, urllib.error.URLError("boom"))
 
-        mock_sgx.assert_called_once()                      # never tried a 2nd holding/alias
+        mock_sgx.assert_called_once()
         mock_print.assert_called_once()
-        self.assertIn("fall back to last year's pattern", mock_print.call_args[0][0])
+        self.assertIn("2 unresolved holdings fall back", mock_print.call_args[0][0])
         self.assertEqual(result, {"matched": [], "unmatched": [], "rows": 0})
-
         with Session() as s:
             self.assertEqual(s.query(DividendAnnouncement).count(), 0)
 
+    def test_a_non_transport_error_crashes_loudly(self):
+        Session = make_sessionmaker()
+        with Session() as s:
+            self._seed(s)
+
+        with self.assertRaises(KeyError):
+            self._run(Session, KeyError("exDate"))
 
 if __name__ == "__main__":
     unittest.main()

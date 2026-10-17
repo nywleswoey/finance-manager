@@ -50,7 +50,7 @@ def _looks_like_sgx_code(name):
     plausible SGX registered company name. SGX's corporate-actions API ignores ticker/code
     params (see module docstring), so querying by one is a pointless request."""
     return (
-        name and " " not in name and name.isupper()
+        name and " " not in name
         and (len(name) <= 4 or any(c.isdigit() for c in name))
     )
 
@@ -72,13 +72,17 @@ def _candidate_names(s, security_id):
         out.append(own_u)
     for a in aliases:
         stripped = _strip_dividend_suffix((a or "").strip())
-        if not stripped or _looks_like_sgx_code(stripped.upper()):
+        if not stripped or _looks_like_sgx_code(stripped):
             continue
         u = stripped.upper()
         if u not in seen:
             seen.add(u)
             out.append(u)
     return out
+
+
+class SgxUnavailable(RuntimeError):
+    """The SGX request itself failed (network, TLS, timeout, unparseable reply)."""
 
 
 def _resolve(s, security_id):
@@ -92,8 +96,8 @@ def _resolve(s, security_id):
     for name in _candidate_names(s, security_id):
         try:
             sched = sgx_schedule(name)
-        except Exception as e:
-            raise RuntimeError(f"sgx lookup failed for {name!r}: {type(e).__name__}: {e}") from e
+        except (OSError, ValueError) as e:
+            raise SgxUnavailable(f"sgx lookup failed for {name!r}: {type(e).__name__}: {e}") from e
         time.sleep(0.2)
         if sched:
             return name, sched
@@ -108,37 +112,37 @@ def main(today=None):
         "SELECT DISTINCT security_id, canonical_ticker FROM current_position "
         "WHERE market='SG' AND asset_type != 'fund'")).all()
 
-    matched, unmatched, rows_written = [], [], 0
-    try:
-        for sid, tk in held:
+    matched, unmatched, rows_written, failure = [], [], 0, None
+    for sid, tk in held:
+        try:
             name, sched = _resolve(s, sid)
-            if not name:
-                unmatched.append(tk)
+        except SgxUnavailable as e:
+            failure = e
+            break
+        if not name:
+            unmatched.append(tk)
+            continue
+        matched.append(tk)
+        for ex, slot in sched.items():
+            # a cash/scrip election makes the regex-summed rate untrustworthy as THE cash
+            # rate (see sgx_schedule's docstring) - skip it rather than store a guess.
+            if slot["has_opt"] or not slot["inline"] or slot["inline"] <= 0 or ex < cutoff:
                 continue
-            matched.append(tk)
-            for ex, slot in sched.items():
-                # a cash/scrip election makes the regex-summed rate untrustworthy as THE
-                # cash rate (see sgx_schedule's docstring) - skip it rather than store a guess.
-                if slot["has_opt"] or not slot["inline"] or slot["inline"] <= 0 or ex < cutoff:
-                    continue
-                s.merge(DividendAnnouncement(
-                    security_id=sid, ex_date=ex, pay_date=slot["pay"],
-                    amount_per_unit=round(slot["inline"], 6), currency=slot["ccy"] or "SGD",
-                    source="sgx"))
-                rows_written += 1
-    except Exception as e:
-        # a failed fetch must never write partial results that could delete or overwrite
-        # good cached rows - roll back whatever this run's merges have staged.
-        s.rollback()
-        s.close()
-        print(f"{e} - dividend projections fall back to last year's pattern")
-        return {"matched": [], "unmatched": [], "rows": 0}
+            s.merge(DividendAnnouncement(
+                security_id=sid, ex_date=ex, pay_date=slot["pay"],
+                amount_per_unit=round(slot["inline"], 6), currency=slot["ccy"] or "SGD",
+                source="sgx"))
+            rows_written += 1
     s.commit()
-    print(f"dividend announcements: {len(matched)} securities matched ({rows_written} rows), "
-          f"{len(unmatched)} unmatched: {unmatched}")
+    summary = (f"dividend announcements: {len(matched)} securities matched ({rows_written} rows), "
+               f"{len(unmatched)} unmatched: {unmatched}")
+    if failure:
+        unresolved = len(held) - len(matched) - len(unmatched)
+        summary += (f"; stopped on {failure} - the {unresolved} unresolved holdings fall back "
+                    f"to last year's pattern")
+    print(summary)
     s.close()
     return {"matched": matched, "unmatched": unmatched, "rows": rows_written}
-
 
 if __name__ == "__main__":
     main()
