@@ -9,16 +9,24 @@ compare `r["name"]` against what was asked for, which this function already does
 """
 import json
 import re
+import ssl
 import urllib.parse
 import urllib.request
 import datetime as dt
 
+import certifi
+
 RATE_RX = re.compile(r"\b(SGD|USD|EUR|HKD)\s*([0-9]+(?:\.[0-9]+)?)")
+
+# SGX's cert chains to GlobalSign Root R46, which is missing from the OS CA bundle Python's
+# default SSLContext uses on some platforms (e.g. macOS's /etc/ssl/cert.pem); certifi's bundle
+# has it. Built once at import time rather than per request.
+_SSL_CONTEXT = ssl.create_default_context(cafile=certifi.where())
 
 
 def _get(url):
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    return json.load(urllib.request.urlopen(req, timeout=30))
+    return json.load(urllib.request.urlopen(req, timeout=30, context=_SSL_CONTEXT))
 
 
 def epoch_date(ms):
