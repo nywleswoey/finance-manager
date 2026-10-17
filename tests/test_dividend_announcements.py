@@ -12,6 +12,7 @@ than hit for real - no live network in tests.
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_dividend_announcements.py -q
 """
 import datetime as dt
+import http.client
 import unittest
 import urllib.error
 from unittest.mock import patch
@@ -129,6 +130,16 @@ class TestResolve(unittest.TestCase):
                 da._resolve(self.s, 1)
 
         mock_sgx.assert_called_once()   # stopped at the own name, never tried the "DBS" alias
+
+    def test_a_dropped_or_malformed_http_response_is_a_transport_failure(self):
+        self.s.add(Security(id=1, canonical_ticker="D05", name="DBS Group Holdings Ltd", market="SG"))
+        self.s.commit()
+
+        for err in (http.client.IncompleteRead(b"partial"), http.client.BadStatusLine("junk")):
+            with self.subTest(err=type(err).__name__), \
+                 patch.object(da, "sgx_schedule", side_effect=err):
+                with self.assertRaises(da.SgxUnavailable):
+                    da._resolve(self.s, 1)
 
     def test_a_non_transport_error_propagates_unwrapped(self):
         self.s.add(Security(id=1, canonical_ticker="D05", name="DBS Group Holdings Ltd", market="SG"))

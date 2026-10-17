@@ -18,6 +18,7 @@ A holding with no matching candidate is left with nothing here, and `projected()
 to last year's pattern for it — the required graceful degradation, not a special case.
 """
 import datetime as dt
+import http.client
 import os
 import re
 import sys
@@ -96,7 +97,7 @@ def _resolve(s, security_id):
     for name in _candidate_names(s, security_id):
         try:
             sched = sgx_schedule(name)
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, http.client.HTTPException) as e:
             raise SgxUnavailable(f"sgx lookup failed for {name!r}: {type(e).__name__}: {e}") from e
         time.sleep(0.2)
         if sched:
