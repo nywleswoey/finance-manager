@@ -313,13 +313,52 @@ def test_cdp_statements_reads_a_bare_cash_dividend_and_a_dividend_option_line(tm
         "24/09/2026      SASSEUR REIT Cash Dividend - 6,500 units @ SGD 0.03366"
         "                                      218.79\n"
         "31/03/2026      STONEWEG EUTRUST Dividend Option - 1,400 units @ EUR 0.06837"
-        "                            95.72\n"
+        "                            141.30\n"
+        "                EUR 95.72 (Currency Conversion @ 1.4762)\n"
     ) + CASH_TXN_FOOTER
     got = _cdp_statements(tmp_path, monkeypatch, text)
     assert got == [
         ("CRPU", "2026-09-24", 218.79, "SGD", 6500.0, 0.03366),
         ("SET", "2026-03-31", 95.72, "EUR", 1400.0, 0.06837),
     ]
+
+
+def test_cdp_statements_books_a_foreign_dividend_in_its_own_currency(tmp_path, monkeypatch):
+    """CDP credits SGD: the amount column of a foreign-declared line is the SGD converted
+    figure, and the native gross sits on the "Currency Conversion" line below it. The native
+    gross is what goes with the declared currency (as the tracker sheet and the brokers book
+    USD/EUR dividends); booking the SGD figure as USD/EUR overstates it by the FX rate."""
+    text = CASH_TXN_HEADER + (
+        "25/09/2020      MANULIFEREIT USD Cash Dividend - 5,200 units @ USD 0.0199"
+        "                               140.14\n"
+        "                USD 103.48 (Currency Conversion @ 1.3543)\n"
+    ) + CASH_TXN_FOOTER
+    assert _cdp_statements(tmp_path, monkeypatch, text) == [
+        ("BTOU", "2020-09-25", 103.48, "USD", 5200.0, 0.0199)]
+
+
+def test_cdp_statements_falls_back_to_the_sgd_credit_without_a_conversion_line(
+        tmp_path, monkeypatch, capsys):
+    """No native figure to read: book what was actually credited, in SGD (the declared rate is
+    in another currency, so it is not carried), and say so."""
+    text = CASH_TXN_HEADER + (
+        "25/09/2020      MANULIFEREIT USD Cash Dividend - 5,200 units @ USD 0.0199"
+        "                               140.14\n"
+    ) + CASH_TXN_FOOTER
+    assert _cdp_statements(tmp_path, monkeypatch, text) == [
+        ("BTOU", "2020-09-25", 140.14, "SGD", 5200.0, None)]
+    assert "Currency Conversion" in capsys.readouterr().out
+
+
+def test_cdp_statements_drops_a_delisting_payout_booked_as_sale_proceeds(tmp_path, monkeypatch):
+    """Accordia's 2020-10-15 "Special Cash Dividend" is the delisting payout, already booked as
+    the 40,000-unit sale in the CDP transactions; reading it as income too would double it."""
+    text = CASH_TXN_HEADER + (
+        "15/10/2020      ACCORDIA GOLF TR Special Cash Dividend - 40,000 units @ JPY 54.57"
+        "                    28,264.00\n"
+        "                JPY 2,182,800.09 (Currency Conversion @ 0.012948506)\n"
+    ) + CASH_TXN_FOOTER
+    assert _cdp_statements(tmp_path, monkeypatch, text) == []
 
 
 def test_cdp_statements_ignores_capital_distribution_redemption_and_payment_made_lines(

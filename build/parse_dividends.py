@@ -95,6 +95,9 @@ def fsm():
 _CASH_DIV_LINE = re.compile(
     r"^\s*(\d{2})/(\d{2})/(\d{4})\s+(.+?(?:Cash Dividend|Dividend Option))\s+-\s+"
     r"([\d,]+)\s+units\s+@\s+([A-Z]{3})\s*([\d.]+)\s+([\d,]+\.\d{2})\s*$")
+# Under a foreign-declared line: "USD 103.48 (Currency Conversion @ 1.3543)". CDP credits SGD,
+# so the line above's amount column is the converted SGD figure; this is the native gross.
+_CASH_DIV_FX = re.compile(r"^\s*([A-Z]{3})\s+([\d,]+\.\d{2})\s+\(Currency Conversion\b")
 _CASH_DIV_KIND = re.compile(r"\s+(?:Final|Interim|Special)?\s*(?:Cash Dividend|Dividend Option)\s*$",
                             re.I)
 
@@ -123,7 +126,8 @@ def cdp_statements():
                 break
         if start is None:
             continue
-        for ln in lines[start:end]:
+        section = lines[start:end]
+        for i, ln in enumerate(section):
             m = _CASH_DIV_LINE.match(ln)
             if not m:
                 continue
@@ -133,8 +137,20 @@ def cdp_statements():
             if tk is None:
                 unmapped.add(name)
                 continue
-            add(date=f"{yyyy}-{mm}-{dd}", account="CDP", market="SG", ticker=tk,
-                name=name, kind="cash", gross=num(amt), units=num(units), rate=num(rate),
+            date = f"{yyyy}-{mm}-{dd}"
+            if (tk, date) in CDP_DIV_FIX and CDP_DIV_FIX[(tk, date)] is None:  # explicit drop
+                continue
+            gross, rate = num(amt), num(rate)
+            if ccy != "SGD":
+                fx = _CASH_DIV_FX.match(section[i + 1]) if i + 1 < len(section) else None
+                if fx and fx.group(1) == ccy:
+                    gross = num(fx.group(2))
+                else:                     # no native figure: book the SGD actually credited
+                    print(f"CDP statement dividend: no Currency Conversion line under {tk} "
+                          f"{date} ({ccy}); booked the SGD credit instead (review)")
+                    ccy, rate = "SGD", None
+            add(date=date, account="CDP", market="SG", ticker=tk,
+                name=name, kind="cash", gross=gross, units=num(units), rate=rate,
                 currency=ccy, source="cdp (cash dividend, statement)")
     if unmapped:
         print("CDP statement dividends: UNMAPPED issuer names (review):", sorted(unmapped))
@@ -151,11 +167,13 @@ import datetime as _dt
 _XL_EPOCH = _dt.date(1899, 12, 30)
 # foreign-currency CDP holdings (others are SGD); used when native != SGD column
 CDP_FCCY = {"LIW": "USD", "SET": "EUR", "BTOU": "USD", "CMOU": "USD", "H78": "USD", "UD1U": "EUR"}
-# manual corrections to the CDP sheet, keyed by (ticker, ISO pay-date). The sheet is a broader
-# tracker and occasionally mis-records. Value None = drop the row; a dict = override gross/sgd/units.
+# manual corrections to CDP dividends, keyed by (ticker, ISO pay-date). Value None = drop the row
+# (from the statement and the sheet alike); a dict = override the sheet's gross/sgd/units (the
+# sheet is a broader tracker and occasionally mis-records).
 CDP_DIV_FIX = {
-    # 2021 Accordia "dividend" is the remainder of the delisting payout — booked as txn proceeds,
-    # not income (position already sold 2020-10-15).
+    # Accordia's delisting payout, paid as a "Special Cash Dividend" (2020-10-15) plus a 2021
+    # remainder, is booked as the 40,000-unit sale's proceeds, not income.
+    ("ADQU", "2020-10-15"): None,
     ("ADQU", "2021-08-17"): None,
     # CDP held only 1,400 Stoneweg on this date; the sheet's 14,500 units (and 1,260.78) also
     # counted the 13,100 later held in Tiger Prime. Scale to the CDP-only 1,400.
