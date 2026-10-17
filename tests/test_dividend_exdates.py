@@ -82,10 +82,53 @@ class TestBackfillExDates(unittest.TestCase):
         self.assertIsNone(s.scalar(select(Dividend.ex_date)))
 
     def test_matches_on_ticker_and_pay_date_together(self):
-        """A right ticker on the wrong pay date, or vice versa, must not be filled."""
+        """A right ticker on the wrong pay date, or vice versa, must not be filled. (The wrong date
+        is beyond PAY_DATE_TOLERANCE_DAYS; a nearer one is a shifted payout, tested below.)"""
         s = make_session(); seed(s)
-        div(s, 1, 1, dt.date(2026, 5, 20))          # F34 on D05's pay date
-        div(s, 1, 2, dt.date(2026, 5, 14))          # D05 on F34's pay date
+        div(s, 1, 1, dt.date(2026, 7, 1))           # F34, 48 days off its CSV pay date
+        div(s, 1, 3, dt.date(2026, 5, 14))          # C38U on F34's pay date
+        s.flush()
+        self.assertEqual(load.backfill_ex_dates(s), 0)
+
+    def test_fills_a_payout_whose_pay_date_moved(self):
+        """A source switch (e.g. tracker sheet -> statement PDF) can shift a payout's pay date by
+        a few days; the CSV's ex-date must follow it or the exporter refuses to run."""
+        s = make_session(); seed(s)
+        div(s, 1, 1, dt.date(2026, 5, 22))          # F34 8 days late (CSV says 2026-05-14), as
+        div(s, 2, 1, dt.date(2026, 5, 22))          # S7OU's 2019-06 payout moved; other account
+        s.flush()
+        self.assertEqual(load.backfill_ex_dates(s), 2)
+        for d in s.scalars(select(Dividend)).all():
+            self.assertEqual(d.ex_date, dt.date(2026, 4, 29))
+
+    def test_shift_beyond_tolerance_is_not_filled(self):
+        s = make_session(); seed(s)
+        div(s, 1, 1, dt.date(2026, 6, 15))          # F34, 32 days after the CSV pay date
+        s.flush()
+        self.assertEqual(load.backfill_ex_dates(s), 0)
+
+    def test_shifted_match_never_takes_a_payout_with_its_own_csv_row(self):
+        """D05's 2026-05-20 payout is in the CSV under its own date; F34's ex-date can't claim it,
+        nor can a nearby F34 payout that the CSV already lists."""
+        csv_path = os.path.join(self.root, "data", "dividends-master.csv")
+        with open(csv_path, "a") as fh:
+            fh.write("2026-05-18,,F34,0.1,SGD\n")
+        s = make_session(); seed(s)
+        div(s, 1, 1, dt.date(2026, 5, 18))          # F34, listed in the CSV (no ex-date)
+        s.flush()
+        self.assertEqual(load.backfill_ex_dates(s), 0)
+        self.assertIsNone(s.scalar(select(Dividend.ex_date)))
+
+    def test_ambiguous_shift_is_not_filled(self):
+        s = make_session(); seed(s)
+        div(s, 1, 1, dt.date(2026, 5, 10))          # two F34 candidates in the window
+        div(s, 1, 1, dt.date(2026, 5, 30))
+        s.flush()
+        self.assertEqual(load.backfill_ex_dates(s), 0)
+
+    def test_shift_never_puts_ex_date_after_pay_date(self):
+        s = make_session(); seed(s)
+        div(s, 1, 1, dt.date(2026, 4, 28))          # F34 paid before the CSV's ex-date
         s.flush()
         self.assertEqual(load.backfill_ex_dates(s), 0)
 
