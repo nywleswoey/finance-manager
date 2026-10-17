@@ -12,10 +12,12 @@ back). There is no name column seeded for this: `security.name` and its `securit
 are harvested from brokers' own statement text, which routinely echoes the exchange's
 registered name on a dividend line (build/fetch_cpf_srs_dividends.py's curated SEC dict is the
 same names, by hand, for the 7 CPF/SRS counters it backfills). So each holding tries its own
-name plus every alias as a candidate and keeps the first that SGX actually recognizes
-(`sgx_schedule` returns a non-empty schedule only when the name matched — see its docstring).
-A holding with no matching candidate is left with nothing here, and `projected()` falls back
-to last year's pattern for it — the required graceful degradation, not a special case.
+name plus every plausible-name alias (see `_candidate_names`) as a candidate and keeps the
+first that SGX actually recognizes (`sgx_schedule` returns a non-empty schedule only when the
+name matched — see its docstring). A holding with no matching candidate is left with nothing
+here, and `projected()` falls back to last year's pattern for it — the required graceful
+degradation, not a special case. If the SGX request itself fails, the run stops there, keeps
+what already resolved, and the remaining holdings fall back the same way.
 """
 import datetime as dt
 import http.client
@@ -144,6 +146,7 @@ def main(today=None):
     print(summary)
     s.close()
     return {"matched": matched, "unmatched": unmatched, "rows": rows_written}
+
 
 if __name__ == "__main__":
     main()
