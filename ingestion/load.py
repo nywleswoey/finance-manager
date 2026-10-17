@@ -6,6 +6,7 @@ This bridges the current parser outputs into the DB before parsers are rewritten
 write directly. Run:  PYTHONPATH=. .venv/bin/python -m ingestion.load
 """
 import csv
+import datetime as dt
 import hashlib
 import os
 import sys
@@ -33,6 +34,11 @@ SKIP_ACCT = ("superseded", "dup", "Vickers", "Tiger-archive")
 # (SGXZ40088619 Fullerton SGD Liquidity, SGXZ99103178, SGXZ75661421), so a prefix rule would one
 # day swallow a real position the moment those stop being classified as cash sweeps.
 SKIP_TICKERS = frozenset({"SGXZ17686775", "SGXZ18842542", "SGXZ87559985"})
+
+# How far a payout's pay date may drift between sources and still be treated as the same event:
+# the ±31 days within which build/parse_dividends.py lets a CDP statement row replace the tracker
+# sheet's row for the same ticker (the sheet's dates can be a week or more off the statement's).
+PAY_DATE_TOLERANCE_DAYS = 31
 
 
 def h(*parts):
@@ -186,18 +192,48 @@ def backfill_ex_dates(session):
     n = 0
     with open(p) as fh:
         rows = list(csv.DictReader(fh))
+    listed = {(r["ticker"], r["date"]) for r in rows}
+    in_db = {(tk, str(pay)) for tk, pay in session.execute(text(
+        "SELECT DISTINCT sec.canonical_ticker, d.pay_date FROM dividend d "
+        "JOIN security sec ON sec.id = d.security_id WHERE d.pay_date IS NOT NULL"))}
     for r in rows:
         if not r.get("ex_date"):
             continue
+        pay = r["date"]
+        if (r["ticker"], pay) not in in_db:
+            pay = _shifted_pay_date(session, r, listed)
+            if pay is None:
+                continue
         # ex-dates are account-independent, so one CSV row updates every account's copy of
         # that (security, pay_date) dividend. Only NULLs are touched: the DB stays authoritative
         # for anything already set, so a stale CSV can never overwrite a corrected ex-date.
         n += session.execute(text(
             "UPDATE dividend SET ex_date = :ex WHERE ex_date IS NULL AND pay_date = :pay "
             "AND security_id IN (SELECT id FROM security WHERE canonical_ticker = :tk)"),
-            {"ex": r["ex_date"], "tk": r["ticker"], "pay": r["date"]}).rowcount
+            {"ex": r["ex_date"], "tk": r["ticker"], "pay": pay}).rowcount
     session.flush()
     return n
+
+
+def _shifted_pay_date(session, r, listed):
+    """The pay date the DB now holds for CSV row `r`'s payout, when no DB row has `r`'s own date.
+
+    Switching a payout's source (e.g. the CDP tracker sheet -> the statement PDF) can move its pay
+    date by a few days. Without following it, the ex-date is stranded on a date no row has and the
+    exporter refuses to run. Matched conservatively: same ticker, within PAY_DATE_TOLERANCE_DAYS,
+    ex_date still NULL, not before the ex-date, and not a date the CSV lists in its own right. Anything other than exactly one candidate date is left alone.
+    """
+    pay, ex = pdate(r["date"]), pdate(r["ex_date"])
+    if pay is None or ex is None:
+        return None
+    lo = max(ex, pay - dt.timedelta(days=PAY_DATE_TOLERANCE_DAYS))
+    hi = pay + dt.timedelta(days=PAY_DATE_TOLERANCE_DAYS)
+    found = {str(d) for (d,) in session.execute(text(
+        "SELECT DISTINCT d.pay_date FROM dividend d JOIN security sec ON sec.id = d.security_id "
+        "WHERE sec.canonical_ticker = :tk AND d.ex_date IS NULL "
+        "AND d.pay_date BETWEEN :lo AND :hi"), {"tk": r["ticker"], "lo": lo.isoformat(), "hi": hi.isoformat()})}
+    found = {d for d in found if (r["ticker"], d) not in listed}
+    return found.pop() if len(found) == 1 else None
 
 
 def prune_stale(session, model, keep_hashes, **scope):
