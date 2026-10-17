@@ -208,9 +208,11 @@ cached rather than fetched per page load. SGX's corporate-actions API
 legal name — there is no ticker/code parameter, and an unrecognized name silently returns the
 WHOLE unfiltered history rather than nothing (`portfolio.sgx.sgx_schedule`'s docstring). There is
 no curated name table: each currently-held SG security (excluding funds) tries its own
-`security.name` and every `security_alias` as a candidate and keeps the first SGX actually
-recognizes, since broker statement text routinely already echoes the exchange's registered name
-on a dividend line. A security with no matching candidate — or outside SG, or a cash/scrip
-election SGX's regex-summed rate can't be trusted for — simply has nothing in
-`dividend_announcement`, and `projected()` falls back to `last_year_pattern` for it. That is the
-graceful degradation, not a special case.
+`security.name` and every `security_alias` that could be a registered name (bare SGX codes
+dropped, broker dividend-line suffixes like ` Cash Dividend` stripped) as a candidate and keeps
+the first SGX actually recognizes, since broker statement text routinely already echoes the
+exchange's registered name on a dividend line. A security with no matching candidate — or
+outside SG, or a cash/scrip election SGX's regex-summed rate can't be trusted for — simply has
+nothing in `dividend_announcement`, and `projected()` falls back to `last_year_pattern` for it.
+That is the graceful degradation, not a special case. If the SGX request itself fails, the run
+stops at that holding, commits what already resolved, and the rest degrade the same way.
