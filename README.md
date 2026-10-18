@@ -54,8 +54,9 @@ do; parsing it the next morning is not. See
 [DEPLOY.md §6](DEPLOY.md#6-keeping-the-deployed-data-fresh-schedules).
 
 Web-app edits (snapshot edits, spending classifications) exist only in production. `make
-sync-from-prod` replaces the local docker DB with an exact copy of production, which it only
-reads (needs `ENV_FILE`, see above; asks first unless `CONFIRM=1`) — see
+sync-from-prod` replaces the local docker DB's `public` schema with an exact copy of
+production's (Neon's `neon_auth` schema is never copied), which it only reads (needs
+`ENV_FILE`, see above; asks first unless `CONFIRM=1`) — see
 [DEPLOY.md § Operations](DEPLOY.md#operations).
 
 One-off / backdated net-worth snapshot for a specific month:

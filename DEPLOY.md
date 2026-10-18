@@ -285,14 +285,17 @@ this list is the live one — add a line here before citing a new code.
 - **Keeping the local docker DB in sync with production**: `make ingest-all` only ever adds
   what statements on this machine can produce; it never carries over snapshot edits or spending
   classifications made in the web app, which land only in the deployed (Neon) DB. `make
-  sync-from-prod` makes the local docker DB an exact copy of production instead: it reads
-  `DATABASE_URL_UNPOOLED` from `ENV_FILE` (falling back to `DATABASE_URL`, as `api` reads it;
-  so it needs `vercel env pull` run first), opens every session against it read-only
-  (`PGOPTIONS='-c default_transaction_read_only=on'`), `pg_dump`s it (via a version-matched
-  `postgres:<major>-alpine` container when Neon's major version is ahead of the local `pg_dump`
-  on `PATH`), drops and recreates the docker DB's `public` schema, and `pg_restore`s the dump
-  into it — so nothing local-only survives, and it lands on the same alembic revision as
-  production, since `alembic_version` comes over with everything else. The
+  sync-from-prod` makes the local docker DB's `public` schema an exact copy of production's
+  instead: it reads `DATABASE_URL_UNPOOLED` from `ENV_FILE` (falling back to `DATABASE_URL`, as
+  `api` reads it; so it needs `vercel env pull` run first), opens every session against it
+  read-only (`PGOPTIONS='-c default_transaction_read_only=on'`), `pg_dump`s only the `public`
+  schema (via a version-matched `postgres:<major>-alpine` container when Neon's major version
+  is ahead of the local `pg_dump` on `PATH`) — Neon's own `neon_auth` schema (sessions, tokens,
+  password hashes the local app never uses) is never dumped — drops and recreates the docker
+  DB's `public` schema (and drops any `neon_auth` schema a sync run before this exclusion left
+  behind), and `pg_restore`s the dump into it — so nothing local-only survives, and it lands on
+  the same alembic revision as production, since `alembic_version` comes over with everything
+  else. The
   destination is guarded like `reset`/`migrate` (refuses a non-localhost `DATABASE_URL`
   exported in the shell) and it replaces every row locally, so it asks `Type 'yes' to continue`
   unless `CONFIRM=1`. Prints a one-line row-count summary (`txn`, `dividend`, `cash_txn`,

@@ -51,11 +51,21 @@ else
 fi
 
 ( export PGOPTIONS="$RO"; pg_tool pg_dump --format=custom --no-owner --no-privileges \
-    --dbname="$SOURCE_DATABASE_URL" ) > "$DUMP_FILE"
+    --exclude-schema=neon_auth --dbname="$SOURCE_DATABASE_URL" ) > "$DUMP_FILE"
 
+# --exclude-schema (not --schema=public) so the dump keeps treating "public" as the implicit
+# default schema pg_dump never emits a CREATE SCHEMA for — using --schema=public instead would
+# make pg_dump emit one, which then collides with the "create schema public" below.
+#
 # --clean only drops what the dump contains; a local-only table, view or sequence would survive
-# it. Start from an empty schema so the result is exactly production.
-psql "$DEST_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c 'drop schema public cascade; create schema public;'
+# it. Start from an empty schema so the result is exactly production. Also drop any neon_auth
+# schema left by a sync run before this exclusion was added — it holds Neon's managed auth
+# data (sessions, tokens, password hashes) the local app never uses, and a stale copy collides
+# with pg_restore on the next sync.
+psql "$DEST_DATABASE_URL" -q -v ON_ERROR_STOP=1 -c '
+  drop schema public cascade; create schema public;
+  drop schema if exists neon_auth cascade;
+'
 
 # A dump written by a pg_dump newer than the docker-compose server (whether from the image
 # above or a local libpq upgrade) can carry session-setup SETs for GUCs the server doesn't have
