@@ -12,13 +12,17 @@ back). There is no name column seeded for this: `security.name` and its `securit
 are harvested from brokers' own statement text, which routinely echoes the exchange's
 registered name on a dividend line (build/fetch_cpf_srs_dividends.py's curated SEC dict is the
 same names, by hand, for the 7 CPF/SRS counters it backfills). So each holding tries its own
-name plus every alias as a candidate and keeps the first that SGX actually recognizes
-(`sgx_schedule` returns a non-empty schedule only when the name matched — see its docstring).
-A holding with no matching candidate is left with nothing here, and `projected()` falls back
-to last year's pattern for it — the required graceful degradation, not a special case.
+name plus every plausible-name alias (see `_candidate_names`) as a candidate and keeps the
+first that SGX actually recognizes (`sgx_schedule` returns a non-empty schedule only when the
+name matched — see its docstring). A holding with no matching candidate is left with nothing
+here, and `projected()` falls back to last year's pattern for it — the required graceful
+degradation, not a special case. If the SGX request itself fails, the run stops there, keeps
+what already resolved, and the remaining holdings fall back the same way.
 """
 import datetime as dt
+import http.client
 import os
+import re
 import sys
 import time
 
@@ -33,30 +37,70 @@ from portfolio.sgx import sgx_schedule
 # how far back to keep: enough to cross-check against, not the security's whole SGX history
 LOOKBACK_YEARS = 1
 
+# a broker statement's dividend line routinely appends one of these to the security's own
+# name (e.g. "DBS Group Holdings Ltd Cash Dividend") rather than giving the bare name itself
+_DIVIDEND_LINE_SUFFIX_RX = re.compile(
+    r"\s+(cash dividend|scrip dividend option|cash in lieu)$", re.IGNORECASE)
+
+
+def _strip_dividend_suffix(name):
+    """Strip a trailing broker dividend-line suffix (e.g. ' Cash Dividend') from `name`."""
+    return _DIVIDEND_LINE_SUFFIX_RX.sub("", name)
+
+
+def _looks_like_sgx_code(name):
+    """True for a bare SGX stock/fund code (e.g. 'C', 'D05', '0P0001OOJG') rather than a
+    plausible SGX registered company name. SGX's corporate-actions API ignores ticker/code
+    params (see module docstring), so querying by one is a pointless request."""
+    return (
+        name and " " not in name
+        and (len(name) <= 4 or any(c.isdigit() for c in name))
+    )
+
 
 def _candidate_names(s, security_id):
-    """The security's own name plus every alias, upper-cased and deduped, own name first."""
-    rows = s.execute(text(
-        "SELECT name FROM security WHERE id=:id "
-        "UNION ALL SELECT alias FROM security_alias WHERE security_id=:id"),
-        {"id": security_id}).scalars().all()
+    """The security's own name, then every alias that is a plausible SGX registered name,
+    upper-cased and deduped. The own name is never filtered or stripped - it is trusted
+    as-is and always tried first; aliases that are bare SGX codes are dropped, and broker
+    dividend-line suffixes are stripped before dedup, so they collapse onto a name already
+    in the list rather than firing a separate, doomed lookup."""
+    own = s.execute(text("SELECT name FROM security WHERE id=:id"), {"id": security_id}).scalar()
+    aliases = s.execute(text(
+        "SELECT alias FROM security_alias WHERE security_id=:id"), {"id": security_id}).scalars().all()
+
     seen, out = set(), []
-    for n in rows:
-        u = (n or "").strip().upper()
-        if u and u not in seen:
+    own_u = (own or "").strip().upper()
+    if own_u:
+        seen.add(own_u)
+        out.append(own_u)
+    for a in aliases:
+        stripped = _strip_dividend_suffix((a or "").strip())
+        if not stripped or _looks_like_sgx_code(stripped):
+            continue
+        u = stripped.upper()
+        if u not in seen:
             seen.add(u)
             out.append(u)
     return out
 
 
+class SgxUnavailable(RuntimeError):
+    """The SGX request itself failed (network, TLS, timeout, unparseable reply)."""
+
+
 def _resolve(s, security_id):
-    """The first candidate name SGX recognizes, with its schedule — or (None, {})."""
+    """The first candidate name SGX recognizes, with its schedule - or (None, {}).
+
+    A transport failure (the SGX request itself failing, as opposed to SGX answering with
+    no match for that name) is raised rather than swallowed: it tells us nothing about
+    whether SGX would have recognized that name, so retrying every remaining candidate just
+    repeats the same failing request under a different name.
+    """
     for name in _candidate_names(s, security_id):
         try:
             sched = sgx_schedule(name)
-        except Exception as e:
-            print(f"  sgx lookup failed for {name!r}: {type(e).__name__}")
-            continue
+        except (OSError, ValueError, http.client.HTTPException) as e:
+            raise SgxUnavailable(f"sgx lookup failed for {name!r}: {type(e).__name__}: {e}") from e
         time.sleep(0.2)
         if sched:
             return name, sched
@@ -71,16 +115,20 @@ def main(today=None):
         "SELECT DISTINCT security_id, canonical_ticker FROM current_position "
         "WHERE market='SG' AND asset_type != 'fund'")).all()
 
-    matched, unmatched, rows_written = [], [], 0
+    matched, unmatched, rows_written, failure = [], [], 0, None
     for sid, tk in held:
-        name, sched = _resolve(s, sid)
+        try:
+            name, sched = _resolve(s, sid)
+        except SgxUnavailable as e:
+            failure = e
+            break
         if not name:
             unmatched.append(tk)
             continue
         matched.append(tk)
         for ex, slot in sched.items():
             # a cash/scrip election makes the regex-summed rate untrustworthy as THE cash
-            # rate (see sgx_schedule's docstring) — skip it rather than store a guess.
+            # rate (see sgx_schedule's docstring) - skip it rather than store a guess.
             if slot["has_opt"] or not slot["inline"] or slot["inline"] <= 0 or ex < cutoff:
                 continue
             s.merge(DividendAnnouncement(
@@ -89,8 +137,13 @@ def main(today=None):
                 source="sgx"))
             rows_written += 1
     s.commit()
-    print(f"dividend announcements: {len(matched)} securities matched ({rows_written} rows), "
-          f"{len(unmatched)} unmatched: {unmatched}")
+    summary = (f"dividend announcements: {len(matched)} securities matched ({rows_written} rows), "
+               f"{len(unmatched)} unmatched: {unmatched}")
+    if failure:
+        unresolved = len(held) - len(matched) - len(unmatched)
+        summary += (f"; stopped on {failure} - the {unresolved} unresolved holdings fall back "
+                    f"to last year's pattern")
+    print(summary)
     s.close()
     return {"matched": matched, "unmatched": unmatched, "rows": rows_written}
 
