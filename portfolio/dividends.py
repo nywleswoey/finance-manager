@@ -1,14 +1,19 @@
 """Dividend attribution — the `dividend` table, read for the UI.
 
-Owns the one date-semantics decision the app repeats: **units held at pay_date**, replayed
-from the ledger as the signed quantity of every trade dated on or before the dividend's
-pay_date, and the **implied rate** (gross / qty) used when a statement doesn't declare a
-per-unit rate. That pair (`units_at`, `implied_rate`) was duplicated between the per-holding
-view and the per-dividend detail view; both now share it here.
+Owns the one date-semantics decision the app repeats: units held **at the dividend's entitlement
+date**, replayed from the ledger as the signed quantity of every trade dated on or before that
+date, and the **implied rate** (gross / qty) used when a statement doesn't declare a per-unit
+rate. Entitlement is fixed at ex_date (standard dividend mechanics: a trade settling between
+ex_date and pay_date doesn't change who is owed the cash), so `details()` replays the ledger to
+ex_date and only falls back to pay_date when a row has no ex_date - using pay_date whenever a
+trade falls in that window inflates or deflates `qty` and corrupts the implied rate (see
+TestDetails.test_implied_rate_uses_ex_date_not_pay_date_when_a_trade_falls_between_them). That
+pair (`units_at`, `implied_rate`) was duplicated between the per-holding view and the
+per-dividend detail view; both now share it here.
 
-(twr.py and performance.py fold dividends on a *different* date — ex_date, not pay_date — for
-return math; that difference is deliberate and stays there. This module is the pay_date /
-attribution view.)
+(twr.py and performance.py fold dividends on ex_date too, but for a different reason - *when*
+the cash flow hits return math, not *which* units it belongs to; that engine separation is
+deliberate and stays there, see ADR 0001. This module is the entitlement / attribution view.)
 
 Every public function accepts an optional Session (`s`) and routes through db.session_scope.
 Every read shape carries **both** amounts: `gross` in the payment's native currency (what the
@@ -98,7 +103,8 @@ def details(s=None):
         stated = num(d["stated_units"])
         held = None
         if d["security_id"] is not None:
-            held = units_at(d["pay_date"], by.get((d["account_id"], d["security_id"]), []))
+            held = units_at(d["ex_date"] or d["pay_date"],
+                             by.get((d["account_id"], d["security_id"]), []))
         qty = stated if stated else held              # prefer statement-stated qty
         implied = implied_rate(gross, qty)
         flags = []
@@ -166,13 +172,37 @@ def annual(s=None):
     }
 
 
+SAME_DISTRIBUTION_DAYS = 15  # one ticker's pay dates this close, at the same per-unit rate,
+                              # are one distribution paid out through two different brokers on
+                              # two different settlement schedules, not two payments. Narrow on
+                              # purpose (same ticker, by construction - `rows` is always one
+                              # ticker's - same rate, close dates) so genuinely separate payments
+                              # (different rate, or further apart) never merge. C38U is the
+                              # motivating case: Moomoo and FSM each pay their own account's
+                              # units at the same declared rate, a week or two apart.
+
+
+def _rate_matches(a, b, tol=1e-4):
+    """Same per-unit rate up to float/rounding noise."""
+    return abs(a - b) <= max(tol, 0.01 * max(abs(a), abs(b)))
+
+
 def _payments(rows):
     """One entry per distinct payment (one ticker's rows), oldest first, keyed on pay_date.
 
     `details()` returns a row per (account, statement line): a statement may split one
     distribution into component lines (0.60 + 0.15) that sum to the rate, while another account
     holding the same distribution carries the combined declared rate (0.75). So per account the
-    lines are summed, and across accounts the largest per-account rate is the payment's rate."""
+    lines are summed, and across accounts on the same pay_date the largest per-account rate is
+    the payment's rate - every account received the same per-unit rate on its own units, so
+    summing would multiply that rate by the number of accounts, not add real payments.
+
+    The same distribution can also reach two accounts under two DIFFERENT pay dates (each
+    broker settles on its own schedule): those collapse into one entry too, by the same
+    max-rate rule, whenever they're within SAME_DISTRIBUTION_DAYS of each other at a matching
+    rate - see SAME_DISTRIBUTION_DAYS. The merge window anchors on each kept entry's own
+    pay_date (not the running scan position), so it can't drift past the stated window by
+    chaining through several close dates."""
     per_account = defaultdict(float)
     first = {}
     for r in rows:
@@ -181,7 +211,14 @@ def _payments(rows):
     rate = defaultdict(float)
     for (d, _), v in per_account.items():
         rate[d] = max(rate[d], v)
-    return [{**first[d], "rate": round(rate[d], 6)} for d in sorted(first)]
+    out = []
+    for d in sorted(first):
+        if out and (d - out[-1]["pay_date"]).days <= SAME_DISTRIBUTION_DAYS \
+                and _rate_matches(rate[d], out[-1]["rate"]):
+            out[-1]["rate"] = round(max(rate[d], out[-1]["rate"]), 6)
+            continue
+        out.append({**first[d], "rate": round(rate[d], 6)})
+    return out
 
 
 def _anniversary(d, year):

@@ -102,6 +102,40 @@ class TestUnreceivedLastYear(unittest.TestCase):
         self.assertEqual(self._overdue(last_year, paid), [])
 
 
+class TestPayments(unittest.TestCase):
+    """C38U: the same distribution reaches two accounts (Moomoo, FSM) under two pay dates a
+    week or two apart, each broker settling on its own schedule. _payments() must collapse
+    that into one payment while leaving genuinely separate payments alone."""
+
+    def test_same_ticker_same_rate_within_window_is_one_payment(self):
+        rows = [{"pay_date": D(2026, 3, 15), "account": "Moomoo", "rate": 0.0461},
+                {"pay_date": D(2026, 3, 24), "account": "FSM", "rate": 0.0461}]
+        out = dividends._payments(rows)
+        self.assertEqual([(r["pay_date"], r["rate"]) for r in out], [(D(2026, 3, 15), 0.0461)])
+
+    def test_different_rate_within_the_window_stays_two_payments(self):
+        # a genuinely separate payment that happens to land nearby must never merge.
+        rows = [{"pay_date": D(2026, 3, 15), "account": "Moomoo", "rate": 0.0461},
+                {"pay_date": D(2026, 3, 24), "account": "FSM", "rate": 0.09}]
+        out = dividends._payments(rows)
+        self.assertEqual([r["pay_date"] for r in out], [D(2026, 3, 15), D(2026, 3, 24)])
+
+    def test_same_rate_outside_the_window_stays_two_payments(self):
+        rows = [{"pay_date": D(2026, 3, 15), "account": "Moomoo", "rate": 0.0461},
+                {"pay_date": D(2026, 4, 5), "account": "FSM", "rate": 0.0461}]
+        out = dividends._payments(rows)
+        self.assertEqual([r["pay_date"] for r in out], [D(2026, 3, 15), D(2026, 4, 5)])
+
+    def test_merge_window_anchors_on_the_kept_payment_not_a_chain(self):
+        # three dates each exactly SAME_DISTRIBUTION_DAYS apart from their neighbour must not
+        # chain into one payment spanning twice that window.
+        rows = [{"pay_date": D(2026, 1, 1), "account": "A", "rate": 0.05},
+                {"pay_date": D(2026, 1, 16), "account": "B", "rate": 0.05},
+                {"pay_date": D(2026, 1, 31), "account": "C", "rate": 0.05}]
+        out = dividends._payments(rows)
+        self.assertEqual([r["pay_date"] for r in out], [D(2026, 1, 1), D(2026, 1, 31)])
+
+
 class TestSgdOrNone(unittest.TestCase):
     def test_converts_when_the_currency_has_a_rate(self):
         self.assertEqual(dividends._sgd_or_none(100, "HKD", {"HKD": 0.17}), (17.0, None))
@@ -130,9 +164,9 @@ class TestDetails(unittest.TestCase):
     def tearDown(self):
         self.s.close()
 
-    def _div(self, pay, gross, *, sec=1, declared=None, units=None, ccy="SGD"):
+    def _div(self, pay, gross, *, sec=1, declared=None, units=None, ccy="SGD", ex=None):
         self._d += 1
-        self.s.add(Dividend(account_id=1, security_id=sec, pay_date=pay, kind="cash",
+        self.s.add(Dividend(account_id=1, security_id=sec, pay_date=pay, ex_date=ex, kind="cash",
                             gross=Decimal(str(gross)),
                             amount_per_unit=None if declared is None else Decimal(str(declared)),
                             units=None if units is None else Decimal(str(units)),
@@ -168,6 +202,21 @@ class TestDetails(unittest.TestCase):
         self.assertEqual(r["qty"], 400.0)
         self.assertEqual(r["qty_source"], "ledger")
         self.assertEqual(r["implied_rate"], 0.25)
+        self.assertEqual(r["rate_source"], "implied")
+
+    def test_implied_rate_uses_ex_date_not_pay_date_when_a_trade_falls_between_them(self):
+        # BABA 2025-07-11 (real case): 1 unit was entitled at ex_date, but 200 more were bought
+        # after ex_date and before pay_date - those 200 never received this dividend. Replaying
+        # the ledger to pay_date (201) understates the implied rate 201x; ex_date (1) recovers
+        # the real per-unit rate.
+        self._buy(D(2024, 1, 1), 1)
+        self._buy(D(2025, 6, 19), 200)                 # after ex_date, before pay_date
+        self._div(D(2025, 7, 11), 2, ex=D(2025, 6, 12))
+        self.s.commit()
+        r = self._by_gross(dividends.details(self.s))[2.0]
+        self.assertEqual(r["qty"], 1.0)
+        self.assertEqual(r["qty_source"], "ledger")
+        self.assertEqual(r["implied_rate"], 2.0)
         self.assertEqual(r["rate_source"], "implied")
 
     def test_unmapped_and_undated_dividend_is_flagged(self):
