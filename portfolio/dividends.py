@@ -187,9 +187,8 @@ SAME_DISTRIBUTION_DAYS = 15  # one ticker's pay dates this close, at the same pe
                               # is always one ticker's - same rate, close dates, disjoint
                               # accounts) so genuinely separate payments (different rate, further
                               # apart, or a second payment into an account already paid) never
-                              # merge. C38U is the
-                              # motivating case: Moomoo and FSM each pay their own account's
-                              # units at the same declared rate, a week or two apart.
+                              # merge. C38U is the motivating case: Moomoo and FSM each pay their
+                              # own account's units at the same declared rate, a week or two apart.
 
 
 def _rate_matches(a, b, tol=1e-4):
@@ -210,9 +209,14 @@ def _payments(rows):
     The same distribution can also reach two accounts under two DIFFERENT pay dates (each
     broker settles on its own schedule): those collapse into one entry too, by the same
     max-rate rule, whenever they're within SAME_DISTRIBUTION_DAYS of each other at a matching
-    rate and no account was paid on both - see SAME_DISTRIBUTION_DAYS. The merge window anchors on each kept entry's own
-    pay_date (not the running scan position), so it can't drift past the stated window by
-    chaining through several close dates."""
+    rate and no account was paid on both - see SAME_DISTRIBUTION_DAYS. The merge window anchors
+    on each kept entry's own pay_date (not the running scan position), so it can't drift past
+    the stated window by chaining through several close dates.
+
+    This merge is the payment SCHEDULE only (what `projected()` replays), never received cash:
+    each broker's row is real cash on its own separately held units (C38U, checked against the
+    local DB copy: 6200 units in FSM and 500 in Moomoo, each paid its own gross), so `annual()`
+    and `details()` rightly keep summing and listing every row."""
     per_account = defaultdict(float)
     first = {}
     for r in rows:
@@ -234,6 +238,13 @@ def _payments(rows):
         out.append({**first[d], "rate": round(rate[d], 6)})
         paid.append(set(accounts[d]))
     return out
+
+
+def _paid_dates(rows):
+    """This year's received pay dates for one ticker, one per distinct payment - the same
+    `_payments()` rule last year's side is collapsed by, so a merged-away second broker's date
+    can't consume an unrelated last-year payment. A row with no rate keeps its own date."""
+    return {p["pay_date"] for p in _payments([{**r, "rate": r["rate"] or 0.0} for r in rows])}
 
 
 def _anniversary(d, year):
@@ -378,7 +389,7 @@ def projected(s=None, today=None):
         elif units > 1e-6:
             basis = "none"
             still, overdue = unreceived_last_year(last_year.get(ticker) or [],
-                                                   paid_this_year.get(ticker, set()), today)
+                                                   _paid_dates(this_year.get(ticker, [])), today)
             for r in overdue:
                 ex = r.get("ex_date")
                 held = entitled_units(ex and _anniversary(ex, yr), _anniversary(r["pay_date"], yr),
