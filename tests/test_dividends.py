@@ -1,4 +1,4 @@
-"""portfolio.dividends — the shared pay_date attribution primitives and details().
+"""portfolio.dividends — the shared entitlement attribution primitives and details().
 
 Stdlib unittest + in-memory SQLite (no pg), matching tests/test_networth.py. annual() leans
 on Postgres (EXTRACT), so it isn't exercised here;
@@ -30,6 +30,17 @@ class TestUnitsAt(unittest.TestCase):
     def test_signed_quantities_net_out(self):
         self.assertEqual(dividends.units_at(D(2024, 6, 1),
                                             [(D(2024, 1, 1), 100), (D(2024, 2, 1), -40)]), 60.0)
+
+
+class TestEntitledUnits(unittest.TestCase):
+    def test_a_trade_on_the_ex_date_is_already_ex(self):
+        # a buy on ex_date isn't entitled, a sell on ex_date still is.
+        txns = [(D(2024, 1, 1), 100), (D(2024, 6, 1), 200), (D(2024, 6, 1), -50)]
+        self.assertEqual(dividends.entitled_units(D(2024, 6, 1), D(2024, 6, 20), txns), 100.0)
+
+    def test_no_ex_date_falls_back_to_on_or_before_pay_date(self):
+        txns = [(D(2024, 1, 1), 100), (D(2024, 6, 20), 200), (D(2024, 6, 21), 999)]
+        self.assertEqual(dividends.entitled_units(None, D(2024, 6, 20), txns), 300.0)
 
 
 class TestImpliedRate(unittest.TestCase):
@@ -125,6 +136,14 @@ class TestPayments(unittest.TestCase):
                 {"pay_date": D(2026, 4, 5), "account": "FSM", "rate": 0.0461}]
         out = dividends._payments(rows)
         self.assertEqual([r["pay_date"] for r in out], [D(2026, 3, 15), D(2026, 4, 5)])
+
+    def test_same_account_same_rate_within_window_stays_two_payments(self):
+        # one account paid twice (e.g. an advanced distribution then the regular one) is two
+        # payments, however close and however equal the rates.
+        rows = [{"pay_date": D(2026, 3, 15), "account": "FSM", "rate": 0.0461},
+                {"pay_date": D(2026, 3, 24), "account": "FSM", "rate": 0.0461}]
+        out = dividends._payments(rows)
+        self.assertEqual([r["pay_date"] for r in out], [D(2026, 3, 15), D(2026, 3, 24)])
 
     def test_merge_window_anchors_on_the_kept_payment_not_a_chain(self):
         # three dates each exactly SAME_DISTRIBUTION_DAYS apart from their neighbour must not

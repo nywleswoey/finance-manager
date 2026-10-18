@@ -183,7 +183,7 @@ def ticker_ledger(s, ticker):
         "AND NOT (t.action ILIKE '%dividend%' AND t.qty_signed = 0)",
         {"tk": ticker})
     divs = fetch_dicts(s,
-        "SELECT d.pay_date, a.name account, a.funding_bucket bucket, d.gross, d.currency, d.kind, "
+        "SELECT d.ex_date, d.pay_date, a.name account, a.funding_bucket bucket, d.gross, d.currency, d.kind, "
         "d.units, d.amount_per_unit FROM dividend d "
         "JOIN account a ON a.id=d.account_id JOIN security sec ON sec.id=d.security_id "
         "WHERE sec.canonical_ticker=:tk ORDER BY d.pay_date",
@@ -227,9 +227,9 @@ def holding(ticker: str):
     for t in txns:
         bal += float(t["qty_signed"] or 0)
         t["balance"] = round(bal, 4)
-    # enrich each dividend with qty held at pay date + declared rate per unit.
+    # enrich each dividend with qty entitled to it + declared rate per unit.
     # prefer statement-stated values; fall back to ledger replay / implied (gross/qty).
-    # units_at / implied_rate are the shared pay_date attribution primitives (see dividends.py).
+    # entitled_units / implied_rate are the shared entitlement attribution primitives (see dividends.py).
     # gross_sgd mirrors the rest of the detail view (cost/MV/P/L are all SGD); the native
     # gross + rate stay alongside it because they are what the statement actually said.
     for x in divs:
@@ -237,7 +237,7 @@ def holding(ticker: str):
         if units is None:
             pairs = [(t["trade_date"], float(t["qty_signed"] or 0)) for t in txns
                      if t["account"] == x["account"]]
-            units = dividends.units_at(x["pay_date"], pairs)
+            units = dividends.entitled_units(x["ex_date"], x["pay_date"], pairs)
         rate = num(x["amount_per_unit"])
         if rate is None:
             rate = dividends.implied_rate(x["gross"], units)

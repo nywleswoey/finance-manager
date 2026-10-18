@@ -1,14 +1,14 @@
 """Dividend attribution — the `dividend` table, read for the UI.
 
 Owns the one date-semantics decision the app repeats: units held **at the dividend's entitlement
-date**, replayed from the ledger as the signed quantity of every trade dated on or before that
-date, and the **implied rate** (gross / qty) used when a statement doesn't declare a per-unit
-rate. Entitlement is fixed at ex_date (standard dividend mechanics: a trade settling between
-ex_date and pay_date doesn't change who is owed the cash), so `details()` replays the ledger to
-ex_date and only falls back to pay_date when a row has no ex_date - using pay_date whenever a
-trade falls in that window inflates or deflates `qty` and corrupts the implied rate (see
-TestDetails.test_implied_rate_uses_ex_date_not_pay_date_when_a_trade_falls_between_them). That
-pair (`units_at`, `implied_rate`) was duplicated between the per-holding view and the
+date** (`entitled_units`), replayed from the ledger, and the **implied rate** (gross / qty) used
+when a statement doesn't declare a per-unit rate. Entitlement is fixed by ex_date (standard
+dividend mechanics: a trade dated on or after ex_date is already ex the dividend, so it doesn't
+change who is owed the cash), so the replay counts every trade dated strictly before ex_date and
+only falls back to "on or before pay_date" when a row has no ex_date - replaying to pay_date
+whenever a trade falls in that window inflates or deflates `qty` and corrupts the implied rate
+(see TestDetails.test_implied_rate_uses_ex_date_not_pay_date_when_a_trade_falls_between_them).
+That pair (`entitled_units`, `implied_rate`) was duplicated between the per-holding view and the
 per-dividend detail view; both now share it here.
 
 (twr.py and performance.py fold dividends on ex_date too, but for a different reason - *when*
@@ -34,18 +34,26 @@ from .money import to_sgd
 from .nullable import nulls_last, num
 
 
-# ---------------- the shared pay_date attribution primitives ----------------
+# ---------------- the shared entitlement attribution primitives ----------------
 
-def units_at(pay_date, txns):
-    """Position size on `pay_date`: the signed quantity of every txn dated on or before it.
+def units_at(date, txns):
+    """Position size on `date`: the signed quantity of every txn dated on or before it.
 
     `txns` is an iterable of (trade_date, qty) for the relevant (account, security). Dates are
     compared as ISO strings so date objects and pre-stringified CDP rows behave alike. Returns
-    None when `pay_date` is unknown (nothing to attribute against)."""
-    if pay_date is None:
+    None when `date` is unknown (nothing to attribute against)."""
+    if date is None:
         return None
     return round(sum(q for td, q in txns
-                     if td is not None and str(td) <= str(pay_date)), 4)
+                     if td is not None and str(td) <= str(date)), 4)
+
+
+def entitled_units(ex_date, pay_date, txns):
+    """Units entitled to a dividend: held at the close before `ex_date`, else (no ex_date) on
+    `pay_date` - see the module docstring. Dates compare as ISO strings, as in `units_at`."""
+    if ex_date is None:
+        return units_at(pay_date, txns)
+    return round(sum(q for td, q in txns if td is not None and str(td) < str(ex_date)), 4)
 
 
 def implied_rate(gross, qty):
@@ -68,9 +76,9 @@ def _sgd_or_none(value, ccy, fx):
 # ---------------- read shapes (formerly the /api/dividend* handlers) ----------------
 
 def details(s=None):
-    """Per-dividend detail: declared per-share rate + units held at pay date (replayed from
-    the ledger) + implied rate (gross/units). Flags rows where the rate can't be determined
-    (no position data, missing date, or unmapped ticker) for manual input.
+    """Per-dividend detail: declared per-share rate + units entitled to it (replayed from
+    the ledger, see `entitled_units`) + implied rate (gross/units). Flags rows where the rate
+    can't be determined (no position data, missing date, or unmapped ticker) for manual input.
 
     Gross is reported both native (`gross`) and in SGD (`gross_sgd`, latest FX). Rates stay
     native — a declared per-unit rate is a statement fact, not a converted figure. A currency
@@ -103,8 +111,8 @@ def details(s=None):
         stated = num(d["stated_units"])
         held = None
         if d["security_id"] is not None:
-            held = units_at(d["ex_date"] or d["pay_date"],
-                             by.get((d["account_id"], d["security_id"]), []))
+            held = entitled_units(d["ex_date"], d["pay_date"],
+                                  by.get((d["account_id"], d["security_id"]), []))
         qty = stated if stated else held              # prefer statement-stated qty
         implied = implied_rate(gross, qty)
         flags = []
@@ -173,11 +181,13 @@ def annual(s=None):
 
 
 SAME_DISTRIBUTION_DAYS = 15  # one ticker's pay dates this close, at the same per-unit rate,
-                              # are one distribution paid out through two different brokers on
-                              # two different settlement schedules, not two payments. Narrow on
-                              # purpose (same ticker, by construction - `rows` is always one
-                              # ticker's - same rate, close dates) so genuinely separate payments
-                              # (different rate, or further apart) never merge. C38U is the
+                              # in DIFFERENT accounts, are one distribution paid out through two
+                              # different brokers on two different settlement schedules, not two
+                              # payments. Narrow on purpose (same ticker, by construction - `rows`
+                              # is always one ticker's - same rate, close dates, disjoint
+                              # accounts) so genuinely separate payments (different rate, further
+                              # apart, or a second payment into an account already paid) never
+                              # merge. C38U is the
                               # motivating case: Moomoo and FSM each pay their own account's
                               # units at the same declared rate, a week or two apart.
 
@@ -200,7 +210,7 @@ def _payments(rows):
     The same distribution can also reach two accounts under two DIFFERENT pay dates (each
     broker settles on its own schedule): those collapse into one entry too, by the same
     max-rate rule, whenever they're within SAME_DISTRIBUTION_DAYS of each other at a matching
-    rate - see SAME_DISTRIBUTION_DAYS. The merge window anchors on each kept entry's own
+    rate and no account was paid on both - see SAME_DISTRIBUTION_DAYS. The merge window anchors on each kept entry's own
     pay_date (not the running scan position), so it can't drift past the stated window by
     chaining through several close dates."""
     per_account = defaultdict(float)
@@ -211,13 +221,18 @@ def _payments(rows):
     rate = defaultdict(float)
     for (d, _), v in per_account.items():
         rate[d] = max(rate[d], v)
-    out = []
+    accounts = defaultdict(set)
+    for d, a in per_account:
+        accounts[d].add(a)
+    out, paid = [], []
     for d in sorted(first):
         if out and (d - out[-1]["pay_date"]).days <= SAME_DISTRIBUTION_DAYS \
-                and _rate_matches(rate[d], out[-1]["rate"]):
+                and _rate_matches(rate[d], out[-1]["rate"]) and paid[-1].isdisjoint(accounts[d]):
             out[-1]["rate"] = round(max(rate[d], out[-1]["rate"]), 6)
+            paid[-1] |= accounts[d]
             continue
         out.append({**first[d], "rate": round(rate[d], 6)})
+        paid.append(set(accounts[d]))
     return out
 
 
@@ -290,7 +305,7 @@ def projected(s=None, today=None):
     projection isn't owed to add (the pattern doesn't say it recurs that late), but almost always
     did happen and is just missing from the ledger. Each is priced at the units held on its
     date this year (the anniversary of last year's ex_date, else of its pay_date, replayed via
-    `units_at`) and dropped when nothing was held then. Those surface as each holding's `overdue`
+    `entitled_units`) and dropped when nothing was held then. Those surface as each holding's `overdue`
     list (and the top-level `overdue_sgd` / `overdue_count`) WITHOUT being added to
     `expected_remaining_sgd` or `projected_total_sgd` — an estimate of money already paid in
     reality that this app hasn't ingested yet, not a projection of money still to come."""
@@ -365,8 +380,9 @@ def projected(s=None, today=None):
             still, overdue = unreceived_last_year(last_year.get(ticker) or [],
                                                    paid_this_year.get(ticker, set()), today)
             for r in overdue:
-                held = units_at(_anniversary(r.get("ex_date") or r["pay_date"], yr),
-                                ledger.get(ticker, []))
+                ex = r.get("ex_date")
+                held = entitled_units(ex and _anniversary(ex, yr), _anniversary(r["pay_date"], yr),
+                                      ledger.get(ticker, []))
                 if held <= 1e-6:
                     continue
                 amt_sgd, flag = _sgd_or_none(r["rate"] * held, r["currency"], fx)
