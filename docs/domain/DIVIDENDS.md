@@ -118,6 +118,8 @@ data/**  (broker statements: tiger-prime, fsm, cdp-stocks, moomoo, cpf/srs …)
                  `dividend_announcement` table (SGX-declared rates for current SG holdings)
                  /api/dividends-projected  ──►  Dividends.jsx's `<year> expected` card — see
                  "`<year> expected`" below
+                 /api/dividend-yields  ──►  Dividends.jsx's Dividend Yield table - see
+                 "Dividend yield" below
 ```
 
 `make ingest` runs `flat` then `load` in one shot. `make ingest-all` also folds in spending,
@@ -220,3 +222,24 @@ outside SG, or a cash/scrip election SGX's regex-summed rate can't be trusted fo
 nothing in `dividend_announcement`, and `projected()` falls back to `last_year_pattern` for it.
 That is the graceful degradation, not a special case. If the SGX request itself fails, the run
 stops at that holding, commits what already resolved, and the rest degrade the same way.
+
+## Dividend yield (trailing + expected)
+
+`GET /api/dividend-yields` (`portfolio.dividends.yields()`) gives each currently held counter a
+**trailing** yield (the last 365 days' regular dividends per unit ÷ latest price) and an
+**expected** yield (the next 365 days': SGX-declared rates where `dividend_announcement` has
+them, else the trailing payment pattern rolled forward a year, matched the same `DRIFT_DAYS`
+anniversary way as `<year> expected`), each in the counter's price currency, plus an
+SGD-market-value-weighted portfolio average. Two kinds of payment are kept out of both:
+
+- **Possibly special** - a payment more than `OUTLIER_MULT` (2.5x) both its own slot a year
+  earlier and the counter's median payment is flagged, listed under "Excluded as possibly
+  special", and left out (`_classify`, which also covers a payment with no year-earlier slot).
+- **Capital return** - a recurring non-ordinary component folded into the same per-unit rate
+  (DBS's quarterly capital return) cannot be told apart in the data, so it is declared by hand
+  in the `dividend_adjustment` table via the tab's Capital-return adjustments list
+  (`/api/dividend-capital-returns`) and subtracted from every payment and announcement it covers.
+  The table is user data, not ingested: re-ingesting never touches it.
+
+The exact rules (currency restatement, stale prices, `basis`, null vs `0.0`) are in the
+`yields()` / `_forward()` / `_classify()` docstrings.
