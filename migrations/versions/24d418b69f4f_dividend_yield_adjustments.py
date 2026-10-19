@@ -1,4 +1,4 @@
-"""Dividend yield adjustments: dividend_adjustment (capital-return deduction), dividend_flag_override (mark-as-regular)
+"""Dividend yield adjustments: dividend_adjustment (capital-return deduction)
 
 Revision ID: 24d418b69f4f
 Revises: a3f9c7d2e1b4
@@ -32,18 +32,6 @@ def upgrade() -> None:
     )
     op.create_index("ix_dividend_adjustment_security_id", "dividend_adjustment", ["security_id"])
 
-    op.create_table(
-        "dividend_flag_override",
-        sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("security_id", sa.Integer, sa.ForeignKey("security.id"), nullable=False),
-        sa.Column("ex_date", sa.Date, nullable=True),
-        sa.Column("pay_date", sa.Date, nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.UniqueConstraint("security_id", "ex_date", "pay_date", name="uq_div_flag_override"),
-    )
-    op.create_index("ix_dividend_flag_override_security_id", "dividend_flag_override", ["security_id"])
-
 
 def downgrade() -> None:
-    op.drop_table("dividend_flag_override")
     op.drop_table("dividend_adjustment")

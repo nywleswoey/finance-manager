@@ -505,11 +505,11 @@ class TestProjected(pgtest.Case):
 class TestYields(pgtest.Case):
     """dividends.yields() — the Dividends tab's trailing/forward yield columns: DBS's capital
     return excluded (data/fmyield/report.md's method, recapped in the launch brief's captain's
-    intent), an oversized payment flagged unless marked regular, declared vs pattern forward
-    basis, and the SGD-weighted portfolio average. `today` is pinned the same way
+    intent), an oversized payment flagged, declared vs pattern forward basis, a dividend paid in
+    another currency than its price, and the SGD-weighted portfolio average. `today` is pinned the same way
     TestProjected's is."""
     TABLES = ("dividend", "dividend_announcement", "dividend_adjustment",
-             "dividend_flag_override", "price", "txn", "fx_rate", "account", "security")
+             "price", "txn", "fx_rate", "account", "security")
 
     def setUp(self):
         super().setUp()
@@ -523,14 +523,17 @@ class TestYields(pgtest.Case):
             Security(id=3, canonical_ticker="RANGED", name="Ranged Co", market="SG", currency="SGD"),
             Security(id=4, canonical_ticker="OUTL", name="Outlier Inc", market="US", currency="USD"),
             Security(id=5, canonical_ticker="INTFIN", name="Interim Final Ltd", market="HK", currency="SGD"),
-            Security(id=6, canonical_ticker="MARKED", name="Marked Inc", market="US", currency="USD"),
+            Security(id=6, canonical_ticker="XCCY", name="Euro Payer REIT", market="SG", currency="SGD"),
             Security(id=7, canonical_ticker="FWDDEC", name="Declared Co", market="SG", currency="SGD"),
             Security(id=8, canonical_ticker="FWDPAT", name="Pattern Co", market="SG", currency="SGD"),
             Security(id=9, canonical_ticker="NODIV", name="No Dividend Co", market="SG", currency="SGD"),
             Security(id=10, canonical_ticker="NOPX", name="No Price Co", market="SG", currency="SGD"),
             Security(id=11, canonical_ticker="STALE", name="Stale Price Co", market="SG", currency="SGD"),
+            Security(id=12, canonical_ticker="LONGGAP", name="Long Gap REIT", market="SG", currency="SGD"),
+            Security(id=13, canonical_ticker="GONEEX", name="Gone Ex REIT", market="SG", currency="SGD"),
         ])
         self.s.add(FxRate(date=TODAY, currency="USD", rate_to_sgd=Decimal("1.30")))
+        self.s.add(FxRate(date=TODAY, currency="EUR", rate_to_sgd=Decimal("1.50")))
         self.s.commit()
         self._n = 0
 
@@ -640,22 +643,6 @@ class TestYields(pgtest.Case):
         assert r["trailing_dps"] == 0.60                     # the 2026-04-01 interim, uncut
         assert not [e for e in out["excluded"] if e["ticker"] == "INTFIN"]
 
-    def test_marking_a_flagged_payment_regular_counts_it_as_regular(self):
-        self._buy(6, D(2022, 1, 1), 100)
-        self._div(6, D(2023, 10, 1), 0.01, ccy="USD")
-        self._div(6, D(2024, 4, 1), 0.01, ccy="USD")
-        self._div(6, D(2024, 10, 1), 0.01, ccy="USD")
-        self._div(6, D(2025, 10, 1), 0.01, ccy="USD")
-        self._div(6, D(2026, 10, 1), 0.25, ccy="USD")
-        self._price(6, TODAY, 200.0, ccy="USD")
-        self.s.commit()
-        dividends.mark_payment_regular(6, None, D(2026, 10, 1), s=self.s)
-
-        out = self._yields()
-        r = self._rows(out)["MARKED"]
-        assert r["trailing_dps"] == 0.25
-        assert not [e for e in out["excluded"] if e["ticker"] == "MARKED"]
-
     def test_forward_basis_declared_when_sgx_announcement_matches_the_anniversary(self):
         self._buy(7, D(2024, 1, 1), 1000)
         self._div(7, D(2026, 5, 1), 0.50)
@@ -667,6 +654,44 @@ class TestYields(pgtest.Case):
         assert r["trailing_dps"] == 0.50
         assert r["forward_dps"] == 0.55
         assert r["forward_basis"] == "declared"
+
+    def test_forward_matches_a_declared_rate_on_the_ex_date_anniversary_not_the_pay_date(self):
+        # an ex-to-pay gap (here 54 days) past DRIFT_DAYS must not leave the trailing payment
+        # unmatched and then count the same declared payment a second time as "new"
+        self._buy(12, D(2024, 1, 1), 1000)
+        self._div(12, D(2025, 12, 25), 0.50, ex=D(2025, 11, 1))
+        self._announce(12, ex=D(2026, 11, 3), rate=0.55, pay=D(2026, 12, 20))
+        self._price(12, TODAY, 20.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["LONGGAP"]
+        assert r["forward_dps"] == 0.55
+        assert r["forward_basis"] == "declared"
+
+    def test_a_declared_rate_already_ex_but_not_yet_paid_counts_forward(self):
+        self._buy(13, D(2024, 1, 1), 1000)
+        self._div(13, D(2025, 10, 20), 0.50, ex=D(2025, 9, 25))
+        self._announce(13, ex=D(2026, 9, 28), rate=0.60, pay=D(2026, 10, 25))
+        self._price(13, TODAY, 20.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["GONEEX"]
+        assert r["forward_dps"] == 0.60
+        assert r["forward_basis"] == "declared"
+
+    def test_a_dividend_paid_in_another_currency_is_restated_in_the_price_currency(self):
+        # UD1U's shape: quoted in SGD, distributions paid in EUR
+        self._buy(6, D(2024, 1, 1), 10_000)
+        self._div(6, D(2026, 3, 1), 0.0074, ccy="EUR", units=10_000)
+        self._price(6, TODAY, 0.165)
+        self.s.commit()
+
+        r = self._rows(self._yields())["XCCY"]
+        assert r["currency"] == "SGD"
+        assert r["dividend_currency"] == "EUR"
+        assert r["trailing_dps"] == round(0.0074 * 1.5, 6)
+        assert r["trailing_yield_pct"] == round(0.0074 * 1.5 / 0.165 * 100, 3)
+        assert r["mv_sgd"] == round(10_000 * 0.165, 2)
 
     def test_forward_basis_pattern_when_nothing_is_declared(self):
         self._buy(8, D(2024, 1, 1), 1000)

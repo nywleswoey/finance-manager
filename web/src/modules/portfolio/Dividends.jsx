@@ -39,7 +39,7 @@ export default function Dividends() {
     get("/api/dividend-yields").then(setYld).catch(() => setYld(null));
     get("/api/dividend-capital-returns").then((r) => setCapReturns(r.rows)).catch(() => setCapReturns([]));
   }, []);
-  // Only re-fetches after a mutation (mark-as-regular, add/remove a capital-return row) —
+  // Only re-fetches after a mutation (add/remove a capital-return row) -
   // the initial load is the effect above, in the SAME tick as the rest of the page's fetches
   // rather than a second one that can resolve after `settle()`'s anchor is already visible.
   useEffect(() => {
@@ -47,11 +47,6 @@ export default function Dividends() {
     get("/api/dividend-yields").then(setYld).catch(() => setYld(null));
     get("/api/dividend-capital-returns").then((r) => setCapReturns(r.rows)).catch(() => setCapReturns([]));
   }, [ver]);
-
-  async function markRegular(e) {
-    await post("/api/dividend-flag-override", { security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date });
-    setVer((v) => v + 1);
-  }
 
   async function removeAdjustment(id) {
     await del("/api/dividend-capital-returns/" + id);
@@ -61,7 +56,7 @@ export default function Dividends() {
   function selectCapSecurity(e) {
     const sid = e.target.value;
     const row = (yld?.rows || []).find((r) => String(r.security_id) === sid);
-    setCapForm({ ...capForm, security_id: sid, currency: row ? row.currency : capForm.currency });
+    setCapForm({ ...capForm, security_id: sid, currency: row ? row.dividend_currency || row.currency : capForm.currency });
   }
   const setCap = (k) => (e) => setCapForm({ ...capForm, [k]: e.target.value });
 
@@ -240,7 +235,6 @@ export default function Dividends() {
                     vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
                     &nbsp;({money(e.baseline, e.currency, 4)})
                   </span>
-                  <button className="link-btn" onClick={() => markRegular(e)}>Mark as regular</button>
                 </div>
               ))}
             </div>

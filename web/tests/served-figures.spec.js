@@ -143,7 +143,7 @@ test.describe("Portfolio › Dividends", () => {
 
       for (const e of yld.excluded) {
         // The row div is the pill's parent — the one element carrying both the ticker and
-        // the rest of that payment's line (date, rate, ratio, mark-as-regular button). A
+        // the rest of that payment's line (date, rate, ratio). A
         // ticker can also appear in the main table's row (D05 does, below), so this is
         // scoped to the excluded section specifically.
         const row = page.getByTestId("dividend-excluded")

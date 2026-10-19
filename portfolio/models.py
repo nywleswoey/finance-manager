@@ -174,21 +174,6 @@ class DividendAdjustment(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
-class DividendFlagOverride(Base):
-    """A distribution the oversized-payment flag (portfolio.dividends.yields) would exclude as
-    possibly special, which the user has marked regular instead — keyed the same way
-    distinct_distributions() groups a distribution's identity (ex_date, else pay_date), so the
-    override survives a re-ingest that reassigns `dividend.id`. A row's presence IS the
-    override; there is no "confirmed special" state to store, since that is just its absence."""
-    __tablename__ = "dividend_flag_override"
-    id: Mapped[int] = mapped_column(primary_key=True)
-    security_id: Mapped[int] = mapped_column(ForeignKey("security.id"), index=True)
-    ex_date: Mapped[dt.date | None] = mapped_column(Date)
-    pay_date: Mapped[dt.date | None] = mapped_column(Date)
-    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    __table_args__ = (UniqueConstraint("security_id", "ex_date", "pay_date", name="uq_div_flag_override"),)
-
-
 # ---------------- spending (cash-flow ledger) ----------------
 class CashTxn(Base):
     """One bank/credit-card cash-flow line — the spending ledger (distinct from the
