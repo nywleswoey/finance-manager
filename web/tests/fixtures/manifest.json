@@ -51,6 +51,14 @@
   "file": "dividends-projected.json",
   "status": 200
  },
+ "/api/dividend-yields": {
+  "file": "dividend-yields.json",
+  "status": 200
+ },
+ "/api/dividend-capital-returns": {
+  "file": "dividend-capital-returns.json",
+  "status": 200
+ },
  "/api/accounts": {
   "file": "accounts.json",
   "status": 200

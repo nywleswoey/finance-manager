@@ -82,15 +82,15 @@ const PINNED = [
   { view: "Portfolio › Holdings", tables: [{ pin: "Security", cols: 13 }], groupBy: "asset_type" },
   { view: "Portfolio › Performance", tables: [{ pin: "market", cols: 9 }] },
   {
-    // The crosstab, then the `<year> expected` per-holding breakdown (also pattern A — six
-    // numbers-and-a-word per row, not enough fields to earn a card), then the detail ledger
-    // — which the tablet tier reached and which had been hiding behind an inline
-    // `{ maxHeight: 520, overflow: "auto" }`: contained, so the pane ratchet read zero for
-    // this view, and unpinned, so scrolling that box sideways at 640 lost the security name
-    // along with the date.
+    // The crosstab, then the Dividend Yield table (also pattern A, same "six
+    // numbers-and-a-word per row" density as the breakdown beside it), then the `<year>
+    // expected` per-holding breakdown, then the detail ledger — which the tablet tier
+    // reached and which had been hiding behind an inline `{ maxHeight: 520, overflow: "auto"
+    // }`: contained, so the pane ratchet read zero for this view, and unpinned, so scrolling
+    // that box sideways at 640 lost the security name along with the date.
     view: "Portfolio › Dividends",
     tables: [{ pin: "Bucket", cols: null }, { pin: "Security", cols: 6 },
-             { pin: "Date", cols: 8, cardsBelow: true }],
+             { pin: "Security", cols: 6 }, { pin: "Date", cols: 8, cardsBelow: true }],
   },
   { view: "Portfolio › Options", tables: [{ pin: "Underlying", cols: 8 }] },
   {

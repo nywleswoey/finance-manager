@@ -21,7 +21,8 @@ import pytest
 from sqlalchemy import text
 
 from portfolio import dividends
-from portfolio.models import Account, Dividend, DividendAnnouncement, FxRate, Security, Txn
+from portfolio.models import (Account, Dividend, DividendAdjustment, DividendAnnouncement,
+                              FxRate, Price, Security, Txn)
 from tests import pgtest
 from tests.sqlitetest import current_position_sql
 
@@ -499,3 +500,222 @@ class TestProjected(pgtest.Case):
         assert h["basis"] == "announced"
         assert h["expected_remaining_sgd"] == 500.0
         assert [d["expected_date"] for d in h["overdue"]] == [D(2026, 7, 20)]
+
+
+class TestYields(pgtest.Case):
+    """dividends.yields() — the Dividends tab's trailing/forward yield columns: DBS's capital
+    return excluded (data/fmyield/report.md's method, recapped in the launch brief's captain's
+    intent), an oversized payment flagged unless marked regular, declared vs pattern forward
+    basis, and the SGD-weighted portfolio average. `today` is pinned the same way
+    TestProjected's is."""
+    TABLES = ("dividend", "dividend_announcement", "dividend_adjustment",
+             "dividend_flag_override", "price", "txn", "fx_rate", "account", "security")
+
+    def setUp(self):
+        super().setUp()
+        with self.engine.begin() as c:
+            c.execute(text("DROP VIEW IF EXISTS current_position"))
+            c.execute(text(current_position_sql()))
+        self.s.add(Account(id=1, name="FSM", funding_bucket="cash"))
+        self.s.add_all([
+            Security(id=1, canonical_ticker="D05", name="DBS", market="SG", currency="SGD"),
+            Security(id=2, canonical_ticker="CLAMP", name="Clamp Co", market="SG", currency="SGD"),
+            Security(id=3, canonical_ticker="RANGED", name="Ranged Co", market="SG", currency="SGD"),
+            Security(id=4, canonical_ticker="OUTL", name="Outlier Inc", market="US", currency="USD"),
+            Security(id=5, canonical_ticker="INTFIN", name="Interim Final Ltd", market="HK", currency="SGD"),
+            Security(id=6, canonical_ticker="MARKED", name="Marked Inc", market="US", currency="USD"),
+            Security(id=7, canonical_ticker="FWDDEC", name="Declared Co", market="SG", currency="SGD"),
+            Security(id=8, canonical_ticker="FWDPAT", name="Pattern Co", market="SG", currency="SGD"),
+            Security(id=9, canonical_ticker="NODIV", name="No Dividend Co", market="SG", currency="SGD"),
+            Security(id=10, canonical_ticker="NOPX", name="No Price Co", market="SG", currency="SGD"),
+            Security(id=11, canonical_ticker="STALE", name="Stale Price Co", market="SG", currency="SGD"),
+        ])
+        self.s.add(FxRate(date=TODAY, currency="USD", rate_to_sgd=Decimal("1.30")))
+        self.s.commit()
+        self._n = 0
+
+    def _buy(self, sid, day, qty, *, account=1):
+        self._n += 1
+        self.s.add(Txn(account_id=account, security_id=sid, trade_date=day, action="buy",
+                       qty_signed=Decimal(str(qty)), dedup_hash=f"t{self._n}"))
+
+    def _div(self, sid, pay, rate, *, units=1000, ccy="SGD", account=1, ex=None):
+        self._n += 1
+        self.s.add(Dividend(account_id=account, security_id=sid, ex_date=ex, pay_date=pay,
+                            kind="cash", gross=Decimal(str(rate * units)),
+                            amount_per_unit=Decimal(str(rate)), units=Decimal(str(units)),
+                            currency=ccy, source_file="unmapped-src", dedup_hash=f"d{self._n}"))
+
+    def _announce(self, sid, ex, rate, ccy="SGD", *, pay=None):
+        self.s.add(DividendAnnouncement(security_id=sid, ex_date=ex, pay_date=pay or ex,
+                                        amount_per_unit=Decimal(str(rate)), currency=ccy))
+
+    def _price(self, sid, day, close, ccy="SGD"):
+        self.s.add(Price(security_id=sid, date=day, close=Decimal(str(close)), currency=ccy))
+
+    def _adjust(self, sid, amount, start, end=None, ccy="SGD", note=None):
+        self.s.add(DividendAdjustment(security_id=sid, amount_per_unit=Decimal(str(amount)),
+                                      currency=ccy, start_date=start, end_date=end, note=note))
+
+    def _yields(self):
+        return dividends.yields(s=self.s, today=TODAY)
+
+    def _rows(self, out):
+        return {r["ticker"]: r for r in out["rows"]}
+
+    def test_capital_return_is_subtracted_from_trailing_and_forward_dps(self):
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._div(1, D(2025, 11, 24), 0.75, ex=D(2025, 11, 13))
+        self._div(1, D(2026, 4, 17), 0.75, ex=D(2026, 4, 8))
+        self._adjust(1, 0.15, D(2025, 1, 1), note="DBS capital return")
+        self._price(1, TODAY, 74.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["D05"]
+        assert r["trailing_dps"] == 1.2                     # (0.75 - 0.15) x 2
+        assert r["forward_dps"] == 1.2                       # no announcement: same pattern
+        assert r["forward_basis"] == "pattern"
+        assert r["capital_return"] == {"amount_per_unit": 0.15, "currency": "SGD",
+                                       "note": "DBS capital return"}
+        assert r["trailing_yield_pct"] == round(1.2 / 74.0 * 100, 3)
+
+    def test_capital_return_deduction_clamped_at_zero_and_flagged(self):
+        self._buy(2, D(2024, 1, 1), 1000)
+        self._div(2, D(2026, 6, 1), 0.05)
+        self._adjust(2, 0.15, D(2025, 1, 1))
+        self._price(2, TODAY, 1.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["CLAMP"]
+        assert r["trailing_dps"] == 0.0                      # 0.05 - 0.15, clamped
+        assert r["capital_return_clamped"] is True
+
+    def test_capital_return_only_applies_within_its_date_range(self):
+        self._buy(3, D(2024, 1, 1), 1000)
+        self._div(3, D(2025, 11, 1), 0.75, ex=D(2025, 10, 20))    # before the adjustment starts
+        self._div(3, D(2026, 6, 1), 0.75, ex=D(2026, 5, 20))      # within range
+        self._adjust(3, 0.15, D(2026, 1, 1))
+        self._price(3, TODAY, 10.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["RANGED"]
+        assert r["trailing_dps"] == 1.35                     # 0.75 (untouched) + 0.60 (net)
+
+    def test_an_oversized_payment_is_flagged_and_excluded(self):
+        # NVIDIA's real shape (data/fmyield/report.md): a $0.01 quarterly pattern, then a
+        # payment 25x that, with no textual confirmation either way.
+        self._buy(4, D(2022, 1, 1), 100)
+        self._div(4, D(2023, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2024, 4, 1), 0.01, ccy="USD")
+        self._div(4, D(2024, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2025, 10, 1), 0.01, ccy="USD")           # seasonal baseline (anniversary match)
+        self._div(4, D(2026, 10, 1), 0.25, ccy="USD")           # trailing, 25x — flagged
+        self._price(4, TODAY, 200.0, ccy="USD")
+        self.s.commit()
+
+        out = self._yields()
+        r = self._rows(out)["OUTL"]
+        assert r["trailing_dps"] == 0.0                      # the only trailing payment is flagged
+        excl = [e for e in out["excluded"] if e["ticker"] == "OUTL"]
+        assert len(excl) == 1
+        assert excl[0]["ratio"] == 25.0
+        assert excl[0]["baseline_type"] == "seasonal"
+        assert excl[0]["baseline"] == 0.01
+
+    def test_a_larger_interim_dividend_is_not_flagged_against_a_smaller_final(self):
+        # Hang Lung Properties' shape: interim is genuinely larger than final every year.
+        # A flat all-time median (5 finals at 0.10, 4 interims at 0.60) would flag the
+        # interim 6x over — comparing it to ITS OWN slot a year earlier (also an interim,
+        # ratio 1x) is what correctly says this is not an outlier.
+        self._buy(5, D(2019, 1, 1), 1000)
+        for y in (2020, 2021, 2022, 2023, 2024):
+            self._div(5, D(y, 10, 1), 0.10)                  # final, every year
+        for y in (2023, 2024, 2025, 2026):
+            self._div(5, D(y, 4, 1), 0.60)                   # interim, every year
+        self._price(5, TODAY, 20.0)
+        self.s.commit()
+
+        out = self._yields()
+        r = self._rows(out)["INTFIN"]
+        assert r["trailing_dps"] == 0.60                     # the 2026-04-01 interim, uncut
+        assert not [e for e in out["excluded"] if e["ticker"] == "INTFIN"]
+
+    def test_marking_a_flagged_payment_regular_counts_it_as_regular(self):
+        self._buy(6, D(2022, 1, 1), 100)
+        self._div(6, D(2023, 10, 1), 0.01, ccy="USD")
+        self._div(6, D(2024, 4, 1), 0.01, ccy="USD")
+        self._div(6, D(2024, 10, 1), 0.01, ccy="USD")
+        self._div(6, D(2025, 10, 1), 0.01, ccy="USD")
+        self._div(6, D(2026, 10, 1), 0.25, ccy="USD")
+        self._price(6, TODAY, 200.0, ccy="USD")
+        self.s.commit()
+        dividends.mark_payment_regular(6, None, D(2026, 10, 1), s=self.s)
+
+        out = self._yields()
+        r = self._rows(out)["MARKED"]
+        assert r["trailing_dps"] == 0.25
+        assert not [e for e in out["excluded"] if e["ticker"] == "MARKED"]
+
+    def test_forward_basis_declared_when_sgx_announcement_matches_the_anniversary(self):
+        self._buy(7, D(2024, 1, 1), 1000)
+        self._div(7, D(2026, 5, 1), 0.50)
+        self._announce(7, ex=D(2027, 4, 20), rate=0.55)          # within DRIFT_DAYS of 2027-05-01
+        self._price(7, TODAY, 20.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["FWDDEC"]
+        assert r["trailing_dps"] == 0.50
+        assert r["forward_dps"] == 0.55
+        assert r["forward_basis"] == "declared"
+
+    def test_forward_basis_pattern_when_nothing_is_declared(self):
+        self._buy(8, D(2024, 1, 1), 1000)
+        self._div(8, D(2026, 5, 1), 0.50)
+        self._price(8, TODAY, 20.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["FWDPAT"]
+        assert r["forward_dps"] == 0.50
+        assert r["forward_basis"] == "pattern"
+
+    def test_a_priced_counter_with_no_dividend_history_shows_zero_not_null(self):
+        self._buy(9, D(2024, 1, 1), 1000)
+        self._price(9, TODAY, 5.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["NODIV"]
+        assert r["trailing_yield_pct"] == 0.0
+        assert r["forward_yield_pct"] == 0.0
+
+    def test_a_held_counter_with_no_price_shows_a_null_yield(self):
+        self._buy(10, D(2024, 1, 1), 1000)
+        self._div(10, D(2026, 5, 1), 0.50)
+        self.s.commit()
+
+        r = self._rows(self._yields())["NOPX"]
+        assert r["trailing_yield_pct"] is None
+        assert r["forward_yield_pct"] is None
+        assert r["price"] is None
+
+    def test_a_price_older_than_the_stale_window_is_flagged(self):
+        self._buy(11, D(2024, 1, 1), 1000)
+        self._price(11, TODAY - dt.timedelta(days=dividends.PRICE_STALE_DAYS + 1), 5.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["STALE"]
+        assert r["price_is_stale"] is True
+        assert r["price_stale_days"] == dividends.PRICE_STALE_DAYS + 1
+
+    def test_portfolio_yield_is_sgd_market_value_weighted(self):
+        self._buy(1, D(2024, 1, 1), 1000)                        # D05: SGD, 1000 units
+        self._div(1, D(2026, 5, 1), 0.60)
+        self._price(1, TODAY, 60.0)                              # mv = 60,000 SGD, yield 1.0%
+        self._buy(4, D(2024, 1, 1), 100, account=1)               # OUTL: USD, 100 units
+        self._div(4, D(2026, 5, 1), 2.0, ccy="USD")
+        self._price(4, TODAY, 100.0, ccy="USD")                  # mv = 100 x 100 x 1.30 = 13,000 SGD, yield 2.0%
+        self.s.commit()
+
+        out = self._yields()
+        d05_mv, outl_mv = 60_000.0, 13_000.0
+        expected = round((d05_mv * 1.0 + outl_mv * 2.0) / (d05_mv + outl_mv), 3)
+        assert out["portfolio_trailing_yield_pct"] == expected

@@ -6,10 +6,12 @@ PostHog proxy, StaticFiles. This module owns the portfolio-specific memoization 
 that /api/refresh-prices and the cron handler in server.main clear — server.main re-exports it so
 `server.main._cache` (imported by tests and scripts/audit_ledger.py) stays the same object.
 """
+import datetime as dt
 import logging
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 
 from portfolio import dividends
 from portfolio.db import fetch_dicts, fx_as_of, fx_map, session_scope, valuation_as_of
@@ -262,6 +264,57 @@ def dividends_annual():
 @router.get("/api/dividends-projected")
 def dividends_projected():
     return dividends.projected()
+
+
+@router.get("/api/dividend-yields")
+def dividend_yields():
+    return dividends.yields()
+
+
+class CapitalReturnIn(BaseModel):
+    security_id: int = Field(gt=0)
+    amount_per_unit: float = Field(gt=0, le=1_000_000)        # SECURITY-05
+    currency: str = Field(min_length=3, max_length=3)
+    start_date: dt.date
+    end_date: dt.date | None = None
+    note: str | None = Field(default=None, max_length=256)
+
+
+@router.get("/api/dividend-capital-returns")
+def dividend_capital_returns():
+    return {"rows": dividends.capital_return_adjustments()}
+
+
+@router.post("/api/dividend-capital-returns")
+def dividend_capital_return_add(body: CapitalReturnIn):
+    dividends.add_capital_return_adjustment(
+        body.security_id, body.amount_per_unit, body.currency.upper(),
+        body.start_date, body.end_date, body.note)
+    return {"rows": dividends.capital_return_adjustments()}
+
+
+@router.delete("/api/dividend-capital-returns/{adjustment_id}")
+def dividend_capital_return_remove(adjustment_id: int):
+    dividends.remove_capital_return_adjustment(adjustment_id)
+    return {"rows": dividends.capital_return_adjustments()}
+
+
+class FlagOverrideIn(BaseModel):
+    security_id: int = Field(gt=0)
+    ex_date: dt.date | None = None
+    pay_date: dt.date | None = None
+
+
+@router.post("/api/dividend-flag-override")
+def dividend_flag_override_mark(body: FlagOverrideIn):
+    dividends.mark_payment_regular(body.security_id, body.ex_date, body.pay_date)
+    return dividends.yields()
+
+
+@router.post("/api/dividend-flag-override/unmark")
+def dividend_flag_override_unmark(body: FlagOverrideIn):
+    dividends.unmark_payment_regular(body.security_id, body.ex_date, body.pay_date)
+    return dividends.yields()
 
 
 @router.get("/api/transactions")
