@@ -7,6 +7,7 @@
    "market": "HK",
    "security_id": 1,
    "currency": "HKD",
+   "dividend_currency": "HKD",
    "price": 12.18,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -17,7 +18,8 @@
    "trailing_yield_pct": 7.061,
    "forward_yield_pct": 7.061,
    "mv_sgd": 13897.38,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "00101",
@@ -25,6 +27,7 @@
    "market": "HK",
    "security_id": 2,
    "currency": "HKD",
+   "dividend_currency": "HKD",
    "price": 6.4,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -35,7 +38,8 @@
    "trailing_yield_pct": 8.125,
    "forward_yield_pct": 8.125,
    "mv_sgd": 18777.6,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "00788",
@@ -43,6 +47,7 @@
    "market": "HK",
    "security_id": 5,
    "currency": "HKD",
+   "dividend_currency": "HKD",
    "price": 9.11,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -53,7 +58,8 @@
    "trailing_yield_pct": 3.13,
    "forward_yield_pct": 3.13,
    "mv_sgd": 43805.44,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "00823",
@@ -61,6 +67,7 @@
    "market": "HK",
    "security_id": 6,
    "currency": "HKD",
+   "dividend_currency": "HKD",
    "price": 38.2,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -71,7 +78,8 @@
    "trailing_yield_pct": 6.639,
    "forward_yield_pct": 6.639,
    "mv_sgd": 37359.6,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "01038",
@@ -79,6 +87,7 @@
    "market": "HK",
    "security_id": 9,
    "currency": "HKD",
+   "dividend_currency": "HKD",
    "price": 67.95,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -89,7 +98,8 @@
    "trailing_yield_pct": 3.87,
    "forward_yield_pct": 3.87,
    "mv_sgd": 16613.78,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "01310",
@@ -97,6 +107,7 @@
    "market": "HK",
    "security_id": 11,
    "currency": "HKD",
+   "dividend_currency": "HKD",
    "price": 5.82,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -107,7 +118,8 @@
    "trailing_yield_pct": 5.911,
    "forward_yield_pct": 5.911,
    "mv_sgd": 25613.82,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "01883",
@@ -115,6 +127,7 @@
    "market": "HK",
    "security_id": 13,
    "currency": "HKD",
+   "dividend_currency": "HKD",
    "price": 2.36,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -125,7 +138,8 @@
    "trailing_yield_pct": 7.627,
    "forward_yield_pct": 7.627,
    "mv_sgd": 4231.48,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "0P0001OOJG",
@@ -133,17 +147,19 @@
    "market": "SG",
    "security_id": 15,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 239.32,
    "price_date": "2026-09-13",
    "price_stale_days": 36,
    "price_is_stale": true,
    "trailing_dps": 0,
-   "forward_dps": 0.0,
+   "forward_dps": 0,
    "forward_basis": "none",
    "trailing_yield_pct": 0.0,
    "forward_yield_pct": 0.0,
    "mv_sgd": 97190.05,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "1J5",
@@ -151,6 +167,7 @@
    "market": "SG",
    "security_id": 20,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 0.37,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -161,7 +178,8 @@
    "trailing_yield_pct": 4.054,
    "forward_yield_pct": 4.054,
    "mv_sgd": 1110.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "3255",
@@ -169,17 +187,19 @@
    "market": "MY",
    "security_id": 82,
    "currency": "MYR",
+   "dividend_currency": "MYR",
    "price": 13.24,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
    "price_is_stale": false,
    "trailing_dps": 0,
-   "forward_dps": 0.0,
+   "forward_dps": 0,
    "forward_basis": "none",
    "trailing_yield_pct": 0.0,
    "forward_yield_pct": 0.0,
    "mv_sgd": 6630.59,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "42R",
@@ -187,6 +207,7 @@
    "market": "SG",
    "security_id": 21,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 0.27,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -197,7 +218,8 @@
    "trailing_yield_pct": 4.63,
    "forward_yield_pct": 4.63,
    "mv_sgd": 810.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "5E2",
@@ -205,6 +227,7 @@
    "market": "SG",
    "security_id": 26,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 1.85,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -215,7 +238,8 @@
    "trailing_yield_pct": 1.622,
    "forward_yield_pct": 1.622,
    "mv_sgd": 1.85,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "9CI",
@@ -223,6 +247,7 @@
    "market": "SG",
    "security_id": 30,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 2.38,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -233,7 +258,8 @@
    "trailing_yield_pct": 5.042,
    "forward_yield_pct": 5.042,
    "mv_sgd": 6426.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "AAPL",
@@ -241,6 +267,7 @@
    "market": "US",
    "security_id": 31,
    "currency": "USD",
+   "dividend_currency": "USD",
    "price": 343.46,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -251,7 +278,8 @@
    "trailing_yield_pct": 0.309,
    "forward_yield_pct": 0.309,
    "mv_sgd": 439.49,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "AMZN",
@@ -259,17 +287,19 @@
    "market": "US",
    "security_id": 34,
    "currency": "USD",
+   "dividend_currency": "USD",
    "price": 250.0,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
    "price_is_stale": false,
    "trailing_dps": 0,
-   "forward_dps": 0.0,
+   "forward_dps": 0,
    "forward_basis": "none",
    "trailing_yield_pct": 0.0,
    "forward_yield_pct": 0.0,
    "mv_sgd": 32101.52,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "BABA",
@@ -277,6 +307,7 @@
    "market": "US",
    "security_id": 36,
    "currency": "USD",
+   "dividend_currency": "USD",
    "price": 109.11,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -287,7 +318,8 @@
    "trailing_yield_pct": 0.962,
    "forward_yield_pct": 0.962,
    "mv_sgd": 139756.77,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "C38U",
@@ -295,6 +327,7 @@
    "market": "SG",
    "security_id": 42,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 2.23,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -305,7 +338,8 @@
    "trailing_yield_pct": 3.852,
    "forward_yield_pct": 3.852,
    "mv_sgd": 14941.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "C52",
@@ -313,6 +347,7 @@
    "market": "SG",
    "security_id": 43,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 1.26,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -323,25 +358,28 @@
    "trailing_yield_pct": 6.746,
    "forward_yield_pct": 6.746,
    "mv_sgd": 16632.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "CMOU",
    "name": "Keppel Pacific Oak US Reit",
    "market": "SG",
    "security_id": 46,
-   "currency": "SGD",
+   "currency": "USD",
+   "dividend_currency": "SGD",
    "price": 0.146,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
    "price_is_stale": false,
-   "trailing_dps": 0.008275,
-   "forward_dps": 0.008275,
+   "trailing_dps": 0.006467,
+   "forward_dps": 0.006467,
    "forward_basis": "pattern",
-   "trailing_yield_pct": 5.668,
-   "forward_yield_pct": 5.668,
-   "mv_sgd": 5080.8,
-   "capital_return": null
+   "trailing_yield_pct": 4.429,
+   "forward_yield_pct": 4.429,
+   "mv_sgd": 6501.39,
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "COIN",
@@ -349,17 +387,19 @@
    "market": "US",
    "security_id": 47,
    "currency": "USD",
+   "dividend_currency": "USD",
    "price": 173.16,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
    "price_is_stale": false,
    "trailing_dps": 0,
-   "forward_dps": 0.0,
+   "forward_dps": 0,
    "forward_basis": "none",
    "trailing_yield_pct": 0.0,
    "forward_yield_pct": 0.0,
    "mv_sgd": 110787.77,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "CRPU",
@@ -367,6 +407,7 @@
    "market": "SG",
    "security_id": 48,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 0.6,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -377,7 +418,8 @@
    "trailing_yield_pct": 10.749,
    "forward_yield_pct": 10.749,
    "mv_sgd": 7200.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "D05",
@@ -385,6 +427,7 @@
    "market": "SG",
    "security_id": 49,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 74.11,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -399,7 +442,8 @@
     "amount_per_unit": 0.15,
     "currency": "SGD",
     "note": "DBS recurring quarterly capital return (report data/fmyield/report.md) - not an ordinary dividend, excluded from yield"
-   }
+   },
+   "capital_return_clamped": false
   },
   {
    "ticker": "F34",
@@ -407,6 +451,7 @@
    "market": "SG",
    "security_id": 51,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 3.44,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -417,7 +462,8 @@
    "trailing_yield_pct": 4.36,
    "forward_yield_pct": 4.36,
    "mv_sgd": 24768.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "HMN",
@@ -425,6 +471,7 @@
    "market": "SG",
    "security_id": 54,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 0.81,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -435,7 +482,8 @@
    "trailing_yield_pct": 7.536,
    "forward_yield_pct": 7.536,
    "mv_sgd": 123.93,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "J2T",
@@ -443,6 +491,7 @@
    "market": "SG",
    "security_id": 57,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 0.25,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -453,7 +502,8 @@
    "trailing_yield_pct": 4.5,
    "forward_yield_pct": 4.5,
    "mv_sgd": 175.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "N2IU",
@@ -461,6 +511,7 @@
    "market": "SG",
    "security_id": 61,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 1.15,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -471,7 +522,8 @@
    "trailing_yield_pct": 5.183,
    "forward_yield_pct": 5.183,
    "mv_sgd": 3680.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "NVDA",
@@ -479,17 +531,19 @@
    "market": "US",
    "security_id": 62,
    "currency": "USD",
+   "dividend_currency": "USD",
    "price": 214.13,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
    "price_is_stale": false,
    "trailing_dps": 0,
-   "forward_dps": 0.0,
+   "forward_dps": 0,
    "forward_basis": "none",
    "trailing_yield_pct": 0.0,
    "forward_yield_pct": 0.0,
    "mv_sgd": 27400.07,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "O39",
@@ -497,6 +551,7 @@
    "market": "SG",
    "security_id": 63,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 29.0,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -507,7 +562,8 @@
    "trailing_yield_pct": 3.621,
    "forward_yield_pct": 3.621,
    "mv_sgd": 26651.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "O5RU",
@@ -515,6 +571,7 @@
    "market": "SG",
    "security_id": 64,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 1.39,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -525,7 +582,8 @@
    "trailing_yield_pct": 7.127,
    "forward_yield_pct": 7.127,
    "mv_sgd": 59492.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "PLTR",
@@ -533,17 +591,19 @@
    "market": "US",
    "security_id": 67,
    "currency": "USD",
+   "dividend_currency": "USD",
    "price": 186.03,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
    "price_is_stale": false,
    "trailing_dps": 0,
-   "forward_dps": 0.0,
+   "forward_dps": 0,
    "forward_basis": "none",
    "trailing_yield_pct": 0.0,
    "forward_yield_pct": 0.0,
    "mv_sgd": 1190.22,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "Q01",
@@ -551,6 +611,7 @@
    "market": "SG",
    "security_id": 68,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 0.925,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -561,7 +622,8 @@
    "trailing_yield_pct": 5.405,
    "forward_yield_pct": 5.405,
    "mv_sgd": 15725.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "RIVN",
@@ -569,17 +631,19 @@
    "market": "US",
    "security_id": 69,
    "currency": "USD",
+   "dividend_currency": "USD",
    "price": 12.42,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
    "price_is_stale": false,
    "trailing_dps": 0,
-   "forward_dps": 0.0,
+   "forward_dps": 0,
    "forward_basis": "none",
    "trailing_yield_pct": 0.0,
    "forward_yield_pct": 0.0,
    "mv_sgd": 39731.58,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "S61",
@@ -587,6 +651,7 @@
    "market": "SG",
    "security_id": 71,
    "currency": "SGD",
+   "dividend_currency": "SGD",
    "price": 3.58,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
@@ -597,25 +662,28 @@
    "trailing_yield_pct": 11.355,
    "forward_yield_pct": 11.355,
    "mv_sgd": 19332.0,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "SET",
    "name": "Stoneweg European Reit",
    "market": "SG",
    "security_id": 73,
-   "currency": "SGD",
+   "currency": "EUR",
+   "dividend_currency": "SGD",
    "price": 1.48,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
    "price_is_stale": false,
-   "trailing_dps": 0.197834,
-   "forward_dps": 0.197834,
+   "trailing_dps": 0.137566,
+   "forward_dps": 0.137566,
    "forward_basis": "pattern",
-   "trailing_yield_pct": 13.367,
-   "forward_yield_pct": 13.367,
-   "mv_sgd": 21460.0,
-   "capital_return": null
+   "trailing_yield_pct": 9.295,
+   "forward_yield_pct": 9.295,
+   "mv_sgd": 30861.63,
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "SPCX",
@@ -623,40 +691,44 @@
    "market": "US",
    "security_id": 93,
    "currency": "USD",
+   "dividend_currency": "USD",
    "price": 146.03,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
    "price_is_stale": false,
    "trailing_dps": 0,
-   "forward_dps": 0.0,
+   "forward_dps": 0,
    "forward_basis": "none",
    "trailing_yield_pct": 0.0,
    "forward_yield_pct": 0.0,
    "mv_sgd": 19.12,
-   "capital_return": null
+   "capital_return": null,
+   "capital_return_clamped": false
   },
   {
    "ticker": "UD1U",
    "name": "IREIT Global",
    "market": "SG",
    "security_id": 77,
-   "currency": "EUR",
+   "currency": "SGD",
+   "dividend_currency": "EUR",
    "price": 0.165,
    "price_date": "2026-10-18",
    "price_stale_days": 1,
    "price_is_stale": false,
-   "trailing_dps": 0.0074,
-   "forward_dps": 0.0074,
+   "trailing_dps": 0.010642,
+   "forward_dps": 0.010642,
    "forward_basis": "pattern",
-   "trailing_yield_pct": 4.485,
-   "forward_yield_pct": 4.485,
-   "mv_sgd": 63143.12,
-   "capital_return": null
+   "trailing_yield_pct": 6.45,
+   "forward_yield_pct": 6.45,
+   "mv_sgd": 43907.33,
+   "capital_return": null,
+   "capital_return_clamped": false
   }
  ],
- "portfolio_trailing_yield_pct": 3.25,
- "portfolio_forward_yield_pct": 3.25,
- "total_mv_sgd": 1220229.88,
+ "portfolio_trailing_yield_pct": 3.272,
+ "portfolio_forward_yield_pct": 3.272,
+ "total_mv_sgd": 1211816.31,
  "excluded": [
   {
    "ticker": "S61",
