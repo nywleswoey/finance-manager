@@ -53,6 +53,17 @@ export default function Dividends() {
     setVer((v) => v + 1);
   }
 
+  async function markRegular(e) {
+    await post("/api/dividend-flag-overrides",
+      { security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date });
+    setVer((v) => v + 1);
+  }
+
+  async function unmarkRegular(id) {
+    await del("/api/dividend-flag-overrides/" + id);
+    setVer((v) => v + 1);
+  }
+
   function selectCapSecurity(e) {
     const sid = e.target.value;
     const row = (yld?.rows || []).find((r) => String(r.security_id) === sid);
@@ -235,6 +246,28 @@ export default function Dividends() {
                     vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
                     &nbsp;({money(e.baseline, e.currency, 4)})
                   </span>
+                  <button className="link-btn" onClick={() => markRegular(e)}>Mark as regular</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {yld.marked_regular?.length > 0 && (
+            <div style={{ marginTop: 16 }} data-testid="dividend-marked-regular">
+              <h4 style={{ margin: "0 0 8px" }}>Marked as regular</h4>
+              {yld.marked_regular.map((e) => (
+                <div key={e.id}
+                    style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
+                             padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+                  <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
+                  <span className="mut">{e.pay_date}</span>
+                  <span>{money(e.rate, e.currency, 4)}</span>
+                  <span className="mut">{fmt(e.ratio, 1)}x</span>
+                  <span className="mut">
+                    vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
+                    &nbsp;({money(e.baseline, e.currency, 4)})
+                  </span>
+                  <button className="link-btn" onClick={() => unmarkRegular(e.id)}>Unmark</button>
                 </div>
               ))}
             </div>

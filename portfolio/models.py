@@ -174,6 +174,24 @@ class DividendAdjustment(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class DividendFlagOverride(Base):
+    """A distribution the user declared regular despite OUTLIER_MULT flagging it as possibly
+    special (NVIDIA's 2026-10-01 rate hike, a real SEC-announced increase, is the motivating
+    case) - persisted so the override survives a re-ingest and both yields in
+    portfolio.dividends.yields() count the payment as regular again. Keyed the same way
+    `_distributions()` groups one: ex_date when the distribution has one, else pay_date.
+    Deleting the row un-marks it - the Dividends tab's "Marked as regular" list reads this
+    table, undo removes from it."""
+    __tablename__ = "dividend_flag_override"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    security_id: Mapped[int] = mapped_column(ForeignKey("security.id"), index=True)
+    ex_date: Mapped[dt.date | None] = mapped_column(Date)
+    pay_date: Mapped[dt.date] = mapped_column(Date)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (UniqueConstraint("security_id", "ex_date", "pay_date",
+                                       name="uq_dividend_flag_override"),)
+
+
 # ---------------- spending (cash-flow ledger) ----------------
 class CashTxn(Base):
     """One bank/credit-card cash-flow line — the spending ledger (distinct from the

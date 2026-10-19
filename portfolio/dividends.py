@@ -548,6 +548,43 @@ def apply_capital_return(rate, currency, date, adjustments):
     return (0.0 if clamped else net), adj, clamped
 
 
+def flag_overrides(s=None):
+    """Every dividend_flag_override, newest first, with the security's ticker/name joined in
+    for the Dividends tab's "Marked as regular" list."""
+    with session_scope(s) as s:
+        rows = fetch_dicts(s,
+            "SELECT o.id, o.security_id, sec.canonical_ticker ticker, sec.name, "
+            "o.ex_date, o.pay_date "
+            "FROM dividend_flag_override o JOIN security sec ON sec.id = o.security_id "
+            "ORDER BY o.pay_date DESC, o.id DESC")
+    return rows
+
+
+def add_flag_override(security_id, ex_date, pay_date, s=None):
+    """Mark a distribution OUTLIER_MULT would otherwise flag as regular - persisted so it
+    survives a re-ingest and stays regular in both yields(). Keyed like _distributions()
+    groups a distribution: ex_date when present, else pay_date alone. Idempotent - marking an
+    already-marked payment again is a no-op, not a duplicate row."""
+    where_ex = "ex_date = :ex" if ex_date is not None else "ex_date IS NULL"
+    with session_scope(s) as s:
+        existing = fetch_dicts(s,
+            f"SELECT id FROM dividend_flag_override WHERE security_id = :sid AND {where_ex} "
+            "AND pay_date = :pay", {"sid": security_id, "ex": ex_date, "pay": pay_date})
+        if existing:
+            return
+        s.execute(text(
+            "INSERT INTO dividend_flag_override (security_id, ex_date, pay_date) "
+            "VALUES (:sid, :ex, :pay)"),
+            {"sid": security_id, "ex": ex_date, "pay": pay_date})
+        s.commit()
+
+
+def remove_flag_override(override_id, s=None):
+    with session_scope(s) as s:
+        s.execute(text("DELETE FROM dividend_flag_override WHERE id = :id"), {"id": override_id})
+        s.commit()
+
+
 def _seasonal_baseline(distributions, d):
     """The same ticker's own distribution from ~1 or ~2 years before `d` (`net_rate`), matched
     the same anniversary +/- DRIFT_DAYS way projected()/unreceived_last_year() match "the same
@@ -563,14 +600,20 @@ def _seasonal_baseline(distributions, d):
     return None
 
 
-def _classify(distributions):
+def _classify(distributions, overridden_keys=frozenset()):
     """Mutate each of `distributions` (already carrying `net_rate`, see `_net_distributions`)
-    with `flagged` (bool, excluded from regular DPS) and, when flagged, `flag_baseline` /
-    `flag_baseline_type` / `flag_ratio` explaining why.
+    with `flagged` (bool, the raw possibly-special heuristic) and, when flagged,
+    `flag_baseline` / `flag_baseline_type` / `flag_ratio` explaining why, plus `overridden`
+    (bool, true when the user declared the payment regular - see dividend_flag_override). A
+    flagged-and-overridden distribution still gets its baseline/ratio (the "Marked as regular"
+    list's reason) but no longer excludes from regular DPS - see yields().
 
     Flagged when the net rate is more than OUTLIER_MULT x BOTH its seasonal baseline (same slot,
     a year or two earlier) AND the ticker's all-time median net rate (needs >= 3 distributions to
-    have a median at all); with no seasonal match, the median alone decides."""
+    have a median at all); with no seasonal match, the median alone decides.
+
+    `overridden_keys` is the set of (ex_date, pay_date) keys from dividend_flag_override,
+    matching the same (ex_date, else pay_date) grouping `_distributions()` uses."""
     net_rates = [d["net_rate"] for d in distributions]
     median_rate = statistics.median(net_rates) if len(net_rates) >= 3 else None
     for d in distributions:
@@ -579,6 +622,7 @@ def _classify(distributions):
         outlier_global = median_rate is not None and d["net_rate"] > OUTLIER_MULT * median_rate
         is_outlier = outlier_global if seasonal is None else (outlier_seasonal and outlier_global)
         d["flagged"] = bool(is_outlier)
+        d["overridden"] = bool(is_outlier) and (d["ex_date"], d["pay_date"]) in overridden_keys
         if is_outlier:
             baseline = seasonal if seasonal is not None else median_rate
             d["flag_baseline"] = round(baseline, 6)
@@ -684,8 +728,11 @@ def yields(s=None, today=None):
     dividend shows `0.0` - the two stay visually distinct from each other, and from each other
     alone, consistently.
 
-    `excluded` lists every flagged trailing distribution across every held counter, for the
-    tab's "Excluded as possibly special" list."""
+    `excluded` lists every flagged-and-not-overridden trailing distribution across every held
+    counter, for the tab's "Excluded as possibly special" list. `marked_regular` lists every
+    flagged distribution the user declared regular (dividend_flag_override), trailing window or
+    not, for the tab's "Marked as regular" list - each carries the same baseline/ratio reason as
+    `excluded` plus the override's `id` for the tab's Unmark action."""
     today = today or sg_today()
     trail_start = today - dt.timedelta(days=365)
     fwd_end = today + dt.timedelta(days=365)
@@ -705,6 +752,10 @@ def yields(s=None, today=None):
                                 "end_date, note FROM dividend_adjustment"):
             adjustments_by_sec[r["security_id"]].append(
                 {**r, "amount_per_unit": num(r["amount_per_unit"])})
+        overrides_by_sec = defaultdict(dict)
+        for r in fetch_dicts(s, "SELECT id, security_id, ex_date, pay_date "
+                                "FROM dividend_flag_override"):
+            overrides_by_sec[r["security_id"]][(r["ex_date"], r["pay_date"])] = r["id"]
         announced_by_sec = defaultdict(list)
         for r in fetch_dicts(s,
                 "SELECT security_id, ex_date, pay_date, amount_per_unit, currency "
@@ -717,7 +768,7 @@ def yields(s=None, today=None):
         for r in details(s)["rows"]:
             rows_by_ticker[r["ticker"]].append(r)
 
-    rows, excluded = [], []
+    rows, excluded, marked_regular = [], [], []
     for h in sorted(holdings, key=lambda h: h["ticker"]):
         tk = h["ticker"]
         sec = securities.get(tk)
@@ -725,17 +776,28 @@ def yields(s=None, today=None):
             continue
         sid = sec["security_id"]
         adjustments = adjustments_by_sec.get(sid, [])
+        overrides = overrides_by_sec.get(sid, {})
 
         distributions = _distributions(rows_by_ticker.get(tk, []))
         _net_distributions(distributions, adjustments)
-        _classify(distributions)
+        _classify(distributions, overrides.keys())
 
         trailing = [d for d in distributions if trail_start <= d["pay_date"] <= today]
-        trailing_regular = [d for d in trailing if not d["flagged"]]
+        trailing_regular = [d for d in trailing if not d["flagged"] or d["overridden"]]
 
         for d in trailing:
-            if d["flagged"]:
+            if d["flagged"] and not d["overridden"]:
                 excluded.append({
+                    "ticker": tk, "name": sec["name"], "security_id": sid,
+                    "ex_date": iso(d["ex_date"]), "pay_date": iso(d["pay_date"]),
+                    "rate": d["rate"], "net_rate": round(d["net_rate"], 6),
+                    "currency": d["currency"], "baseline": d["flag_baseline"],
+                    "baseline_type": d["flag_baseline_type"], "ratio": d["flag_ratio"],
+                })
+        for d in distributions:
+            if d["overridden"]:
+                marked_regular.append({
+                    "id": overrides[(d["ex_date"], d["pay_date"])],
                     "ticker": tk, "name": sec["name"], "security_id": sid,
                     "ex_date": iso(d["ex_date"]), "pay_date": iso(d["pay_date"]),
                     "rate": d["rate"], "net_rate": round(d["net_rate"], 6),
@@ -800,4 +862,5 @@ def yields(s=None, today=None):
         "portfolio_forward_yield_pct": _weighted("forward_yield_pct"),
         "total_mv_sgd": round(total_mv, 2),
         "excluded": sorted(excluded, key=lambda e: (e["pay_date"] or "", e["ticker"])),
+        "marked_regular": sorted(marked_regular, key=lambda e: (e["pay_date"] or "", e["ticker"])),
     }

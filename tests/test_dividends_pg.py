@@ -509,7 +509,7 @@ class TestYields(pgtest.Case):
     another currency than its price, and the SGD-weighted portfolio average. `today` is pinned the same way
     TestProjected's is."""
     TABLES = ("dividend", "dividend_announcement", "dividend_adjustment",
-             "price", "txn", "fx_rate", "account", "security")
+             "dividend_flag_override", "price", "txn", "fx_rate", "account", "security")
 
     def setUp(self):
         super().setUp()
@@ -624,6 +624,60 @@ class TestYields(pgtest.Case):
         assert excl[0]["ratio"] == 25.0
         assert excl[0]["baseline_type"] == "seasonal"
         assert excl[0]["baseline"] == 0.01
+
+    def test_marking_a_flagged_payment_regular_raises_yield_and_unmarking_restores_it(self):
+        # NVIDIA's real case (launch brief): the 0.25 payment is a genuine rate increase
+        # (SEC 8-K 2026-05-20), not a one-off - marking it regular must count it toward both
+        # trailing and forward DPS, and move it from `excluded` to `marked_regular`; unmarking
+        # must put it straight back to the original flagged state.
+        self._buy(4, D(2022, 1, 1), 100)
+        self._div(4, D(2023, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2024, 4, 1), 0.01, ccy="USD")
+        self._div(4, D(2024, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2025, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2026, 10, 1), 0.25, ccy="USD")
+        self._price(4, TODAY, 200.0, ccy="USD")
+        self.s.commit()
+
+        flagged = self._rows(self._yields())["OUTL"]
+        assert flagged["trailing_dps"] == 0.0
+        assert flagged["forward_dps"] == 0.0
+
+        dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
+
+        marked = self._yields()
+        r = self._rows(marked)["OUTL"]
+        assert r["trailing_dps"] == 0.25
+        assert r["forward_dps"] == 0.25
+        assert not [e for e in marked["excluded"] if e["ticker"] == "OUTL"]
+        regular = [e for e in marked["marked_regular"] if e["ticker"] == "OUTL"]
+        assert len(regular) == 1
+        assert regular[0]["ratio"] == 25.0
+        assert regular[0]["baseline_type"] == "seasonal"
+        assert regular[0]["baseline"] == 0.01
+        override_id = regular[0]["id"]
+
+        dividends.remove_flag_override(override_id, s=self.s)
+
+        restored = self._yields()
+        r = self._rows(restored)["OUTL"]
+        assert r["trailing_dps"] == 0.0
+        assert not restored["marked_regular"]
+        excl = [e for e in restored["excluded"] if e["ticker"] == "OUTL"]
+        assert len(excl) == 1
+        assert excl[0]["ratio"] == 25.0
+
+    def test_adding_the_same_override_twice_is_a_no_op(self):
+        self._buy(4, D(2022, 1, 1), 100)
+        self._div(4, D(2025, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2026, 10, 1), 0.25, ccy="USD")
+        self._price(4, TODAY, 200.0, ccy="USD")
+        self.s.commit()
+
+        dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
+        dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
+
+        assert len(dividends.flag_overrides(s=self.s)) == 1
 
     def test_a_larger_interim_dividend_is_not_flagged_against_a_smaller_final(self):
         # Hang Lung Properties' shape: interim is genuinely larger than final every year.
