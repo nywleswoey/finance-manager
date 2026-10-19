@@ -706,6 +706,20 @@ class TestYields(pgtest.Case):
         assert r["forward_dps"] == 0.40
         assert r["forward_basis"] == "pattern"
 
+    def test_a_monthly_payer_rolls_every_month_forward(self):
+        # the latest month sits ~30 days from the earliest month's anniversary - a neighbour,
+        # not the same slot paid again
+        self._buy(8, D(2024, 1, 1), 1000)
+        for m in range(12):
+            y, mo = (2025, 10 + m) if m < 3 else (2026, m - 2)
+            self._div(8, D(y, mo, 15), 0.10, ex=D(y, mo, 1))
+        self._price(8, TODAY, 20.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["FWDPAT"]
+        assert r["trailing_dps"] == 1.2
+        assert r["forward_dps"] == r["trailing_dps"]
+
     def test_forward_basis_pattern_when_nothing_is_declared(self):
         self._buy(8, D(2024, 1, 1), 1000)
         self._div(8, D(2026, 5, 1), 0.50)

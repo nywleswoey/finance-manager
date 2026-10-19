@@ -607,13 +607,13 @@ def _slot_date(d):
     return d["ex_date"] or d["pay_date"]
 
 
-def _nearest_pairs(anniversaries, dates):
-    """`{i: j}` pairing each of `anniversaries` with at most one of `dates` within DRIFT_DAYS,
-    nearest pairs first, each date used once - unreceived_last_year()'s pairing."""
+def _nearest_pairs(anniversaries, dates, tolerance):
+    """`{i: j}` pairing each of `anniversaries` with at most one of `dates` within `tolerance`
+    days, nearest pairs first, each date used once - unreceived_last_year()'s pairing."""
     pairs = sorted((abs((d - anniv).days), i, j)
                    for i, anniv in enumerate(anniversaries)
                    for j, d in enumerate(dates)
-                   if abs((d - anniv).days) <= DRIFT_DAYS)
+                   if abs((d - anniv).days) <= tolerance)
     match, used = {}, set()
     for _, i, j in pairs:
         if i not in match and j not in used:
@@ -628,18 +628,24 @@ def _forward(trailing_regular, declared):
     A trailing regular distribution whose one-year anniversary (of its ex_date, else pay_date)
     is already paired with a later trailing distribution has had its slot paid again inside the
     window, so only that later one rolls forward. Each remaining one's anniversary is paired
-    with the nearest SGX-declared announcement (its ex_date) within DRIFT_DAYS, nearest pairs
-    first, as unreceived_last_year() pairs; a paired one takes the declared rate ("declared"),
+    with the nearest SGX-declared announcement (its ex_date), nearest pairs first, as
+    unreceived_last_year() pairs. Both pairings allow DRIFT_DAYS, narrowed to half the
+    counter's median gap between payments so a monthly payer's slot never pairs with the
+    neighbouring month's; a paired one takes the declared rate ("declared"),
     an unpaired one repeats its own net rate ("pattern"). A declared announcement left unpaired
     is a new or initiated distribution and counts on its own ("declared").
     `declared` is `[(announcement, net_rate)]`."""
     def anniversary(d):
         return _anniversary(_slot_date(d), _slot_date(d).year + 1)
 
+    slots = sorted(_slot_date(d) for d in trailing_regular)
+    gaps = [(b - a).days for a, b in zip(slots, slots[1:])]
+    tolerance = min(DRIFT_DAYS, statistics.median(gaps) / 2) if gaps else DRIFT_DAYS
     repaid = _nearest_pairs([anniversary(d) for d in trailing_regular],
-                            [_slot_date(d) for d in trailing_regular])
+                            [_slot_date(d) for d in trailing_regular], tolerance)
     rolling = [d for i, d in enumerate(trailing_regular) if i not in repaid]
-    match = _nearest_pairs([anniversary(d) for d in rolling], [a["ex_date"] for a, _ in declared])
+    match = _nearest_pairs([anniversary(d) for d in rolling], [a["ex_date"] for a, _ in declared],
+                           tolerance)
     out = []
     for i, d in enumerate(rolling):
         if i in match:
