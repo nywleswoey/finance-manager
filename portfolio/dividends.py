@@ -548,28 +548,16 @@ def apply_capital_return(rate, currency, date, adjustments):
     return (0.0 if clamped else net), adj, clamped
 
 
-def flag_overrides(s=None):
-    """Every dividend_flag_override, newest first, with the security's ticker/name joined in
-    for the Dividends tab's "Marked as regular" list."""
-    with session_scope(s) as s:
-        rows = fetch_dicts(s,
-            "SELECT o.id, o.security_id, sec.canonical_ticker ticker, sec.name, "
-            "o.ex_date, o.pay_date "
-            "FROM dividend_flag_override o JOIN security sec ON sec.id = o.security_id "
-            "ORDER BY o.pay_date DESC, o.id DESC")
-    return rows
-
-
 def add_flag_override(security_id, ex_date, pay_date, s=None):
     """Mark a distribution OUTLIER_MULT would otherwise flag as regular - persisted so it
     survives a re-ingest and stays regular in both yields(). Keyed like _distributions()
-    groups a distribution: ex_date when present, else pay_date alone. Idempotent - marking an
-    already-marked payment again is a no-op, not a duplicate row."""
-    where_ex = "ex_date = :ex" if ex_date is not None else "ex_date IS NULL"
+    groups a distribution: ex_date when present, else pay_date (matched by `_override_id()`).
+    Idempotent - marking an already-marked payment again is a no-op, not a duplicate row."""
+    where = "ex_date = :ex" if ex_date is not None else "ex_date IS NULL AND pay_date = :pay"
     with session_scope(s) as s:
         existing = fetch_dicts(s,
-            f"SELECT id FROM dividend_flag_override WHERE security_id = :sid AND {where_ex} "
-            "AND pay_date = :pay", {"sid": security_id, "ex": ex_date, "pay": pay_date})
+            f"SELECT id FROM dividend_flag_override WHERE security_id = :sid AND {where}",
+            {"sid": security_id, "ex": ex_date, "pay": pay_date})
         if existing:
             return
         s.execute(text(
@@ -600,20 +588,34 @@ def _seasonal_baseline(distributions, d):
     return None
 
 
-def _classify(distributions, overridden_keys=frozenset()):
+def _override_id(overrides, d):
+    """The dividend_flag_override id (`overrides`: rows of id/ex_date/pay_date) marking
+    distribution `d` regular, else None. Matched the way `_distributions()` tells one
+    distribution from another: an override with an ex_date on that ex_date, one without on a
+    pay_date within SAME_DISTRIBUTION_DAYS - so marking a payment before a later ingest supplies
+    its ex_date (or another account's earlier pay_date) still holds."""
+    for o in overrides:
+        if o["ex_date"] is not None and o["ex_date"] == d["ex_date"]:
+            return o["id"]
+    for o in overrides:
+        if o["ex_date"] is None \
+                and abs((o["pay_date"] - d["pay_date"]).days) <= SAME_DISTRIBUTION_DAYS:
+            return o["id"]
+    return None
+
+
+def _classify(distributions, overrides):
     """Mutate each of `distributions` (already carrying `net_rate`, see `_net_distributions`)
     with `flagged` (bool, the raw possibly-special heuristic) and, when flagged,
-    `flag_baseline` / `flag_baseline_type` / `flag_ratio` explaining why, plus `overridden`
-    (bool, true when the user declared the payment regular - see dividend_flag_override). A
+    `flag_baseline` / `flag_baseline_type` / `flag_ratio` explaining why, plus `override_id`
+    (the dividend_flag_override id when the user declared it regular, see `_override_id()`,
+    else None) and `overridden` (bool). A
     flagged-and-overridden distribution still gets its baseline/ratio (the "Marked as regular"
     list's reason) but no longer excludes from regular DPS - see yields().
 
     Flagged when the net rate is more than OUTLIER_MULT x BOTH its seasonal baseline (same slot,
     a year or two earlier) AND the ticker's all-time median net rate (needs >= 3 distributions to
-    have a median at all); with no seasonal match, the median alone decides.
-
-    `overridden_keys` is the set of (ex_date, pay_date) keys from dividend_flag_override,
-    matching the same (ex_date, else pay_date) grouping `_distributions()` uses."""
+    have a median at all); with no seasonal match, the median alone decides."""
     net_rates = [d["net_rate"] for d in distributions]
     median_rate = statistics.median(net_rates) if len(net_rates) >= 3 else None
     for d in distributions:
@@ -622,7 +624,8 @@ def _classify(distributions, overridden_keys=frozenset()):
         outlier_global = median_rate is not None and d["net_rate"] > OUTLIER_MULT * median_rate
         is_outlier = outlier_global if seasonal is None else (outlier_seasonal and outlier_global)
         d["flagged"] = bool(is_outlier)
-        d["overridden"] = bool(is_outlier) and (d["ex_date"], d["pay_date"]) in overridden_keys
+        d["override_id"] = _override_id(overrides, d) if is_outlier else None
+        d["overridden"] = d["override_id"] is not None
         if is_outlier:
             baseline = seasonal if seasonal is not None else median_rate
             d["flag_baseline"] = round(baseline, 6)
@@ -752,10 +755,10 @@ def yields(s=None, today=None):
                                 "end_date, note FROM dividend_adjustment"):
             adjustments_by_sec[r["security_id"]].append(
                 {**r, "amount_per_unit": num(r["amount_per_unit"])})
-        overrides_by_sec = defaultdict(dict)
+        overrides_by_sec = defaultdict(list)
         for r in fetch_dicts(s, "SELECT id, security_id, ex_date, pay_date "
                                 "FROM dividend_flag_override"):
-            overrides_by_sec[r["security_id"]][(r["ex_date"], r["pay_date"])] = r["id"]
+            overrides_by_sec[r["security_id"]].append(r)
         announced_by_sec = defaultdict(list)
         for r in fetch_dicts(s,
                 "SELECT security_id, ex_date, pay_date, amount_per_unit, currency "
@@ -776,11 +779,11 @@ def yields(s=None, today=None):
             continue
         sid = sec["security_id"]
         adjustments = adjustments_by_sec.get(sid, [])
-        overrides = overrides_by_sec.get(sid, {})
+        overrides = overrides_by_sec.get(sid, [])
 
         distributions = _distributions(rows_by_ticker.get(tk, []))
         _net_distributions(distributions, adjustments)
-        _classify(distributions, overrides.keys())
+        _classify(distributions, overrides)
 
         trailing = [d for d in distributions if trail_start <= d["pay_date"] <= today]
         trailing_regular = [d for d in trailing if not d["flagged"] or d["overridden"]]
@@ -797,7 +800,7 @@ def yields(s=None, today=None):
         for d in distributions:
             if d["overridden"]:
                 marked_regular.append({
-                    "id": overrides[(d["ex_date"], d["pay_date"])],
+                    "id": d["override_id"],
                     "ticker": tk, "name": sec["name"], "security_id": sid,
                     "ex_date": iso(d["ex_date"]), "pay_date": iso(d["pay_date"]),
                     "rate": d["rate"], "net_rate": round(d["net_rate"], 6),

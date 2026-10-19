@@ -677,7 +677,38 @@ class TestYields(pgtest.Case):
         dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
         dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
 
-        assert len(dividends.flag_overrides(s=self.s)) == 1
+        assert self.s.execute(text("SELECT COUNT(*) FROM dividend_flag_override")).scalar() == 1
+
+    def test_an_override_still_applies_after_a_reingest_adds_the_ex_date(self):
+        # Marked while the statement carried no ex_date; a later ingest supplies one (and an
+        # account paid a day earlier) - the distribution's (ex_date, pay_date) both move, yet
+        # it is the same payment and must stay marked, and stay unmarkable.
+        self._buy(4, D(2022, 1, 1), 100)
+        self._div(4, D(2023, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2024, 4, 1), 0.01, ccy="USD")
+        self._div(4, D(2024, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2025, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2026, 10, 1), 0.25, ccy="USD")
+        self._price(4, TODAY, 200.0, ccy="USD")
+        self.s.commit()
+        dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
+
+        self.s.execute(text("UPDATE dividend SET ex_date = :ex WHERE pay_date = :pay"),
+                       {"ex": D(2026, 9, 10), "pay": D(2026, 10, 1)})
+        self.s.add(Account(id=2, name="IBKR", funding_bucket="cash"))
+        self._div(4, D(2026, 9, 30), 0.25, ccy="USD", account=2, ex=D(2026, 9, 10))
+        self.s.commit()
+
+        out = self._yields()
+        assert self._rows(out)["OUTL"]["trailing_dps"] == 0.25
+        assert not [e for e in out["excluded"] if e["ticker"] == "OUTL"]
+        regular = [e for e in out["marked_regular"] if e["ticker"] == "OUTL"]
+        assert [(e["ex_date"], e["pay_date"]) for e in regular] == [("2026-09-10", "2026-09-30")]
+
+        dividends.remove_flag_override(regular[0]["id"], s=self.s)
+        restored = self._yields()
+        assert not restored["marked_regular"]
+        assert [e["ticker"] for e in restored["excluded"]] == ["OUTL"]
 
     def test_a_larger_interim_dividend_is_not_flagged_against_a_smaller_final(self):
         # Hang Lung Properties' shape: interim is genuinely larger than final every year.
