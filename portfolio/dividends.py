@@ -24,14 +24,15 @@ the app reports SGD, so dividends must be comparable without mental FX. `annual(
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_dividends.py -q
 """
 import datetime as dt
+import statistics
 from collections import defaultdict
 
 from sqlalchemy import text
 
 from ingestion.prices import sg_today
-from .db import fetch_dicts, fx_map, session_scope
-from .money import to_sgd
-from .nullable import nulls_last, num
+from .db import fetch_dicts, fx_map, latest_price, session_scope
+from .money import rate_to_sgd, to_sgd
+from .nullable import iso, nulls_last, num
 
 
 # ---------------- the shared entitlement attribution primitives ----------------
@@ -209,8 +210,12 @@ def distinct_distributions(ticker, s=None):
     A row with no ex_date joins the distribution of a DIFFERENT account within
     SAME_DISTRIBUTION_DAYS of its pay_date at a matching rate, else it stands alone. Rows with
     no rate (nothing to compare or count) are left out."""
-    rows = [r for r in details(s)["rows"]
-            if r["ticker"] == ticker and r["rate"] is not None and r["pay_date"] is not None]
+    return _distributions([r for r in details(s)["rows"] if r["ticker"] == ticker])
+
+
+def _distributions(rows):
+    """`distinct_distributions()` over one ticker's already-fetched `details()` rows."""
+    rows = [r for r in rows if r["rate"] is not None and r["pay_date"] is not None]
     groups = {}
     for r in sorted(rows, key=lambda r: (r["ex_date"] is None, r["pay_date"])):
         key = ("ex", r["ex_date"]) if r["ex_date"] else ("pay", r["pay_date"])
@@ -462,4 +467,337 @@ def projected(s=None, today=None):
         "overdue_sgd": round(overdue_total, 2),
         "overdue_count": overdue_count,
         "holdings": holdings,
+    }
+
+
+# ---------------- dividend yield (trailing + forward, special payments excluded) ----------------
+#
+# One thing nothing in the ingested data distinguishes from an ordinary regular dividend, so it
+# can't be derived - only declared by the user and persisted, surviving a re-ingest:
+#
+#   dividend_adjustment    a recurring non-ordinary per-unit component (DBS's quarterly capital
+#                           return is the known case) folded into the SAME summed rate as the
+#                           ordinary dividend by both the statement rows and the SGX cache
+#                           (portfolio.sgx's `particulars` text no longer carries "ordinary" /
+#                           "special" / "capital return" wording — see data/fmyield/report.md).
+#
+# Everything else here is derived, reusing distinct_distributions() for the per-unit rate and
+# the same DRIFT_DAYS/_anniversary primitives projected() already uses to roll a payment forward
+# a year — never re-deriving that grouping.
+
+OUTLIER_MULT = 2.5     # flag a distribution as possibly special when its net rate is more than
+                        # this x BOTH its seasonal baseline (same slot, a year or two earlier)
+                        # AND the ticker's all-time median net rate — see _classify.
+PRICE_STALE_DAYS = 7    # a price older than this many days is flagged stale on the yield columns
+
+
+def capital_return_adjustments(s=None):
+    """Every dividend_adjustment, newest start_date first, with the security's ticker/name
+    joined in for the Dividends tab's list."""
+    with session_scope(s) as s:
+        rows = fetch_dicts(s,
+            "SELECT da.id, da.security_id, sec.canonical_ticker ticker, sec.name, "
+            "da.amount_per_unit, da.currency, da.start_date, da.end_date, da.note "
+            "FROM dividend_adjustment da JOIN security sec ON sec.id = da.security_id "
+            "ORDER BY da.start_date DESC, da.id DESC")
+    return [{**r, "amount_per_unit": num(r["amount_per_unit"])} for r in rows]
+
+
+def add_capital_return_adjustment(security_id, amount_per_unit, currency, start_date,
+                                  end_date=None, note=None, s=None):
+    """Persist a capital-return (or other recurring non-ordinary component) deduction — see
+    DividendAdjustment for why this can only be declared, not derived."""
+    with session_scope(s) as s:
+        s.execute(text(
+            "INSERT INTO dividend_adjustment (security_id, amount_per_unit, currency, "
+            "start_date, end_date, note) VALUES (:sid, :amt, :ccy, :start, :end, :note)"),
+            {"sid": security_id, "amt": amount_per_unit, "ccy": currency,
+             "start": start_date, "end": end_date, "note": note})
+        s.commit()
+
+
+def remove_capital_return_adjustment(adjustment_id, s=None):
+    with session_scope(s) as s:
+        s.execute(text("DELETE FROM dividend_adjustment WHERE id = :id"), {"id": adjustment_id})
+        s.commit()
+
+
+def _active_adjustment(adjustments, date):
+    """The dividend_adjustment covering `date` (its ex_date, else pay_date) — the one with the
+    latest start_date <= date whose end_date (if any) hasn't passed — or None. Picking the
+    latest start_date lets a new adjustment row for a rate change take over from `start_date`
+    without touching the old one's history."""
+    if date is None:
+        return None
+    candidates = [a for a in adjustments
+                 if a["start_date"] <= date and (a["end_date"] is None or date <= a["end_date"])]
+    return max(candidates, key=lambda a: a["start_date"]) if candidates else None
+
+
+def apply_capital_return(rate, currency, date, adjustments):
+    """`rate` minus the adjustment active on `date`, clamped at zero — never a negative
+    "regular" dividend. Returns `(net_rate, adjustment_or_None, clamped: bool)`; `clamped` lets
+    a caller surface "the deduction is larger than this payment" rather than silently losing the
+    difference. An adjustment in a different currency than the payment never applies — there is
+    nothing to subtract 1:1 across currencies here."""
+    adj = _active_adjustment(adjustments, date)
+    if adj is None or adj["currency"] != currency:
+        return rate, None, False
+    net = rate - float(adj["amount_per_unit"])
+    clamped = net < 0
+    return (0.0 if clamped else net), adj, clamped
+
+
+def _seasonal_baseline(distributions, d):
+    """The same ticker's own distribution from ~1 or ~2 years before `d` (`net_rate`), matched
+    the same anniversary +/- DRIFT_DAYS way projected()/unreceived_last_year() match "the same
+    payment, a year on" — or None if there isn't one. Comparing a payment only to its own slot a
+    year earlier (rather than a flat all-time median) is what keeps a genuinely larger interim
+    dividend (Hang Lung Properties, QAF) from being flagged against a smaller final one."""
+    for back in (1, 2):
+        anniv = _anniversary(d["pay_date"], d["pay_date"].year - back)
+        matches = [o for o in distributions if o is not d
+                  and abs((o["pay_date"] - anniv).days) <= DRIFT_DAYS]
+        if matches:
+            return min(matches, key=lambda o: abs((o["pay_date"] - anniv).days))["net_rate"]
+    return None
+
+
+def _classify(distributions):
+    """Mutate each of `distributions` (already carrying `net_rate`, see `_net_distributions`)
+    with `flagged` (bool, excluded from regular DPS) and, when flagged, `flag_baseline` /
+    `flag_baseline_type` / `flag_ratio` explaining why.
+
+    Flagged when the net rate is more than OUTLIER_MULT x BOTH its seasonal baseline (same slot,
+    a year or two earlier) AND the ticker's all-time median net rate (needs >= 3 distributions to
+    have a median at all); with no seasonal match, the median alone decides."""
+    net_rates = [d["net_rate"] for d in distributions]
+    median_rate = statistics.median(net_rates) if len(net_rates) >= 3 else None
+    for d in distributions:
+        seasonal = _seasonal_baseline(distributions, d)
+        outlier_seasonal = seasonal is not None and d["net_rate"] > OUTLIER_MULT * seasonal
+        outlier_global = median_rate is not None and d["net_rate"] > OUTLIER_MULT * median_rate
+        is_outlier = outlier_global if seasonal is None else (outlier_seasonal and outlier_global)
+        d["flagged"] = bool(is_outlier)
+        if is_outlier:
+            baseline = seasonal if seasonal is not None else median_rate
+            d["flag_baseline"] = round(baseline, 6)
+            d["flag_baseline_type"] = "seasonal" if seasonal is not None else "median"
+            d["flag_ratio"] = round(d["net_rate"] / baseline, 2) if baseline else None
+        else:
+            d["flag_baseline"] = d["flag_baseline_type"] = d["flag_ratio"] = None
+
+
+def _net_distributions(distributions, adjustments):
+    """Attach `net_rate` / `capital_return` / `capital_return_clamped` to each of `distributions`
+    in place — the capital-return deduction, matched by ex_date else pay_date."""
+    for d in distributions:
+        date = d["ex_date"] or d["pay_date"]
+        net, adj, clamped = apply_capital_return(d["rate"], d["currency"], date, adjustments)
+        d["net_rate"], d["capital_return"], d["capital_return_clamped"] = net, adj, clamped
+
+
+def _in_currency(value, frm, to, fx):
+    """`value` in currency `frm` restated in `to` through their SGD rates; ValueError when
+    either currency has no FX rate (portfolio.money's miss-policy)."""
+    return value * rate_to_sgd(frm, fx) / rate_to_sgd(to, fx)
+
+
+def _slot_date(d):
+    return d["ex_date"] or d["pay_date"]
+
+
+def _nearest_pairs(anniversaries, dates, tolerance):
+    """`{i: j}` pairing each of `anniversaries` with at most one of `dates` within `tolerance`
+    days, nearest pairs first, each date used once - unreceived_last_year()'s pairing."""
+    pairs = sorted((abs((d - anniv).days), i, j)
+                   for i, anniv in enumerate(anniversaries)
+                   for j, d in enumerate(dates)
+                   if abs((d - anniv).days) <= tolerance)
+    match, used = {}, set()
+    for _, i, j in pairs:
+        if i not in match and j not in used:
+            match[i] = j
+            used.add(j)
+    return match
+
+
+def _forward(trailing_regular, declared):
+    """The next 12 months' regular distributions as `(net_rate, currency, basis)`.
+
+    A trailing regular distribution whose one-year anniversary (of its ex_date, else pay_date)
+    is already paired with a later trailing distribution has had its slot paid again inside the
+    window, so only that later one rolls forward. Each remaining one's anniversary is paired
+    with the nearest SGX-declared announcement (its ex_date), nearest pairs first, as
+    unreceived_last_year() pairs. Both pairings allow DRIFT_DAYS, narrowed to half the
+    counter's median gap between payments so a monthly payer's slot never pairs with the
+    neighbouring month's; a paired one takes the declared rate ("declared"),
+    an unpaired one repeats its own net rate ("pattern"). A declared announcement left unpaired
+    is a new or initiated distribution and counts on its own ("declared").
+    `declared` is `[(announcement, net_rate)]`."""
+    def anniversary(d):
+        return _anniversary(_slot_date(d), _slot_date(d).year + 1)
+
+    slots = sorted(_slot_date(d) for d in trailing_regular)
+    gaps = [(b - a).days for a, b in zip(slots, slots[1:])]
+    tolerance = min(DRIFT_DAYS, statistics.median(gaps) / 2) if gaps else DRIFT_DAYS
+    repaid = _nearest_pairs([anniversary(d) for d in trailing_regular],
+                            [_slot_date(d) for d in trailing_regular], tolerance)
+    rolling = [d for i, d in enumerate(trailing_regular) if i not in repaid]
+    match = _nearest_pairs([anniversary(d) for d in rolling], [a["ex_date"] for a, _ in declared],
+                           tolerance)
+    out = []
+    for i, d in enumerate(rolling):
+        if i in match:
+            a, net = declared[match[i]]
+            out.append((net, a["currency"], "declared"))
+        else:
+            out.append((d["net_rate"], d["currency"], "pattern"))
+    used = set(match.values())
+    out += [(net, a["currency"], "declared") for j, (a, net) in enumerate(declared) if j not in used]
+    return out
+
+
+def yields(s=None, today=None):
+    """Per-held-counter trailing/forward regular dividend yield, special and capital-return
+    payments excluded — the Dividends tab's yield columns.
+
+    For each currently-held ticker: distinct_distributions() for its full per-unit-rate history,
+    net of any active dividend_adjustment (`_net_distributions`), then `_classify` to exclude any
+    oversized payment. Trailing regular DPS sums the net rate of every regular distribution paid
+    in the last 365 days. Forward regular DPS is `_forward()` over those and every SGX-declared
+    announcement (`dividend_announcement`, itself net of capital return) paid (pay_date, else
+    ex_date) in the next 365 days - a ticker built only from declared rates is `basis`
+    "declared", only from the trailing pattern "pattern", from both "declared+pattern", from
+    neither "none". This is the same rolling-12-months analogue of what projected() already does
+    to calendar year-end, over the next 365 days instead.
+
+    Yield = DPS / latest price, each counter in its price's currency (`currency`): a dividend
+    paid in another currency (UD1U pays EUR on an SGD quote) is restated in it through the
+    latest FX before dividing, so `trailing_dps` / `forward_dps` are in that currency too;
+    `dividend_currency` is the currency the counter's latest distribution was paid in.
+    `portfolio_*_yield_pct` is the SGD-market-value-weighted average across every priced held
+    counter (portfolio.db.fx_map / portfolio.money, which raises rather than silently defaulting
+    a missing FX rate to 1:1 - a counter in a currency with no rate gets `None` DPS/yield/market
+    value and is left out of the weighted average, not zeroed into it). A counter with dividend
+    history but no price shows yield `None` (a dash on the tab); a priced counter with no regular
+    dividend shows `0.0` - the two stay visually distinct from each other, and from each other
+    alone, consistently.
+
+    `excluded` lists every flagged trailing distribution across every held counter, for the
+    tab's "Excluded as possibly special" list."""
+    today = today or sg_today()
+    trail_start = today - dt.timedelta(days=365)
+    fwd_end = today + dt.timedelta(days=365)
+
+    with session_scope(s) as s:
+        fx = fx_map(s)
+        prices = latest_price(s)
+        securities = {r["ticker"]: r for r in fetch_dicts(s,
+            "SELECT canonical_ticker ticker, id security_id, name, market, currency "
+            "FROM security")}
+        holdings = fetch_dicts(s,
+            "SELECT canonical_ticker ticker, SUM(units) units FROM current_position "
+            "GROUP BY canonical_ticker HAVING ABS(SUM(units)) > 1e-6")
+
+        adjustments_by_sec = defaultdict(list)
+        for r in fetch_dicts(s, "SELECT security_id, amount_per_unit, currency, start_date, "
+                                "end_date, note FROM dividend_adjustment"):
+            adjustments_by_sec[r["security_id"]].append(
+                {**r, "amount_per_unit": num(r["amount_per_unit"])})
+        announced_by_sec = defaultdict(list)
+        for r in fetch_dicts(s,
+                "SELECT security_id, ex_date, pay_date, amount_per_unit, currency "
+                "FROM dividend_announcement "
+                "WHERE COALESCE(pay_date, ex_date) > :today AND COALESCE(pay_date, ex_date) <= :fwd_end",
+                {"today": today, "fwd_end": fwd_end}):
+            announced_by_sec[r["security_id"]].append(
+                {**r, "amount_per_unit": num(r["amount_per_unit"])})
+        rows_by_ticker = defaultdict(list)
+        for r in details(s)["rows"]:
+            rows_by_ticker[r["ticker"]].append(r)
+
+    rows, excluded = [], []
+    for h in sorted(holdings, key=lambda h: h["ticker"]):
+        tk = h["ticker"]
+        sec = securities.get(tk)
+        if sec is None:
+            continue
+        sid = sec["security_id"]
+        adjustments = adjustments_by_sec.get(sid, [])
+
+        distributions = _distributions(rows_by_ticker.get(tk, []))
+        _net_distributions(distributions, adjustments)
+        _classify(distributions)
+
+        trailing = [d for d in distributions if trail_start <= d["pay_date"] <= today]
+        trailing_regular = [d for d in trailing if not d["flagged"]]
+
+        for d in trailing:
+            if d["flagged"]:
+                excluded.append({
+                    "ticker": tk, "name": sec["name"], "security_id": sid,
+                    "ex_date": iso(d["ex_date"]), "pay_date": iso(d["pay_date"]),
+                    "rate": d["rate"], "net_rate": round(d["net_rate"], 6),
+                    "currency": d["currency"], "baseline": d["flag_baseline"],
+                    "baseline_type": d["flag_baseline_type"], "ratio": d["flag_ratio"],
+                })
+
+        declared = [(a, apply_capital_return(a["amount_per_unit"], a["currency"],
+                                             a["ex_date"], adjustments)[0])
+                    for a in announced_by_sec.get(sid, [])]
+        forward = _forward(trailing_regular, declared)
+        bits = {b for _, _, b in forward}
+        basis = ("none" if not bits else "declared+pattern" if len(bits) == 2 else bits.pop())
+
+        px = prices.get(sid)
+        price_val = px["close"] if px else None
+        price_date = px["date"] if px else None
+        stale_days = (today - price_date).days if price_date else None
+        ccy = (px and px["currency"]) or sec["currency"]
+
+        try:
+            trailing_dps = round(sum(_in_currency(d["net_rate"], d["currency"], ccy, fx)
+                                     for d in trailing_regular), 6)
+            fwd_dps = round(sum(_in_currency(v, c, ccy, fx) for v, c, _ in forward), 6)
+        except ValueError:
+            trailing_dps = fwd_dps = None
+        try:
+            mv_sgd = float(h["units"]) * price_val * rate_to_sgd(ccy, fx) if price_val is not None else None
+        except ValueError:
+            mv_sgd = None
+
+        trail_yield = round(trailing_dps / price_val * 100, 3) if price_val and trailing_dps is not None else None
+        fwd_yield = round(fwd_dps / price_val * 100, 3) if price_val and fwd_dps is not None else None
+        active = _active_adjustment(adjustments, today)
+
+        rows.append({
+            "ticker": tk, "name": sec["name"], "market": sec["market"],
+            "security_id": sid, "currency": ccy,
+            "dividend_currency": distributions[-1]["currency"] if distributions else ccy,
+            "price": price_val, "price_date": iso(price_date),
+            "price_stale_days": stale_days,
+            "price_is_stale": bool(stale_days and stale_days > PRICE_STALE_DAYS),
+            "trailing_dps": trailing_dps, "forward_dps": fwd_dps, "forward_basis": basis,
+            "trailing_yield_pct": trail_yield, "forward_yield_pct": fwd_yield,
+            "mv_sgd": round(mv_sgd, 2) if mv_sgd is not None else None,
+            "capital_return": ({"amount_per_unit": num(active["amount_per_unit"]),
+                                "currency": active["currency"], "note": active["note"]}
+                               if active else None),
+            "capital_return_clamped": any(d["capital_return_clamped"] for d in trailing),
+        })
+
+    total_mv = sum(r["mv_sgd"] for r in rows if r["mv_sgd"] is not None)
+
+    def _weighted(key):
+        counted = [r for r in rows if r["mv_sgd"] is not None and r[key] is not None]
+        mv = sum(r["mv_sgd"] for r in counted)
+        return round(sum(r["mv_sgd"] * r[key] for r in counted) / mv, 3) if mv else None
+
+    return {
+        "as_of": iso(today), "rows": rows,
+        "portfolio_trailing_yield_pct": _weighted("trailing_yield_pct"),
+        "portfolio_forward_yield_pct": _weighted("forward_yield_pct"),
+        "total_mv_sgd": round(total_mv, 2),
+        "excluded": sorted(excluded, key=lambda e: (e["pay_date"] or "", e["ticker"])),
     }

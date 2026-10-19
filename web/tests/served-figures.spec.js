@@ -42,7 +42,10 @@ test.describe("Portfolio › Dividends", () => {
       // visible at a glance (not only on hover) so a reader can verify which month to check
       // the statement for.
       await openView(page, baseURL, "Portfolio › Dividends");
-      const expectedCard = page.locator(".card").filter({ hasText: /Expected/ }).first();
+      // Anchored on the year prefix, not a bare "Expected" match: the Dividend Yield card
+      // above this one also carries the word, in its "Expected yield" headline and column.
+      const expectedCard = page.locator(".card")
+        .filter({ has: page.getByRole("heading", { name: /^\d{4} Expected/ }) }).first();
       const row = expectedCard.locator("tbody tr").filter({ hasText: "D05" });
       const cell = row.locator("td").nth(3);
 
@@ -67,7 +70,9 @@ test.describe("Portfolio › Dividends", () => {
       await page.route("**/api/dividends-projected", (route) =>
         route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(served) }));
       await VIEWS.find((v) => v.name === "Portfolio › Dividends").open(page);
-      const row = page.locator(".card").filter({ hasText: /Expected/ }).first()
+      // Same anchored match as above, for the same reason.
+      const row = page.locator(".card")
+        .filter({ has: page.getByRole("heading", { name: /^\d{4} Expected/ }) }).first()
         .locator("tbody tr").filter({ hasText: "D05" });
 
       await expect(row.locator("td").nth(3)).toHaveAttribute("title",
@@ -90,6 +95,79 @@ test.describe("Portfolio › Dividends", () => {
       expect.soft(cells[i + 1], String(y)).toBe(want);
     });
   });
+
+  const yieldCard = (page) => page.locator(".card").filter({ hasText: /^Dividend Yield/ });
+  const pct = (n) => n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
+
+  test("the Dividend Yield card's headline is the server's portfolio-weighted figures",
+    async ({ page, baseURL }) => {
+      const yld = readFixture("dividend-yields.json");
+      await openView(page, baseURL, "Portfolio › Dividends");
+
+      await expect(yieldCard(page)).toContainText(pct(yld.portfolio_trailing_yield_pct));
+      await expect(yieldCard(page)).toContainText(pct(yld.portfolio_forward_yield_pct));
+      await expect(yieldCard(page)).toContainText(asSgd(yld.total_mv_sgd));
+    });
+
+  test("a counter's row states its own trailing and expected yield, and its basis",
+    async ({ page, baseURL }) => {
+      const yld = readFixture("dividend-yields.json");
+      // Hang Lung Group: priced, regular history, no capital-return adjustment, no
+      // declared SGX rate — the plain case the other rows build on.
+      const r = yld.rows.find((x) => x.ticker === "00010");
+      await openView(page, baseURL, "Portfolio › Dividends");
+      const row = yieldCard(page).locator("tbody tr").filter({ hasText: r.ticker });
+
+      await expect(row).toContainText(pct(r.trailing_yield_pct));
+      await expect(row).toContainText(pct(r.forward_yield_pct));
+      await expect(row).toContainText("last 12m pattern");
+    });
+
+  test("DBS's row carries the capital-return deduction as a pill, with its amount",
+    async ({ page, baseURL }) => {
+      const yld = readFixture("dividend-yields.json");
+      const d05 = yld.rows.find((x) => x.ticker === "D05");
+      await openView(page, baseURL, "Portfolio › Dividends");
+      const row = yieldCard(page).locator("tbody tr").filter({ hasText: "D05" });
+      const pill = row.locator(".pill").filter({ hasText: /cap\. return/ });
+
+      await expect(pill).toContainText(
+        d05.capital_return.amount_per_unit.toLocaleString("en-US", { minimumFractionDigits: 4 }));
+      await expect(pill).toHaveAttribute("title", d05.capital_return.note);
+    });
+
+  test("every flagged payment the server excluded is listed, with its ratio and baseline",
+    async ({ page, baseURL }) => {
+      const yld = readFixture("dividend-yields.json");
+      await openView(page, baseURL, "Portfolio › Dividends");
+
+      for (const e of yld.excluded) {
+        // The row div is the pill's parent — the one element carrying both the ticker and
+        // the rest of that payment's line (date, rate, ratio). A
+        // ticker can also appear in the main table's row (D05 does, below), so this is
+        // scoped to the excluded section specifically.
+        const row = page.getByTestId("dividend-excluded")
+          .locator(".pill", { hasText: e.ticker }).locator("xpath=ancestor::div[1]");
+        await expect(row).toContainText(`${e.ratio.toFixed(1)}x`);
+        await expect(row).toContainText(e.pay_date);
+      }
+    });
+
+  test("the capital-return adjustments list is the server's, DBS included",
+    async ({ page, baseURL }) => {
+      const adj = readFixture("dividend-capital-returns.json").rows;
+      await openView(page, baseURL, "Portfolio › Dividends");
+
+      for (const a of adj) {
+        // Scoped to this section for the same reason as the excluded list above — DBS's
+        // ticker pill also renders in the main table's row.
+        const row = page.getByTestId("dividend-capital-returns")
+          .locator(".pill", { hasText: a.ticker }).locator("xpath=ancestor::div[1]");
+        await expect(row).toContainText(
+          a.amount_per_unit.toLocaleString("en-US", { minimumFractionDigits: 4 }));
+        await expect(row).toContainText(a.start_date);
+      }
+    });
 });
 
 test("Recurring's headline tile states one month, whatever the cadences",

@@ -1,0 +1,15 @@
+{
+ "rows": [
+  {
+   "id": 1,
+   "security_id": 49,
+   "ticker": "D05",
+   "name": "DBS Group Holdings Ltd",
+   "amount_per_unit": 0.15,
+   "currency": "SGD",
+   "start_date": "2025-11-13",
+   "end_date": null,
+   "note": "DBS recurring quarterly capital return (report data/fmyield/report.md) - not an ordinary dividend, excluded from yield"
+  }
+ ]
+}

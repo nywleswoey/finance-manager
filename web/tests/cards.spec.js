@@ -74,13 +74,14 @@ const CARDED = [
   },
   {
     view: "Portfolio › Dividends",
-    // The crosstab and the `<year> expected` breakdown above it are both pattern A and stay
-    // a table at every width — only the payment ledger below them converts.
-    tablesBelow: 2,
+    // The crosstab, the Dividend Yield table and the `<year> expected` breakdown above the
+    // ledger are all pattern A and stay a table at every width — only the payment ledger
+    // below them converts.
+    tablesBelow: 3,
     lists: [{
       what: "the payment ledger",
       rows: () => readFixture("dividend-details.json").rows.length,
-      tableIndex: 2, cols: 8, fields: 3,
+      tableIndex: 3, cols: 8, fields: 3,
     }],
   },
   {

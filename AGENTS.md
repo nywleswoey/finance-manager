@@ -50,6 +50,21 @@ plans.
 - **Playwright reuses whatever already listens on its preview port** (`reuseExistingServer`
   outside CI; default 4173). With several worktrees open that can be another checkout's build,
   so tests run against stale code. Set `PREVIEW_PORT` to a port you have checked is free.
+- **`web/src`'s `<table>` count is tracked by hand.** `inventory.spec.js` asserts the exact
+  count; `pinned.spec.js`'s `PINNED` array and `cards.spec.js`'s `CARDED` array each enumerate
+  every table's responsive pattern (pin column, column count, `cardsBelow`) per view, in DOM
+  order. Adding or removing a `<table>` needs all three updated, plus `RESPONSIVE.md`'s
+  per-view row — see that doc's "Per-view gates" table. A `position: sticky` identity column
+  can visibly let go for the last few pixels of horizontal scroll if that column's own content
+  makes it wide relative to the table (seen with a yield table's full security-name column);
+  capping that cell's width and setting `whiteSpace: "normal"` (overriding the sheet's blanket
+  `nowrap`) fixes it. Committed Playwright fixtures (`web/tests/fixtures/api/`) are derived
+  from the live docker DB by `scripts/capture_web_fixtures.py` and are never hand-edited; to
+  add one new endpoint's fixture without dragging the whole suite's data forward (and risking
+  unrelated geometry drift), capture against a disposable Postgres container restored from a
+  `pg_dump` of the shared DB (never migrate the shared DB itself), then keep only the new
+  fixture file(s) and their `manifest.json` entries, `git checkout --` everything else the
+  recapture touched.
 - **`docker-compose.yml`'s `container_name: portfolio_db` is global, not worktree-scoped.**
   The file pins the compose project `name: portofolio` (why: comment there), so `docker compose
   up -d` from any checkout attaches to that same container and volume — there is no

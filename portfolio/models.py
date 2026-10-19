@@ -154,6 +154,26 @@ class DividendAnnouncement(Base):
     fetched_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
+class DividendAdjustment(Base):
+    """A user-entered, per-security deduction subtracted from every matching distribution's
+    per-unit rate before it counts toward trailing/forward yield (portfolio.dividends.yields) —
+    for a recurring non-ordinary component (e.g. DBS's quarterly capital return) that nothing
+    in the ingested data distinguishes from the ordinary rate: the statement rows and the SGX
+    cache (portfolio.sgx) both store one summed `Rate:` per ex-date, so this can't be derived,
+    only declared. Applies to a distribution whose ex_date (else pay_date) falls in
+    [start_date, end_date] — end_date null means still in effect — so a later rate change
+    doesn't retroactively rewrite history."""
+    __tablename__ = "dividend_adjustment"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    security_id: Mapped[int] = mapped_column(ForeignKey("security.id"), index=True)
+    amount_per_unit: Mapped[Decimal] = mapped_column(RATE)
+    currency: Mapped[str] = mapped_column(String(3))
+    start_date: Mapped[dt.date] = mapped_column(Date)
+    end_date: Mapped[dt.date | None] = mapped_column(Date)
+    note: Mapped[str | None] = mapped_column(String(256))
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 # ---------------- spending (cash-flow ledger) ----------------
 class CashTxn(Base):
     """One bank/credit-card cash-flow line — the spending ledger (distinct from the

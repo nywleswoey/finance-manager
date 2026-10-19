@@ -1,10 +1,18 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
-import { get, fmt, sgd, money, monthYear } from "../../api.js";
+import { get, post, del, fmt, sgd, money, monthYear } from "../../api.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
 
 const BUCKET_LABEL = { cash: "Cash", srs: "SRS", cpf: "CPF" };
 const BASIS_LABEL = { announced: "SGX announced", last_year_pattern: "last year's pattern", none: "—", "not held": "not held", unmapped: "unmapped" };
+// yields()'s own basis vocabulary (declared / pattern / both / none) - distinct from
+// projected()'s BASIS_LABEL above, which is about the rest of THIS calendar year, not the
+// trailing/forward 12-month yield window.
+const YIELD_BASIS_LABEL = { declared: "SGX declared", pattern: "last 12m pattern",
+  "declared+pattern": "declared + pattern", none: "no history" };
+const pctOrDash = (v) => (v == null ? "—" : fmt(v, 2) + "%");
+const CAP_RETURN_EMPTY = { security_id: "", amount_per_unit: "", currency: "SGD",
+  start_date: "", end_date: "", note: "" };
 // A detail row's own date if it has one (announced), else the anniversary `expected_date`
 // unreceived_last_year() replayed onto this year (last_year_pattern) — either way,
 // the month a reader checks the statement for.
@@ -17,13 +25,55 @@ export default function Dividends() {
   const [ann, setAnn] = useState(null);
   const [det, setDet] = useState(null);
   const [proj, setProj] = useState(null);
+  const [yld, setYld] = useState(null);
+  const [capReturns, setCapReturns] = useState([]);
   const [onlyFlagged, setOnlyFlagged] = useState(false);
+  const [capForm, setCapForm] = useState(CAP_RETURN_EMPTY);
+  const [capBusy, setCapBusy] = useState(false);
+  const [ver, setVer] = useState(0);
   const phone = usePhone();
   useEffect(() => {
     get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {}, yoy_pct: {} }));
     get("/api/dividend-details").then(setDet).catch(() => setDet({ rows: [], flagged: 0, total: 0, total_sgd: 0, flagged_sgd: 0 }));
     get("/api/dividends-projected").then(setProj).catch(() => setProj(null));
+    get("/api/dividend-yields").then(setYld).catch(() => setYld(null));
+    get("/api/dividend-capital-returns").then((r) => setCapReturns(r.rows)).catch(() => setCapReturns([]));
   }, []);
+  // Only re-fetches after a mutation (add/remove a capital-return row) -
+  // the initial load is the effect above, in the SAME tick as the rest of the page's fetches
+  // rather than a second one that can resolve after `settle()`'s anchor is already visible.
+  useEffect(() => {
+    if (ver === 0) return;
+    get("/api/dividend-yields").then(setYld).catch(() => setYld(null));
+    get("/api/dividend-capital-returns").then((r) => setCapReturns(r.rows)).catch(() => setCapReturns([]));
+  }, [ver]);
+
+  async function removeAdjustment(id) {
+    await del("/api/dividend-capital-returns/" + id);
+    setVer((v) => v + 1);
+  }
+
+  function selectCapSecurity(e) {
+    const sid = e.target.value;
+    const row = (yld?.rows || []).find((r) => String(r.security_id) === sid);
+    setCapForm({ ...capForm, security_id: sid, currency: row ? row.dividend_currency || row.currency : capForm.currency });
+  }
+  const setCap = (k) => (e) => setCapForm({ ...capForm, [k]: e.target.value });
+
+  async function submitAdjustment(e) {
+    e.preventDefault();
+    setCapBusy(true);
+    try {
+      await post("/api/dividend-capital-returns", {
+        security_id: Number(capForm.security_id), amount_per_unit: Number(capForm.amount_per_unit),
+        currency: capForm.currency.trim().toUpperCase(), start_date: capForm.start_date,
+        end_date: capForm.end_date || null, note: capForm.note.trim() || null,
+      });
+      setCapForm(CAP_RETURN_EMPTY);
+      setVer((v) => v + 1);
+    } finally { setCapBusy(false); }
+  }
+
   if (!ann) return <div className="loading">Loading…</div>;
   // Only holdings with a real number to show — the many zero-dividend growth names (AAPL,
   // NVDA, …) would otherwise pad the breakdown with rows that say nothing.
@@ -107,6 +157,127 @@ export default function Dividends() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      {yld && (
+        <div className="card">
+          <h3>Dividend Yield&nbsp;<span className="pill">special payments excluded</span></h3>
+          {/* Pattern A's headline figures, same shape as the Expected card below: the
+              portfolio-weighted SGD figures first, then the per-counter breakdown they sum
+              from (by market value, not a simple average across counters). */}
+          <div style={{ display: "flex", gap: 24, flexWrap: "wrap", margin: "8px 0 16px" }}>
+            <div><div className="mut" style={{ fontSize: ".8em" }}>Trailing yield</div>
+              <div style={{ fontSize: "1.2em" }}>{pctOrDash(yld.portfolio_trailing_yield_pct)}</div></div>
+            <div><div className="mut" style={{ fontSize: ".8em" }}>Expected yield</div>
+              <div style={{ fontSize: "1.2em" }}>{pctOrDash(yld.portfolio_forward_yield_pct)}</div></div>
+            <div><div className="mut" style={{ fontSize: ".8em" }}>Market value</div>
+              <div style={{ fontSize: "1.2em" }}>{sgd(yld.total_mv_sgd)}</div></div>
+          </div>
+          {/* Pattern A, unconditionally — the `<year> Expected` breakdown just below carries
+              the exact same reasoning ("six numbers-and-a-word per row, not enough fields to
+              earn a card") at the same density, so this table follows that precedent rather
+              than becoming a seventh card list. */}
+          <div className="pinned hscroll">
+            <table>
+              <thead><tr>
+                <th className="l">Security</th><th className="l">Mkt</th>
+                <th title="latest close, native currency">Price</th>
+                <th title="last 12 months' regular dividends ÷ latest price, special and capital-return payments excluded">Trailing yield</th>
+                <th title="next 12 months' expected regular dividends ÷ latest price">Expected yield</th>
+                <th className="l">Basis</th>
+              </tr></thead>
+              <tbody>
+                {yld.rows.map((r) => (
+                  <tr key={r.ticker}>
+                    {/* `whiteSpace: normal` against the sheet's blanket `nowrap` (th, td): this
+                        column's content (a full security name, its ticker and sometimes a
+                        capital-return pill) is the widest in the table by a wide margin — left
+                        at `nowrap` the pinned cell can end up wider than the table's own
+                        scrollable width is willing to give it room for at the far end of a
+                        scroll, which is what pulls it loose from `left: 0` there. Capping the
+                        width and letting it wrap keeps the identity column pinned at every
+                        scroll position instead. */}
+                    <td className="l" style={{ maxWidth: 220, whiteSpace: "normal" }}>
+                      {r.name} {r.ticker && <span className="pill">{r.ticker}</span>}
+                      {r.capital_return &&
+                        <span className="pill" style={{ marginLeft: 4 }}
+                              title={r.capital_return.note || "capital-return deduction applied"}>
+                          cap. return −{money(r.capital_return.amount_per_unit, r.capital_return.currency, 4)}
+                        </span>}
+                    </td>
+                    <td className="l mut">{r.market || "—"}</td>
+                    <td>{r.price == null ? "—" : money(r.price, r.currency, 2)}
+                      {r.price_is_stale &&
+                        <span className="mut" title={`price ${r.price_stale_days}d old`}>&nbsp;⚠</span>}</td>
+                    <td className={r.trailing_yield_pct ? "pos" : "mut"}>{pctOrDash(r.trailing_yield_pct)}</td>
+                    <td className={r.forward_yield_pct ? "pos" : "mut"}>{pctOrDash(r.forward_yield_pct)}</td>
+                    <td className="l mut">{YIELD_BASIS_LABEL[r.forward_basis] || r.forward_basis}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {yld.excluded.length > 0 && (
+            <div style={{ marginTop: 16 }} data-testid="dividend-excluded">
+              <h4 style={{ margin: "0 0 8px" }}>Excluded as possibly special</h4>
+              {/* A handful of rows at most (one per flagged payment in the trailing 12
+                  months) — a plain list, not Pattern A/B's machinery built for a dense
+                  ledger. */}
+              {yld.excluded.map((e) => (
+                <div key={e.security_id + "-" + e.pay_date}
+                    style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
+                             padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+                  <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
+                  <span className="mut">{e.pay_date}</span>
+                  <span className="neg">{money(e.rate, e.currency, 4)}</span>
+                  <span className="neg">{fmt(e.ratio, 1)}x</span>
+                  <span className="mut">
+                    vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
+                    &nbsp;({money(e.baseline, e.currency, 4)})
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ marginTop: 16 }} data-testid="dividend-capital-returns">
+            <h4 style={{ margin: "0 0 8px" }}>Capital-return adjustments&nbsp;
+              <span className="mut" style={{ fontWeight: 400, fontSize: ".8em" }}>
+                a recurring non-ordinary component (e.g. DBS's capital return) subtracted before the yield above
+              </span>
+            </h4>
+            {capReturns.map((c) => (
+              <div key={c.id}
+                  style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
+                           padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+                <span style={{ fontWeight: 600 }}>{c.name} <span className="pill">{c.ticker}</span></span>
+                <span>{money(c.amount_per_unit, c.currency, 4)}</span>
+                <span className="mut">{c.start_date} → {c.end_date || "ongoing"}</span>
+                {c.note && <span className="mut">{c.note}</span>}
+                <button className="link-btn" onClick={() => removeAdjustment(c.id)} title="Delete">✕</button>
+              </div>
+            ))}
+            <form onSubmit={submitAdjustment}
+                 style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <select value={capForm.security_id} onChange={selectCapSecurity}>
+                <option value="">Security…</option>
+                {yld.rows.map((r) => <option key={r.security_id} value={r.security_id}>{r.ticker} ({r.name})</option>)}
+              </select>
+              <input type="number" step="0.0001" placeholder="Amount/unit" value={capForm.amount_per_unit}
+                    onChange={setCap("amount_per_unit")} style={{ width: 120 }} />
+              <input placeholder="Ccy" value={capForm.currency} onChange={setCap("currency")} style={{ width: 60 }} />
+              <input type="date" value={capForm.start_date} onChange={setCap("start_date")} />
+              <input type="date" placeholder="End (optional)" value={capForm.end_date} onChange={setCap("end_date")} />
+              <input placeholder="Note (optional)" value={capForm.note} onChange={setCap("note")} style={{ minWidth: 160 }} />
+              <button type="submit"
+                     disabled={capBusy || !capForm.security_id || !capForm.amount_per_unit
+                              || !capForm.currency || !capForm.start_date}>
+                {capBusy ? "Adding…" : "Add"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {proj && (
         <div className="card">

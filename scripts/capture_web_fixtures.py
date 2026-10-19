@@ -158,6 +158,12 @@ ENDPOINTS: list[tuple[str, str]] = [
     ("dividends-annual", "/api/dividends-annual"),
     ("dividend-details", "/api/dividend-details"),
     ("dividends-projected", "/api/dividends-projected"),
+    # The yield columns' own two reads: per-counter trailing/forward yield (with DBS's
+    # capital-return deduction and the SBS Transit / NVIDIA oversized-payment flags — see
+    # data/fmyield/report.md — baked into this book's fixture data) and the capital-return
+    # adjustment list the Dividends tab's CRUD section reads.
+    ("dividend-yields", "/api/dividend-yields"),
+    ("dividend-capital-returns", "/api/dividend-capital-returns"),
     ("accounts", "/api/accounts"),
     ("transactions", "/api/transactions?"),
     # --- the detail page: nine tickers, and every one of them the only thing that reaches
@@ -295,10 +301,11 @@ def _ensure_long_merchant(base: str, rows: list[dict]) -> list[dict]:
     characters and the card-width assertions are measuring the wrong worst case.
     """
     longest = max((len(str(r.get("merchant") or "")) for r in rows), default=0)
-    # No date window: ask for the whole ledger and let the data say where the worst row
-    # is. A hardcoded window would stop finding it as the data ages, and would surface
-    # three functions away as an unexplained pathological-row failure.
-    _, everything = get(base, "/api/spending/transactions?limit=1000000")
+    # No date window: ask for as much of the ledger as the endpoint's own bound allows
+    # (SECURITY-05, le=2000) and let the data say where the worst row is. A hardcoded
+    # window would stop finding it as the data ages, and would surface three functions
+    # away as an unexplained pathological-row failure.
+    _, everything = get(base, "/api/spending/transactions?limit=2000")
     worst = max(everything, key=lambda r: len(str(r.get("merchant") or "")), default=None)
     if worst is None or len(str(worst.get("merchant") or "")) <= longest:
         return rows

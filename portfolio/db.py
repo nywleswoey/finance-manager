@@ -72,6 +72,18 @@ def latest_close(s):
         "SELECT DISTINCT ON (security_id) security_id, close FROM price ORDER BY security_id, date DESC")).all()}
 
 
+def latest_price(s):
+    """security_id -> {date, close, currency}, the newest `price` row per security — like
+    `latest_close` but carrying the date, so a caller (portfolio.dividends.yields) can flag a
+    stale price. A max-join rather than `latest_close`'s `DISTINCT ON`, same portability
+    reasoning as `fx_map`: this runs under the SQLite sessions tests build too."""
+    rows = s.execute(text(
+        "SELECT p.security_id, p.date, p.close, p.currency FROM price p JOIN "
+        "(SELECT security_id, max(date) AS date FROM price GROUP BY security_id) newest "
+        "ON newest.security_id = p.security_id AND newest.date = p.date")).all()
+    return {sid: {"date": d, "close": float(c), "currency": ccy} for sid, d, c, ccy in rows}
+
+
 def valuation_as_of(s):
     """How fresh a DB-priced valuation can be: the older of the newest `price` row and the
     newest `fx_rate` row — the two sources `latest_close` and `fx_map` read. None if either
