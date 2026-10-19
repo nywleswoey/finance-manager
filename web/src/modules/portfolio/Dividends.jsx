@@ -9,6 +9,9 @@ const BASIS_LABEL = { announced: "SGX announced", last_year_pattern: "last year'
 // unreceived_last_year() replayed onto this year (last_year_pattern) — either way,
 // the month a reader checks the statement for.
 const expectedMonth = (d) => monthYear(Date.parse(d.expected_date || d.pay_date || d.ex_date));
+// Last-year-pattern and overdue rows are per account (one ticker can be held at two brokers);
+// announced rows are per distribution and carry none.
+const ofAccount = (r) => (r.account ? ` (${r.account})` : "");
 
 export default function Dividends() {
   const [ann, setAnn] = useState(null);
@@ -152,7 +155,7 @@ export default function Dividends() {
                           first to go check the statement. */}
                       {h.overdue?.length > 0 &&
                         <span className="pill" style={{ marginLeft: 6, color: "var(--warn)" }}
-                              title={h.overdue.map((o) => `${o.expected_date}: ${money(o.amount_sgd, "SGD", 2)}`).join("; ")}>
+                              title={h.overdue.map((o) => `${o.expected_date}: ${money(o.amount_sgd, "SGD", 2)}${ofAccount(o)}`).join("; ")}>
                           overdue {h.overdue[0].expected_date} · {sgd(h.overdue.reduce((t, o) => t + (o.amount_sgd || 0), 0))}
                         </span>}
                     </td>
@@ -162,7 +165,7 @@ export default function Dividends() {
                         year, or an SGX-announced date) shown inline — at a glance, not just on
                         hover — with the rest in the tooltip when there's more than one. */}
                     <td className={h.expected_remaining_sgd ? "pos" : "mut"}
-                        title={h.detail.map((d) => `${expectedMonth(d)}: ${money(d.amount_sgd, "SGD", 2)}`).join("; ")}>
+                        title={h.detail.map((d) => `${expectedMonth(d)}: ${money(d.amount_sgd, "SGD", 2)}${ofAccount(d)}`).join("; ")}>
                       {money(h.expected_remaining_sgd, "SGD", 2)}
                       {h.detail.length > 0 &&
                         <span className="mut" style={{ fontSize: ".85em", marginLeft: 4 }}>

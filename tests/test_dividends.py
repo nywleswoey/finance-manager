@@ -1,4 +1,4 @@
-"""portfolio.dividends — the shared pay_date attribution primitives and details().
+"""portfolio.dividends — the shared entitlement attribution primitives and details().
 
 Stdlib unittest + in-memory SQLite (no pg), matching tests/test_networth.py. annual() leans
 on Postgres (EXTRACT), so it isn't exercised here;
@@ -30,6 +30,17 @@ class TestUnitsAt(unittest.TestCase):
     def test_signed_quantities_net_out(self):
         self.assertEqual(dividends.units_at(D(2024, 6, 1),
                                             [(D(2024, 1, 1), 100), (D(2024, 2, 1), -40)]), 60.0)
+
+
+class TestEntitledUnits(unittest.TestCase):
+    def test_a_trade_on_the_ex_date_is_already_ex(self):
+        # a buy on ex_date isn't entitled, a sell on ex_date still is.
+        txns = [(D(2024, 1, 1), 100), (D(2024, 6, 1), 200), (D(2024, 6, 1), -50)]
+        self.assertEqual(dividends.entitled_units(D(2024, 6, 1), D(2024, 6, 20), txns), 100.0)
+
+    def test_no_ex_date_falls_back_to_on_or_before_pay_date(self):
+        txns = [(D(2024, 1, 1), 100), (D(2024, 6, 20), 200), (D(2024, 6, 21), 999)]
+        self.assertEqual(dividends.entitled_units(None, D(2024, 6, 20), txns), 300.0)
 
 
 class TestImpliedRate(unittest.TestCase):
@@ -130,9 +141,9 @@ class TestDetails(unittest.TestCase):
     def tearDown(self):
         self.s.close()
 
-    def _div(self, pay, gross, *, sec=1, declared=None, units=None, ccy="SGD"):
+    def _div(self, pay, gross, *, sec=1, declared=None, units=None, ccy="SGD", ex=None):
         self._d += 1
-        self.s.add(Dividend(account_id=1, security_id=sec, pay_date=pay, kind="cash",
+        self.s.add(Dividend(account_id=1, security_id=sec, pay_date=pay, ex_date=ex, kind="cash",
                             gross=Decimal(str(gross)),
                             amount_per_unit=None if declared is None else Decimal(str(declared)),
                             units=None if units is None else Decimal(str(units)),
@@ -168,6 +179,21 @@ class TestDetails(unittest.TestCase):
         self.assertEqual(r["qty"], 400.0)
         self.assertEqual(r["qty_source"], "ledger")
         self.assertEqual(r["implied_rate"], 0.25)
+        self.assertEqual(r["rate_source"], "implied")
+
+    def test_implied_rate_uses_ex_date_not_pay_date_when_a_trade_falls_between_them(self):
+        # BABA 2025-07-11 (real case): 1 unit was entitled at ex_date, but 200 more were bought
+        # after ex_date and before pay_date - those 200 never received this dividend. Replaying
+        # the ledger to pay_date (201) understates the implied rate 201x; ex_date (1) recovers
+        # the real per-unit rate.
+        self._buy(D(2024, 1, 1), 1)
+        self._buy(D(2025, 6, 19), 200)                 # after ex_date, before pay_date
+        self._div(D(2025, 7, 11), 2, ex=D(2025, 6, 12))
+        self.s.commit()
+        r = self._by_gross(dividends.details(self.s))[2.0]
+        self.assertEqual(r["qty"], 1.0)
+        self.assertEqual(r["qty_source"], "ledger")
+        self.assertEqual(r["implied_rate"], 2.0)
         self.assertEqual(r["rate_source"], "implied")
 
     def test_unmapped_and_undated_dividend_is_flagged(self):

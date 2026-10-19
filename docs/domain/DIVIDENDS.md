@@ -61,9 +61,10 @@ flags the row `no FX rate for <CCY>`; the other endpoints raise (BR4, no silent 
   Captured where the PDF prints it: CDP (`… <qty> units @ SGD <rate>`) and Moomoo
   (`… CASH DIVIDEND @ <CCY> <rate>` / US `<qty> SHARES DIVIDENDS`). Tiger / FSM / the
   2017-18 CDP layout don't print a rate → left null.
-- **qty held** — units of the ticker held in the paying account at the pay date,
-  replayed from the ledger (`txn` summed where `trade_date ≤ pay_date`). Falls back to
-  the statement-stated units when present.
+- **qty held** — units of the ticker in the paying account entitled to the dividend,
+  replayed from the ledger (`txn` summed where `trade_date < ex_date`, else `≤ pay_date` when
+  the row has no ex_date; `entitled_units()` in `portfolio/dividends.py`). The
+  statement-stated units win when present.
 - **implied rate** = `gross / qty_held`. Cross-checks the declared rate (they match where
   both exist — e.g. 42R 0.005 declared = 0.005 implied).
 - **flags** — `"qty unknown — needs manual input"` when neither a declared rate nor a
@@ -173,24 +174,27 @@ of the year's expected payments. Per holding, in order of preference:
    year end — bucketed like received money, by pay date — and not already received, rate ×
    TODAY's units (not the units at ex-date, since the rate is account/time-independent and the
    question is "what would I get now").
-2. **last_year_pattern** — last year's distinct payments (one per pay date, however many
-   accounts or statement lines carried it — `_payments()`) not yet matched by this year's (`unreceived_last_year()`): each payment
+2. **last_year_pattern** — per account, last year's distinct payments (one per pay date,
+   however many statement lines carried it — `_payments()`) not yet matched by that account's
+   own payments this year (`unreceived_last_year()`): each payment
    received this year consumes at most one last-year payment, the one whose anniversary is
    nearest within ±45 days (`DRIFT_DAYS`); an unmatched one is projected if its anniversary is no
    more than 45 days before today — so a monthly payer's receipt cancels exactly one payment, a
    payment running late is kept, and one further behind is not projected (it is **overdue**,
    below). Each row's rate (declared, else gross/units-held-then — reuses `details()`'s per-row
-   computation rather than re-replaying the ledger) × TODAY's units. Each `detail` row carries
-   `expected_date` (the anniversary), so the card can show the month to check the statement for.
+   computation rather than re-replaying the ledger) × that account's TODAY units, so an account
+   holding none today projects nothing. Each `detail` row carries `expected_date` (the
+   anniversary) and `account`, so the card can show the month and broker to check.
 3. **none** — neither exists (e.g. a security that already paid its only distribution for the
    year, or pays no cash dividend at all).
 
 **Overdue** — an unmatched last-year payment whose anniversary is more than `DRIFT_DAYS` before
 today is almost always money already paid but not yet ingested, so it is reported, never
-projected: each held security's `overdue` list (`expected_date` = the anniversary, `amount_sgd`)
+projected: each held security's `overdue` list (`expected_date` = the anniversary, `account`,
+`amount_sgd`)
 and the top-level `overdue_sgd` / `overdue_count`, shown as the card's "Overdue (not in totals)"
 figure and an amber per-row tag. It is priced at the units held on the anniversary of last year's
-ex_date (else pay_date) via `units_at`, and dropped when none were held then. It is never added to
+ex_date (else pay_date) in that account via `entitled_units`, and dropped when none were held then. It is never added to
 `expected_remaining_sgd` or `projected_total_sgd`.
 
 It always projects the current SGT year (`sg_today()`); there is no year parameter. A ticker

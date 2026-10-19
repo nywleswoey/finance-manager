@@ -50,6 +50,32 @@ test.describe("Portfolio › Dividends", () => {
       await expect(cell).toHaveAttribute("title", /Nov 2026/);
     });
 
+  test("a ticker held at two brokers names each payment's account on hover",
+    async ({ page, baseURL }) => {
+      // projected() matches and projects each account's own schedule, so one month can carry
+      // two payments; without the account they read as one payment listed twice.
+      const proj = readFixture("dividends-projected.json");
+      const d05 = proj.holdings.find((h) => h.ticker === "D05");
+      const pay = { pay_date: "2025-11-24", rate: 0.75, currency: "SGD", expected_date: "2026-11-24" };
+      const late = { expected_date: "2026-05-12", rate: 0.6, currency: "SGD" };
+      const served = { ...proj, holdings: proj.holdings.map((h) => h !== d05 ? h : {
+        ...h,
+        detail: [{ ...pay, account: "Moomoo", amount_sgd: 375 }, { ...pay, account: "FSM", amount_sgd: 2842.5 }],
+        overdue: [{ ...late, account: "FSM", amount_sgd: 2274 }, { ...late, account: "Moomoo", amount_sgd: 300 }],
+      }) };
+      await loadApp(page, baseURL);
+      await page.route("**/api/dividends-projected", (route) =>
+        route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(served) }));
+      await VIEWS.find((v) => v.name === "Portfolio › Dividends").open(page);
+      const row = page.locator(".card").filter({ hasText: /Expected/ }).first()
+        .locator("tbody tr").filter({ hasText: "D05" });
+
+      await expect(row.locator("td").nth(3)).toHaveAttribute("title",
+        "Nov 2026: S$375.00 (Moomoo); Nov 2026: S$2,842.50 (FSM)");
+      await expect(row.locator(".pill").filter({ hasText: /overdue/ })).toHaveAttribute("title",
+        "2026-05-12: S$2,274.00 (FSM); 2026-05-12: S$300.00 (Moomoo)");
+    });
+
   test("the YoY row is the server's, year by year", async ({ page, baseURL }) => {
     const ann = readFixture("dividends-annual.json");
     await openView(page, baseURL, "Portfolio › Dividends");

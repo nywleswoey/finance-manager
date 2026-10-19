@@ -63,7 +63,7 @@ TXNS = [{"trade_date": D(2020, 1, 1), "account": "FSM", "bucket": "cash", "actio
         {"trade_date": D(2021, 1, 1), "account": "CPF", "bucket": "cpf", "action": "buy",
          "qty_signed": 1210.0, "price": 21.0464, "gross_amount": None, "currency": "SGD",
          "source_file": "cpf.csv"}]
-DIVS = [{"pay_date": D(2022, 1, 1), "account": "FSM", "bucket": "cash", "gross": 1200.0,
+DIVS = [{"ex_date": None, "pay_date": D(2022, 1, 1), "account": "FSM", "bucket": "cash", "gross": 1200.0,
          "currency": "SGD", "kind": "cash", "units": None, "amount_per_unit": None}]
 TRADES = [{"underlying": "D05", "type": "put", "realised": True, "realized_sgd": 1.0}]
 
@@ -187,6 +187,18 @@ def test_the_running_balance_runs_across_buckets(client):
     txns = client.get("/api/holding?ticker=D05").json()["transactions"]
 
     assert [t["balance"] for t in txns] == [3080.0, 4290.0]
+
+
+def test_a_dividend_is_attributed_to_the_units_held_before_its_ex_date(client, monkeypatch):
+    """A buy on or after ex_date (here: on it, 3 weeks before pay_date) was never entitled."""
+    txns = TXNS + [{**TXNS[0], "trade_date": D(2022, 1, 1), "qty_signed": 920.0}]
+    div = {**DIVS[0], "ex_date": D(2022, 1, 1), "pay_date": D(2022, 1, 21)}
+    monkeypatch.setattr(portfolio_routes, "ticker_ledger",
+                        lambda s, tk: ([dict(t) for t in txns], [div], {}))
+
+    x = client.get("/api/holding?ticker=D05").json()["dividends"][0]
+
+    assert (x["units"], x["rate"]) == (3080.0, round(1200.0 / 3080.0, 6))
 
 
 def test_option_trades_are_fetched_for_any_ticker(client, monkeypatch):

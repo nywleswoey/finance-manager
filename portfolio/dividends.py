@@ -1,14 +1,19 @@
 """Dividend attribution — the `dividend` table, read for the UI.
 
-Owns the one date-semantics decision the app repeats: **units held at pay_date**, replayed
-from the ledger as the signed quantity of every trade dated on or before the dividend's
-pay_date, and the **implied rate** (gross / qty) used when a statement doesn't declare a
-per-unit rate. That pair (`units_at`, `implied_rate`) was duplicated between the per-holding
-view and the per-dividend detail view; both now share it here.
+Owns the one date-semantics decision the app repeats: units held **at the dividend's entitlement
+date** (`entitled_units`), replayed from the ledger, and the **implied rate** (gross / qty) used
+when a statement doesn't declare a per-unit rate. Entitlement is fixed by ex_date (standard
+dividend mechanics: a trade dated on or after ex_date is already ex the dividend, so it doesn't
+change who is owed the cash), so the replay counts every trade dated strictly before ex_date and
+only falls back to "on or before pay_date" when a row has no ex_date - replaying to pay_date
+whenever a trade falls in that window inflates or deflates `qty` and corrupts the implied rate
+(see TestDetails.test_implied_rate_uses_ex_date_not_pay_date_when_a_trade_falls_between_them).
+That pair (`entitled_units`, `implied_rate`) was duplicated between the per-holding view and the
+per-dividend detail view; both now share it here.
 
-(twr.py and performance.py fold dividends on a *different* date — ex_date, not pay_date — for
-return math; that difference is deliberate and stays there. This module is the pay_date /
-attribution view.)
+(twr.py and performance.py fold dividends into return math on their own date bases - *when*
+the cash flow counts, not *which* units it belongs to; that engine separation is deliberate and
+stays there, see ADR 0001. This module is the entitlement / attribution view.)
 
 Every public function accepts an optional Session (`s`) and routes through db.session_scope.
 Every read shape carries **both** amounts: `gross` in the payment's native currency (what the
@@ -29,18 +34,26 @@ from .money import to_sgd
 from .nullable import nulls_last, num
 
 
-# ---------------- the shared pay_date attribution primitives ----------------
+# ---------------- the shared entitlement attribution primitives ----------------
 
-def units_at(pay_date, txns):
-    """Position size on `pay_date`: the signed quantity of every txn dated on or before it.
+def units_at(date, txns):
+    """Position size on `date`: the signed quantity of every txn dated on or before it.
 
     `txns` is an iterable of (trade_date, qty) for the relevant (account, security). Dates are
     compared as ISO strings so date objects and pre-stringified CDP rows behave alike. Returns
-    None when `pay_date` is unknown (nothing to attribute against)."""
-    if pay_date is None:
+    None when `date` is unknown (nothing to attribute against)."""
+    if date is None:
         return None
     return round(sum(q for td, q in txns
-                     if td is not None and str(td) <= str(pay_date)), 4)
+                     if td is not None and str(td) <= str(date)), 4)
+
+
+def entitled_units(ex_date, pay_date, txns):
+    """Units entitled to a dividend: held at the close before `ex_date`, else (no ex_date) on
+    `pay_date` - see the module docstring."""
+    if ex_date is None:
+        return units_at(pay_date, txns)
+    return units_at(dt.date.fromisoformat(str(ex_date)) - dt.timedelta(days=1), txns)
 
 
 def implied_rate(gross, qty):
@@ -63,9 +76,9 @@ def _sgd_or_none(value, ccy, fx):
 # ---------------- read shapes (formerly the /api/dividend* handlers) ----------------
 
 def details(s=None):
-    """Per-dividend detail: declared per-share rate + units held at pay date (replayed from
-    the ledger) + implied rate (gross/units). Flags rows where the rate can't be determined
-    (no position data, missing date, or unmapped ticker) for manual input.
+    """Per-dividend detail: declared per-share rate + units entitled to it (replayed from
+    the ledger, see `entitled_units`) + implied rate (gross/units). Flags rows where the rate
+    can't be determined (no position data, missing date, or unmapped ticker) for manual input.
 
     Gross is reported both native (`gross`) and in SGD (`gross_sgd`, latest FX). Rates stay
     native — a declared per-unit rate is a statement fact, not a converted figure. A currency
@@ -98,7 +111,8 @@ def details(s=None):
         stated = num(d["stated_units"])
         held = None
         if d["security_id"] is not None:
-            held = units_at(d["pay_date"], by.get((d["account_id"], d["security_id"]), []))
+            held = entitled_units(d["ex_date"], d["pay_date"],
+                                  by.get((d["account_id"], d["security_id"]), []))
         qty = stated if stated else held              # prefer statement-stated qty
         implied = implied_rate(gross, qty)
         flags = []
@@ -133,7 +147,12 @@ def details(s=None):
 
 def annual(s=None):
     """Annual dividend income by funding bucket, converted to SGD at latest FX. Historical FX
-    is not stored, so prior years use today's rate (an approximation)."""
+    is not stored, so prior years use today's rate (an approximation).
+
+    Every dividend row is summed, including one distribution received by several accounts:
+    each row is real cash paid into its account on units held there (C38U: 6200 units in FSM
+    and 500 in Moomoo, each paid its own gross), not a double count. The once-per-distribution
+    view is `distinct_distributions()`, for per-unit rate and yield only."""
     with session_scope(s) as s:
         fx = fx_map(s)
         rows = s.execute(text(
@@ -164,6 +183,54 @@ def annual(s=None):
         "totals": {y: round(v, 2) for y, v in totals.items()},
         "yoy_pct": yoy,
     }
+
+
+SAME_DISTRIBUTION_DAYS = 15  # `distinct_distributions()`'s fallback for a row with no ex_date:
+                              # a pay date this close to another account's row of the same ticker,
+                              # at the same per-unit rate, is that same distribution settled by a
+                              # different broker on its own schedule (C38U: Moomoo and FSM a week
+                              # or two apart). Never applied within one account - two close,
+                              # equal-rate rows in one account are two distributions.
+
+
+def _rate_matches(a, b, tol=1e-4):
+    """Same per-unit rate up to float/rounding noise."""
+    return abs(a - b) <= max(tol, 0.01 * max(abs(a), abs(b)))
+
+
+def distinct_distributions(ticker, s=None):
+    """One entry per distribution of `ticker` - `{ex_date, pay_date, rate, currency}`, oldest
+    first - counted ONCE however many accounts received it: the per-unit view the dividend-yield
+    columns read. Received cash stays per row in `annual()` / `details()`.
+
+    Rows sharing an ex_date are one distribution. Per account its statement lines are summed
+    (component lines 0.60 + 0.15 make the 0.75 rate) and across accounts the largest per-account
+    rate is the distribution's - every account was paid the same per-unit rate on its own units.
+    A row with no ex_date joins the distribution of a DIFFERENT account within
+    SAME_DISTRIBUTION_DAYS of its pay_date at a matching rate, else it stands alone. Rows with
+    no rate (nothing to compare or count) are left out."""
+    rows = [r for r in details(s)["rows"]
+            if r["ticker"] == ticker and r["rate"] is not None and r["pay_date"] is not None]
+    groups = {}
+    for r in sorted(rows, key=lambda r: (r["ex_date"] is None, r["pay_date"])):
+        key = ("ex", r["ex_date"]) if r["ex_date"] else ("pay", r["pay_date"])
+        g = groups.setdefault(key, {"ex_date": r["ex_date"], "pay_date": r["pay_date"],
+                                    "currency": r["currency"], "rates": defaultdict(float)})
+        g["rates"][r["account"]] += r["rate"]
+    for key in sorted(k for k in groups if k[0] == "pay"):
+        g = groups[key]
+        rate = max(g["rates"].values())
+        for other in groups.values():
+            if other is not g and other["pay_date"] is not None \
+                    and abs((other["pay_date"] - g["pay_date"]).days) <= SAME_DISTRIBUTION_DAYS \
+                    and _rate_matches(rate, max(other["rates"].values())) \
+                    and other["rates"].keys().isdisjoint(g["rates"]):
+                other["rates"].update(g["rates"])
+                del groups[key]
+                break
+    return [{"ex_date": g["ex_date"], "pay_date": g["pay_date"], "currency": g["currency"],
+             "rate": round(max(g["rates"].values()), 6)}
+            for g in sorted(groups.values(), key=lambda g: g["ex_date"] or g["pay_date"])]
 
 
 def _payments(rows):
@@ -233,7 +300,8 @@ def projected(s=None, today=None):
 
     A holding's remaining payments use the SGX-declared rate from `dividend_announcement` for
     announcements paid (pay_date, else ex_date) between today and year end and not already
-    received (`basis` "announced"); otherwise `unreceived_last_year()`'s payments at TODAY's units
+    received (`basis` "announced"); otherwise each account's `unreceived_last_year()` payments -
+    matched against that account's own receipts only - at that account's TODAY units
     (`basis` "last_year_pattern") — ingestion.dividend_announcements' online fetch degrading
     to this is exactly what makes that degradation graceful rather than a crash. A holding with
     neither gets `basis` "none". A ticker that received a payment this year but is no longer
@@ -253,7 +321,7 @@ def projected(s=None, today=None):
     projection isn't owed to add (the pattern doesn't say it recurs that late), but almost always
     did happen and is just missing from the ledger. Each is priced at the units held on its
     date this year (the anniversary of last year's ex_date, else of its pay_date, replayed via
-    `units_at`) and dropped when nothing was held then. Those surface as each holding's `overdue`
+    `entitled_units`) and dropped when nothing was held then. Those surface as each holding's `overdue`
     list (and the top-level `overdue_sgd` / `overdue_count`) WITHOUT being added to
     `expected_remaining_sgd` or `projected_total_sgd` — an estimate of money already paid in
     reality that this app hasn't ingested yet, not a projection of money still to come."""
@@ -263,11 +331,12 @@ def projected(s=None, today=None):
     with session_scope(s) as s:
         fx = fx_map(s)
 
-        current_units, meta = defaultdict(float), {}
+        current_units, account_units, meta = defaultdict(float), defaultdict(dict), {}
         for h in fetch_dicts(s,
-                "SELECT canonical_ticker ticker, name, currency, SUM(units) units "
-                "FROM current_position GROUP BY canonical_ticker, name, currency"):
+                "SELECT canonical_ticker ticker, account, name, currency, units "
+                "FROM current_position"):
             current_units[h["ticker"]] += float(h["units"])
+            account_units[h["ticker"]][h["account"]] = float(h["units"])
             meta[h["ticker"]] = h
 
         received_rows = fetch_dicts(s,
@@ -291,24 +360,30 @@ def projected(s=None, today=None):
 
         # per-payment rate (declared, else gross/units-held-then) — details() already derives
         # it per row; reused here rather than re-replaying the ledger.
+        # keyed per (ticker, account): each account's schedule is matched and projected from its
+        # own history, so one broker's receipt never consumes another's still-expected payment.
         this_year, last_year = defaultdict(list), defaultdict(list)
         for r in details(s)["rows"]:
             if r["ticker"] is None or r["pay_date"] is None:
                 continue
             if r["pay_date"].year == yr:
-                this_year[r["ticker"]].append(r)
+                this_year[(r["ticker"], r["account"])].append(r)
             elif r["pay_date"].year == yr - 1 and r["rate"] is not None:
-                last_year[r["ticker"]].append(r)
+                last_year[(r["ticker"], r["account"])].append(r)
 
         received_total = annual(s)["totals"].get(yr, 0.0)   # the EXACT figure the tab shows
 
         ledger = defaultdict(list)
-        for t, td, q in s.execute(text(
-                "SELECT sec.canonical_ticker, t.trade_date, t.qty_signed FROM txn t "
-                "JOIN security sec ON sec.id=t.security_id")).all():
-            ledger[t].append((td, float(q)))
+        for t, acct, td, q in s.execute(text(
+                "SELECT sec.canonical_ticker, a.name, t.trade_date, t.qty_signed FROM txn t "
+                "JOIN security sec ON sec.id=t.security_id "
+                "JOIN account a ON a.id=t.account_id")).all():
+            ledger[(t, acct)].append((td, float(q)))
 
-    paid_this_year = {t: {r["pay_date"] for r in rows} for t, rows in this_year.items()}
+    paid = {k: {r["pay_date"] for r in rows} for k, rows in this_year.items()}
+    paid_this_year = defaultdict(set)
+    for (t, _), dates in paid.items():
+        paid_this_year[t] |= dates
     announced = defaultdict(list)
     for r in announced_rows:
         if (r["pay_date"] or r["ex_date"]) not in paid_this_year.get(r["ticker"], set()):
@@ -325,18 +400,26 @@ def projected(s=None, today=None):
             basis = "unmapped"
         elif units > 1e-6:
             basis = "none"
-            still, overdue = unreceived_last_year(last_year.get(ticker) or [],
-                                                   paid_this_year.get(ticker, set()), today)
-            for r in overdue:
-                held = units_at(_anniversary(r.get("ex_date") or r["pay_date"], yr),
-                                ledger.get(ticker, []))
-                if held <= 1e-6:
+            still = []
+            for (t, acct), rows in sorted(last_year.items(), key=lambda kv: kv[0][1]):
+                if t != ticker:
                     continue
-                amt_sgd, flag = _sgd_or_none(r["rate"] * held, r["currency"], fx)
-                overdue_detail.append({"expected_date": r["expected_date"], "rate": r["rate"],
-                                        "currency": r["currency"],
-                                        "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
-                                        **({"flag": flag} if flag else {})})
+                acct_still, overdue = unreceived_last_year(rows, paid.get((t, acct), set()), today)
+                acct_units = account_units[ticker].get(acct, 0.0)
+                still += [(r, acct, acct_units) for r in acct_still if acct_units > 1e-6]
+                for r in overdue:
+                    ex = r.get("ex_date")
+                    held = entitled_units(ex and _anniversary(ex, yr), _anniversary(r["pay_date"], yr),
+                                          ledger.get((t, acct), []))
+                    if held <= 1e-6:
+                        continue
+                    amt_sgd, flag = _sgd_or_none(r["rate"] * held, r["currency"], fx)
+                    overdue_detail.append({"expected_date": r["expected_date"], "account": acct,
+                                            "rate": r["rate"], "currency": r["currency"],
+                                            "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
+                                            **({"flag": flag} if flag else {})})
+            overdue_detail.sort(key=lambda d: d["expected_date"])
+            still.sort(key=lambda x: x[0]["expected_date"])
             rows = announced.get(ticker) or []
             if rows:
                 basis = "announced"
@@ -349,11 +432,11 @@ def projected(s=None, today=None):
                                    **({"flag": flag} if flag else {})})
             elif still:
                 basis = "last_year_pattern"
-                for r in still:
-                    amt_sgd, flag = _sgd_or_none(r["rate"] * units, r["currency"], fx)
+                for r, acct, acct_units in still:
+                    amt_sgd, flag = _sgd_or_none(r["rate"] * acct_units, r["currency"], fx)
                     remaining_sgd += amt_sgd or 0.0
                     detail.append({"pay_date": r["pay_date"], "expected_date": r["expected_date"],
-                                   "rate": r["rate"], "currency": r["currency"],
+                                   "account": acct, "rate": r["rate"], "currency": r["currency"],
                                    "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
                                    **({"flag": flag} if flag else {})})
         full_remaining[ticker] = remaining_sgd

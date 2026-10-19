@@ -356,6 +356,105 @@ class TestProjected(pgtest.Case):
         assert out["overdue_sgd"] == 1100.0                        # 0.5x1000 + 0.6x1000
         assert out["overdue_count"] == 2
 
+    def test_a_second_brokers_date_for_one_distribution_cannot_consume_another_payment(self):
+        # C38U-shaped: one distribution through two accounts a week apart, both years, plus a
+        # separate May payment last year that hasn't come this year - it must stay overdue.
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._buy(1, D(2024, 1, 1), 500, account=2)
+        for yr in (2025, 2026):
+            self._div(1, D(yr, 3, 15), 46.1, rate=0.0461, units=1000)
+            self._div(1, D(yr, 3, 24), 23.05, rate=0.0461, units=500, account=2)
+        self._div(1, D(2025, 5, 1), 30, rate=0.03, units=1000)
+        self.s.commit()
+
+        h = self._holdings(self._projected())["D05"]
+        assert [d["expected_date"] for d in h["overdue"]] == [D(2026, 5, 1)]
+
+    def _c38u(self):
+        """C38U as really held: 6200 units in FSM, 500 in Moomoo."""
+        self.s.add(Account(id=3, name="Moomoo", funding_bucket="cash"))
+        self.s.add(Security(id=6, canonical_ticker="C38U", name="CICT", market="SG",
+                            asset_type="reit", currency="SGD"))
+        self.s.flush()
+        self._buy(6, D(2020, 1, 1), 6200, account=1)
+        self._buy(6, D(2021, 1, 1), 500, account=3)
+
+    def test_one_distribution_in_two_accounts_is_projected_per_account_counted_once_per_unit(self):
+        self._c38u()
+        self._div(6, D(2025, 9, 18), 285.82, rate=0.0461, units=6200, ex=D(2025, 8, 12))
+        self._div(6, D(2025, 9, 15), 23.05, rate=0.0461, units=500, account=3, ex=D(2025, 8, 12))
+        self.s.commit()
+
+        h = self._holdings(self._projected())["C38U"]
+        assert h["basis"] == "last_year_pattern"
+        assert [(d["account"], d["expected_date"], d["amount_sgd"]) for d in h["detail"]] == \
+            [("Moomoo", D(2026, 9, 15), 23.05), ("FSM", D(2026, 9, 18), 285.82)]
+        assert [(d["ex_date"], d["rate"]) for d in dividends.distinct_distributions("C38U", s=self.s)] == \
+            [(D(2025, 8, 12), 0.0461)]
+
+    def test_one_brokers_receipt_never_hides_anothers_missing_payment(self):
+        # only Moomoo's statement for this year's March distribution is ingested; FSM's cash is
+        # still owed (or just not imported) and must surface, not be consumed by Moomoo's row.
+        self._c38u()
+        self._div(6, D(2025, 3, 21), 285.82, rate=0.0461, units=6200, ex=D(2025, 2, 12))
+        self._div(6, D(2025, 3, 15), 23.05, rate=0.0461, units=500, account=3, ex=D(2025, 2, 12))
+        self._div(6, D(2026, 3, 15), 23.05, rate=0.0461, units=500, account=3)
+        self.s.commit()
+
+        h = self._holdings(self._projected())["C38U"]
+        assert [(d["account"], d["expected_date"], d["amount_sgd"]) for d in h["overdue"]] == \
+            [("FSM", D(2026, 3, 21), 285.82)]
+
+    def test_two_close_equal_rate_distributions_in_one_account_stay_two(self):
+        # an advanced distribution then the regular one, same account, same rate.
+        self._c38u()
+        self._div(6, D(2025, 9, 1), 186, rate=0.03, units=6200, ex=D(2025, 8, 10))
+        self._div(6, D(2025, 9, 10), 186, rate=0.03, units=6200, ex=D(2025, 8, 20))
+        self._div(6, D(2026, 9, 2), 186, rate=0.03, units=6200, ex=D(2026, 8, 10))
+        self.s.commit()
+
+        h = self._holdings(self._projected())["C38U"]
+        assert [(d["account"], d["expected_date"]) for d in h["detail"]] == [("FSM", D(2026, 9, 10))]
+        assert [d["ex_date"] for d in dividends.distinct_distributions("C38U", s=self.s)] == \
+            [D(2025, 8, 10), D(2025, 8, 20), D(2026, 8, 10)]
+
+    def test_a_row_with_no_ex_date_joins_another_accounts_distribution_never_its_own(self):
+        self._c38u()
+        self._div(6, D(2026, 3, 24), 285.82, rate=0.0461, units=6200, ex=D(2026, 2, 13))
+        self._div(6, D(2026, 3, 15), 23.05, rate=0.0461, units=500, account=3)     # Moomoo, no ex
+        self._div(6, D(2026, 6, 8), 246.76, rate=0.0398, units=6200)               # FSM, no ex
+        self._div(6, D(2026, 6, 15), 246.76, rate=0.0398, units=6200)              # FSM again
+        self.s.commit()
+
+        assert [(d["ex_date"], d["pay_date"], d["rate"])
+                for d in dividends.distinct_distributions("C38U", s=self.s)] == \
+            [(D(2026, 2, 13), D(2026, 3, 24), 0.0461),
+             (None, D(2026, 6, 8), 0.0398), (None, D(2026, 6, 15), 0.0398)]
+
+    def test_ireit_held_in_fsm_and_srs_projects_each_account_and_counts_each_ex_date_once(self):
+        # UD1U's real shape: FSM and SRS paid on the same ex/pay dates; this August only SRS's
+        # row (no ex_date) is ingested, so FSM's August payment is still to come for FSM.
+        self.s.add(Account(id=4, name="SRS", funding_bucket="srs"))
+        self.s.flush()
+        self._buy(2, D(2020, 1, 1), 43900, account=1)
+        self._buy(2, D(2020, 1, 1), 222205, account=4)
+        for ex, pay, rate in ((D(2025, 3, 5), D(2025, 3, 27), 0.0094),
+                              (D(2025, 8, 14), D(2025, 8, 28), 0.0071),
+                              (D(2026, 3, 5), D(2026, 3, 26), 0.0038)):
+            self._div(2, pay, round(rate * 43900, 2), rate=rate, units=43900, ccy="EUR", ex=ex)
+            self._div(2, pay, round(rate * 222205, 2), rate=rate, units=222205, ccy="EUR",
+                      account=4, ex=ex)
+        self._div(2, D(2026, 8, 27), 799.94, rate=0.0036, units=222205, ccy="EUR", account=4)
+        self.s.commit()
+
+        h = self._holdings(self._projected())["UD1U"]
+        assert [(d["account"], d["expected_date"], d["amount_sgd"]) for d in h["detail"]] == \
+            [("FSM", D(2026, 8, 28), round(0.0071 * 43900 * 0.5, 2))]
+        assert [(d["ex_date"], d["pay_date"], d["rate"])
+                for d in dividends.distinct_distributions("UD1U", s=self.s)] == \
+            [(D(2025, 3, 5), D(2025, 3, 27), 0.0094), (D(2025, 8, 14), D(2025, 8, 28), 0.0071),
+             (D(2026, 3, 5), D(2026, 3, 26), 0.0038), (None, D(2026, 8, 27), 0.0036)]
+
     def test_a_holding_bought_after_the_expected_date_is_not_overdue(self):
         self._buy(1, D(2026, 8, 1), 1000)                           # bought after both anniversaries
         self._div(1, D(2025, 5, 12), 500, rate=0.5, units=1000)
