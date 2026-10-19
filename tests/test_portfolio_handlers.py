@@ -227,6 +227,33 @@ def test_dividend_details_is_a_pass_through(client, monkeypatch):
     assert client.get("/api/dividend-details").json() == rows
 
 
+def test_dividend_flag_override_add_forwards_to_add_flag_override(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(portfolio_routes.dividends, "add_flag_override",
+        lambda sid, ex, pay: seen.append((sid, ex, pay)))
+    monkeypatch.setattr(portfolio_routes.dividends, "yields", lambda: {"marked_regular": []})
+
+    r = client.post("/api/dividend-flag-overrides",
+        json={"security_id": 4, "ex_date": None, "pay_date": "2026-10-01"})
+
+    assert r.status_code == 200
+    assert r.json() == {"marked_regular": []}
+    assert seen == [(4, None, D(2026, 10, 1))]
+
+
+def test_dividend_flag_override_remove_forwards_to_remove_flag_override(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(portfolio_routes.dividends, "remove_flag_override",
+        lambda override_id: seen.append(override_id))
+    monkeypatch.setattr(portfolio_routes.dividends, "yields", lambda: {"excluded": []})
+
+    r = client.delete("/api/dividend-flag-overrides/7")
+
+    assert r.status_code == 200
+    assert r.json() == {"excluded": []}
+    assert seen == [7]
+
+
 # ---------------------------------------------------------------- alloc_by_account
 
 @pytest.fixture

@@ -509,7 +509,7 @@ class TestYields(pgtest.Case):
     another currency than its price, and the SGD-weighted portfolio average. `today` is pinned the same way
     TestProjected's is."""
     TABLES = ("dividend", "dividend_announcement", "dividend_adjustment",
-             "price", "txn", "fx_rate", "account", "security")
+             "dividend_flag_override", "price", "txn", "fx_rate", "account", "security")
 
     def setUp(self):
         super().setUp()
@@ -624,6 +624,91 @@ class TestYields(pgtest.Case):
         assert excl[0]["ratio"] == 25.0
         assert excl[0]["baseline_type"] == "seasonal"
         assert excl[0]["baseline"] == 0.01
+
+    def test_marking_a_flagged_payment_regular_raises_yield_and_unmarking_restores_it(self):
+        # NVIDIA's real case (launch brief): the 0.25 payment is a genuine rate increase
+        # (SEC 8-K 2026-05-20), not a one-off - marking it regular must count it toward both
+        # trailing and forward DPS, and move it from `excluded` to `marked_regular`; unmarking
+        # must put it straight back to the original flagged state.
+        self._buy(4, D(2022, 1, 1), 100)
+        self._div(4, D(2023, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2024, 4, 1), 0.01, ccy="USD")
+        self._div(4, D(2024, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2025, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2026, 10, 1), 0.25, ccy="USD")
+        self._price(4, TODAY, 200.0, ccy="USD")
+        self.s.commit()
+
+        flagged = self._rows(self._yields())["OUTL"]
+        assert flagged["trailing_dps"] == 0.0
+        assert flagged["forward_dps"] == 0.0
+
+        dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
+
+        marked = self._yields()
+        r = self._rows(marked)["OUTL"]
+        assert r["trailing_dps"] == 0.25
+        assert r["forward_dps"] == 0.25
+        assert not [e for e in marked["excluded"] if e["ticker"] == "OUTL"]
+        regular = [e for e in marked["marked_regular"] if e["ticker"] == "OUTL"]
+        assert len(regular) == 1
+        assert regular[0]["ratio"] == 25.0
+        assert regular[0]["baseline_type"] == "seasonal"
+        assert regular[0]["baseline"] == 0.01
+        override_id = regular[0]["id"]
+
+        dividends.remove_flag_override(override_id, s=self.s)
+
+        restored = self._yields()
+        r = self._rows(restored)["OUTL"]
+        assert r["trailing_dps"] == 0.0
+        assert not restored["marked_regular"]
+        excl = [e for e in restored["excluded"] if e["ticker"] == "OUTL"]
+        assert len(excl) == 1
+        assert excl[0]["ratio"] == 25.0
+
+    def test_adding_the_same_override_twice_is_a_no_op(self):
+        self._buy(4, D(2022, 1, 1), 100)
+        self._div(4, D(2025, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2026, 10, 1), 0.25, ccy="USD")
+        self._price(4, TODAY, 200.0, ccy="USD")
+        self.s.commit()
+
+        dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
+        dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
+
+        assert self.s.execute(text("SELECT COUNT(*) FROM dividend_flag_override")).scalar() == 1
+
+    def test_an_override_still_applies_after_a_reingest_adds_the_ex_date(self):
+        # Marked while the statement carried no ex_date; a later ingest supplies one (and an
+        # account paid a day earlier) - the distribution's (ex_date, pay_date) both move, yet
+        # it is the same payment and must stay marked, and stay unmarkable.
+        self._buy(4, D(2022, 1, 1), 100)
+        self._div(4, D(2023, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2024, 4, 1), 0.01, ccy="USD")
+        self._div(4, D(2024, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2025, 10, 1), 0.01, ccy="USD")
+        self._div(4, D(2026, 10, 1), 0.25, ccy="USD")
+        self._price(4, TODAY, 200.0, ccy="USD")
+        self.s.commit()
+        dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
+
+        self.s.execute(text("UPDATE dividend SET ex_date = :ex WHERE pay_date = :pay"),
+                       {"ex": D(2026, 9, 10), "pay": D(2026, 10, 1)})
+        self.s.add(Account(id=2, name="IBKR", funding_bucket="cash"))
+        self._div(4, D(2026, 9, 30), 0.25, ccy="USD", account=2, ex=D(2026, 9, 10))
+        self.s.commit()
+
+        out = self._yields()
+        assert self._rows(out)["OUTL"]["trailing_dps"] == 0.25
+        assert not [e for e in out["excluded"] if e["ticker"] == "OUTL"]
+        regular = [e for e in out["marked_regular"] if e["ticker"] == "OUTL"]
+        assert [(e["ex_date"], e["pay_date"]) for e in regular] == [("2026-09-10", "2026-09-30")]
+
+        dividends.remove_flag_override(regular[0]["id"], s=self.s)
+        restored = self._yields()
+        assert not restored["marked_regular"]
+        assert [e["ticker"] for e in restored["excluded"]] == ["OUTL"]
 
     def test_a_larger_interim_dividend_is_not_flagged_against_a_smaller_final(self):
         # Hang Lung Properties' shape: interim is genuinely larger than final every year.

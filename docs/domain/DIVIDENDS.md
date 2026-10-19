@@ -235,6 +235,11 @@ SGD-market-value-weighted portfolio average. Two kinds of payment are kept out o
 - **Possibly special** - a payment more than `OUTLIER_MULT` (2.5x) both its own slot a year
   earlier and the counter's median payment is flagged, listed under "Excluded as possibly
   special", and left out (`_classify`, which also covers a payment with no year-earlier slot).
+  A flagged payment that is really a regular increase (NVIDIA's 2026-10-01 rate hike) can be
+  marked regular from that list (`POST /api/dividend-flag-overrides`); it then counts in both
+  yields and moves to "Marked as regular", whose Unmark (`DELETE
+  /api/dividend-flag-overrides/{id}`) undoes it. The `dividend_flag_override` table is user
+  data like `dividend_adjustment`, keyed by ex_date else pay_date (`_override_id`).
 - **Capital return** - a recurring non-ordinary component folded into the same per-unit rate
   (DBS's quarterly capital return) cannot be told apart in the data, so it is declared by hand
   in the `dividend_adjustment` table via the tab's Capital-return adjustments list

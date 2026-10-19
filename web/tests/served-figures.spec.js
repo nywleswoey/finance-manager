@@ -153,6 +153,58 @@ test.describe("Portfolio › Dividends", () => {
       }
     });
 
+  test("marking a flagged payment regular moves it to Marked as regular, Unmark reverses it",
+    async ({ page, baseURL }) => {
+      // NVIDIA's shape (launch brief): a real rate increase the heuristic still flags as
+      // possibly special — mark/unmark is the user's escape hatch, round-tripped here against
+      // the same fixture row served-figures.spec.js already asserts the excluded shape from.
+      const base = readFixture("dividend-yields.json");
+      const nvda = base.excluded.find((e) => e.ticker === "NVDA");
+      const markedYld = { ...base, excluded: base.excluded.filter((e) => e.ticker !== "NVDA"),
+                          marked_regular: [{ ...nvda, id: 501 }] };
+      const unmarkedYld = { ...base, marked_regular: [] };
+      let marked = false;
+
+      await openView(page, baseURL, "Portfolio › Dividends");
+
+      // Registered AFTER the view has already settled on the committed fixture, so the
+      // initial render is untouched — only the mutation's own refetch hits these, narrower
+      // routes winning over mockApi's catch-all per Playwright's reverse registration order.
+      await page.route("**/api/dividend-yields", (route) =>
+        route.fulfill({ status: 200, contentType: "application/json",
+                        body: JSON.stringify(marked ? markedYld : unmarkedYld) }));
+      await page.route("**/api/dividend-flag-overrides", async (route) => {
+        if (route.request().method() !== "POST") return route.fallback();
+        marked = true;
+        return route.fulfill({ status: 200, contentType: "application/json",
+                              body: JSON.stringify(markedYld) });
+      });
+      await page.route("**/api/dividend-flag-overrides/501", async (route) => {
+        if (route.request().method() !== "DELETE") return route.fallback();
+        marked = false;
+        return route.fulfill({ status: 200, contentType: "application/json",
+                              body: JSON.stringify(unmarkedYld) });
+      });
+
+      const excludedRow = page.getByTestId("dividend-excluded")
+        .locator(".pill", { hasText: "NVDA" }).locator("xpath=ancestor::div[1]");
+      await expect(excludedRow).toBeVisible();
+      await excludedRow.getByRole("button", { name: "Mark as regular" }).click();
+
+      const markedRow = page.getByTestId("dividend-marked-regular")
+        .locator(".pill", { hasText: "NVDA" }).locator("xpath=ancestor::div[1]");
+      await expect(markedRow).toBeVisible();
+      await expect(markedRow).toContainText(`${nvda.ratio.toFixed(1)}x`);
+      await expect(page.getByTestId("dividend-excluded").locator(".pill", { hasText: "NVDA" }))
+        .toHaveCount(0);
+
+      await markedRow.getByRole("button", { name: "Unmark" }).click();
+
+      await expect(page.getByTestId("dividend-excluded").locator(".pill", { hasText: "NVDA" }))
+        .toBeVisible();
+      await expect(page.getByTestId("dividend-marked-regular")).toHaveCount(0);
+    });
+
   test("the capital-return adjustments list is the server's, DBS included",
     async ({ page, baseURL }) => {
       const adj = readFixture("dividend-capital-returns.json").rows;

@@ -299,6 +299,24 @@ def dividend_capital_return_remove(adjustment_id: int):
     return {"rows": dividends.capital_return_adjustments()}
 
 
+class FlagOverrideIn(BaseModel):
+    security_id: int = Field(gt=0)
+    ex_date: dt.date | None = None
+    pay_date: dt.date
+
+
+@router.post("/api/dividend-flag-overrides")
+def dividend_flag_override_add(body: FlagOverrideIn):
+    dividends.add_flag_override(body.security_id, body.ex_date, body.pay_date)
+    return dividends.yields()
+
+
+@router.delete("/api/dividend-flag-overrides/{override_id}")
+def dividend_flag_override_remove(override_id: int):
+    dividends.remove_flag_override(override_id)
+    return dividends.yields()
+
+
 @router.get("/api/transactions")
 def transactions(account: str | None = None, ticker: str | None = None,
                  limit: int = Query(500, ge=1, le=2000)):
