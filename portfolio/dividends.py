@@ -147,7 +147,12 @@ def details(s=None):
 
 def annual(s=None):
     """Annual dividend income by funding bucket, converted to SGD at latest FX. Historical FX
-    is not stored, so prior years use today's rate (an approximation)."""
+    is not stored, so prior years use today's rate (an approximation).
+
+    Every dividend row is summed, including one distribution received by several accounts:
+    each row is real cash paid into its account on units held there (C38U: 6200 units in FSM
+    and 500 in Moomoo, each paid its own gross), not a double count. The once-per-distribution
+    view is `distinct_distributions()`, for per-unit rate and yield only."""
     with session_scope(s) as s:
         fx = fx_map(s)
         rows = s.execute(text(
@@ -180,20 +185,52 @@ def annual(s=None):
     }
 
 
-SAME_DISTRIBUTION_DAYS = 15  # one ticker's pay dates this close, at the same per-unit rate,
-                              # in DIFFERENT accounts, are one distribution paid out through two
-                              # different brokers on two different settlement schedules, not two
-                              # payments. Narrow on purpose (same ticker, by construction - `rows`
-                              # is always one ticker's - same rate, close dates, disjoint
-                              # accounts) so genuinely separate payments (different rate, further
-                              # apart, or a second payment into an account already paid) never
-                              # merge. C38U is the motivating case: Moomoo and FSM each pay their
-                              # own account's units at the same declared rate, a week or two apart.
+SAME_DISTRIBUTION_DAYS = 15  # `distinct_distributions()`'s fallback for a row with no ex_date:
+                              # a pay date this close to another account's row of the same ticker,
+                              # at the same per-unit rate, is that same distribution settled by a
+                              # different broker on its own schedule (C38U: Moomoo and FSM a week
+                              # or two apart). Never applied within one account - two close,
+                              # equal-rate rows in one account are two distributions.
 
 
 def _rate_matches(a, b, tol=1e-4):
     """Same per-unit rate up to float/rounding noise."""
     return abs(a - b) <= max(tol, 0.01 * max(abs(a), abs(b)))
+
+
+def distinct_distributions(ticker, s=None):
+    """One entry per distribution of `ticker` - `{ex_date, pay_date, rate, currency}`, oldest
+    first - counted ONCE however many accounts received it: the per-unit view the dividend-yield
+    columns read. Received cash stays per row in `annual()` / `details()`.
+
+    Rows sharing an ex_date are one distribution. Per account its statement lines are summed
+    (component lines 0.60 + 0.15 make the 0.75 rate) and across accounts the largest per-account
+    rate is the distribution's - every account was paid the same per-unit rate on its own units.
+    A row with no ex_date joins the distribution of a DIFFERENT account within
+    SAME_DISTRIBUTION_DAYS of its pay_date at a matching rate, else it stands alone. Rows with
+    no rate (nothing to compare or count) are left out."""
+    rows = [r for r in details(s)["rows"]
+            if r["ticker"] == ticker and r["rate"] is not None and r["pay_date"] is not None]
+    groups = {}
+    for r in sorted(rows, key=lambda r: (r["ex_date"] is None, r["pay_date"])):
+        key = ("ex", r["ex_date"]) if r["ex_date"] else ("pay", r["pay_date"])
+        g = groups.setdefault(key, {"ex_date": r["ex_date"], "pay_date": r["pay_date"],
+                                    "currency": r["currency"], "rates": defaultdict(float)})
+        g["rates"][r["account"]] += r["rate"]
+    for key in sorted(k for k in groups if k[0] == "pay"):
+        g = groups[key]
+        rate = max(g["rates"].values())
+        for other in groups.values():
+            if other is not g and other["pay_date"] is not None \
+                    and abs((other["pay_date"] - g["pay_date"]).days) <= SAME_DISTRIBUTION_DAYS \
+                    and _rate_matches(rate, max(other["rates"].values())) \
+                    and other["rates"].keys().isdisjoint(g["rates"]):
+                other["rates"].update(g["rates"])
+                del groups[key]
+                break
+    return [{"ex_date": g["ex_date"], "pay_date": g["pay_date"], "currency": g["currency"],
+             "rate": round(max(g["rates"].values()), 6)}
+            for g in sorted(groups.values(), key=lambda g: g["ex_date"] or g["pay_date"])]
 
 
 def _payments(rows):
@@ -202,21 +239,7 @@ def _payments(rows):
     `details()` returns a row per (account, statement line): a statement may split one
     distribution into component lines (0.60 + 0.15) that sum to the rate, while another account
     holding the same distribution carries the combined declared rate (0.75). So per account the
-    lines are summed, and across accounts on the same pay_date the largest per-account rate is
-    the payment's rate - every account received the same per-unit rate on its own units, so
-    summing would multiply that rate by the number of accounts, not add real payments.
-
-    The same distribution can also reach two accounts under two DIFFERENT pay dates (each
-    broker settles on its own schedule): those collapse into one entry too, by the same
-    max-rate rule, whenever they're within SAME_DISTRIBUTION_DAYS of each other at a matching
-    rate and no account was paid on both - see SAME_DISTRIBUTION_DAYS. The merge window anchors
-    on each kept entry's own pay_date (not the running scan position), so it can't drift past
-    the stated window by chaining through several close dates.
-
-    This merge is the payment SCHEDULE only (what `projected()` replays), never received cash:
-    each broker's row is real cash on its own separately held units (C38U, checked against the
-    local DB copy: 6200 units in FSM and 500 in Moomoo, each paid its own gross), so `annual()`
-    and `details()` rightly keep summing and listing every row."""
+    lines are summed, and across accounts the largest per-account rate is the payment's rate."""
     per_account = defaultdict(float)
     first = {}
     for r in rows:
@@ -225,19 +248,7 @@ def _payments(rows):
     rate = defaultdict(float)
     for (d, _), v in per_account.items():
         rate[d] = max(rate[d], v)
-    accounts = defaultdict(set)
-    for d, a in per_account:
-        accounts[d].add(a)
-    out, paid = [], []
-    for d in sorted(first):
-        if out and (d - out[-1]["pay_date"]).days <= SAME_DISTRIBUTION_DAYS \
-                and _rate_matches(rate[d], out[-1]["rate"]) and paid[-1].isdisjoint(accounts[d]):
-            out[-1]["rate"] = round(max(rate[d], out[-1]["rate"]), 6)
-            paid[-1] |= accounts[d]
-            continue
-        out.append({**first[d], "rate": round(rate[d], 6)})
-        paid.append(set(accounts[d]))
-    return out
+    return [{**first[d], "rate": round(rate[d], 6)} for d in sorted(first)]
 
 
 def _anniversary(d, year):
@@ -289,7 +300,8 @@ def projected(s=None, today=None):
 
     A holding's remaining payments use the SGX-declared rate from `dividend_announcement` for
     announcements paid (pay_date, else ex_date) between today and year end and not already
-    received (`basis` "announced"); otherwise `unreceived_last_year()`'s payments at TODAY's units
+    received (`basis` "announced"); otherwise each account's `unreceived_last_year()` payments -
+    matched against that account's own receipts only - at that account's TODAY units
     (`basis` "last_year_pattern") — ingestion.dividend_announcements' online fetch degrading
     to this is exactly what makes that degradation graceful rather than a crash. A holding with
     neither gets `basis` "none". A ticker that received a payment this year but is no longer
@@ -319,11 +331,12 @@ def projected(s=None, today=None):
     with session_scope(s) as s:
         fx = fx_map(s)
 
-        current_units, meta = defaultdict(float), {}
+        current_units, account_units, meta = defaultdict(float), defaultdict(dict), {}
         for h in fetch_dicts(s,
-                "SELECT canonical_ticker ticker, name, currency, SUM(units) units "
-                "FROM current_position GROUP BY canonical_ticker, name, currency"):
+                "SELECT canonical_ticker ticker, account, name, currency, units "
+                "FROM current_position"):
             current_units[h["ticker"]] += float(h["units"])
+            account_units[h["ticker"]][h["account"]] = float(h["units"])
             meta[h["ticker"]] = h
 
         received_rows = fetch_dicts(s,
@@ -347,27 +360,30 @@ def projected(s=None, today=None):
 
         # per-payment rate (declared, else gross/units-held-then) — details() already derives
         # it per row; reused here rather than re-replaying the ledger.
+        # keyed per (ticker, account): each account's schedule is matched and projected from its
+        # own history, so one broker's receipt never consumes another's still-expected payment.
         this_year, last_year = defaultdict(list), defaultdict(list)
         for r in details(s)["rows"]:
             if r["ticker"] is None or r["pay_date"] is None:
                 continue
             if r["pay_date"].year == yr:
-                this_year[r["ticker"]].append(r)
+                this_year[(r["ticker"], r["account"])].append(r)
             elif r["pay_date"].year == yr - 1 and r["rate"] is not None:
-                last_year[r["ticker"]].append(r)
+                last_year[(r["ticker"], r["account"])].append(r)
 
         received_total = annual(s)["totals"].get(yr, 0.0)   # the EXACT figure the tab shows
 
         ledger = defaultdict(list)
-        for t, td, q in s.execute(text(
-                "SELECT sec.canonical_ticker, t.trade_date, t.qty_signed FROM txn t "
-                "JOIN security sec ON sec.id=t.security_id")).all():
-            ledger[t].append((td, float(q)))
+        for t, acct, td, q in s.execute(text(
+                "SELECT sec.canonical_ticker, a.name, t.trade_date, t.qty_signed FROM txn t "
+                "JOIN security sec ON sec.id=t.security_id "
+                "JOIN account a ON a.id=t.account_id")).all():
+            ledger[(t, acct)].append((td, float(q)))
 
-    paid_this_year = {t: {r["pay_date"] for r in rows} for t, rows in this_year.items()}
-    distinct_paid = {t: {p["pay_date"] for p in _payments([r for r in rows if r["rate"] is not None])}
-                     | {r["pay_date"] for r in rows if r["rate"] is None}
-                     for t, rows in this_year.items()}
+    paid = {k: {r["pay_date"] for r in rows} for k, rows in this_year.items()}
+    paid_this_year = defaultdict(set)
+    for (t, _), dates in paid.items():
+        paid_this_year[t] |= dates
     announced = defaultdict(list)
     for r in announced_rows:
         if (r["pay_date"] or r["ex_date"]) not in paid_this_year.get(r["ticker"], set()):
@@ -384,19 +400,26 @@ def projected(s=None, today=None):
             basis = "unmapped"
         elif units > 1e-6:
             basis = "none"
-            still, overdue = unreceived_last_year(last_year.get(ticker) or [],
-                                                   distinct_paid.get(ticker, set()), today)
-            for r in overdue:
-                ex = r.get("ex_date")
-                held = entitled_units(ex and _anniversary(ex, yr), _anniversary(r["pay_date"], yr),
-                                      ledger.get(ticker, []))
-                if held <= 1e-6:
+            still = []
+            for (t, acct), rows in sorted(last_year.items(), key=lambda kv: kv[0][1]):
+                if t != ticker:
                     continue
-                amt_sgd, flag = _sgd_or_none(r["rate"] * held, r["currency"], fx)
-                overdue_detail.append({"expected_date": r["expected_date"], "rate": r["rate"],
-                                        "currency": r["currency"],
-                                        "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
-                                        **({"flag": flag} if flag else {})})
+                acct_still, overdue = unreceived_last_year(rows, paid.get((t, acct), set()), today)
+                acct_units = account_units[ticker].get(acct, 0.0)
+                still += [(r, acct, acct_units) for r in acct_still if acct_units > 1e-6]
+                for r in overdue:
+                    ex = r.get("ex_date")
+                    held = entitled_units(ex and _anniversary(ex, yr), _anniversary(r["pay_date"], yr),
+                                          ledger.get((t, acct), []))
+                    if held <= 1e-6:
+                        continue
+                    amt_sgd, flag = _sgd_or_none(r["rate"] * held, r["currency"], fx)
+                    overdue_detail.append({"expected_date": r["expected_date"], "account": acct,
+                                            "rate": r["rate"], "currency": r["currency"],
+                                            "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
+                                            **({"flag": flag} if flag else {})})
+            overdue_detail.sort(key=lambda d: d["expected_date"])
+            still.sort(key=lambda x: x[0]["expected_date"])
             rows = announced.get(ticker) or []
             if rows:
                 basis = "announced"
@@ -409,11 +432,11 @@ def projected(s=None, today=None):
                                    **({"flag": flag} if flag else {})})
             elif still:
                 basis = "last_year_pattern"
-                for r in still:
-                    amt_sgd, flag = _sgd_or_none(r["rate"] * units, r["currency"], fx)
+                for r, acct, acct_units in still:
+                    amt_sgd, flag = _sgd_or_none(r["rate"] * acct_units, r["currency"], fx)
                     remaining_sgd += amt_sgd or 0.0
                     detail.append({"pay_date": r["pay_date"], "expected_date": r["expected_date"],
-                                   "rate": r["rate"], "currency": r["currency"],
+                                   "account": acct, "rate": r["rate"], "currency": r["currency"],
                                    "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
                                    **({"flag": flag} if flag else {})})
         full_remaining[ticker] = remaining_sgd

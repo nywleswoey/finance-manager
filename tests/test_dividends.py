@@ -113,48 +113,6 @@ class TestUnreceivedLastYear(unittest.TestCase):
         self.assertEqual(self._overdue(last_year, paid), [])
 
 
-class TestPayments(unittest.TestCase):
-    """C38U: the same distribution reaches two accounts (Moomoo, FSM) under two pay dates a
-    week or two apart, each broker settling on its own schedule. _payments() must collapse
-    that into one payment while leaving genuinely separate payments alone."""
-
-    def test_same_ticker_same_rate_within_window_is_one_payment(self):
-        rows = [{"pay_date": D(2026, 3, 15), "account": "Moomoo", "rate": 0.0461},
-                {"pay_date": D(2026, 3, 24), "account": "FSM", "rate": 0.0461}]
-        out = dividends._payments(rows)
-        self.assertEqual([(r["pay_date"], r["rate"]) for r in out], [(D(2026, 3, 15), 0.0461)])
-
-    def test_different_rate_within_the_window_stays_two_payments(self):
-        # a genuinely separate payment that happens to land nearby must never merge.
-        rows = [{"pay_date": D(2026, 3, 15), "account": "Moomoo", "rate": 0.0461},
-                {"pay_date": D(2026, 3, 24), "account": "FSM", "rate": 0.09}]
-        out = dividends._payments(rows)
-        self.assertEqual([r["pay_date"] for r in out], [D(2026, 3, 15), D(2026, 3, 24)])
-
-    def test_same_rate_outside_the_window_stays_two_payments(self):
-        rows = [{"pay_date": D(2026, 3, 15), "account": "Moomoo", "rate": 0.0461},
-                {"pay_date": D(2026, 4, 5), "account": "FSM", "rate": 0.0461}]
-        out = dividends._payments(rows)
-        self.assertEqual([r["pay_date"] for r in out], [D(2026, 3, 15), D(2026, 4, 5)])
-
-    def test_same_account_same_rate_within_window_stays_two_payments(self):
-        # one account paid twice (e.g. an advanced distribution then the regular one) is two
-        # payments, however close and however equal the rates.
-        rows = [{"pay_date": D(2026, 3, 15), "account": "FSM", "rate": 0.0461},
-                {"pay_date": D(2026, 3, 24), "account": "FSM", "rate": 0.0461}]
-        out = dividends._payments(rows)
-        self.assertEqual([r["pay_date"] for r in out], [D(2026, 3, 15), D(2026, 3, 24)])
-
-    def test_merge_window_anchors_on_the_kept_payment_not_a_chain(self):
-        # three dates each exactly SAME_DISTRIBUTION_DAYS apart from their neighbour must not
-        # chain into one payment spanning twice that window.
-        rows = [{"pay_date": D(2026, 1, 1), "account": "A", "rate": 0.05},
-                {"pay_date": D(2026, 1, 16), "account": "B", "rate": 0.05},
-                {"pay_date": D(2026, 1, 31), "account": "C", "rate": 0.05}]
-        out = dividends._payments(rows)
-        self.assertEqual([r["pay_date"] for r in out], [D(2026, 1, 1), D(2026, 1, 31)])
-
-
 class TestSgdOrNone(unittest.TestCase):
     def test_converts_when_the_currency_has_a_rate(self):
         self.assertEqual(dividends._sgd_or_none(100, "HKD", {"HKD": 0.17}), (17.0, None))
