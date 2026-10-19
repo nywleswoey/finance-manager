@@ -11,9 +11,9 @@ whenever a trade falls in that window inflates or deflates `qty` and corrupts th
 That pair (`entitled_units`, `implied_rate`) was duplicated between the per-holding view and the
 per-dividend detail view; both now share it here.
 
-(twr.py and performance.py fold dividends on ex_date too, but for a different reason - *when*
-the cash flow hits return math, not *which* units it belongs to; that engine separation is
-deliberate and stays there, see ADR 0001. This module is the entitlement / attribution view.)
+(twr.py and performance.py fold dividends into return math on their own date bases - *when*
+the cash flow counts, not *which* units it belongs to; that engine separation is deliberate and
+stays there, see ADR 0001. This module is the entitlement / attribution view.)
 
 Every public function accepts an optional Session (`s`) and routes through db.session_scope.
 Every read shape carries **both** amounts: `gross` in the payment's native currency (what the
