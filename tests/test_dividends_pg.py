@@ -356,6 +356,20 @@ class TestProjected(pgtest.Case):
         assert out["overdue_sgd"] == 1100.0                        # 0.5x1000 + 0.6x1000
         assert out["overdue_count"] == 2
 
+    def test_a_second_brokers_date_for_one_distribution_cannot_consume_another_payment(self):
+        # C38U-shaped: one distribution through two accounts a week apart, both years, plus a
+        # separate May payment last year that hasn't come this year - it must stay overdue.
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._buy(1, D(2024, 1, 1), 500, account=2)
+        for yr in (2025, 2026):
+            self._div(1, D(yr, 3, 15), 46.1, rate=0.0461, units=1000)
+            self._div(1, D(yr, 3, 24), 23.05, rate=0.0461, units=500, account=2)
+        self._div(1, D(2025, 5, 1), 30, rate=0.03, units=1000)
+        self.s.commit()
+
+        h = self._holdings(self._projected())["D05"]
+        assert [d["expected_date"] for d in h["overdue"]] == [D(2026, 5, 1)]
+
     def test_a_holding_bought_after_the_expected_date_is_not_overdue(self):
         self._buy(1, D(2026, 8, 1), 1000)                           # bought after both anniversaries
         self._div(1, D(2025, 5, 12), 500, rate=0.5, units=1000)

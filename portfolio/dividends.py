@@ -50,10 +50,10 @@ def units_at(date, txns):
 
 def entitled_units(ex_date, pay_date, txns):
     """Units entitled to a dividend: held at the close before `ex_date`, else (no ex_date) on
-    `pay_date` - see the module docstring. Dates compare as ISO strings, as in `units_at`."""
+    `pay_date` - see the module docstring."""
     if ex_date is None:
         return units_at(pay_date, txns)
-    return round(sum(q for td, q in txns if td is not None and str(td) < str(ex_date)), 4)
+    return units_at(dt.date.fromisoformat(str(ex_date)) - dt.timedelta(days=1), txns)
 
 
 def implied_rate(gross, qty):
@@ -240,13 +240,6 @@ def _payments(rows):
     return out
 
 
-def _paid_dates(rows):
-    """This year's received pay dates for one ticker, one per distinct payment - the same
-    `_payments()` rule last year's side is collapsed by, so a merged-away second broker's date
-    can't consume an unrelated last-year payment. A row with no rate keeps its own date."""
-    return {p["pay_date"] for p in _payments([{**r, "rate": r["rate"] or 0.0} for r in rows])}
-
-
 def _anniversary(d, year):
     """`d` moved to `year`, Feb 29 -> Feb 28 on a non-leap target."""
     try:
@@ -372,6 +365,9 @@ def projected(s=None, today=None):
             ledger[t].append((td, float(q)))
 
     paid_this_year = {t: {r["pay_date"] for r in rows} for t, rows in this_year.items()}
+    distinct_paid = {t: {p["pay_date"] for p in _payments([r for r in rows if r["rate"] is not None])}
+                     | {r["pay_date"] for r in rows if r["rate"] is None}
+                     for t, rows in this_year.items()}
     announced = defaultdict(list)
     for r in announced_rows:
         if (r["pay_date"] or r["ex_date"]) not in paid_this_year.get(r["ticker"], set()):
@@ -389,7 +385,7 @@ def projected(s=None, today=None):
         elif units > 1e-6:
             basis = "none"
             still, overdue = unreceived_last_year(last_year.get(ticker) or [],
-                                                   _paid_dates(this_year.get(ticker, [])), today)
+                                                   distinct_paid.get(ticker, set()), today)
             for r in overdue:
                 ex = r.get("ex_date")
                 held = entitled_units(ex and _anniversary(ex, yr), _anniversary(r["pay_date"], yr),

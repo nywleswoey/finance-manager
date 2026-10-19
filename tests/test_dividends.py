@@ -104,18 +104,6 @@ class TestUnreceivedLastYear(unittest.TestCase):
         still, _ = dividends.unreceived_last_year(rows, set(), self.TODAY)
         self.assertEqual([(r["pay_date"], r["rate"]) for r in still], [(D(2025, 11, 20), 0.75)])
 
-    def test_a_merged_away_second_broker_date_cannot_consume_another_payment(self):
-        # C38U-shaped: one distribution through Moomoo and FSM a week apart, both years, plus a
-        # separate May payment last year that hasn't come this year - it must stay overdue.
-        last_year = [{"pay_date": D(2025, 3, 15), "account": "Moomoo", "rate": 0.0461},
-                     {"pay_date": D(2025, 3, 24), "account": "FSM", "rate": 0.0461},
-                     {"pay_date": D(2025, 5, 1), "account": "FSM", "rate": 0.03}]
-        this_year = [{"pay_date": D(2026, 3, 15), "account": "Moomoo", "rate": 0.0461},
-                     {"pay_date": D(2026, 3, 24), "account": "FSM", "rate": 0.0461}]
-        _, overdue = dividends.unreceived_last_year(last_year, dividends._paid_dates(this_year),
-                                                    self.TODAY)
-        self.assertEqual([r["pay_date"] for r in overdue], [D(2025, 5, 1)])
-
     def test_a_matched_payment_is_never_also_overdue(self):
         # a payment more than DRIFT_DAYS stale that nonetheless matched this year's receipt
         # (e.g. a holding bought back after a long gap) is consumed, not double-counted as overdue.
