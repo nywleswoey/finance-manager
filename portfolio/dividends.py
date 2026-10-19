@@ -603,33 +603,51 @@ def _in_currency(value, frm, to, fx):
     return value * rate_to_sgd(frm, fx) / rate_to_sgd(to, fx)
 
 
-def _forward(trailing_regular, declared):
-    """The next 12 months' regular distributions as `(net_rate, currency, basis)`.
+def _slot_date(d):
+    return d["ex_date"] or d["pay_date"]
 
-    Each trailing regular distribution's one-year anniversary (of its ex_date, else pay_date)
-    is paired with the nearest SGX-declared announcement (its ex_date) within DRIFT_DAYS,
-    nearest pairs first, as unreceived_last_year() pairs; a paired one takes the declared rate
-    ("declared"), an unpaired one repeats its own net rate ("pattern"). A declared announcement
-    left unpaired is a new or initiated distribution and counts on its own ("declared").
-    `declared` is `[(announcement, net_rate)]`."""
-    anniversaries = [_anniversary(d["ex_date"] or d["pay_date"], (d["ex_date"] or d["pay_date"]).year + 1)
-                     for d in trailing_regular]
-    pairs = sorted((abs((a["ex_date"] - anniv).days), i, j)
+
+def _nearest_pairs(anniversaries, dates):
+    """`{i: j}` pairing each of `anniversaries` with at most one of `dates` within DRIFT_DAYS,
+    nearest pairs first, each date used once - unreceived_last_year()'s pairing."""
+    pairs = sorted((abs((d - anniv).days), i, j)
                    for i, anniv in enumerate(anniversaries)
-                   for j, (a, _) in enumerate(declared)
-                   if abs((a["ex_date"] - anniv).days) <= DRIFT_DAYS)
+                   for j, d in enumerate(dates)
+                   if abs((d - anniv).days) <= DRIFT_DAYS)
     match, used = {}, set()
     for _, i, j in pairs:
         if i not in match and j not in used:
             match[i] = j
             used.add(j)
+    return match
+
+
+def _forward(trailing_regular, declared):
+    """The next 12 months' regular distributions as `(net_rate, currency, basis)`.
+
+    A trailing regular distribution whose one-year anniversary (of its ex_date, else pay_date)
+    is already paired with a later trailing distribution has had its slot paid again inside the
+    window, so only that later one rolls forward. Each remaining one's anniversary is paired
+    with the nearest SGX-declared announcement (its ex_date) within DRIFT_DAYS, nearest pairs
+    first, as unreceived_last_year() pairs; a paired one takes the declared rate ("declared"),
+    an unpaired one repeats its own net rate ("pattern"). A declared announcement left unpaired
+    is a new or initiated distribution and counts on its own ("declared").
+    `declared` is `[(announcement, net_rate)]`."""
+    def anniversary(d):
+        return _anniversary(_slot_date(d), _slot_date(d).year + 1)
+
+    repaid = _nearest_pairs([anniversary(d) for d in trailing_regular],
+                            [_slot_date(d) for d in trailing_regular])
+    rolling = [d for i, d in enumerate(trailing_regular) if i not in repaid]
+    match = _nearest_pairs([anniversary(d) for d in rolling], [a["ex_date"] for a, _ in declared])
     out = []
-    for i, d in enumerate(trailing_regular):
+    for i, d in enumerate(rolling):
         if i in match:
             a, net = declared[match[i]]
             out.append((net, a["currency"], "declared"))
         else:
             out.append((d["net_rate"], d["currency"], "pattern"))
+    used = set(match.values())
     out += [(net, a["currency"], "declared") for j, (a, net) in enumerate(declared) if j not in used]
     return out
 

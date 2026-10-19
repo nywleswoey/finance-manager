@@ -693,6 +693,19 @@ class TestYields(pgtest.Case):
         assert r["trailing_yield_pct"] == round(0.0074 * 1.5 / 0.165 * 100, 3)
         assert r["mv_sgd"] == round(10_000 * 0.165, 2)
 
+    def test_a_slot_paid_twice_inside_the_trailing_window_rolls_forward_once(self):
+        # quarterly, the latest one paid a few days earlier than the year before
+        self._buy(8, D(2024, 1, 1), 1000)
+        for pay in (D(2025, 10, 8), D(2026, 1, 8), D(2026, 4, 8), D(2026, 7, 8), D(2026, 10, 2)):
+            self._div(8, pay, 0.10)
+        self._price(8, TODAY, 20.0)
+        self.s.commit()
+
+        r = self._rows(self._yields())["FWDPAT"]
+        assert r["trailing_dps"] == 0.50
+        assert r["forward_dps"] == 0.40
+        assert r["forward_basis"] == "pattern"
+
     def test_forward_basis_pattern_when_nothing_is_declared(self):
         self._buy(8, D(2024, 1, 1), 1000)
         self._div(8, D(2026, 5, 1), 0.50)
