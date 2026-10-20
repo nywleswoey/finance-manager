@@ -259,7 +259,12 @@ test.describe("Portfolio › Dividends", () => {
         .locator(".pill", { hasText: "S61" }).locator("xpath=ancestor::div[1]");
       await excludedRow.getByRole("button", { name: "Split…" }).click();
       await expect(excludedRow.getByRole("button", { name: "0.1597" })).toBeVisible();
+      const mismatch = excludedRow.getByText("doesn't match a cached SGX component");
+      await expect(mismatch).toHaveCount(0);
+      await excludedRow.getByLabel("Special portion per unit").fill("0.16");
+      await expect(mismatch).toBeVisible();
       await excludedRow.getByRole("button", { name: "0.1597" }).click();
+      await expect(mismatch).toHaveCount(0);
       await excludedRow.getByRole("button", { name: "Save" }).click();
 
       expect(postedBody.special_per_unit).toBe(0.1597);

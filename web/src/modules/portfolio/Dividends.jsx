@@ -145,7 +145,7 @@ export default function Dividends() {
   function splitEditor(e) {
     if (editor?.key !== editorKey(e)) return null;
     const value = Number(editor.value);
-    const noMatch = editor.components?.length > 0 && editor.value !== "" && !isNaN(value) &&
+    const noMatch = editor.components?.length > 0 && value > 0 &&
       !editor.components.some((c) => Math.abs(c.amount_per_unit - value) < 1e-9);
     return (
       <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 10px", alignItems: "center",
