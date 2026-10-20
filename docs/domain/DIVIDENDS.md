@@ -264,10 +264,17 @@ alongside the summed `dividend_announcement` row) so the split-entry UI can offe
 button per cached rate instead of a free-typed amount (`GET
 /api/dividend-announcement-components`, `portfolio.dividends.split_components` - falls back to
 matching `dividend_announcement`'s own pay_date within `SAME_DISTRIBUTION_DAYS` when the payment
-itself has no ex_date, same as SBS's real 2026-08-28 payment). This is a convenience only;
-automatically classifying which component is special is a separate, not-yet-built follow-up -
-`dividend_flag_override.source` ("user" today) exists so that classifier can record itself
-distinctly from a user-entered split when it lands.
+itself has no ex_date, same as SBS's real 2026-08-28 payment).
+
+SGX never says which of those lines is regular and which is special, so any payment with more
+than one cached component, all in the payment's own currency, and no split yet is listed under
+"Awaiting identification" (`yields()`'s `awaiting_identification`, also flagged by a banner at
+the top of the Dividends tab) for the user to mark each component Normal or Special.
+`POST /api/dividend-identify-components` (`portfolio.dividends.identify_components`) records
+the summed Special rates as an ordinary user split; the per-component labels themselves are not
+stored. Until identified, the payment is classified exactly as before. Automatic classification
+is not built - `dividend_flag_override.source` ("user" today) exists so such a classifier can
+record itself distinctly from a user-entered split.
 
 The exact rules (currency restatement, stale prices, `basis`, null vs `0.0`) are in the
 `yields()` / `_forward()` / `_classify()` / `_net_distributions()` docstrings.

@@ -896,9 +896,9 @@ def yields(s=None, today=None):
     line and carries no split yet - SGX's corporate-actions API never says which component is
     the regular rate and which is special (#captain's intent), so these need the captain's own
     call. A payment whose components aren't all in its own currency is left out (a special
-    portion is recorded in the payment's currency - see `identify_components`). Each entry carries `components` (the cached per-unit rates) for the Dividends tab to
-    list with a Normal/Special choice; `portfolio.dividends.identify_components` turns that
-    choice into the usual `dividend_flag_override` split once every component is labelled.
+    portion is recorded in the payment's currency - see `identify_components`). Each entry
+    carries `components` (the cached per-unit rates) for the Dividends tab to list
+    with a Normal/Special choice; `portfolio.dividends.identify_components` turns that choice into the usual `dividend_flag_override` split once every component is labelled.
     Until then the payment is untouched - still `excluded` if the raw heuristic flags it,
     `regular` otherwise - exactly as before this existed. A single-component payment is never
     listed here."""
