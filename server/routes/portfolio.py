@@ -303,11 +303,16 @@ class FlagOverrideIn(BaseModel):
     security_id: int = Field(gt=0)
     ex_date: dt.date | None = None
     pay_date: dt.date
+    special_per_unit: float = Field(default=0, ge=0, le=1_000_000)        # SECURITY-05
 
 
 @router.post("/api/dividend-flag-overrides")
 def dividend_flag_override_add(body: FlagOverrideIn):
-    dividends.add_flag_override(body.security_id, body.ex_date, body.pay_date)
+    try:
+        dividends.add_flag_override(body.security_id, body.ex_date, body.pay_date,
+                                    body.special_per_unit)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
     return dividends.yields()
 
 
@@ -315,6 +320,13 @@ def dividend_flag_override_add(body: FlagOverrideIn):
 def dividend_flag_override_remove(override_id: int):
     dividends.remove_flag_override(override_id)
     return dividends.yields()
+
+
+@router.get("/api/dividend-announcement-components")
+def dividend_announcement_components(security_id: int = Query(gt=0),
+                                     ex_date: dt.date | None = None,
+                                     pay_date: dt.date | None = None):
+    return {"rows": dividends.split_components(security_id, ex_date, pay_date)}
 
 
 @router.get("/api/transactions")

@@ -34,13 +34,17 @@ def epoch_date(ms):
 
 
 def sgx_schedule(name):
-    """{exDate: {pay, ccy, inline, has_opt}} for `name`'s declared cash dividends.
+    """{exDate: {pay, ccy, inline, has_opt, components}} for `name`'s declared cash dividends.
 
     `inline` sums every SGD/USD/EUR/HKD rate regex-matched out of the announcement's
     `particulars` text for that ex-date (a dividend split across several line items, e.g. an
-    ordinary + special rate, sums to the total per-unit cash rate). `has_opt` flags a
-    cash/scrip election, where `inline` alone cannot be trusted as the cash rate a holder
-    without the scrip option actually receives — callers skip those rather than guess."""
+    ordinary + special rate, sums to the total per-unit cash rate). `components` is that same
+    per-line-item breakdown, unsummed - `[{currency, amount_per_unit}, ...]`, in the order SGX
+    returned them - so a caller that needs to tell the ordinary rate from the special one (the
+    Dividends tab's split-entry UI, via ingestion.dividend_announcements ->
+    dividend_announcement_component) has it, without re-deriving it from `inline`. `has_opt`
+    flags a cash/scrip election, where `inline` alone cannot be trusted as the cash rate a
+    holder without the scrip option actually receives — callers skip those rather than guess."""
     url = "https://api.sgx.com/corporateactions/v1.0?cat=DIVIDEND&name=" + urllib.parse.quote(name)
     data = _get(url).get("data") or []
     by_ex, seen = {}, set()
@@ -51,7 +55,7 @@ def sgx_schedule(name):
         if not ex:
             continue
         slot = by_ex.setdefault(ex, {"pay": epoch_date(r.get("datePaid")) or epoch_date(r.get("recDate")) or ex,
-                                     "ccy": None, "inline": 0.0, "has_opt": False})
+                                     "ccy": None, "inline": 0.0, "has_opt": False, "components": []})
         part = r.get("particulars") or ""
         if "Cash Option" in part or "Scrip" in part:
             slot["has_opt"] = True
@@ -61,6 +65,8 @@ def sgx_schedule(name):
             if dkey in seen:
                 continue
             seen.add(dkey)
-            slot["ccy"] = slot["ccy"] or m.group(1)
-            slot["inline"] = round(slot["inline"] + float(m.group(2)), 8)
+            ccy, rate = m.group(1), round(float(m.group(2)), 8)
+            slot["ccy"] = slot["ccy"] or ccy
+            slot["inline"] = round(slot["inline"] + rate, 8)
+            slot["components"].append({"currency": ccy, "amount_per_unit": rate})
     return by_ex

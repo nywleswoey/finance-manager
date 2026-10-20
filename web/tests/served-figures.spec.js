@@ -205,6 +205,77 @@ test.describe("Portfolio › Dividends", () => {
       await expect(page.getByTestId("dividend-marked-regular")).toHaveCount(0);
     });
 
+  test("the Regular payments list includes an unflagged, unsplit trailing payment",
+    async ({ page, baseURL }) => {
+      // SBS Transit's own ordinary+special payment (launch brief) - this is the OTHER one,
+      // not yet split, so the heuristic counts it in full and it has nowhere else to be
+      // listed: proving "any listed payment, flagged or regular" actually reaches one.
+      const yld = readFixture("dividend-yields.json");
+      const s61 = yld.regular.find((e) => e.ticker === "S61");
+      await openView(page, baseURL, "Portfolio › Dividends");
+
+      const row = page.getByTestId("dividend-regular")
+        .locator(".pill", { hasText: "S61" }).locator("xpath=ancestor::div[1]");
+      await expect(row).toContainText(s61.pay_date);
+      await expect(row).toContainText(
+        s61.rate.toLocaleString("en-US", { minimumFractionDigits: 4 }));
+      await expect(row.getByRole("button", { name: "Split…" })).toBeVisible();
+    });
+
+  test("splitting a payment offers cached SGX components and lists the resulting breakdown",
+    async ({ page, baseURL }) => {
+      // SBS Transit's flagged 0.2442 payment (launch brief) really is 0.0845 ordinary +
+      // 0.1597 special - picking the cached SGX component sets the input, and saving moves
+      // the row from Excluded into the split list showing both halves.
+      const base = readFixture("dividend-yields.json");
+      const s61 = base.excluded.find((e) => e.ticker === "S61");
+      const splitYld = { ...base, excluded: base.excluded.filter((e) => e.ticker !== "S61"),
+                         marked_regular: [{ ...s61, id: 701, special_per_unit: 0.1597,
+                                           regular_per_unit: 0.0845, baseline: null,
+                                           baseline_type: null, ratio: null }] };
+      let saved = false;
+      let postedBody = null;
+
+      await openView(page, baseURL, "Portfolio › Dividends");
+
+      await page.route("**/api/dividend-announcement-components**", (route) =>
+        route.fulfill({ status: 200, contentType: "application/json",
+                        body: JSON.stringify({ rows: [
+                          { amount_per_unit: 0.0845, currency: "SGD" },
+                          { amount_per_unit: 0.1597, currency: "SGD" },
+                        ] }) }));
+      await page.route("**/api/dividend-yields", (route) =>
+        route.fulfill({ status: 200, contentType: "application/json",
+                        body: JSON.stringify(saved ? splitYld : base) }));
+      await page.route("**/api/dividend-flag-overrides", async (route) => {
+        if (route.request().method() !== "POST") return route.fallback();
+        postedBody = route.request().postDataJSON();
+        saved = true;
+        return route.fulfill({ status: 200, contentType: "application/json",
+                              body: JSON.stringify(splitYld) });
+      });
+
+      const excludedRow = page.getByTestId("dividend-excluded")
+        .locator(".pill", { hasText: "S61" }).locator("xpath=ancestor::div[1]");
+      await excludedRow.getByRole("button", { name: "Split…" }).click();
+      await expect(excludedRow.getByRole("button", { name: "0.1597" })).toBeVisible();
+      const mismatch = excludedRow.getByText("doesn't match a cached SGX component");
+      await expect(mismatch).toHaveCount(0);
+      await excludedRow.getByLabel("Special portion per unit").fill("0.16");
+      await expect(mismatch).toBeVisible();
+      await excludedRow.getByRole("button", { name: "0.1597" }).click();
+      await expect(mismatch).toHaveCount(0);
+      await excludedRow.getByRole("button", { name: "Save" }).click();
+
+      expect(postedBody.special_per_unit).toBe(0.1597);
+      const splitRow = page.getByTestId("dividend-marked-regular")
+        .locator(".pill", { hasText: "S61" }).locator("xpath=ancestor::div[1]");
+      await expect(splitRow).toContainText("0.0845");
+      await expect(splitRow).toContainText("0.1597");
+      await expect(page.getByTestId("dividend-excluded").locator(".pill", { hasText: "S61" }))
+        .toHaveCount(0);
+    });
+
   test("the capital-return adjustments list is the server's, DBS included",
     async ({ page, baseURL }) => {
       const adj = readFixture("dividend-capital-returns.json").rows;

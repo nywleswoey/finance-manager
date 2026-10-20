@@ -22,7 +22,7 @@ from sqlalchemy import text
 
 from portfolio import dividends
 from portfolio.models import (Account, Dividend, DividendAdjustment, DividendAnnouncement,
-                              FxRate, Price, Security, Txn)
+                              DividendAnnouncementComponent, FxRate, Price, Security, Txn)
 from tests import pgtest
 from tests.sqlitetest import current_position_sql
 
@@ -508,8 +508,9 @@ class TestYields(pgtest.Case):
     intent), an oversized payment flagged, declared vs pattern forward basis, a dividend paid in
     another currency than its price, and the SGD-weighted portfolio average. `today` is pinned the same way
     TestProjected's is."""
-    TABLES = ("dividend", "dividend_announcement", "dividend_adjustment",
-             "dividend_flag_override", "price", "txn", "fx_rate", "account", "security")
+    TABLES = ("dividend", "dividend_announcement", "dividend_announcement_component",
+             "dividend_adjustment", "dividend_flag_override", "price", "txn", "fx_rate",
+             "account", "security")
 
     def setUp(self):
         super().setUp()
@@ -531,6 +532,7 @@ class TestYields(pgtest.Case):
             Security(id=11, canonical_ticker="STALE", name="Stale Price Co", market="SG", currency="SGD"),
             Security(id=12, canonical_ticker="LONGGAP", name="Long Gap REIT", market="SG", currency="SGD"),
             Security(id=13, canonical_ticker="GONEEX", name="Gone Ex REIT", market="SG", currency="SGD"),
+            Security(id=14, canonical_ticker="S61", name="SBS Transit", market="SG", currency="SGD"),
         ])
         self.s.add(FxRate(date=TODAY, currency="USD", rate_to_sgd=Decimal("1.30")))
         self.s.add(FxRate(date=TODAY, currency="EUR", rate_to_sgd=Decimal("1.50")))
@@ -559,6 +561,10 @@ class TestYields(pgtest.Case):
     def _adjust(self, sid, amount, start, end=None, ccy="SGD", note=None):
         self.s.add(DividendAdjustment(security_id=sid, amount_per_unit=Decimal(str(amount)),
                                       currency=ccy, start_date=start, end_date=end, note=note))
+
+    def _component(self, sid, ex, amount, ccy="SGD"):
+        self.s.add(DividendAnnouncementComponent(security_id=sid, ex_date=ex,
+                                                 amount_per_unit=Decimal(str(amount)), currency=ccy))
 
     def _yields(self):
         return dividends.yields(s=self.s, today=TODAY)
@@ -639,9 +645,12 @@ class TestYields(pgtest.Case):
         self._price(4, TODAY, 200.0, ccy="USD")
         self.s.commit()
 
-        flagged = self._rows(self._yields())["OUTL"]
+        before = self._yields()
+        flagged = self._rows(before)["OUTL"]
         assert flagged["trailing_dps"] == 0.0
         assert flagged["forward_dps"] == 0.0
+        assert [e["ticker"] for e in before["excluded"]] == ["OUTL"]
+        assert not [e for e in before["regular"] if e["ticker"] == "OUTL"]
 
         dividends.add_flag_override(4, None, D(2026, 10, 1), s=self.s)
 
@@ -655,6 +664,10 @@ class TestYields(pgtest.Case):
         assert regular[0]["ratio"] == 25.0
         assert regular[0]["baseline_type"] == "seasonal"
         assert regular[0]["baseline"] == 0.01
+        # the original "mark as regular" is the zero-special case of the generalised split
+        assert regular[0]["special_per_unit"] == 0.0
+        assert regular[0]["regular_per_unit"] == 0.25
+        assert not [e for e in marked["regular"] if e["ticker"] == "OUTL"]
         override_id = regular[0]["id"]
 
         dividends.remove_flag_override(override_id, s=self.s)
@@ -856,3 +869,184 @@ class TestYields(pgtest.Case):
         d05_mv, outl_mv = 60_000.0, 13_000.0
         expected = round((d05_mv * 1.0 + outl_mv * 2.0) / (d05_mv + outl_mv), 3)
         assert out["portfolio_trailing_yield_pct"] == expected
+
+    # ------------- per-payment split: special portion (launch brief's captain's intent) -------
+
+    def test_sbs_splits_give_regular_trailing_dps_and_exclude_the_special_from_both_dps(self):
+        # SBS Transit's real shape: two payments, each an ordinary + a special rate summed into
+        # one statement line - splitting both must count only the regular portion toward
+        # trailing AND forward DPS, with the special portion listed separately.
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 5, 11), 0.4065, ex=D(2026, 4, 30))
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+
+        dividends.add_flag_override(14, D(2026, 4, 30), D(2026, 5, 11), 0.3199, s=self.s)
+        dividends.add_flag_override(14, D(2026, 8, 20), D(2026, 8, 28), 0.1597, s=self.s)
+
+        out = self._yields()
+        r = self._rows(out)["S61"]
+        assert r["trailing_dps"] == 0.1711                  # 0.0845 + 0.0866, specials excluded
+        assert r["forward_dps"] == 0.1711                   # projected forward, specials excluded too
+        assert r["trailing_yield_pct"] == round(0.1711 / 2.90 * 100, 3)
+        assert not [e for e in out["excluded"] if e["ticker"] == "S61"]
+        assert not [e for e in out["regular"] if e["ticker"] == "S61"]
+
+        splits = sorted((e for e in out["marked_regular"] if e["ticker"] == "S61"),
+                        key=lambda e: e["pay_date"])
+        assert [(e["special_per_unit"], e["regular_per_unit"]) for e in splits] == \
+            [(0.3199, 0.0866), (0.1597, 0.0845)]
+
+    def test_a_flagged_sbs_payment_is_never_excluded_once_split_and_lists_the_special(self):
+        # Same payment the heuristic would flag (its own seasonal baseline is 0.0845, this
+        # year's combined 0.2442 rate is 2.89x that) - splitting it must move it out of
+        # `excluded` into the split list for good, counting only its regular 0.0845.
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2024, 8, 20), 0.0845, ex=D(2024, 8, 10))
+        self._div(14, D(2025, 8, 20), 0.0845, ex=D(2025, 8, 10))
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+
+        before = self._yields()
+        excl = [e for e in before["excluded"] if e["ticker"] == "S61"]
+        assert len(excl) == 1
+        assert excl[0]["ratio"] == round(0.2442 / 0.0845, 2)
+        assert self._rows(before)["S61"]["trailing_dps"] == 0.0
+
+        dividends.add_flag_override(14, D(2026, 8, 20), D(2026, 8, 28), 0.1597, s=self.s)
+
+        out = self._yields()
+        assert not [e for e in out["excluded"] if e["ticker"] == "S61"]
+        assert self._rows(out)["S61"]["trailing_dps"] == 0.0845
+        split = [e for e in out["marked_regular"] if e["ticker"] == "S61"]
+        assert len(split) == 1
+        assert split[0]["special_per_unit"] == 0.1597
+        assert split[0]["regular_per_unit"] == 0.0845
+        # once the special is split out, the regular remainder (0.0845) matches its own
+        # seasonal baseline exactly - no longer outlier-shaped, so there is no "why flagged"
+        # reason left to show (contrast the zero-special "mark as regular" case below, where
+        # the payment's own rate is untouched and stays genuinely outlier-shaped).
+        assert split[0]["baseline_type"] is None
+        assert split[0]["ratio"] is None
+
+    def test_editing_a_splits_special_portion_updates_it_not_a_second_row(self):
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+
+        dividends.add_flag_override(14, D(2026, 8, 20), D(2026, 8, 28), 0.10, s=self.s)
+        dividends.add_flag_override(14, D(2026, 8, 20), D(2026, 8, 28), 0.1597, s=self.s)
+
+        assert self.s.execute(text(
+            "SELECT COUNT(*) FROM dividend_flag_override")).scalar() == 1
+        split = [e for e in self._yields()["marked_regular"] if e["ticker"] == "S61"]
+        assert split[0]["special_per_unit"] == 0.1597
+
+    def test_editing_a_split_after_a_reingest_adds_the_ex_date_updates_the_same_row(self):
+        # Split while the statement carried no ex_date (SBS's real 2026-08-28 case); a later
+        # ingest supplies ex 2026-08-20. Edit (posting the new key) must update that one row,
+        # so Clear afterwards leaves the payment unsplit.
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 8, 28), 0.2442)
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+        dividends.add_flag_override(14, None, D(2026, 8, 28), 0.10, s=self.s)
+
+        self.s.execute(text("UPDATE dividend SET ex_date = :ex WHERE pay_date = :pay"),
+                       {"ex": D(2026, 8, 20), "pay": D(2026, 8, 28)})
+        self.s.commit()
+        dividends.add_flag_override(14, D(2026, 8, 20), D(2026, 8, 28), 0.1597, s=self.s)
+
+        rows = self.s.execute(text(
+            "SELECT ex_date, pay_date, special_per_unit FROM dividend_flag_override")).all()
+        assert [(r[0], r[1], float(r[2])) for r in rows] == \
+            [(D(2026, 8, 20), D(2026, 8, 28), 0.1597)]
+        split = [e for e in self._yields()["marked_regular"] if e["ticker"] == "S61"]
+        assert [e["special_per_unit"] for e in split] == [0.1597]
+
+        dividends.remove_flag_override(split[0]["id"], s=self.s)
+        assert not [e for e in self._yields()["marked_regular"] if e["ticker"] == "S61"]
+
+    def test_a_negative_special_portion_is_rejected(self):
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self.s.commit()
+
+        with pytest.raises(ValueError):
+            dividends.add_flag_override(14, D(2026, 8, 20), D(2026, 8, 28), -0.01, s=self.s)
+        assert self.s.execute(text(
+            "SELECT COUNT(*) FROM dividend_flag_override")).scalar() == 0
+
+    def test_a_special_portion_larger_than_the_rate_is_rejected(self):
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self.s.commit()
+
+        with pytest.raises(ValueError):
+            dividends.add_flag_override(14, D(2026, 8, 20), D(2026, 8, 28), 0.30, s=self.s)
+        assert self.s.execute(text(
+            "SELECT COUNT(*) FROM dividend_flag_override")).scalar() == 0
+
+    def test_a_special_portion_exactly_equal_to_the_rate_is_allowed(self):
+        # the whole payment is special - a valid, if unusual, edge case: never a negative
+        # "regular" remainder, but exactly zero is fine.
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+
+        dividends.add_flag_override(14, D(2026, 8, 20), D(2026, 8, 28), 0.2442, s=self.s)
+
+        assert self._rows(self._yields())["S61"]["trailing_dps"] == 0.0
+
+    def test_a_split_for_an_unknown_payment_is_rejected(self):
+        self._buy(14, D(2020, 1, 1), 1000)
+        self.s.commit()
+
+        with pytest.raises(ValueError):
+            dividends.add_flag_override(14, None, D(2026, 8, 28), 0.1, s=self.s)
+
+    def test_regular_bucket_lists_plain_trailing_payments_with_no_flag_and_no_split(self):
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._div(1, D(2025, 11, 24), 0.75, ex=D(2025, 11, 13))
+        self._div(1, D(2026, 4, 17), 0.75, ex=D(2026, 4, 8))
+        self._adjust(1, 0.15, D(2025, 1, 1), note="DBS capital return")
+        self._price(1, TODAY, 74.0)
+        self.s.commit()
+
+        out = self._yields()
+        regular = sorted((e for e in out["regular"] if e["ticker"] == "D05"),
+                         key=lambda e: e["pay_date"])
+        assert [(e["rate"], e["net_rate"]) for e in regular] == [(0.75, 0.6), (0.75, 0.6)]
+        assert not [e for e in out["excluded"] if e["ticker"] == "D05"]
+        assert not [e for e in out["marked_regular"] if e["ticker"] == "D05"]
+
+    def test_split_components_returns_the_cached_sgx_rates_for_the_exact_ex_date(self):
+        self._component(14, D(2026, 8, 20), 0.0845)
+        self._component(14, D(2026, 8, 20), 0.1597)
+        self._component(14, D(2026, 4, 30), 0.0866)
+        self.s.commit()
+
+        rows = dividends.split_components(14, D(2026, 8, 20), s=self.s)
+        assert rows == [{"amount_per_unit": 0.0845, "currency": "SGD"},
+                        {"amount_per_unit": 0.1597, "currency": "SGD"}]
+        assert dividends.split_components(14, D(2026, 1, 1), s=self.s) == []
+        assert dividends.split_components(14, None, s=self.s) == []
+
+    def test_split_components_falls_back_to_pay_date_when_the_payment_has_no_ex_date(self):
+        # SBS Transit's real 2026-08-28 payment (launch brief): the statement carries no
+        # ex_date, but SGX's announcement does - matched within SAME_DISTRIBUTION_DAYS of the
+        # announcement's OWN pay_date, the same tolerance `_match_override` already allows.
+        self._announce(14, ex=D(2026, 8, 20), rate=0.2442, pay=D(2026, 8, 28))
+        self._component(14, D(2026, 8, 20), 0.0845)
+        self._component(14, D(2026, 8, 20), 0.1597)
+        self.s.commit()
+
+        rows = dividends.split_components(14, None, pay_date=D(2026, 8, 28), s=self.s)
+        assert rows == [{"amount_per_unit": 0.0845, "currency": "SGD"},
+                        {"amount_per_unit": 0.1597, "currency": "SGD"}]
+        assert dividends.split_components(14, None, pay_date=D(2026, 1, 1), s=self.s) == []
+        assert dividends.split_components(14, None, s=self.s) == []
