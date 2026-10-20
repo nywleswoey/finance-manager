@@ -552,11 +552,11 @@ def apply_capital_return(rate, currency, date, adjustments):
     return (0.0 if clamped else net), adj, clamped
 
 
-def _payment_rate(security_id, ex_date, pay_date, s):
-    """The combined per-unit rate of the one distribution at (security_id, ex_date, pay_date) -
-    an EXACT match, not `_match_override()`'s re-ingest-tolerant one: the caller already has this
-    key from a distribution `yields()` just listed, so there is no drift to allow for. None when
-    no such distribution is found (a stale key - nothing to validate a split against)."""
+def _payment(security_id, ex_date, pay_date, s):
+    """The one distribution at (security_id, ex_date, pay_date) - an EXACT match, not
+    `_match_override()`'s re-ingest-tolerant one: the caller already has this key from a
+    distribution `yields()` just listed, so there is no drift to allow for. None when no such
+    distribution is found (a stale key - nothing to validate a split against)."""
     row = fetch_dicts(s, "SELECT canonical_ticker FROM security WHERE id = :sid", {"sid": security_id})
     ticker = row[0]["canonical_ticker"] if row else None
     if ticker is None:
@@ -564,9 +564,9 @@ def _payment_rate(security_id, ex_date, pay_date, s):
     for d in distinct_distributions(ticker, s):
         if ex_date is not None:
             if d["ex_date"] == ex_date:
-                return d["rate"]
+                return d
         elif d["ex_date"] is None and d["pay_date"] == pay_date:
-            return d["rate"]
+            return d
     return None
 
 
@@ -580,35 +580,38 @@ def add_flag_override(security_id, ex_date, pay_date, special_per_unit=0, s=None
     present, else pay_date (matched by `_match_override()`).
 
     Upsert, not insert-or-skip: calling this again on an already-split payment UPDATEs its
-    special_per_unit (the Dividends tab's Edit) rather than adding a second row; the same value
+    special_per_unit (the Dividends tab's Edit) rather than adding a second row - the existing
+    row is found by `_match_override()`, the same rule `yields()` attaches it by, and its key is
+    refreshed to the payment's current (ex_date, pay_date); the same value
     twice is a true no-op (same single row either way) - this is what keeps the original
     "marking an already-marked payment again is a no-op" behaviour working unchanged.
 
     Raises ValueError when special_per_unit is negative, exceeds the payment's own combined rate
-    (`_payment_rate`, allowing float rounding noise), or matches no known distribution at all -
+    (`_payment`, allowing float rounding noise), or matches no known distribution at all -
     never persisting a split nothing can apply to."""
     special_per_unit = float(special_per_unit or 0)
     if special_per_unit < 0:
         raise ValueError("special portion cannot be negative")
-    where = "ex_date = :ex" if ex_date is not None else "ex_date IS NULL AND pay_date = :pay"
     with session_scope(s) as s:
-        rate = _payment_rate(security_id, ex_date, pay_date, s)
-        if rate is None:
+        d = _payment(security_id, ex_date, pay_date, s)
+        if d is None:
             raise ValueError("no matching dividend payment for that ex_date/pay_date")
-        if special_per_unit > rate + 1e-9:
+        if special_per_unit > d["rate"] + 1e-9:
             raise ValueError(
-                f"special portion {special_per_unit} exceeds the payment's rate {rate}")
-        existing = fetch_dicts(s,
-            f"SELECT id FROM dividend_flag_override WHERE security_id = :sid AND {where}",
-            {"sid": security_id, "ex": ex_date, "pay": pay_date})
+                f"special portion {special_per_unit} exceeds the payment's rate {d['rate']}")
+        existing = _match_override(fetch_dicts(s,
+            "SELECT id, ex_date, pay_date FROM dividend_flag_override WHERE security_id = :sid",
+            {"sid": security_id}), d)
+        params = {"sid": security_id, "ex": d["ex_date"], "pay": d["pay_date"],
+                  "sp": special_per_unit}
         if existing:
-            s.execute(text("UPDATE dividend_flag_override SET special_per_unit = :sp "
-                           "WHERE id = :id"), {"sp": special_per_unit, "id": existing[0]["id"]})
+            s.execute(text("UPDATE dividend_flag_override SET ex_date = :ex, pay_date = :pay, "
+                           "special_per_unit = :sp, source = 'user' WHERE id = :id"),
+                      {**params, "id": existing["id"]})
         else:
             s.execute(text(
                 "INSERT INTO dividend_flag_override (security_id, ex_date, pay_date, "
-                "special_per_unit) VALUES (:sid, :ex, :pay, :sp)"),
-                {"sid": security_id, "ex": ex_date, "pay": pay_date, "sp": special_per_unit})
+                "special_per_unit) VALUES (:sid, :ex, :pay, :sp)"), params)
         s.commit()
 
 

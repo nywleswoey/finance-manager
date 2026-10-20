@@ -945,6 +945,31 @@ class TestYields(pgtest.Case):
         split = [e for e in self._yields()["marked_regular"] if e["ticker"] == "S61"]
         assert split[0]["special_per_unit"] == 0.1597
 
+    def test_editing_a_split_after_a_reingest_adds_the_ex_date_updates_the_same_row(self):
+        # Split while the statement carried no ex_date (SBS's real 2026-08-28 case); a later
+        # ingest supplies ex 2026-08-20. Edit (posting the new key) must update that one row,
+        # so Clear afterwards leaves the payment unsplit.
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 8, 28), 0.2442)
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+        dividends.add_flag_override(14, None, D(2026, 8, 28), 0.10, s=self.s)
+
+        self.s.execute(text("UPDATE dividend SET ex_date = :ex WHERE pay_date = :pay"),
+                       {"ex": D(2026, 8, 20), "pay": D(2026, 8, 28)})
+        self.s.commit()
+        dividends.add_flag_override(14, D(2026, 8, 20), D(2026, 8, 28), 0.1597, s=self.s)
+
+        rows = self.s.execute(text(
+            "SELECT ex_date, pay_date, special_per_unit FROM dividend_flag_override")).all()
+        assert [(r[0], r[1], float(r[2])) for r in rows] == \
+            [(D(2026, 8, 20), D(2026, 8, 28), 0.1597)]
+        split = [e for e in self._yields()["marked_regular"] if e["ticker"] == "S61"]
+        assert [e["special_per_unit"] for e in split] == [0.1597]
+
+        dividends.remove_flag_override(split[0]["id"], s=self.s)
+        assert not [e for e in self._yields()["marked_regular"] if e["ticker"] == "S61"]
+
     def test_a_negative_special_portion_is_rejected(self):
         self._buy(14, D(2020, 1, 1), 1000)
         self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
