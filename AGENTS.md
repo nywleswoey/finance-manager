@@ -34,6 +34,12 @@ plans.
   cookie gate), `auth_settings`, `no_db`; SQLite sessions and the alembic-only
   `current_position` view SQL are in `tests/sqlitetest.py`, Postgres-only SQL goes in
   `tests/*_pg.py` via `tests/pgtest.py`, build/ scripts load via `tests/buildscript.py`.
+  `tests/pgtest.py`'s throwaway `portfolio_test` database is schema'd from `Base.metadata.
+  create_all`, not alembic - it only adds missing tables, never a column added to an
+  existing one by a later model change, so a `*_pg.py` run against a `portfolio_test` left
+  over from before such a change fails every test in the affected class with an "UndefinedColumn"
+  error. Safe fix: drop that one database (same server, `_test`-suffixed, never the app's) and
+  let the next run recreate it.
 - **ADR [0001](docs/adr/0001-do-not-unify-twr-and-performance.md): do not unify
   `performance.py` and `twr.py`.** They're deliberately separate engines; they share only
   `portfolio/xirr.py` and the flow classifier `portfolio/flows.py` (a gift is an external

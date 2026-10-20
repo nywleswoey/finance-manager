@@ -66,6 +66,10 @@ export default function Dividends() {
   // The one open split editor across all three payment lists (excluded/marked_regular/
   // regular) - keyed by the payment it edits, so opening another row's editor closes this one.
   const [editor, setEditor] = useState(null);
+  // Per-payment Normal/Special labels for the "awaiting identification" list, keyed the same
+  // way as `editor` - but every row keeps its own (unlike the single split editor), since
+  // labelling one multi-component payment has nothing to do with another's.
+  const [identify, setIdentify] = useState({});
   const phone = usePhone();
   useEffect(() => {
     get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {}, yoy_pct: {} }));
@@ -174,6 +178,49 @@ export default function Dividends() {
     );
   }
 
+  const idKey = (e) => `${e.security_id}|${e.ex_date}|${e.pay_date}`;
+
+  // This payment's current Normal/Special choices, one per cached component, in the server's
+  // own order - unset (null) until the captain picks for that component, so `allLabeled` below
+  // can tell "every component labelled" (ready to save) from "still picking" - plus its own
+  // saving/error state, like the split editor's.
+  function identifyFor(e) {
+    return identify[idKey(e)] || { labels: e.components.map(() => null), saving: false, error: null };
+  }
+
+  function setLabel(e, idx, value) {
+    const cur = identifyFor(e);
+    const labels = cur.labels.slice();
+    labels[idx] = value || null;
+    setIdentify({ ...identify, [idKey(e)]: { ...cur, labels, error: null } });
+  }
+
+  // Every component needs a label before this can save - `identify_components` takes one
+  // atomic submission (the Special amounts; everything else is implicitly Normal), never a
+  // partial one, since nothing here persists until it's called (see portfolio.dividends.
+  // identify_components's docstring for why).
+  async function submitIdentify(e) {
+    const key = idKey(e);
+    const entry = identifyFor(e);
+    const special_amounts = e.components
+      .filter((_, i) => entry.labels[i] === "special")
+      .map((c) => c.amount_per_unit);
+    setIdentify((cur) => ({ ...cur, [key]: { ...entry, saving: true, error: null } }));
+    try {
+      await post("/api/dividend-identify-components", {
+        security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date, special_amounts,
+      });
+      setIdentify((cur) => {
+        const next = { ...cur };
+        delete next[key];
+        return next;
+      });
+      setVer((v) => v + 1);
+    } catch (err) {
+      setIdentify((cur) => ({ ...cur, [key]: { ...entry, saving: false, error: err.message } }));
+    }
+  }
+
   function selectCapSecurity(e) {
     const sid = e.target.value;
     const row = (yld?.rows || []).find((r) => String(r.security_id) === sid);
@@ -219,6 +266,19 @@ export default function Dividends() {
   const chart = years.map((y) => ({ year: String(y), total: ann.totals[y] || 0 }));
   return (
     <>
+      {/* Near the top on purpose - SGX's own corporate-actions feed never says which rate line
+          of a multi-part dividend is regular and which is special (see dividends.yields()'s
+          awaiting_identification docstring), so a payment can sit unidentified indefinitely if
+          nothing here calls attention to it. */}
+      {yld?.awaiting_identification?.length > 0 && (
+        <div className="card" style={{ borderColor: "var(--warn)" }} data-testid="dividend-awaiting-identification-banner">
+          <strong style={{ color: "var(--warn)" }}>
+            {yld.awaiting_identification.length} payment{yld.awaiting_identification.length > 1 ? "s" : ""} awaiting identification
+          </strong>
+          <span className="mut"> - SGX declared these as more than one rate line without saying
+            which is regular and which is special; see "Awaiting identification" below.</span>
+        </div>
+      )}
       <div className="card">
         <h3>Annual Dividend Income&nbsp;<span className="pill">SGD · latest FX</span></h3>
         {/* The crosstab grows in COLUMNS — one per year — so horizontal scroll is the only
@@ -350,6 +410,46 @@ export default function Dividends() {
               </tbody>
             </table>
           </div>
+
+          {yld.awaiting_identification?.length > 0 && (
+            <div style={{ marginTop: 16 }} data-testid="dividend-awaiting-identification">
+              <h4 style={{ margin: "0 0 8px", color: "var(--warn)" }}>Awaiting identification&nbsp;
+                <span className="pill">{yld.awaiting_identification.length}</span>
+              </h4>
+              <p className="mut" style={{ fontSize: ".85em", margin: "0 0 8px" }}>
+                SGX declared these payments in more than one rate line without saying which is
+                regular and which is special - mark each component, then save.
+              </p>
+              {yld.awaiting_identification.map((e) => {
+                const key = idKey(e);
+                const { labels, saving, error } = identifyFor(e);
+                const allLabeled = labels.every((l) => l != null);
+                return (
+                  <div key={key}
+                      style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
+                               padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+                    <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
+                    <span className="mut">{e.pay_date}</span>
+                    {e.components.map((c, i) => (
+                      <label key={i} className="taplabel" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        {money(c.amount_per_unit, c.currency, 4)}
+                        <select value={labels[i] ?? ""} onChange={(ev) => setLabel(e, i, ev.target.value)}
+                               aria-label={`${money(c.amount_per_unit, c.currency, 4)} type`}>
+                          <option value="">…</option>
+                          <option value="normal">Normal</option>
+                          <option value="special">Special</option>
+                        </select>
+                      </label>
+                    ))}
+                    {error && <span className="neg">{error}</span>}
+                    <button type="button" disabled={!allLabeled || saving} onClick={() => submitIdentify(e)}>
+                      {saving ? "Saving…" : "Save"}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {yld.excluded.length > 0 && (
             <div style={{ marginTop: 16 }} data-testid="dividend-excluded">

@@ -297,6 +297,46 @@ def test_dividend_announcement_components_falls_back_to_pay_date_alone(client, m
     assert seen == [(4, None, D(2026, 8, 28))]
 
 
+def test_dividend_identify_components_forwards_to_identify_components(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(portfolio_routes.dividends, "identify_components",
+        lambda sid, ex, pay, special_amounts: seen.append((sid, ex, pay, special_amounts)))
+    monkeypatch.setattr(portfolio_routes.dividends, "yields", lambda: {"awaiting_identification": []})
+
+    r = client.post("/api/dividend-identify-components",
+        json={"security_id": 14, "ex_date": "2026-08-20", "pay_date": "2026-08-28",
+              "special_amounts": [0.1597]})
+
+    assert r.status_code == 200
+    assert r.json() == {"awaiting_identification": []}
+    assert seen == [(14, D(2026, 8, 20), D(2026, 8, 28), [0.1597])]
+
+
+def test_dividend_identify_components_defaults_special_amounts_to_empty(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(portfolio_routes.dividends, "identify_components",
+        lambda sid, ex, pay, special_amounts: seen.append((sid, ex, pay, special_amounts)))
+    monkeypatch.setattr(portfolio_routes.dividends, "yields", lambda: {})
+
+    r = client.post("/api/dividend-identify-components",
+        json={"security_id": 14, "ex_date": None, "pay_date": "2026-08-28"})
+
+    assert r.status_code == 200
+    assert seen == [(14, None, D(2026, 8, 28), [])]
+
+
+def test_dividend_identify_components_rejects_a_mismatched_amount_with_400(client, monkeypatch):
+    def boom(sid, ex, pay, special_amounts):
+        raise ValueError("0.9999 does not match a cached component for this payment")
+    monkeypatch.setattr(portfolio_routes.dividends, "identify_components", boom)
+
+    r = client.post("/api/dividend-identify-components",
+        json={"security_id": 14, "ex_date": "2026-08-20", "pay_date": "2026-08-28",
+              "special_amounts": [0.9999]})
+
+    assert r.status_code == 400
+
+
 def test_dividend_flag_override_remove_forwards_to_remove_flag_override(client, monkeypatch):
     seen = []
     monkeypatch.setattr(portfolio_routes.dividends, "remove_flag_override",
