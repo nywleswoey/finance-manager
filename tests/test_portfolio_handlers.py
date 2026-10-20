@@ -230,7 +230,7 @@ def test_dividend_details_is_a_pass_through(client, monkeypatch):
 def test_dividend_flag_override_add_forwards_to_add_flag_override(client, monkeypatch):
     seen = []
     monkeypatch.setattr(portfolio_routes.dividends, "add_flag_override",
-        lambda sid, ex, pay: seen.append((sid, ex, pay)))
+        lambda sid, ex, pay, special: seen.append((sid, ex, pay, special)))
     monkeypatch.setattr(portfolio_routes.dividends, "yields", lambda: {"marked_regular": []})
 
     r = client.post("/api/dividend-flag-overrides",
@@ -238,7 +238,63 @@ def test_dividend_flag_override_add_forwards_to_add_flag_override(client, monkey
 
     assert r.status_code == 200
     assert r.json() == {"marked_regular": []}
-    assert seen == [(4, None, D(2026, 10, 1))]
+    assert seen == [(4, None, D(2026, 10, 1), 0)]
+
+
+def test_dividend_flag_override_add_forwards_the_special_portion(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(portfolio_routes.dividends, "add_flag_override",
+        lambda sid, ex, pay, special: seen.append((sid, ex, pay, special)))
+    monkeypatch.setattr(portfolio_routes.dividends, "yields", lambda: {"marked_regular": []})
+
+    r = client.post("/api/dividend-flag-overrides",
+        json={"security_id": 4, "ex_date": "2026-08-28", "pay_date": "2026-08-28",
+              "special_per_unit": 0.1597})
+
+    assert r.status_code == 200
+    assert seen == [(4, D(2026, 8, 28), D(2026, 8, 28), 0.1597)]
+
+
+def test_dividend_flag_override_add_rejects_an_invalid_split_with_400(client, monkeypatch):
+    def boom(sid, ex, pay, special):
+        raise ValueError("special portion -0.1 cannot be negative")
+    monkeypatch.setattr(portfolio_routes.dividends, "add_flag_override", boom)
+
+    r = client.post("/api/dividend-flag-overrides",
+        json={"security_id": 4, "ex_date": None, "pay_date": "2026-10-01",
+              "special_per_unit": 0})
+
+    # the negative case itself is rejected by pydantic's `ge=0` before reaching the domain
+    # layer - this exercises the domain-layer ValueError -> HTTPException(400) path instead,
+    # the "exceeds the payment's rate" case pydantic cannot bound on its own.
+    assert r.status_code == 400
+
+
+def test_dividend_announcement_components_is_a_pass_through(client, monkeypatch):
+    seen = []
+    rows = [{"amount_per_unit": 0.0845, "currency": "SGD"},
+            {"amount_per_unit": 0.1597, "currency": "SGD"}]
+    monkeypatch.setattr(portfolio_routes.dividends, "split_components",
+        lambda sid, ex, pay: seen.append((sid, ex, pay)) or rows)
+
+    r = client.get("/api/dividend-announcement-components",
+                   params={"security_id": 4, "ex_date": "2026-08-20", "pay_date": "2026-08-28"})
+
+    assert r.status_code == 200
+    assert r.json() == {"rows": rows}
+    assert seen == [(4, D(2026, 8, 20), D(2026, 8, 28))]
+
+
+def test_dividend_announcement_components_falls_back_to_pay_date_alone(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(portfolio_routes.dividends, "split_components",
+        lambda sid, ex, pay: seen.append((sid, ex, pay)) or [])
+
+    r = client.get("/api/dividend-announcement-components",
+                   params={"security_id": 4, "pay_date": "2026-08-28"})
+
+    assert r.status_code == 200
+    assert seen == [(4, None, D(2026, 8, 28))]
 
 
 def test_dividend_flag_override_remove_forwards_to_remove_flag_override(client, monkeypatch):

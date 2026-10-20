@@ -63,6 +63,9 @@ export default function Dividends() {
   const [capBusy, setCapBusy] = useState(false);
   const [ver, setVer] = useState(0);
   const [yldSort, setYldSort] = useState({ key: null, dir: "desc" });
+  // The one open split editor across all three payment lists (excluded/marked_regular/
+  // regular) - keyed by the payment it edits, so opening another row's editor closes this one.
+  const [editor, setEditor] = useState(null);
   const phone = usePhone();
   useEffect(() => {
     get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {}, yoy_pct: {} }));
@@ -87,13 +90,88 @@ export default function Dividends() {
 
   async function markRegular(e) {
     await post("/api/dividend-flag-overrides",
-      { security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date });
+      { security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date, special_per_unit: 0 });
     setVer((v) => v + 1);
   }
 
   async function unmarkRegular(id) {
     await del("/api/dividend-flag-overrides/" + id);
     setVer((v) => v + 1);
+  }
+
+  const editorKey = (e) => `${e.security_id}|${e.ex_date}|${e.pay_date}`;
+
+  // Opens the split editor on `e` (any of excluded/marked_regular/regular's rows share this
+  // shape), pre-filled with `initial` (0 for a fresh split, the existing special_per_unit for
+  // Edit) - and lazily fetches the cached SGX component rates for it so the user can pick one
+  // instead of typing (the launch brief's scope addition), rather than fetching proactively
+  // for every listed payment up front. `pay_date` goes along even when the payment has its own
+  // ex_date - the server falls back to it when ex_date is missing (SBS Transit's real
+  // 2026-08-28 payment carries none).
+  async function openEditor(e, initial) {
+    const key = editorKey(e);
+    setEditor({ key, security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date,
+               value: String(initial ?? 0), error: null, saving: false, components: null });
+    const params = new URLSearchParams({ security_id: e.security_id, pay_date: e.pay_date });
+    if (e.ex_date) params.set("ex_date", e.ex_date);
+    try {
+      const r = await get(`/api/dividend-announcement-components?${params}`);
+      setEditor((cur) => (cur?.key === key ? { ...cur, components: r.rows } : cur));
+    } catch {
+      setEditor((cur) => (cur?.key === key ? { ...cur, components: [] } : cur));
+    }
+  }
+
+  function closeEditor() { setEditor(null); }
+
+  async function saveEditor() {
+    if (!editor) return;
+    setEditor({ ...editor, saving: true, error: null });
+    try {
+      await post("/api/dividend-flag-overrides", {
+        security_id: editor.security_id, ex_date: editor.ex_date, pay_date: editor.pay_date,
+        special_per_unit: Number(editor.value || 0),
+      });
+      setEditor(null);
+      setVer((v) => v + 1);
+    } catch (err) {
+      setEditor((cur) => (cur ? { ...cur, saving: false, error: err.message } : cur));
+    }
+  }
+
+  // The split editor, inline below whichever row opened it - `flexBasis: "100%"` inside that
+  // row's flex-wrap container is what makes it drop to its own line under the row's other
+  // fields rather than widen the row sideways.
+  function splitEditor(e) {
+    if (editor?.key !== editorKey(e)) return null;
+    const value = Number(editor.value);
+    const noMatch = editor.components?.length > 0 && editor.value !== "" && !isNaN(value) &&
+      !editor.components.some((c) => Math.abs(c.amount_per_unit - value) < 0.0005);
+    return (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 10px", alignItems: "center",
+                   flexBasis: "100%", marginTop: 4, paddingLeft: 16 }}>
+        <input type="number" step="0.0001" placeholder="Special /u" value={editor.value}
+              onChange={(ev) => setEditor({ ...editor, value: ev.target.value })}
+              style={{ width: 110 }} aria-label="Special portion per unit" />
+        {editor.components == null && <span className="mut" style={{ fontSize: ".8em" }}>loading SGX rates…</span>}
+        {editor.components?.length > 0 && (
+          <span className="mut" style={{ fontSize: ".8em" }}>SGX components:</span>
+        )}
+        {editor.components?.map((c, i) => (
+          <button key={i} type="button" className="link-btn"
+                 onClick={() => setEditor({ ...editor, value: String(c.amount_per_unit) })}>
+            {money(c.amount_per_unit, c.currency, 4)}
+          </button>
+        ))}
+        {noMatch &&
+          <span className="mut" style={{ color: "var(--warn)" }}>doesn't match a cached SGX component</span>}
+        {editor.error && <span className="neg">{editor.error}</span>}
+        <button type="button" disabled={editor.saving} onClick={saveEditor}>
+          {editor.saving ? "Saving…" : "Save"}
+        </button>
+        <button type="button" className="link-btn" onClick={closeEditor}>Cancel</button>
+      </div>
+    );
   }
 
   function selectCapSecurity(e) {
@@ -292,6 +370,8 @@ export default function Dividends() {
                     &nbsp;({money(e.baseline, e.currency, 4)})
                   </span>
                   <button className="link-btn" onClick={() => markRegular(e)}>Mark as regular</button>
+                  <button className="link-btn" onClick={() => openEditor(e, 0)}>Split…</button>
+                  {splitEditor(e)}
                 </div>
               ))}
             </div>
@@ -299,20 +379,51 @@ export default function Dividends() {
 
           {yld.marked_regular?.length > 0 && (
             <div style={{ marginTop: 16 }} data-testid="dividend-marked-regular">
-              <h4 style={{ margin: "0 0 8px" }}>Marked as regular</h4>
+              <h4 style={{ margin: "0 0 8px" }}>Marked as regular / split</h4>
               {yld.marked_regular.map((e) => (
                 <div key={e.id}
                     style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
                              padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
                   <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
                   <span className="mut">{e.pay_date}</span>
+                  {e.special_per_unit > 0 ? (
+                    <span>{money(e.regular_per_unit, e.currency, 4)} regular
+                      <span className="mut"> + {money(e.special_per_unit, e.currency, 4)} special</span>
+                    </span>
+                  ) : (
+                    <span>{money(e.rate, e.currency, 4)} regular</span>
+                  )}
+                  {e.baseline_type &&
+                    <span className="mut">
+                      ({fmt(e.ratio, 1)}x vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
+                      &nbsp;{money(e.baseline, e.currency, 4)})
+                    </span>}
+                  <button className="link-btn" onClick={() => openEditor(e, e.special_per_unit)}>Edit</button>
+                  <button className="link-btn" onClick={() => unmarkRegular(e.id)}>
+                    {e.special_per_unit > 0 ? "Clear" : "Unmark"}
+                  </button>
+                  {splitEditor(e)}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {yld.regular?.length > 0 && (
+            <div style={{ marginTop: 16 }} data-testid="dividend-regular">
+              <h4 style={{ margin: "0 0 8px" }}>Regular payments&nbsp;
+                <span className="mut" style={{ fontWeight: 400, fontSize: ".8em" }}>
+                  last 12 months, nothing flagged or split - split one if it was really part special
+                </span>
+              </h4>
+              {yld.regular.map((e) => (
+                <div key={e.security_id + "-" + e.pay_date}
+                    style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
+                             padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+                  <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
+                  <span className="mut">{e.pay_date}</span>
                   <span>{money(e.rate, e.currency, 4)}</span>
-                  <span className="mut">{fmt(e.ratio, 1)}x</span>
-                  <span className="mut">
-                    vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
-                    &nbsp;({money(e.baseline, e.currency, 4)})
-                  </span>
-                  <button className="link-btn" onClick={() => unmarkRegular(e.id)}>Unmark</button>
+                  <button className="link-btn" onClick={() => openEditor(e, 0)}>Split…</button>
+                  {splitEditor(e)}
                 </div>
               ))}
             </div>

@@ -18,6 +18,11 @@ name matched — see its docstring). A holding with no matching candidate is lef
 here, and `projected()` falls back to last year's pattern for it — the required graceful
 degradation, not a special case. If the SGX request itself fails, the run stops there, keeps
 what already resolved, and the remaining holdings fall back the same way.
+
+Each ex-date's unsummed line-item rates also land in `dividend_announcement_component` (e.g.
+an ordinary + a special rate) - not read by `projected()`, only by the Dividends tab's
+split-entry UI (portfolio.dividends.split_components) so the user can pick a cached SGX
+component instead of typing one.
 """
 import datetime as dt
 import http.client
@@ -25,13 +30,14 @@ import os
 import re
 import sys
 import time
+from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import text
 
 from ingestion.prices import sg_today
 from portfolio.db import SessionLocal
-from portfolio.models import DividendAnnouncement
+from portfolio.models import DividendAnnouncement, DividendAnnouncementComponent
 from portfolio.sgx import sgx_schedule
 
 # how far back to keep: enough to cross-check against, not the security's whole SGX history
@@ -135,6 +141,15 @@ def main(today=None):
                 security_id=sid, ex_date=ex, pay_date=slot["pay"],
                 amount_per_unit=round(slot["inline"], 6), currency=slot["ccy"] or "SGD",
                 source="sgx"))
+            # components wholesale-replaced, not merged: a corrected SGX announcement (a
+            # line-item rate changed between runs) must not leave a stale row behind.
+            s.execute(text("DELETE FROM dividend_announcement_component "
+                           "WHERE security_id = :sid AND ex_date = :ex"), {"sid": sid, "ex": ex})
+            for comp in slot.get("components") or []:
+                s.add(DividendAnnouncementComponent(
+                    security_id=sid, ex_date=ex,
+                    amount_per_unit=Decimal(str(comp["amount_per_unit"])),
+                    currency=comp["currency"]))
             rows_written += 1
     s.commit()
     summary = (f"dividend announcements: {len(matched)} securities matched ({rows_written} rows), "

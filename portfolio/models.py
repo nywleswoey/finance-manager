@@ -175,21 +175,52 @@ class DividendAdjustment(Base):
 
 
 class DividendFlagOverride(Base):
-    """A distribution the user declared regular despite OUTLIER_MULT flagging it as possibly
-    special (NVIDIA's 2026-10-01 rate hike, a real SEC-announced increase, is the motivating
-    case) - persisted so the override survives a re-ingest and both yields in
-    portfolio.dividends.yields() count the payment as regular again. Keyed the same way
-    `_distributions()` groups one: ex_date when the distribution has one, else pay_date.
-    Deleting the row un-marks it - the Dividends tab's "Marked as regular" list reads this
-    table, undo removes from it."""
+    """A per-payment split the user declared: `special_per_unit` is the special portion of the
+    distribution's combined per-unit rate (SBS's 0.2442 = 0.0845 normal + 0.1597 special is the
+    motivating case) - persisted so it survives a re-ingest and portfolio.dividends.yields()
+    counts only the regular part (rate minus special_per_unit, net of any dividend_adjustment)
+    toward trailing/forward DPS, listing the special part separately. `special_per_unit = 0` is
+    the original "mark as regular" case (NVIDIA's 2026-10-01 rate hike, a real SEC-announced
+    increase that OUTLIER_MULT would otherwise flag as possibly special) - a payment with ANY
+    row here is never auto-flagged, see `_classify`. `source` records who declared the split
+    ("user" today; reserved for an automated classifier later - a follow-up, not built here).
+    Keyed the same way `_distributions()` groups a distribution: ex_date when it has one, else
+    pay_date. Deleting the row clears the split entirely - the Dividends tab's split list reads
+    this table, Unmark/Clear removes from it."""
     __tablename__ = "dividend_flag_override"
     id: Mapped[int] = mapped_column(primary_key=True)
     security_id: Mapped[int] = mapped_column(ForeignKey("security.id"), index=True)
     ex_date: Mapped[dt.date | None] = mapped_column(Date)
     pay_date: Mapped[dt.date] = mapped_column(Date)
+    special_per_unit: Mapped[Decimal] = mapped_column(RATE, nullable=False, server_default="0")
+    source: Mapped[str] = mapped_column(String(16), nullable=False, server_default="user")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     __table_args__ = (UniqueConstraint("security_id", "ex_date", "pay_date",
-                                       name="uq_dividend_flag_override"),)
+                                       name="uq_dividend_flag_override"),
+                      CheckConstraint("special_per_unit >= 0",
+                                      name="ck_dividend_flag_override_special_nonneg"),
+                      CheckConstraint("source in ('user', 'automatic')",
+                                      name="ck_dividend_flag_override_source"))
+
+
+class DividendAnnouncementComponent(Base):
+    """One SGX-declared line-item rate for an announced distribution (ingestion.
+    dividend_announcements) - e.g. SBS Transit's 2026-04-30 ex-date carries two rows here, SGD
+    0.0866 and SGD 0.3199, that `dividend_announcement.amount_per_unit` sums to 0.4065.
+    `DividendAnnouncement` stays the single summed-rate-per-ex-date row the forward projection
+    reads; this table exists only so the Dividends tab's split-entry UI can offer the user the
+    exact cached SGX component rates to pick from instead of typing one by hand
+    (portfolio.dividends.split_components). Re-ingestion replaces a given (security_id, ex_date)
+    pair's rows wholesale rather than merging, so a corrected SGX announcement can't leave a
+    stale component behind."""
+    __tablename__ = "dividend_announcement_component"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    security_id: Mapped[int] = mapped_column(ForeignKey("security.id"), index=True)
+    ex_date: Mapped[dt.date] = mapped_column(Date, index=True)
+    amount_per_unit: Mapped[Decimal] = mapped_column(RATE)
+    currency: Mapped[str] = mapped_column(String(3))
+    __table_args__ = (UniqueConstraint("security_id", "ex_date", "amount_per_unit", "currency",
+                                       name="uq_dividend_announcement_component"),)
 
 
 # ---------------- spending (cash-flow ledger) ----------------

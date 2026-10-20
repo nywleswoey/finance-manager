@@ -472,14 +472,18 @@ def projected(s=None, today=None):
 
 # ---------------- dividend yield (trailing + forward, special payments excluded) ----------------
 #
-# One thing nothing in the ingested data distinguishes from an ordinary regular dividend, so it
-# can't be derived - only declared by the user and persisted, surviving a re-ingest:
+# Two things nothing in the ingested data distinguishes from an ordinary regular dividend, so
+# they can't be derived - only declared by the user and persisted, surviving a re-ingest:
 #
 #   dividend_adjustment    a recurring non-ordinary per-unit component (DBS's quarterly capital
 #                           return is the known case) folded into the SAME summed rate as the
 #                           ordinary dividend by both the statement rows and the SGX cache
 #                           (portfolio.sgx's `particulars` text no longer carries "ordinary" /
 #                           "special" / "capital return" wording — see data/fmyield/report.md).
+#   dividend_flag_override  a per-payment split: the special portion of one payment's combined
+#                           rate (SBS Transit's ordinary + special dividend paid the same day is
+#                           the known case), `special_per_unit` 0 meaning the whole payment is
+#                           regular (the original "mark as regular" case, see DividendFlagOverride).
 #
 # Everything else here is derived, reusing distinct_distributions() for the per-unit rate and
 # the same DRIFT_DAYS/_anniversary primitives projected() already uses to roll a payment forward
@@ -548,29 +552,100 @@ def apply_capital_return(rate, currency, date, adjustments):
     return (0.0 if clamped else net), adj, clamped
 
 
-def add_flag_override(security_id, ex_date, pay_date, s=None):
-    """Mark a distribution OUTLIER_MULT would otherwise flag as regular - persisted so it
-    survives a re-ingest and stays regular in both yields(). Keyed like _distributions()
-    groups a distribution: ex_date when present, else pay_date (matched by `_override_id()`).
-    Idempotent - marking an already-marked payment again is a no-op, not a duplicate row."""
+def _payment_rate(security_id, ex_date, pay_date, s):
+    """The combined per-unit rate of the one distribution at (security_id, ex_date, pay_date) -
+    an EXACT match, not `_match_override()`'s re-ingest-tolerant one: the caller already has this
+    key from a distribution `yields()` just listed, so there is no drift to allow for. None when
+    no such distribution is found (a stale key - nothing to validate a split against)."""
+    row = fetch_dicts(s, "SELECT canonical_ticker FROM security WHERE id = :sid", {"sid": security_id})
+    ticker = row[0]["canonical_ticker"] if row else None
+    if ticker is None:
+        return None
+    for d in distinct_distributions(ticker, s):
+        if ex_date is not None:
+            if d["ex_date"] == ex_date:
+                return d["rate"]
+        elif d["ex_date"] is None and d["pay_date"] == pay_date:
+            return d["rate"]
+    return None
+
+
+def add_flag_override(security_id, ex_date, pay_date, special_per_unit=0, s=None):
+    """Record a per-payment split: `special_per_unit` is the user-declared special portion of
+    the payment's combined per-unit rate, in the payment's own currency - 0 (the default) is the
+    original "mark as regular" case, where the whole payment is regular. Persisted so it survives
+    a re-ingest and `yields()` never auto-flags the payment and counts only the regular part
+    (rate minus special_per_unit) toward trailing/forward DPS - see DividendFlagOverride and
+    `_net_distributions()`. Keyed like `_distributions()` groups a distribution: ex_date when
+    present, else pay_date (matched by `_match_override()`).
+
+    Upsert, not insert-or-skip: calling this again on an already-split payment UPDATEs its
+    special_per_unit (the Dividends tab's Edit) rather than adding a second row; the same value
+    twice is a true no-op (same single row either way) - this is what keeps the original
+    "marking an already-marked payment again is a no-op" behaviour working unchanged.
+
+    Raises ValueError when special_per_unit is negative, exceeds the payment's own combined rate
+    (`_payment_rate`, allowing float rounding noise), or matches no known distribution at all -
+    never persisting a split nothing can apply to."""
+    special_per_unit = float(special_per_unit or 0)
+    if special_per_unit < 0:
+        raise ValueError("special portion cannot be negative")
     where = "ex_date = :ex" if ex_date is not None else "ex_date IS NULL AND pay_date = :pay"
     with session_scope(s) as s:
+        rate = _payment_rate(security_id, ex_date, pay_date, s)
+        if rate is None:
+            raise ValueError("no matching dividend payment for that ex_date/pay_date")
+        if special_per_unit > rate + 1e-9:
+            raise ValueError(
+                f"special portion {special_per_unit} exceeds the payment's rate {rate}")
         existing = fetch_dicts(s,
             f"SELECT id FROM dividend_flag_override WHERE security_id = :sid AND {where}",
             {"sid": security_id, "ex": ex_date, "pay": pay_date})
         if existing:
-            return
-        s.execute(text(
-            "INSERT INTO dividend_flag_override (security_id, ex_date, pay_date) "
-            "VALUES (:sid, :ex, :pay)"),
-            {"sid": security_id, "ex": ex_date, "pay": pay_date})
+            s.execute(text("UPDATE dividend_flag_override SET special_per_unit = :sp "
+                           "WHERE id = :id"), {"sp": special_per_unit, "id": existing[0]["id"]})
+        else:
+            s.execute(text(
+                "INSERT INTO dividend_flag_override (security_id, ex_date, pay_date, "
+                "special_per_unit) VALUES (:sid, :ex, :pay, :sp)"),
+                {"sid": security_id, "ex": ex_date, "pay": pay_date, "sp": special_per_unit})
         s.commit()
 
 
 def remove_flag_override(override_id, s=None):
+    """Clear a payment's split entirely (Unmark/Clear) - both the original zero-special "mark as
+    regular" case and a true split end the same way, a plain delete."""
     with session_scope(s) as s:
         s.execute(text("DELETE FROM dividend_flag_override WHERE id = :id"), {"id": override_id})
         s.commit()
+
+
+def split_components(security_id, ex_date, pay_date=None, s=None):
+    """Cached SGX per-component rates for one payment (`dividend_announcement_component`, filled
+    by ingestion.dividend_announcements) - for the Dividends tab's split-entry UI to offer the
+    user a button per declared line-item rate instead of typing one by hand. When the payment
+    itself has no ex_date (SBS Transit's 2026-08-28 payment is the real case - the statement
+    carried none), `pay_date` is matched against `dividend_announcement`'s own pay_date within
+    SAME_DISTRIBUTION_DAYS to recover the ex_date components are keyed by, the same tolerance
+    `_match_override` already allows an ex-date-less override. Empty when nothing is cached: a
+    non-SG/non-SGX-matched security, no match at all, or SGX reported only one line item - the
+    UI falls back to free typing either way, this is a convenience, never a requirement."""
+    with session_scope(s) as s:
+        if ex_date is None:
+            if pay_date is None:
+                return []
+            match = fetch_dicts(s,
+                "SELECT ex_date FROM dividend_announcement WHERE security_id = :sid "
+                "AND ABS(pay_date - :pay) <= :window ORDER BY ABS(pay_date - :pay) LIMIT 1",
+                {"sid": security_id, "pay": pay_date, "window": SAME_DISTRIBUTION_DAYS})
+            if not match:
+                return []
+            ex_date = match[0]["ex_date"]
+        rows = fetch_dicts(s,
+            "SELECT amount_per_unit, currency FROM dividend_announcement_component "
+            "WHERE security_id = :sid AND ex_date = :ex ORDER BY amount_per_unit",
+            {"sid": security_id, "ex": ex_date})
+    return [{"amount_per_unit": num(r["amount_per_unit"]), "currency": r["currency"]} for r in rows]
 
 
 def _seasonal_baseline(distributions, d):
@@ -588,30 +663,30 @@ def _seasonal_baseline(distributions, d):
     return None
 
 
-def _override_id(overrides, d):
-    """The dividend_flag_override id (`overrides`: rows of id/ex_date/pay_date) marking
-    distribution `d` regular, else None. Matched the way `_distributions()` tells one
-    distribution from another: an override with an ex_date on that ex_date, one without on a
-    pay_date within SAME_DISTRIBUTION_DAYS - so marking a payment before a later ingest supplies
-    its ex_date (or another account's earlier pay_date) still holds."""
+def _match_override(overrides, d):
+    """The dividend_flag_override row (id/ex_date/pay_date/special_per_unit) applying to
+    distribution `d`, else None. Matched the way `_distributions()` tells one distribution from
+    another: an override with an ex_date on that ex_date, one without on a pay_date within
+    SAME_DISTRIBUTION_DAYS - so marking a payment before a later ingest supplies its ex_date (or
+    another account's earlier pay_date) still holds."""
     for o in overrides:
         if o["ex_date"] is not None and o["ex_date"] == d["ex_date"]:
-            return o["id"]
+            return o
     for o in overrides:
         if o["ex_date"] is None \
                 and abs((o["pay_date"] - d["pay_date"]).days) <= SAME_DISTRIBUTION_DAYS:
-            return o["id"]
+            return o
     return None
 
 
-def _classify(distributions, overrides):
+def _classify(distributions):
     """Mutate each of `distributions` (already carrying `net_rate`, see `_net_distributions`)
     with `flagged` (bool, the raw possibly-special heuristic) and, when flagged,
-    `flag_baseline` / `flag_baseline_type` / `flag_ratio` explaining why, plus `override_id`
-    (the dividend_flag_override id when the user declared it regular, see `_override_id()`,
-    else None) and `overridden` (bool). A
-    flagged-and-overridden distribution still gets its baseline/ratio (the "Marked as regular"
-    list's reason) but no longer excludes from regular DPS - see yields().
+    `flag_baseline` / `flag_baseline_type` / `flag_ratio` explaining why. This is the raw
+    heuristic's own verdict, independent of any recorded split (`has_split`, attached by
+    `_net_distributions`) - a flagged-and-split distribution still gets its baseline/ratio (the
+    split list's "why this one was flagged" context) but no longer excludes from regular DPS,
+    via `has_split` rather than `flagged` - see yields().
 
     Flagged when the net rate is more than OUTLIER_MULT x BOTH its seasonal baseline (same slot,
     a year or two earlier) AND the ticker's all-time median net rate (needs >= 3 distributions to
@@ -624,8 +699,6 @@ def _classify(distributions, overrides):
         outlier_global = median_rate is not None and d["net_rate"] > OUTLIER_MULT * median_rate
         is_outlier = outlier_global if seasonal is None else (outlier_seasonal and outlier_global)
         d["flagged"] = bool(is_outlier)
-        d["override_id"] = _override_id(overrides, d) if is_outlier else None
-        d["overridden"] = d["override_id"] is not None
         if is_outlier:
             baseline = seasonal if seasonal is not None else median_rate
             d["flag_baseline"] = round(baseline, 6)
@@ -635,12 +708,24 @@ def _classify(distributions, overrides):
             d["flag_baseline"] = d["flag_baseline_type"] = d["flag_ratio"] = None
 
 
-def _net_distributions(distributions, adjustments):
-    """Attach `net_rate` / `capital_return` / `capital_return_clamped` to each of `distributions`
-    in place — the capital-return deduction, matched by ex_date else pay_date."""
+def _net_distributions(distributions, adjustments, overrides):
+    """Attach `special_per_unit` / `override_id` / `has_split` / `regular_rate` / `net_rate` /
+    `capital_return` / `capital_return_clamped` to each of `distributions` in place.
+    `regular_rate` is the combined declared rate minus any recorded split's special portion
+    (`_match_override`, 0/None when there is none); `net_rate` is that regular rate net of any
+    active dividend_adjustment (capital-return deduction, matched by ex_date else pay_date) -
+    the figure trailing/forward DPS sum and `_classify()`'s flagging compares against. A
+    distribution with no split behaves exactly as it did before this split existed
+    (`special_per_unit` 0, `regular_rate` == `rate`)."""
     for d in distributions:
+        match = _match_override(overrides, d)
+        special = float(match["special_per_unit"]) if match else 0.0
+        d["special_per_unit"] = special
+        d["override_id"] = match["id"] if match else None
+        d["has_split"] = match is not None
+        d["regular_rate"] = round(d["rate"] - special, 6)
         date = d["ex_date"] or d["pay_date"]
-        net, adj, clamped = apply_capital_return(d["rate"], d["currency"], date, adjustments)
+        net, adj, clamped = apply_capital_return(d["regular_rate"], d["currency"], date, adjustments)
         d["net_rate"], d["capital_return"], d["capital_return_clamped"] = net, adj, clamped
 
 
@@ -706,14 +791,17 @@ def _forward(trailing_regular, declared):
 
 
 def yields(s=None, today=None):
-    """Per-held-counter trailing/forward regular dividend yield, special and capital-return
-    payments excluded — the Dividends tab's yield columns.
+    """Per-held-counter trailing/forward regular dividend yield, special portions and
+    capital-return payments excluded — the Dividends tab's yield columns.
 
     For each currently-held ticker: distinct_distributions() for its full per-unit-rate history,
-    net of any active dividend_adjustment (`_net_distributions`), then `_classify` to exclude any
-    oversized payment. Trailing regular DPS sums the net rate of every regular distribution paid
-    in the last 365 days. Forward regular DPS is `_forward()` over those and every SGX-declared
-    announcement (`dividend_announcement`, itself net of capital return) paid (pay_date, else
+    net of any recorded split's special portion then any active dividend_adjustment
+    (`_net_distributions`), then `_classify` to flag any oversized payment. Trailing regular DPS
+    sums the net rate of every regular-or-split distribution paid in the last 365 days - a split
+    distribution's special portion never counts, whether or not it was also flagged (see
+    `has_split` below). Forward regular DPS is `_forward()` over those and every SGX-declared
+    announcement (`dividend_announcement`, itself net of capital return - announcements are not
+    split, so a future special dividend there is not yet excludable) paid (pay_date, else
     ex_date) in the next 365 days - a ticker built only from declared rates is `basis`
     "declared", only from the trailing pattern "pattern", from both "declared+pattern", from
     neither "none". This is the same rolling-12-months analogue of what projected() already does
@@ -731,11 +819,17 @@ def yields(s=None, today=None):
     dividend shows `0.0` - the two stay visually distinct from each other, and from each other
     alone, consistently.
 
-    `excluded` lists every flagged-and-not-overridden trailing distribution across every held
-    counter, for the tab's "Excluded as possibly special" list. `marked_regular` lists every
-    flagged distribution the user declared regular (dividend_flag_override), trailing window or
-    not, for the tab's "Marked as regular" list - each carries the same baseline/ratio reason as
-    `excluded` plus the override's `id` for the tab's Unmark action."""
+    `excluded` lists every flagged-and-unsplit trailing distribution across every held counter,
+    for the tab's "Excluded as possibly special" list. `regular` lists every OTHER trailing
+    distribution with no recorded split (the ordinary case) - together with `excluded` and
+    `marked_regular` below, every trailing-window distribution of every held counter appears in
+    exactly one of the three, so the Dividends tab can offer a split on any of them, flagged or
+    not. `marked_regular` lists every distribution carrying a split (dividend_flag_override),
+    trailing window or not, for the tab's split list - `special_per_unit` is the recorded special
+    portion (0 for the original "mark as regular" case) and `regular_per_unit` is the rate minus
+    it (what `net_rate` further nets of any capital-return adjustment); a split distribution that
+    the raw heuristic would also have flagged still carries `baseline`/`baseline_type`/`ratio`
+    (the "why this one was flagged" context), null otherwise."""
     today = today or sg_today()
     trail_start = today - dt.timedelta(days=365)
     fwd_end = today + dt.timedelta(days=365)
@@ -756,9 +850,10 @@ def yields(s=None, today=None):
             adjustments_by_sec[r["security_id"]].append(
                 {**r, "amount_per_unit": num(r["amount_per_unit"])})
         overrides_by_sec = defaultdict(list)
-        for r in fetch_dicts(s, "SELECT id, security_id, ex_date, pay_date "
+        for r in fetch_dicts(s, "SELECT id, security_id, ex_date, pay_date, special_per_unit "
                                 "FROM dividend_flag_override"):
-            overrides_by_sec[r["security_id"]].append(r)
+            overrides_by_sec[r["security_id"]].append(
+                {**r, "special_per_unit": num(r["special_per_unit"])})
         announced_by_sec = defaultdict(list)
         for r in fetch_dicts(s,
                 "SELECT security_id, ex_date, pay_date, amount_per_unit, currency "
@@ -771,7 +866,7 @@ def yields(s=None, today=None):
         for r in details(s)["rows"]:
             rows_by_ticker[r["ticker"]].append(r)
 
-    rows, excluded, marked_regular = [], [], []
+    rows, excluded, marked_regular, regular = [], [], [], []
     for h in sorted(holdings, key=lambda h: h["ticker"]):
         tk = h["ticker"]
         sec = securities.get(tk)
@@ -782,14 +877,14 @@ def yields(s=None, today=None):
         overrides = overrides_by_sec.get(sid, [])
 
         distributions = _distributions(rows_by_ticker.get(tk, []))
-        _net_distributions(distributions, adjustments)
-        _classify(distributions, overrides)
+        _net_distributions(distributions, adjustments, overrides)
+        _classify(distributions)
 
         trailing = [d for d in distributions if trail_start <= d["pay_date"] <= today]
-        trailing_regular = [d for d in trailing if not d["flagged"] or d["overridden"]]
+        trailing_regular = [d for d in trailing if not d["flagged"] or d["has_split"]]
 
         for d in trailing:
-            if d["flagged"] and not d["overridden"]:
+            if d["flagged"] and not d["has_split"]:
                 excluded.append({
                     "ticker": tk, "name": sec["name"], "security_id": sid,
                     "ex_date": iso(d["ex_date"]), "pay_date": iso(d["pay_date"]),
@@ -797,8 +892,15 @@ def yields(s=None, today=None):
                     "currency": d["currency"], "baseline": d["flag_baseline"],
                     "baseline_type": d["flag_baseline_type"], "ratio": d["flag_ratio"],
                 })
+            elif not d["has_split"]:
+                regular.append({
+                    "ticker": tk, "name": sec["name"], "security_id": sid,
+                    "ex_date": iso(d["ex_date"]), "pay_date": iso(d["pay_date"]),
+                    "rate": d["rate"], "net_rate": round(d["net_rate"], 6),
+                    "currency": d["currency"],
+                })
         for d in distributions:
-            if d["overridden"]:
+            if d["has_split"]:
                 marked_regular.append({
                     "id": d["override_id"],
                     "ticker": tk, "name": sec["name"], "security_id": sid,
@@ -806,6 +908,8 @@ def yields(s=None, today=None):
                     "rate": d["rate"], "net_rate": round(d["net_rate"], 6),
                     "currency": d["currency"], "baseline": d["flag_baseline"],
                     "baseline_type": d["flag_baseline_type"], "ratio": d["flag_ratio"],
+                    "special_per_unit": round(d["special_per_unit"], 6),
+                    "regular_per_unit": round(d["regular_rate"], 6),
                 })
 
         declared = [(a, apply_capital_return(a["amount_per_unit"], a["currency"],
@@ -866,4 +970,5 @@ def yields(s=None, today=None):
         "total_mv_sgd": round(total_mv, 2),
         "excluded": sorted(excluded, key=lambda e: (e["pay_date"] or "", e["ticker"])),
         "marked_regular": sorted(marked_regular, key=lambda e: (e["pay_date"] or "", e["ticker"])),
+        "regular": sorted(regular, key=lambda e: (e["pay_date"] or "", e["ticker"])),
     }

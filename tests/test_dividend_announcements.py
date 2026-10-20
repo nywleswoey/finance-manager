@@ -21,7 +21,8 @@ from sqlalchemy import text
 
 import ingestion.dividend_announcements as da
 from ingestion.dividend_announcements import _candidate_names
-from portfolio.models import Account, DividendAnnouncement, Security, SecurityAlias, Txn
+from portfolio.models import (Account, DividendAnnouncement, DividendAnnouncementComponent,
+                              Security, SecurityAlias, Txn)
 from tests.sqlitetest import current_position_sql, make_session, make_sessionmaker
 
 
@@ -228,6 +229,77 @@ class TestMainTransportFailure(unittest.TestCase):
 
         with self.assertRaises(KeyError):
             self._run(Session, KeyError("exDate"))
+
+    def _first_only(self, sched):
+        """A `sgx_schedule` stand-in that returns `sched` for the first held security's own-name
+        lookup and nothing for any other (so `_seed`'s second security, O39, stays unmatched and
+        writes nothing) - the same isolation `test_commits_resolved_holdings_and_stops_at_the_
+        first_failure` gets from its transport-failure shape, without the failure."""
+        first = []
+        def sgx(name):
+            if first:
+                return {}
+            first.append(name)
+            return sched
+        return sgx
+
+    def test_components_are_stored_alongside_the_summed_announcement(self):
+        # SBS Transit's shape (launch brief): an ordinary + special line item sums to the
+        # announcement's amount_per_unit, but each also lands in
+        # dividend_announcement_component for the split-entry UI to offer.
+        Session = make_sessionmaker()
+        with Session() as s:
+            self._seed(s)
+        sched = {dt.date(2025, 2, 14): {
+            "pay": dt.date(2025, 3, 1), "ccy": "SGD", "inline": 0.2442, "has_opt": False,
+            "components": [{"currency": "SGD", "amount_per_unit": 0.0845},
+                           {"currency": "SGD", "amount_per_unit": 0.1597}]}}
+
+        self._run(Session, self._first_only(sched))
+
+        with Session() as s:
+            rows = s.query(DividendAnnouncementComponent).order_by(
+                DividendAnnouncementComponent.amount_per_unit).all()
+            self.assertEqual([(r.security_id, r.ex_date, float(r.amount_per_unit), r.currency)
+                             for r in rows],
+                             [(1, dt.date(2025, 2, 14), 0.0845, "SGD"),
+                              (1, dt.date(2025, 2, 14), 0.1597, "SGD")])
+
+    def test_an_ex_date_missing_components_writes_none(self):
+        # sgx_schedule's real return always carries "components", but a hand-built schedule
+        # dict (as this module's own earlier tests use) may not - must not crash.
+        Session = make_sessionmaker()
+        with Session() as s:
+            self._seed(s)
+        sched = {dt.date(2025, 2, 14): {"pay": dt.date(2025, 3, 1), "ccy": "SGD",
+                                         "inline": 0.12, "has_opt": False}}
+
+        result, _, _ = self._run(Session, self._first_only(sched))
+
+        self.assertEqual(result["rows"], 1)
+        with Session() as s:
+            self.assertEqual(s.query(DividendAnnouncementComponent).count(), 0)
+
+    def test_reingest_replaces_components_wholesale(self):
+        Session = make_sessionmaker()
+        with Session() as s:
+            self._seed(s)
+        first = {dt.date(2025, 2, 14): {
+            "pay": dt.date(2025, 3, 1), "ccy": "SGD", "inline": 0.12, "has_opt": False,
+            "components": [{"currency": "SGD", "amount_per_unit": 0.12}]}}
+        second = {dt.date(2025, 2, 14): {
+            "pay": dt.date(2025, 3, 1), "ccy": "SGD", "inline": 0.20, "has_opt": False,
+            "components": [{"currency": "SGD", "amount_per_unit": 0.08},
+                           {"currency": "SGD", "amount_per_unit": 0.12}]}}
+
+        self._run(Session, self._first_only(first))
+        self._run(Session, self._first_only(second))
+
+        with Session() as s:
+            rows = s.query(DividendAnnouncementComponent).order_by(
+                DividendAnnouncementComponent.amount_per_unit).all()
+            self.assertEqual([float(r.amount_per_unit) for r in rows], [0.08, 0.12])
+
 
 if __name__ == "__main__":
     unittest.main()
