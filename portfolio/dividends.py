@@ -637,13 +637,21 @@ def identify_components(security_id, ex_date, pay_date, special_amounts, s=None)
     go stale under a corrected SGX announcement.
 
     Raises ValueError when the payment has fewer than two cached components (nothing to
-    identify - `yields()` never lists one here) or `special_amounts` contains a rate that
-    doesn't match any cached component (stale UI state - the components list changed under the
-    caller; re-fetch and retry)."""
+    identify - `yields()` never lists one here), any component is declared in a currency other
+    than the payment's own (a special portion must be in the payment's currency - `yields()`
+    never lists such a payment either), or `special_amounts` contains a rate that doesn't match
+    any cached component (stale UI state - the components list changed under the caller;
+    re-fetch and retry)."""
     with session_scope(s) as s:
         comps = split_components(security_id, ex_date, pay_date, s)
         if len(comps) < 2:
             raise ValueError("payment has fewer than two declared components - nothing to identify")
+        d = _payment(security_id, ex_date, pay_date, s)
+        if d is None:
+            raise ValueError("no matching dividend payment for that ex_date/pay_date")
+        if any(c["currency"] != d["currency"] for c in comps):
+            raise ValueError(
+                f"components are not all declared in the payment's currency {d['currency']}")
         remaining = list(comps)
         total_special = 0.0
         for amt in special_amounts:
@@ -887,7 +895,8 @@ def yields(s=None, today=None):
     `marked_regular`) whose SGX announcement cached more than one `dividend_announcement_component`
     line and carries no split yet - SGX's corporate-actions API never says which component is
     the regular rate and which is special (#captain's intent), so these need the captain's own
-    call. Each entry carries `components` (the cached per-unit rates) for the Dividends tab to
+    call. A payment whose components aren't all in its own currency is left out (a special
+    portion is recorded in the payment's currency - see `identify_components`). Each entry carries `components` (the cached per-unit rates) for the Dividends tab to
     list with a Normal/Special choice; `portfolio.dividends.identify_components` turns that
     choice into the usual `dividend_flag_override` split once every component is labelled.
     Until then the payment is untouched - still `excluded` if the raw heuristic flags it,
@@ -958,7 +967,8 @@ def yields(s=None, today=None):
                                     components_by_sec, all_announced_by_sec)
             d["components"] = [{"amount_per_unit": c["amount_per_unit"], "currency": c["currency"]}
                                for c in comps]
-            d["needs_identification"] = len(comps) > 1 and not d["has_split"]
+            d["needs_identification"] = (len(comps) > 1 and not d["has_split"] and
+                                         all(c["currency"] == d["currency"] for c in comps))
 
         trailing = [d for d in distributions if trail_start <= d["pay_date"] <= today]
         trailing_regular = [d for d in trailing if not d["flagged"] or d["has_split"]]
@@ -1060,5 +1070,4 @@ def yields(s=None, today=None):
         "regular": sorted(regular, key=lambda e: (e["pay_date"] or "", e["ticker"])),
         "awaiting_identification": sorted(awaiting_identification,
                                           key=lambda e: (e["pay_date"] or "", e["ticker"])),
-        "awaiting_identification_count": len(awaiting_identification),
     }

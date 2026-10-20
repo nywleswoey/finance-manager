@@ -182,15 +182,17 @@ export default function Dividends() {
 
   // This payment's current Normal/Special choices, one per cached component, in the server's
   // own order - unset (null) until the captain picks for that component, so `allLabeled` below
-  // can tell "every component labelled" (ready to save) from "still picking".
-  function labelsFor(e) {
-    return identify[idKey(e)] || e.components.map(() => null);
+  // can tell "every component labelled" (ready to save) from "still picking" - plus its own
+  // saving/error state, like the split editor's.
+  function identifyFor(e) {
+    return identify[idKey(e)] || { labels: e.components.map(() => null), saving: false, error: null };
   }
 
   function setLabel(e, idx, value) {
-    const labels = labelsFor(e).slice();
+    const cur = identifyFor(e);
+    const labels = cur.labels.slice();
     labels[idx] = value || null;
-    setIdentify({ ...identify, [idKey(e)]: labels });
+    setIdentify({ ...identify, [idKey(e)]: { ...cur, labels, error: null } });
   }
 
   // Every component needs a label before this can save - `identify_components` takes one
@@ -198,19 +200,25 @@ export default function Dividends() {
   // partial one, since nothing here persists until it's called (see portfolio.dividends.
   // identify_components's docstring for why).
   async function submitIdentify(e) {
-    const labels = labelsFor(e);
+    const key = idKey(e);
+    const entry = identifyFor(e);
     const special_amounts = e.components
-      .filter((_, i) => labels[i] === "special")
+      .filter((_, i) => entry.labels[i] === "special")
       .map((c) => c.amount_per_unit);
-    await post("/api/dividend-identify-components", {
-      security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date, special_amounts,
-    });
-    setIdentify((cur) => {
-      const next = { ...cur };
-      delete next[idKey(e)];
-      return next;
-    });
-    setVer((v) => v + 1);
+    setIdentify((cur) => ({ ...cur, [key]: { ...entry, saving: true, error: null } }));
+    try {
+      await post("/api/dividend-identify-components", {
+        security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date, special_amounts,
+      });
+      setIdentify((cur) => {
+        const next = { ...cur };
+        delete next[key];
+        return next;
+      });
+      setVer((v) => v + 1);
+    } catch (err) {
+      setIdentify((cur) => ({ ...cur, [key]: { ...entry, saving: false, error: err.message } }));
+    }
   }
 
   function selectCapSecurity(e) {
@@ -262,10 +270,10 @@ export default function Dividends() {
           of a multi-part dividend is regular and which is special (see dividends.yields()'s
           awaiting_identification docstring), so a payment can sit unidentified indefinitely if
           nothing here calls attention to it. */}
-      {yld?.awaiting_identification_count > 0 && (
+      {yld?.awaiting_identification?.length > 0 && (
         <div className="card" style={{ borderColor: "var(--warn)" }} data-testid="dividend-awaiting-identification-banner">
           <strong style={{ color: "var(--warn)" }}>
-            {yld.awaiting_identification_count} payment{yld.awaiting_identification_count > 1 ? "s" : ""} awaiting identification
+            {yld.awaiting_identification.length} payment{yld.awaiting_identification.length > 1 ? "s" : ""} awaiting identification
           </strong>
           <span className="mut"> - SGX declared these as more than one rate line without saying
             which is regular and which is special; see "Awaiting identification" below.</span>
@@ -406,7 +414,7 @@ export default function Dividends() {
           {yld.awaiting_identification?.length > 0 && (
             <div style={{ marginTop: 16 }} data-testid="dividend-awaiting-identification">
               <h4 style={{ margin: "0 0 8px", color: "var(--warn)" }}>Awaiting identification&nbsp;
-                <span className="pill">{yld.awaiting_identification_count}</span>
+                <span className="pill">{yld.awaiting_identification.length}</span>
               </h4>
               <p className="mut" style={{ fontSize: ".85em", margin: "0 0 8px" }}>
                 SGX declared these payments in more than one rate line without saying which is
@@ -414,7 +422,7 @@ export default function Dividends() {
               </p>
               {yld.awaiting_identification.map((e) => {
                 const key = idKey(e);
-                const labels = labelsFor(e);
+                const { labels, saving, error } = identifyFor(e);
                 const allLabeled = labels.every((l) => l != null);
                 return (
                   <div key={key}
@@ -433,8 +441,9 @@ export default function Dividends() {
                         </select>
                       </label>
                     ))}
-                    <button type="button" disabled={!allLabeled} onClick={() => submitIdentify(e)}>
-                      Save
+                    {error && <span className="neg">{error}</span>}
+                    <button type="button" disabled={!allLabeled || saving} onClick={() => submitIdentify(e)}>
+                      {saving ? "Saving…" : "Save"}
                     </button>
                   </div>
                 );

@@ -1073,10 +1073,10 @@ class TestYields(pgtest.Case):
         self.s.commit()
 
         out = self._yields()
-        assert out["awaiting_identification_count"] == 3
         flagged = sorted((e for e in out["awaiting_identification"] if e["ticker"] == "S61"),
                          key=lambda e: e["ex_date"])
         assert [e["ex_date"] for e in flagged] == ["2025-05-02", "2026-04-30", "2026-08-20"]
+        assert len(out["awaiting_identification"]) == 3
         assert [sorted(c["amount_per_unit"] for c in e["components"]) for e in flagged] == \
             [[0.0841, 0.1469], [0.0866, 0.3199], [0.0845, 0.1597]]
         assert not [e for e in out["excluded"] if e["ticker"] == "S61"]
@@ -1148,5 +1148,22 @@ class TestYields(pgtest.Case):
 
         with pytest.raises(ValueError):
             dividends.identify_components(14, D(2026, 8, 20), D(2026, 8, 28), [0.9999], s=self.s)
+        assert self.s.execute(text(
+            "SELECT COUNT(*) FROM dividend_flag_override")).scalar() == 0
+
+    def test_components_in_another_currency_are_neither_listed_nor_identifiable(self):
+        # An SGX counter declaring in USD while the statement records the payment in SGD - a
+        # USD special subtracted from an SGD rate would silently corrupt the regular DPS.
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self._component(14, D(2026, 8, 20), 0.0845, ccy="USD")
+        self._component(14, D(2026, 8, 20), 0.1597, ccy="USD")
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+
+        out = self._yields()
+        assert not [e for e in out["awaiting_identification"] if e["ticker"] == "S61"]
+        with pytest.raises(ValueError, match="currency"):
+            dividends.identify_components(14, D(2026, 8, 20), D(2026, 8, 28), [0.1597], s=self.s)
         assert self.s.execute(text(
             "SELECT COUNT(*) FROM dividend_flag_override")).scalar() == 0
