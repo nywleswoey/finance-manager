@@ -119,6 +119,13 @@ export default defineConfig({
       testMatch: /served-figures\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // The Dividend Yield table's click-to-sort headers — row order and `aria-sort`, not
+    // layout, so one viewport, on the same reasoning as `served-figures`.
+    {
+      name: "dividend-yield-sort",
+      testMatch: /dividend-yield-sort\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
       testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts|editors|tablet|tap|split-width|phone-layout)\.spec\.js/,
