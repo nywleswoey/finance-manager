@@ -483,6 +483,11 @@ payload's `total`/`total_sgd` and, under "flagged only", `flagged`/`flagged_sgd`
 captured book tracks none) rather than the raw amounts of mixed cadences; and the spending source
 filter offers exactly `/api/spending/window`'s `sources`, under their `label`s.
 
+`tests/dividend-yield-sort.spec.js` — the Dividend Yield table's click-to-sort headers (Security,
+Trailing yield, Expected yield): first-click direction, the flip on a second click, `aria-sort`,
+keyboard activation, and a dash (`null` yield) staying last either way. Row order, not layout, so
+one viewport in a project of its own, like `served-figures.spec.js`.
+
 `tests/viewports.js` — the ten viewports, declared once. They mirror `RESPONSIVE.md`'s table
 one-for-one and a test fails if the two lists drift apart.
 

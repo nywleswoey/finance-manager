@@ -21,6 +21,37 @@ const expectedMonth = (d) => monthYear(Date.parse(d.expected_date || d.pay_date 
 // announced rows are per distribution and carry none.
 const ofAccount = (r) => (r.account ? ` (${r.account})` : "");
 
+// Click-to-sort table header: numeric columns default to descending (biggest first) on their
+// first click, text columns to ascending (A→Z) — `defaultDir` lets a caller flip that per
+// column. A null/undefined value (the yield columns' dash) always sorts last in either
+// direction, so `sortRows` never has to be told which columns can hold one.
+function sortRows(rows, sort) {
+  if (!sort.key) return rows;
+  const dirMul = sort.dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const av = a[sort.key], bv = b[sort.key];
+    if (av == null && bv == null) return 0;
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    return typeof av === "string" ? dirMul * av.localeCompare(bv) : dirMul * (av - bv);
+  });
+}
+
+function SortTh({ sortKey, label, defaultDir, sort, onSort, className, title }) {
+  const active = sort.key === sortKey;
+  const ariaSort = active ? (sort.dir === "asc" ? "ascending" : "descending") : "none";
+  const activate = () => onSort(sortKey, defaultDir);
+  return (
+    <th className={className} title={title} role="columnheader" aria-sort={ariaSort}
+        tabIndex={0} style={{ cursor: "pointer" }}
+        onClick={activate}
+        onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(); } }}>
+      {label}
+      {active && <span aria-hidden="true" style={{ marginLeft: 4 }}>{sort.dir === "asc" ? "▲" : "▼"}</span>}
+    </th>
+  );
+}
+
 export default function Dividends() {
   const [ann, setAnn] = useState(null);
   const [det, setDet] = useState(null);
@@ -31,6 +62,7 @@ export default function Dividends() {
   const [capForm, setCapForm] = useState(CAP_RETURN_EMPTY);
   const [capBusy, setCapBusy] = useState(false);
   const [ver, setVer] = useState(0);
+  const [yldSort, setYldSort] = useState({ key: null, dir: "desc" });
   const phone = usePhone();
   useEffect(() => {
     get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {}, yoy_pct: {} }));
@@ -71,6 +103,12 @@ export default function Dividends() {
   }
   const setCap = (k) => (e) => setCapForm({ ...capForm, [k]: e.target.value });
 
+  function toggleYldSort(key, defaultDir) {
+    setYldSort((prev) => prev.key === key
+      ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+      : { key, dir: defaultDir });
+  }
+
   async function submitAdjustment(e) {
     e.preventDefault();
     setCapBusy(true);
@@ -97,6 +135,7 @@ export default function Dividends() {
   // here would be a second sum of dividends in the browser, and not the same number.
   const shownN = det ? (onlyFlagged ? det.flagged : det.total) : 0;
   const shownSgd = det ? (onlyFlagged ? det.flagged_sgd : det.total_sgd) : 0;
+  const yldRows = yld ? sortRows(yld.rows, yldSort) : [];
   const years = ann.years;                                   // newest → oldest
   const yoy = (y) => ann.yoy_pct?.[y] ?? null;               // vs the year before, server-side
   const chart = years.map((y) => ({ year: String(y), total: ann.totals[y] || 0 }));
@@ -190,14 +229,20 @@ export default function Dividends() {
           <div className="pinned hscroll">
             <table>
               <thead><tr>
-                <th className="l">Security</th><th className="l">Mkt</th>
+                <SortTh sortKey="name" label="Security" defaultDir="asc" className="l"
+                        sort={yldSort} onSort={toggleYldSort} />
+                <th className="l">Mkt</th>
                 <th title="latest close, native currency">Price</th>
-                <th title="last 12 months' regular dividends ÷ latest price, special and capital-return payments excluded">Trailing yield</th>
-                <th title="next 12 months' expected regular dividends ÷ latest price">Expected yield</th>
+                <SortTh sortKey="trailing_yield_pct" label="Trailing yield" defaultDir="desc"
+                        sort={yldSort} onSort={toggleYldSort}
+                        title="last 12 months' regular dividends ÷ latest price, special and capital-return payments excluded" />
+                <SortTh sortKey="forward_yield_pct" label="Expected yield" defaultDir="desc"
+                        sort={yldSort} onSort={toggleYldSort}
+                        title="next 12 months' expected regular dividends ÷ latest price" />
                 <th className="l">Basis</th>
               </tr></thead>
               <tbody>
-                {yld.rows.map((r) => (
+                {yldRows.map((r) => (
                   <tr key={r.ticker}>
                     {/* `whiteSpace: normal` against the sheet's blanket `nowrap` (th, td): this
                         column's content (a full security name, its ticker and sometimes a
