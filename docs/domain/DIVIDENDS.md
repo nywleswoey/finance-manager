@@ -241,23 +241,22 @@ SGD-market-value-weighted portfolio average. Two kinds of payment are kept out o
   (`/api/dividend-capital-returns`) and subtracted from every payment and announcement it covers.
   The table is user data, not ingested: re-ingesting never touches it.
 
-**Per-payment split** (`dividend_flag_override`, keyed by ex_date else pay_date like the
-override above - `_match_override`) is how a flagged-or-not payment's special portion is
+**Per-payment split** (`dividend_flag_override`, user data like `dividend_adjustment`, keyed by
+ex_date else pay_date - `_match_override`) is how a flagged-or-not payment's special portion is
 separated from its regular one: `special_per_unit` (`POST /api/dividend-flag-overrides`, with
 `ex_date`/`pay_date` identifying the payment) is the user-declared special rate in the
 payment's own currency; the regular remainder (`rate - special_per_unit`) is what counts toward
 both yields, further net of any `dividend_adjustment`, and the special portion is listed
 separately under "Marked as regular / split" (`marked_regular`, carrying `special_per_unit` /
 `regular_per_unit`) rather than excluded wholesale. `special_per_unit = 0` is the original "mark
-as regular" case - a payment with ANY split row is never auto-flagged (`has_split` in
-`_net_distributions`/`yields()`), regardless of what the raw `_classify` heuristic would say
-about its (now split-net) rate. `DELETE /api/dividend-flag-overrides/{id}` clears a split
+as regular" case - a payment with ANY split row is never excluded as possibly special
+(`has_split` in `_net_distributions`/`yields()`), regardless of what the raw `_classify`
+heuristic would say about its (now split-net) rate. `DELETE /api/dividend-flag-overrides/{id}` clears a split
 entirely, both cases the same way. Every trailing-window distribution of a held counter lands in
 exactly one of `excluded` / `marked_regular` / `regular` (the third: unflagged, unsplit, the
 ordinary case) - so the Dividends tab can offer a split on any of them, not just a flagged one.
 SBS Transit's 2026-08-28 (0.0845 ordinary + 0.1597 special) and 2026-05-11 (0.0866 + 0.3199) are
-the real motivating payments (launch brief's captain's intent) - one flagged and excluded, the
-other counted in full, until split.
+the real motivating payments - one flagged and excluded, the other counted in full, until split.
 
 SGX's own per-line-item rates for an announced ex-date (e.g. SBS Transit's ordinary + special
 line) are cached unsummed in `dividend_announcement_component` (ingestion.dividend_announcements,

@@ -182,7 +182,7 @@ class DividendFlagOverride(Base):
     toward trailing/forward DPS, listing the special part separately. `special_per_unit = 0` is
     the original "mark as regular" case (NVIDIA's 2026-10-01 rate hike, a real SEC-announced
     increase that OUTLIER_MULT would otherwise flag as possibly special) - a payment with ANY
-    row here is never auto-flagged, see `_classify`. `source` records who declared the split
+    row here is never excluded as possibly special, see `yields()`. `source` records who declared the split
     ("user" today; reserved for an automated classifier later - a follow-up, not built here).
     Keyed the same way `_distributions()` groups a distribution: ex_date when it has one, else
     pay_date. Deleting the row clears the split entirely - the Dividends tab's split list reads
