@@ -623,6 +623,39 @@ def remove_flag_override(override_id, s=None):
         s.commit()
 
 
+def identify_components(security_id, ex_date, pay_date, special_amounts, s=None):
+    """Resolve a multi-component payment's Normal/Special labelling (the Dividends tab's
+    "awaiting identification" list, see `yields()`) into a `dividend_flag_override` split:
+    `special_amounts` is the per-unit rate of every cached `dividend_announcement_component`
+    the captain marked Special - every OTHER cached component for that payment is implicitly
+    Normal. Their summed total becomes the payment's recorded special portion via
+    `add_flag_override` (source='user') - the only state this persists. The Normal/Special
+    choice itself is never stored per component: `dividend_announcement_component` is
+    wholesale-replaced on every re-ingest (see ingestion.dividend_announcements), so a column
+    there couldn't survive one, and the Dividends tab instead asks for every component's label
+    again each time, in one atomic submission, rather than caching a partial answer that could
+    go stale under a corrected SGX announcement.
+
+    Raises ValueError when the payment has fewer than two cached components (nothing to
+    identify - `yields()` never lists one here) or `special_amounts` contains a rate that
+    doesn't match any cached component (stale UI state - the components list changed under the
+    caller; re-fetch and retry)."""
+    with session_scope(s) as s:
+        comps = split_components(security_id, ex_date, pay_date, s)
+        if len(comps) < 2:
+            raise ValueError("payment has fewer than two declared components - nothing to identify")
+        remaining = list(comps)
+        total_special = 0.0
+        for amt in special_amounts:
+            amt = float(amt)
+            match = next((c for c in remaining if abs(c["amount_per_unit"] - amt) < 1e-6), None)
+            if match is None:
+                raise ValueError(f"{amt} does not match a cached component for this payment")
+            remaining.remove(match)
+            total_special += match["amount_per_unit"]
+        add_flag_override(security_id, ex_date, pay_date, special_per_unit=round(total_special, 6), s=s)
+
+
 def split_components(security_id, ex_date, pay_date=None, s=None):
     """Cached SGX per-component rates for one payment (`dividend_announcement_component`, filled
     by ingestion.dividend_announcements) - for the Dividends tab's split-entry UI to offer the
@@ -649,6 +682,22 @@ def split_components(security_id, ex_date, pay_date=None, s=None):
             "WHERE security_id = :sid AND ex_date = :ex ORDER BY amount_per_unit",
             {"sid": security_id, "ex": ex_date})
     return [{"amount_per_unit": num(r["amount_per_unit"]), "currency": r["currency"]} for r in rows]
+
+
+def _components_for(sid, ex_date, pay_date, components_by_sec, announced_by_sec):
+    """`dividend_announcement_component` rows cached for one payment - the same lookup
+    `split_components()` does (own ex_date, else its announcement matched within
+    SAME_DISTRIBUTION_DAYS of pay_date), against already-prefetched data rather than a query
+    per distribution - `yields()`'s batch path, over every held security's full history."""
+    if ex_date is None:
+        if pay_date is None:
+            return []
+        candidates = [a for a in announced_by_sec.get(sid, [])
+                     if abs((a["pay_date"] - pay_date).days) <= SAME_DISTRIBUTION_DAYS]
+        if not candidates:
+            return []
+        ex_date = min(candidates, key=lambda a: abs((a["pay_date"] - pay_date).days))["ex_date"]
+    return [c for c in components_by_sec.get(sid, []) if c["ex_date"] == ex_date]
 
 
 def _seasonal_baseline(distributions, d):
@@ -832,7 +881,18 @@ def yields(s=None, today=None):
     portion (0 for the original "mark as regular" case) and `regular_per_unit` is the rate minus
     it (what `net_rate` further nets of any capital-return adjustment); a split distribution that
     the raw heuristic would also have flagged still carries `baseline`/`baseline_type`/`ratio`
-    (the "why this one was flagged" context), null otherwise."""
+    (the "why this one was flagged" context), null otherwise.
+
+    `awaiting_identification` lists every distribution (trailing window or not, same scope as
+    `marked_regular`) whose SGX announcement cached more than one `dividend_announcement_component`
+    line and carries no split yet - SGX's corporate-actions API never says which component is
+    the regular rate and which is special (#captain's intent), so these need the captain's own
+    call. Each entry carries `components` (the cached per-unit rates) for the Dividends tab to
+    list with a Normal/Special choice; `portfolio.dividends.identify_components` turns that
+    choice into the usual `dividend_flag_override` split once every component is labelled.
+    Until then the payment is untouched - still `excluded` if the raw heuristic flags it,
+    `regular` otherwise - exactly as before this existed. A single-component payment is never
+    listed here."""
     today = today or sg_today()
     trail_start = today - dt.timedelta(days=365)
     fwd_end = today + dt.timedelta(days=365)
@@ -865,11 +925,22 @@ def yields(s=None, today=None):
                 {"today": today, "fwd_end": fwd_end}):
             announced_by_sec[r["security_id"]].append(
                 {**r, "amount_per_unit": num(r["amount_per_unit"])})
+        # every announcement, not just the next-365-days window above - the ex-date-less
+        # fallback match (`_components_for`, same tolerance `split_components` allows) needs a
+        # past payment's own ex_date too, not only an upcoming one's.
+        all_announced_by_sec = defaultdict(list)
+        for r in fetch_dicts(s, "SELECT security_id, ex_date, pay_date FROM dividend_announcement"):
+            all_announced_by_sec[r["security_id"]].append(r)
+        components_by_sec = defaultdict(list)
+        for r in fetch_dicts(s, "SELECT security_id, ex_date, amount_per_unit, currency "
+                                "FROM dividend_announcement_component"):
+            components_by_sec[r["security_id"]].append(
+                {**r, "amount_per_unit": num(r["amount_per_unit"])})
         rows_by_ticker = defaultdict(list)
         for r in details(s)["rows"]:
             rows_by_ticker[r["ticker"]].append(r)
 
-    rows, excluded, marked_regular, regular = [], [], [], []
+    rows, excluded, marked_regular, regular, awaiting_identification = [], [], [], [], []
     for h in sorted(holdings, key=lambda h: h["ticker"]):
         tk = h["ticker"]
         sec = securities.get(tk)
@@ -882,6 +953,12 @@ def yields(s=None, today=None):
         distributions = _distributions(rows_by_ticker.get(tk, []))
         _net_distributions(distributions, adjustments, overrides)
         _classify(distributions)
+        for d in distributions:
+            comps = _components_for(sid, d["ex_date"], d["pay_date"],
+                                    components_by_sec, all_announced_by_sec)
+            d["components"] = [{"amount_per_unit": c["amount_per_unit"], "currency": c["currency"]}
+                               for c in comps]
+            d["needs_identification"] = len(comps) > 1 and not d["has_split"]
 
         trailing = [d for d in distributions if trail_start <= d["pay_date"] <= today]
         trailing_regular = [d for d in trailing if not d["flagged"] or d["has_split"]]
@@ -913,6 +990,13 @@ def yields(s=None, today=None):
                     "baseline_type": d["flag_baseline_type"], "ratio": d["flag_ratio"],
                     "special_per_unit": round(d["special_per_unit"], 6),
                     "regular_per_unit": round(d["regular_rate"], 6),
+                })
+            if d["needs_identification"]:
+                awaiting_identification.append({
+                    "ticker": tk, "name": sec["name"], "security_id": sid,
+                    "ex_date": iso(d["ex_date"]), "pay_date": iso(d["pay_date"]),
+                    "rate": d["rate"], "currency": d["currency"],
+                    "components": d["components"],
                 })
 
         declared = [(a, apply_capital_return(a["amount_per_unit"], a["currency"],
@@ -974,4 +1058,7 @@ def yields(s=None, today=None):
         "excluded": sorted(excluded, key=lambda e: (e["pay_date"] or "", e["ticker"])),
         "marked_regular": sorted(marked_regular, key=lambda e: (e["pay_date"] or "", e["ticker"])),
         "regular": sorted(regular, key=lambda e: (e["pay_date"] or "", e["ticker"])),
+        "awaiting_identification": sorted(awaiting_identification,
+                                          key=lambda e: (e["pay_date"] or "", e["ticker"])),
+        "awaiting_identification_count": len(awaiting_identification),
     }

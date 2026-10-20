@@ -8,6 +8,7 @@ that /api/refresh-prices and the cron handler in server.main clear — server.ma
 """
 import datetime as dt
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -327,6 +328,26 @@ def dividend_announcement_components(security_id: int = Query(gt=0),
                                      ex_date: dt.date | None = None,
                                      pay_date: dt.date | None = None):
     return {"rows": dividends.split_components(security_id, ex_date, pay_date)}
+
+
+class IdentifyComponentsIn(BaseModel):
+    security_id: int = Field(gt=0)
+    ex_date: dt.date | None = None
+    pay_date: dt.date
+    # bounded like FlagOverrideIn.special_per_unit above (SECURITY-05); max_length=20 is
+    # already generous for a cached SGX component list (two or three in practice)
+    special_amounts: Annotated[list[Annotated[float, Field(ge=0, le=1_000_000)]],
+                               Field(max_length=20)] = Field(default_factory=list)
+
+
+@router.post("/api/dividend-identify-components")
+def dividend_identify_components(body: IdentifyComponentsIn):
+    try:
+        dividends.identify_components(body.security_id, body.ex_date, body.pay_date,
+                                      body.special_amounts)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from None
+    return dividends.yields()
 
 
 @router.get("/api/transactions")

@@ -1050,3 +1050,103 @@ class TestYields(pgtest.Case):
                         {"amount_per_unit": 0.1597, "currency": "SGD"}]
         assert dividends.split_components(14, None, pay_date=D(2026, 1, 1), s=self.s) == []
         assert dividends.split_components(14, None, s=self.s) == []
+
+    # ------------- awaiting identification: SGX never says normal vs special (captain's -----
+    # ------------- revised decision - record as separate rows, flag for the captain to call) -
+
+    def test_sbs_three_real_multi_component_payments_are_flagged_for_identification(self):
+        # SBS Transit's three real multi-part dividends (launch brief) - each ex-date carries
+        # two cached SGX components and no recorded split yet, so all three must surface
+        # regardless of the trailing window (same all-distributions scope as marked_regular),
+        # and nothing about excluded/regular changes until they're identified.
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2025, 5, 12), 0.0841 + 0.1469, ex=D(2025, 5, 2))
+        self._div(14, D(2026, 5, 11), 0.0866 + 0.3199, ex=D(2026, 4, 30))
+        self._div(14, D(2026, 8, 28), 0.0845 + 0.1597, ex=D(2026, 8, 20))
+        self._component(14, D(2025, 5, 2), 0.0841)
+        self._component(14, D(2025, 5, 2), 0.1469)
+        self._component(14, D(2026, 4, 30), 0.0866)
+        self._component(14, D(2026, 4, 30), 0.3199)
+        self._component(14, D(2026, 8, 20), 0.0845)
+        self._component(14, D(2026, 8, 20), 0.1597)
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+
+        out = self._yields()
+        assert out["awaiting_identification_count"] == 3
+        flagged = sorted((e for e in out["awaiting_identification"] if e["ticker"] == "S61"),
+                         key=lambda e: e["ex_date"])
+        assert [e["ex_date"] for e in flagged] == ["2025-05-02", "2026-04-30", "2026-08-20"]
+        assert [sorted(c["amount_per_unit"] for c in e["components"]) for e in flagged] == \
+            [[0.0841, 0.1469], [0.0866, 0.3199], [0.0845, 0.1597]]
+        assert not [e for e in out["excluded"] if e["ticker"] == "S61"]
+
+    def test_identifying_components_records_the_special_and_gives_correct_regular_dps(self):
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 5, 11), 0.4065, ex=D(2026, 4, 30))
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self._component(14, D(2026, 4, 30), 0.0866)
+        self._component(14, D(2026, 4, 30), 0.3199)
+        self._component(14, D(2026, 8, 20), 0.0845)
+        self._component(14, D(2026, 8, 20), 0.1597)
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+
+        before = self._yields()
+        assert len([e for e in before["awaiting_identification"] if e["ticker"] == "S61"]) == 2
+
+        dividends.identify_components(14, D(2026, 4, 30), D(2026, 5, 11), [0.3199], s=self.s)
+        dividends.identify_components(14, D(2026, 8, 20), D(2026, 8, 28), [0.1597], s=self.s)
+
+        out = self._yields()
+        assert not [e for e in out["awaiting_identification"] if e["ticker"] == "S61"]
+        assert self._rows(out)["S61"]["trailing_dps"] == 0.1711
+        splits = sorted((e for e in out["marked_regular"] if e["ticker"] == "S61"),
+                        key=lambda e: e["pay_date"])
+        assert [(e["special_per_unit"], e["regular_per_unit"]) for e in splits] == \
+            [(0.3199, 0.0866), (0.1597, 0.0845)]
+
+    def test_a_single_component_payment_is_never_flagged_for_identification(self):
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._div(1, D(2026, 5, 1), 0.60, ex=D(2026, 4, 20))
+        self._component(1, D(2026, 4, 20), 0.60)
+        self._price(1, TODAY, 60.0)
+        self.s.commit()
+
+        out = self._yields()
+        assert not [e for e in out["awaiting_identification"] if e["ticker"] == "D05"]
+
+    def test_a_payment_already_split_by_the_user_is_not_flagged_again(self):
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self._component(14, D(2026, 8, 20), 0.0845)
+        self._component(14, D(2026, 8, 20), 0.1597)
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+        dividends.add_flag_override(14, D(2026, 8, 20), D(2026, 8, 28), 0.1597, s=self.s)
+
+        out = self._yields()
+        assert not [e for e in out["awaiting_identification"] if e["ticker"] == "S61"]
+        split = [e for e in out["marked_regular"] if e["ticker"] == "S61"]
+        assert split[0]["special_per_unit"] == 0.1597
+
+    def test_identify_components_rejects_a_single_component_payment(self):
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._div(1, D(2026, 5, 1), 0.60, ex=D(2026, 4, 20))
+        self._component(1, D(2026, 4, 20), 0.60)
+        self.s.commit()
+
+        with pytest.raises(ValueError):
+            dividends.identify_components(1, D(2026, 4, 20), D(2026, 5, 1), [0.60], s=self.s)
+
+    def test_identify_components_rejects_an_amount_not_in_the_cached_components(self):
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self._component(14, D(2026, 8, 20), 0.0845)
+        self._component(14, D(2026, 8, 20), 0.1597)
+        self.s.commit()
+
+        with pytest.raises(ValueError):
+            dividends.identify_components(14, D(2026, 8, 20), D(2026, 8, 28), [0.9999], s=self.s)
+        assert self.s.execute(text(
+            "SELECT COUNT(*) FROM dividend_flag_override")).scalar() == 0
