@@ -210,13 +210,17 @@ def fsm_statement_rows(data_dir):
     (overlapping export date ranges are normal: iFast's dated exports are cumulative
     snapshots, not deltas). Keyed on `Contract No`, the stable per-transaction field;
     a row without one (shouldn't happen, but cheap to guard) falls back to its full
-    contents. Yields `(relative path, row)` in file order, `row` a `csv.DictReader` dict."""
+    contents. Only a key already seen in an *earlier* file is a duplicate: rows sharing a
+    `Contract No` within one file (e.g. a trade's stock and cash legs) are all kept.
+    Yields `(relative path, row)` in file order, `row` a `csv.DictReader` dict."""
     seen = set()
     for path in fsm_statement_files(data_dir):
         rel = os.path.relpath(path, data_dir)
+        this_file = set()
         for row in csv.DictReader(open(path, encoding="utf-8-sig")):
             key = (row.get("Contract No") or "").strip() or tuple(sorted(row.items()))
             if key in seen:
                 continue
-            seen.add(key)
+            this_file.add(key)
             yield rel, row
+        seen |= this_file

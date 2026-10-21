@@ -229,3 +229,21 @@ def test_fsm_statement_rows_keeps_a_historical_only_setup_unchanged(tmp_path):
     rows = list(fsm_statement_rows(str(tmp_path)))
     assert [(rel, r["Contract No"]) for rel, r in rows] == \
         [(os.path.join("fsm", "ifast_historical.csv"), "TTN1")]
+
+
+def test_fsm_statement_rows_keeps_rows_sharing_a_contract_no_within_one_file(tmp_path):
+    # one trade's stock leg and its SGD Cash Account leg can share a Contract No; only a
+    # repeat from a *different* (overlapping) export is a duplicate
+    (tmp_path / "fsm").mkdir()
+    legs = [
+        {"Transaction Date": "02 Feb 2026", "Transaction Type": "Buy",
+         "Product Name": "DBS Group Holdings (D05)", "Product Amount": "1000",
+         "Contract No": "TTN2"},
+        {"Transaction Date": "02 Feb 2026", "Transaction Type": "Buy",
+         "Product Name": "SGD Cash Account", "Product Amount": "1000",
+         "Contract No": "TTN2"},
+    ]
+    _write_fsm(tmp_path / "fsm" / "ifast_historical.csv", legs)
+    assert len(list(fsm_statement_rows(str(tmp_path)))) == 2
+    _write_fsm(tmp_path / "fsm" / "ifast_20260101_20260301.csv", legs)
+    assert len(list(fsm_statement_rows(str(tmp_path)))) == 2
