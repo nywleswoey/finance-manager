@@ -66,6 +66,65 @@ def test_cdp_date_is_none_when_nothing_parses(s):
     assert pd._cdp_date(s) is None
 
 
+# ---------- FSM / iFast: historical file + dated catch-up exports ----------
+FSM_COLS = ["Transaction Date", "Transaction Type", "Product Name", "Payment Method",
+            "Product Amount", "Product Currency", "Contract No"]
+
+
+def _fsm(tmp_path, monkeypatch, files):
+    (tmp_path / "fsm").mkdir()
+    for name, rows in files.items():
+        with open(tmp_path / "fsm" / name, "w", newline="") as fh:
+            w = csv.DictWriter(fh, FSM_COLS)
+            w.writeheader()
+            for r in rows:
+                w.writerow({"Payment Method": "Cash", "Product Currency": "SGD", **r})
+    monkeypatch.setattr(pd, "DATA", str(tmp_path))
+    monkeypatch.setattr(pd, "DIV", [])
+    pd.fsm()
+    return [(d["ticker"], d["date"], d["gross"]) for d in pd.DIV]
+
+
+def test_fsm_reads_dividends_from_a_dated_export_alongside_the_historical_file(
+        tmp_path, monkeypatch):
+    got = _fsm(tmp_path, monkeypatch, {
+        "ifast_historical.csv": [
+            {"Transaction Date": "17 Apr 2026", "Transaction Type": "Stock Dividend",
+             "Product Name": "DBS Group Holdings Ltd Cash Dividend (D05)",
+             "Product Amount": "2032.8", "Contract No": "TTN1"},
+        ],
+        "ifast_20260420_20260709.csv": [
+            {"Transaction Date": "29 Jun 2026", "Transaction Type": "Stock Dividend",
+             "Product Name": "Mapletree Pan Asia Commercial Trust Cash Dividend (N2IU)",
+             "Product Amount": "8.96", "Contract No": "TTN2"},
+        ],
+    })
+    assert got == [("N2IU", "29 Jun 2026", 8.96), ("D05", "17 Apr 2026", 2032.8)]
+
+
+def test_fsm_does_not_double_count_a_dividend_row_in_an_overlapping_export(
+        tmp_path, monkeypatch):
+    shared = {"Transaction Date": "08 Jun 2026", "Transaction Type": "Stock Dividend",
+              "Product Name": "CapitaLand Integrated Commercial Trust Cash Dividend (C38U)",
+              "Product Amount": "226.3", "Contract No": "TTN-SHARED"}
+    got = _fsm(tmp_path, monkeypatch, {
+        "ifast_historical.csv": [shared],
+        "ifast_20260420_20260709.csv": [shared],
+    })
+    assert got == [("C38U", "08 Jun 2026", 226.3)]
+
+
+def test_fsm_historical_file_only_is_unchanged(tmp_path, monkeypatch):
+    got = _fsm(tmp_path, monkeypatch, {
+        "ifast_historical.csv": [
+            {"Transaction Date": "17 Apr 2026", "Transaction Type": "Stock Dividend",
+             "Product Name": "DBS Group Holdings Ltd Cash Dividend (D05)",
+             "Product Amount": "2032.8", "Contract No": "TTN1"},
+        ],
+    })
+    assert got == [("D05", "17 Apr 2026", 2032.8)]
+
+
 # ---------- CDP tracker: the ±7-day dedup and CDP_DIV_FIX ----------
 # data/ is gitignored, so these run cdp() over a synthetic tracker sheet.
 

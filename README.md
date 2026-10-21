@@ -42,6 +42,7 @@ lands. Per-source commands below if you want to run just one pipeline.
 | New file in… | Command | What it does |
 |---|---|---|
 | `data/` broker statements (Tiger / Moomoo / FSM / CDP / Endowus) | `make ingest` | re-parse → `txn` + `dividend` (only net-new rows land) |
+| `data/fsm/ifast_<from>_<to>.csv` (an FSM/iFast dated export, e.g. `ifast_20260420_20260709.csv`) | `make ingest` | read alongside `data/fsm/ifast_historical.csv`; rows the two exports share (overlapping date ranges) are deduped by `Contract No`, never double-counted |
 | `data/*-cc`, bank/card statements | `make spending` | parse → classify → spending ledger |
 | — (market data) | `make prices` | refresh latest prices + FX (needs network) |
 | — (SGX corporate actions) | `make dividend-announcements` | refresh SGX-declared dividends for current SG holdings, feeding the Dividends tab's `<year> expected` projection (needs network) |

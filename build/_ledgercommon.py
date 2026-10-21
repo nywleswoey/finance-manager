@@ -10,6 +10,7 @@ sibling (`python build/x.py`, build/ on sys.path[0]) or as a package member
 (`-m ingestion.x`, repo root on path).
 """
 import csv
+import glob
 import os
 import re
 
@@ -194,3 +195,28 @@ def norm_ticker(sym, market):
 # transfer-leg action predicates (both underscore and space spellings occur)
 def is_transfer_out(a): return "transfer_out" in a or "transfer out" in a
 def is_transfer_in(a):  return "transfer in" in a or a == "transfer_in"
+
+
+def fsm_statement_files(data_dir):
+    """Every FSM/iFast export under `data_dir/fsm/`: the full-history file
+    (`ifast_historical.csv`) plus any dated exports (`ifast_<from>_<to>.csv`), sorted.
+    Dated exports' ranges can overlap the historical file and each other -> callers must
+    dedup rows, not just files."""
+    return sorted(glob.glob(os.path.join(data_dir, "fsm", "ifast_*.csv")))
+
+
+def fsm_statement_rows(data_dir):
+    """Read every FSM/iFast export once, de-duplicating rows that reappear across files
+    (overlapping export date ranges are normal: iFast's dated exports are cumulative
+    snapshots, not deltas). Keyed on `Contract No`, the stable per-transaction field;
+    a row without one (shouldn't happen, but cheap to guard) falls back to its full
+    contents. Yields `(relative path, row)` in file order, `row` a `csv.DictReader` dict."""
+    seen = set()
+    for path in fsm_statement_files(data_dir):
+        rel = os.path.relpath(path, data_dir)
+        for row in csv.DictReader(open(path, encoding="utf-8-sig")):
+            key = (row.get("Contract No") or "").strip() or tuple(sorted(row.items()))
+            if key in seen:
+                continue
+            seen.add(key)
+            yield rel, row
