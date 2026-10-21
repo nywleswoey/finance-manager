@@ -224,3 +224,17 @@ def fsm_statement_rows(data_dir):
             this_file.add(key)
             yield rel, row
         seen |= this_file
+
+
+def fsm_stock_dividend_is_cash(r):
+    """Does an FSM 'Stock Dividend' row credit cash rather than deliver units?
+
+    A scrip-option dividend taken in cash still carries Product Name "... Scrip
+    Dividend Option (CODE)" - iFast never renames it "Cash Dividend" just because the
+    holder (or the leftover fraction) was paid in cash - so a name check alone
+    misclassifies it as a shares payout. The row's own fields tell the truth instead:
+    a cash credit posts Product Type "Cash Account" with Quantity 0; the scrip taken as
+    shares shows up as a separate 'Corp Action' row with the real (non-zero) quantity,
+    never as a 'Stock Dividend' row with one. So Quantity 0 here is cash, whatever the
+    name says; a nonzero Quantity would be a units payout and stays excluded."""
+    return (r.get("Product Type") or "").strip() == "Cash Account" and num(r.get("Quantity")) == 0
