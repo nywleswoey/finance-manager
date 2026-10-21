@@ -10,7 +10,7 @@ per security in the web app (the Dividends tab and the security page).
 | Source | Section parsed | Markets |
 |---|---|---|
 | Tiger flex | `Dividends` (status = `Paid` only; accruals skipped) | HK, SG, US |
-| FSM / iFast | `Stock Dividend` rows that are `Cash Dividend` / `Cash in Lieu` | SG (+ USD/EUR REITs) |
+| FSM / iFast | `Stock Dividend` rows that credit cash (Product Type `Cash Account`, Quantity 0) - `Cash Dividend` / `Cash in Lieu` and a `Scrip Dividend Option` taken in cash alike; a row delivering units is skipped | SG (+ USD/EUR REITs) |
 | CDP | statement PDFs' `Cash Transaction` section (`cdp_statements()`, authoritative); tracker sheet `data/cdp-stocks/dividends.csv` (`cdp()`) is a fallback, skipped within ±31 days of a statement row for the same ticker. A tracker row with a rate but no amount is backfilled as rate × the CDP position in `ledger.csv`, except on pay dates inside a CDP statement gap | SG (+ USD/EUR) |
 | Moomoo | SG: `… CASH DIVIDEND @/AT …` lines; US: `<TKR> <units> SHARES` + signed `US Dividend Paying`/`Corporate Action` amount | SG, US |
 | CPF / SRS | backfilled (no dividend lines in their transaction files) | SG (+ EUR REIT) |
