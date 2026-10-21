@@ -212,12 +212,13 @@ unpriced holding.
 cached rather than fetched per page load. SGX's corporate-actions API
 (`api.sgx.com/corporateactions/v1.0?cat=DIVIDEND&name=`) filters only by a security's *exact*
 legal name — there is no ticker/code parameter, and an unrecognized name silently returns the
-WHOLE unfiltered history rather than nothing (`portfolio.sgx.sgx_schedule`'s docstring). There is
-no curated name table: each currently-held SG security (excluding funds) tries its own
-`security.name` and every `security_alias` that could be a registered name (bare SGX codes
-dropped, broker dividend-line suffixes like ` Cash Dividend` stripped) as a candidate and keeps
-the first SGX actually recognizes, since broker statement text routinely already echoes the
-exchange's registered name on a dividend line. A security with no matching candidate — or
+WHOLE unfiltered history rather than nothing (`portfolio.sgx.sgx_schedule`'s docstring). Each
+currently-held SG security (excluding funds) first tries its hand-verified name in
+`portfolio.sgx.CPF_SRS_SGX_NAMES` when it has one (statement text routinely drops the
+exchange's corporate suffix - SBS Transit vs `SBS TRANSIT LTD`), then its own `security.name`
+and every `security_alias` that could be a registered name (bare SGX codes dropped, broker
+dividend-line suffixes like ` Cash Dividend` stripped), and keeps the first SGX actually
+recognizes (`_candidate_names`' docstring). A security with no matching candidate — or
 outside SG, or a cash/scrip election SGX's regex-summed rate can't be trusted for — simply has
 nothing in `dividend_announcement`, and `projected()` falls back to `last_year_pattern` for it.
 That is the graceful degradation, not a special case. If the SGX request itself fails, the run
@@ -254,7 +255,9 @@ as regular" case - a payment with ANY split row is never excluded as possibly sp
 heuristic would say about its (now split-net) rate. `DELETE /api/dividend-flag-overrides/{id}` clears a split
 entirely, both cases the same way. Every trailing-window distribution of a held counter lands in
 exactly one of `excluded` / `marked_regular` / `regular` (the third: unflagged, unsplit, the
-ordinary case) - so the Dividends tab can offer a split on any of them, not just a flagged one.
+ordinary case) - so the split UI (the Dividends tab, and the Holdings → ticker screen's
+"Dividend split / identification" card for that one counter) can offer a split on any of them,
+not just a flagged one.
 SBS Transit's 2026-08-28 (0.0845 ordinary + 0.1597 special) and 2026-05-11 (0.0866 + 0.3199) are
 the real motivating payments - one flagged and excluded, the other counted in full, until split.
 
