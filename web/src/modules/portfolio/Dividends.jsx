@@ -279,7 +279,7 @@ export default function Dividends({ onOpenTicker }) {
             </table>
           </div>
 
-          <AwaitingIdentification rows={yld.awaiting_identification} api={split} />
+          <AwaitingIdentification rows={yld.awaiting_identification} api={split} onOpenTicker={onOpenTicker} />
           <Excluded rows={yld.excluded} api={split} onOpenTicker={onOpenTicker} />
           <MarkedRegular rows={yld.marked_regular} api={split} onOpenTicker={onOpenTicker} />
           <Regular rows={yld.regular} api={split} onOpenTicker={onOpenTicker} />

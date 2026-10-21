@@ -176,59 +176,48 @@ function SplitEditor({ e, api }) {
 }
 
 /** "Awaiting identification" - every component needs a Normal/Special choice before `Save`
- * enables. `banner`, when true, additionally renders the top-of-page amber callout the
- * Dividends tab shows (the ticker screen skips it - its own section heading already says so). */
-export function AwaitingIdentification({ rows, api, banner }) {
+ * enables. */
+export function AwaitingIdentification({ rows, api, onOpenTicker }) {
   if (!rows?.length) return null;
   return (
-    <>
-      {banner && (
-        <div className="card" style={{ borderColor: "var(--warn)" }} data-testid="dividend-awaiting-identification-banner">
-          <strong style={{ color: "var(--warn)" }}>
-            {rows.length} payment{rows.length > 1 ? "s" : ""} awaiting identification
-          </strong>
-          <span className="mut"> - SGX declared these as more than one rate line without saying
-            which is regular and which is special; see "Awaiting identification" below.</span>
-        </div>
-      )}
-      <div style={{ marginTop: 16 }} data-testid="dividend-awaiting-identification">
-        <h4 style={{ margin: "0 0 8px", color: "var(--warn)" }}>Awaiting identification&nbsp;
-          <span className="pill">{rows.length}</span>
-        </h4>
-        <p className="mut" style={{ fontSize: ".85em", margin: "0 0 8px" }}>
-          SGX declared these payments in more than one rate line without saying which is
-          regular and which is special - mark each component, then save.
-        </p>
-        {rows.map((e) => {
-          const key = api.editorKey(e);
-          const { labels, saving, error } = api.identifyFor(e);
-          const allLabeled = labels.every((l) => l != null);
-          return (
-            <div key={key}
-                style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
-                         padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-              <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
-              <span className="mut">{e.pay_date}</span>
-              {e.components.map((c, i) => (
-                <label key={i} className="taplabel" style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  {money(c.amount_per_unit, c.currency, 4)}
-                  <select value={labels[i] ?? ""} onChange={(ev) => api.setLabel(e, i, ev.target.value)}
-                         aria-label={`${money(c.amount_per_unit, c.currency, 4)} type`}>
-                    <option value="">…</option>
-                    <option value="normal">Normal</option>
-                    <option value="special">Special</option>
-                  </select>
-                </label>
-              ))}
-              {error && <span className="neg">{error}</span>}
-              <button type="button" disabled={!allLabeled || saving} onClick={() => api.submitIdentify(e)}>
-                {saving ? "Saving…" : "Save"}
-              </button>
-            </div>
-          );
-        })}
-      </div>
-    </>
+    <div style={{ marginTop: 16 }} data-testid="dividend-awaiting-identification">
+      <h4 style={{ margin: "0 0 8px", color: "var(--warn)" }}>Awaiting identification&nbsp;
+        <span className="pill">{rows.length}</span>
+      </h4>
+      <p className="mut" style={{ fontSize: ".85em", margin: "0 0 8px" }}>
+        SGX declared these payments in more than one rate line without saying which is
+        regular and which is special - mark each component, then save.
+      </p>
+      {rows.map((e) => {
+        const key = api.editorKey(e);
+        const { labels, saving, error } = api.identifyFor(e);
+        const allLabeled = labels.every((l) => l != null);
+        return (
+          <div key={key}
+              style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
+                       padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+            <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
+            <span className="mut">{e.pay_date}</span>
+            {e.components.map((c, i) => (
+              <label key={i} className="taplabel" style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                {money(c.amount_per_unit, c.currency, 4)}
+                <select value={labels[i] ?? ""} onChange={(ev) => api.setLabel(e, i, ev.target.value)}
+                       aria-label={`${money(c.amount_per_unit, c.currency, 4)} type`}>
+                  <option value="">…</option>
+                  <option value="normal">Normal</option>
+                  <option value="special">Special</option>
+                </select>
+              </label>
+            ))}
+            <TickerLink e={e} onOpenTicker={onOpenTicker} />
+            {error && <span className="neg">{error}</span>}
+            <button type="button" disabled={!allLabeled || saving} onClick={() => api.submitIdentify(e)}>
+              {saving ? "Saving…" : "Save"}
+            </button>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
