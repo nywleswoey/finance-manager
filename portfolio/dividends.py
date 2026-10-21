@@ -552,6 +552,21 @@ def apply_capital_return(rate, currency, date, adjustments):
     return (0.0 if clamped else net), adj, clamped
 
 
+def _capital_return_component(components, adj, currency):
+    """The one of `components` (the payment's own cached SGX line items, already `{amount_per_unit,
+    currency}`) that IS the active capital-return adjustment `adj` - same amount and currency,
+    within the usual 1e-9 tolerance - or None when `adj` is inactive, in a different currency, or
+    matches no cached component (SGX reported the payment as a single combined line - nothing to
+    attribute the deduction to specifically, see `_net_distributions`)."""
+    if adj is None or adj["currency"] != currency:
+        return None
+    amt = float(adj["amount_per_unit"])
+    for c in components:
+        if c["currency"] == currency and abs(c["amount_per_unit"] - amt) < 1e-9:
+            return c
+    return None
+
+
 def _payment(security_id, ex_date, pay_date, s):
     """The one distribution at (security_id, ex_date, pay_date) - an EXACT match, not
     `_match_override()`'s re-ingest-tolerant one: the caller already has this key from a
@@ -770,13 +785,33 @@ def _classify(distributions):
 
 def _net_distributions(distributions, adjustments, overrides):
     """Attach `special_per_unit` / `override_id` / `has_split` / `regular_rate` / `net_rate` /
-    `capital_return` / `capital_return_clamped` to each of `distributions` in place.
+    `capital_return` / `capital_return_clamped` / `capital_return_component` to each of
+    `distributions` in place. Each distribution must already carry `components` (its cached SGX
+    `dividend_announcement_component` rows, already `{amount_per_unit, currency}` - see
+    `yields()`, which attaches these before calling this).
+
     `regular_rate` is the combined declared rate minus any recorded split's special portion
-    (`_match_override`, 0/None when there is none); `net_rate` is that regular rate net of any
-    active dividend_adjustment (capital-return deduction, matched by ex_date else pay_date) -
-    the figure trailing/forward DPS sum and `_classify()`'s flagging compares against. A
-    distribution with no split behaves exactly as it did before this split existed
-    (`special_per_unit` 0, `regular_rate` == `rate`)."""
+    (`_match_override`, 0/None when there is none).
+
+    `capital_return_component` is the one cached component (`_capital_return_component`) that IS
+    the active dividend_adjustment (capital-return deduction, matched by ex_date else pay_date) -
+    None when the adjustment matches no component (SGX reported a single combined line; the old,
+    still-correct behaviour, `apply_capital_return` against the combined `regular_rate`) or there
+    is no active adjustment at all.
+
+    When a component DOES match, that component is capital return, deducted exactly once: not
+    again on top of a user label that already removed it (`identify_components`/`add_flag_
+    override` marking that same amount Special, folded into `special_per_unit` above) - the
+    precedence is that user labels win for which components are special, capital return only
+    removes what is not already removed, so the deduction is the component's own amount unless
+    `special_per_unit` already equals it (1e-9 tolerance, same as the component match), in which
+    case it is already gone from `regular_rate` and nothing further is subtracted. Either way the
+    result is clamped at zero, same as `apply_capital_return`.
+
+    `net_rate` is `regular_rate` further net of that deduction - the figure trailing/forward DPS
+    sum and `_classify()`'s flagging compares against. A distribution with no split and no
+    matching capital-return component behaves exactly as it did before either of these existed
+    (`special_per_unit` 0, `regular_rate` == `rate`, `net_rate` via `apply_capital_return`)."""
     for d in distributions:
         match = _match_override(overrides, d)
         special = float(match["special_per_unit"]) if match else 0.0
@@ -785,8 +820,20 @@ def _net_distributions(distributions, adjustments, overrides):
         d["has_split"] = match is not None
         d["regular_rate"] = round(d["rate"] - special, 6)
         date = d["ex_date"] or d["pay_date"]
-        net, adj, clamped = apply_capital_return(d["regular_rate"], d["currency"], date, adjustments)
-        d["net_rate"], d["capital_return"], d["capital_return_clamped"] = net, adj, clamped
+        adj = _active_adjustment(adjustments, date)
+        cr_comp = _capital_return_component(d.get("components", []), adj, d["currency"])
+        d["capital_return_component"] = cr_comp
+        if cr_comp is None:
+            net, capital_return, clamped = apply_capital_return(
+                d["regular_rate"], d["currency"], date, adjustments)
+        else:
+            cr_amt = float(adj["amount_per_unit"])
+            deduct = 0.0 if abs(special - cr_amt) < 1e-9 else cr_amt
+            net = d["regular_rate"] - deduct
+            clamped = net < 0
+            net = 0.0 if clamped else net
+            capital_return = adj
+        d["net_rate"], d["capital_return"], d["capital_return_clamped"] = net, capital_return, clamped
 
 
 def _in_currency(value, frm, to, fx):
@@ -892,16 +939,21 @@ def yields(s=None, today=None):
     (the "why this one was flagged" context), null otherwise.
 
     `awaiting_identification` lists every distribution (trailing window or not, same scope as
-    `marked_regular`) whose SGX announcement cached more than one `dividend_announcement_component`
-    line and carries no split yet - SGX's corporate-actions API never says which component is
-    the regular rate and which is special (#captain's intent), so these need the captain's own
-    call. A payment whose components aren't all in its own currency is left out (a special
-    portion is recorded in the payment's currency - see `identify_components`). Each entry
-    carries `components` (the cached per-unit rates) for the Dividends tab to list
-    with a Normal/Special choice; `portfolio.dividends.identify_components` turns that choice into the usual `dividend_flag_override` split once every component is labelled.
-    Until then the payment is untouched - still `excluded` if the raw heuristic flags it,
-    `regular` otherwise - exactly as before this existed. A single-component payment is never
-    listed here."""
+    `marked_regular`) with more than one cached `dividend_announcement_component` line STILL
+    needing the captain's call once any component already resolved as capital return
+    (`capital_return_component`, see `_net_distributions`) is set aside - SGX's corporate-actions
+    API never says which of the rest is regular and which is special (#captain's intent). A
+    payment whose components aren't all in its own currency is left out (a special portion is
+    recorded in the payment's currency - see `identify_components`). Each entry carries
+    `components` (the cached per-unit rates, excluding any capital-return component) for the
+    Dividends tab to list with a Normal/Special choice; `portfolio.dividends.identify_components`
+    turns that choice into the usual `dividend_flag_override` split once every listed component is
+    labelled. Until then the payment is untouched - still `excluded` if the raw heuristic flags
+    it, `regular` otherwise - exactly as before this existed. A single-component payment, and one
+    whose only OTHER component (after the capital-return one) is single, is never listed here;
+    `excluded`/`regular`/`marked_regular` each carry `capital_return_component` (None, or the
+    matched `{amount_per_unit, currency}`) so the Dividends tab can show what happened either
+    way."""
     today = today or sg_today()
     trail_start = today - dt.timedelta(days=365)
     fwd_end = today + dt.timedelta(days=365)
@@ -960,15 +1012,21 @@ def yields(s=None, today=None):
         overrides = overrides_by_sec.get(sid, [])
 
         distributions = _distributions(rows_by_ticker.get(tk, []))
-        _net_distributions(distributions, adjustments, overrides)
-        _classify(distributions)
         for d in distributions:
             comps = _components_for(sid, d["ex_date"], d["pay_date"],
                                     components_by_sec, all_announced_by_sec)
             d["components"] = [{"amount_per_unit": c["amount_per_unit"], "currency": c["currency"]}
                                for c in comps]
-            d["needs_identification"] = (len(comps) > 1 and not d["has_split"] and
-                                         all(c["currency"] == d["currency"] for c in comps))
+        _net_distributions(distributions, adjustments, overrides)
+        _classify(distributions)
+        for d in distributions:
+            # The capital-return component (if matched) is already accounted for automatically -
+            # never offered as an identification choice, and never counted toward "more than one
+            # rate line, which is special?" ambiguity (see _net_distributions).
+            other = [c for c in d["components"] if c is not d["capital_return_component"]]
+            d["identification_components"] = other
+            d["needs_identification"] = (len(other) > 1 and not d["has_split"] and
+                                         all(c["currency"] == d["currency"] for c in d["components"]))
 
         trailing = [d for d in distributions if trail_start <= d["pay_date"] <= today]
         trailing_regular = [d for d in trailing if not d["flagged"] or d["has_split"]]
@@ -981,6 +1039,7 @@ def yields(s=None, today=None):
                     "rate": d["rate"], "net_rate": round(d["net_rate"], 6),
                     "currency": d["currency"], "baseline": d["flag_baseline"],
                     "baseline_type": d["flag_baseline_type"], "ratio": d["flag_ratio"],
+                    "capital_return_component": d["capital_return_component"],
                 })
             elif not d["has_split"]:
                 regular.append({
@@ -988,6 +1047,7 @@ def yields(s=None, today=None):
                     "ex_date": iso(d["ex_date"]), "pay_date": iso(d["pay_date"]),
                     "rate": d["rate"], "net_rate": round(d["net_rate"], 6),
                     "currency": d["currency"],
+                    "capital_return_component": d["capital_return_component"],
                 })
         for d in distributions:
             if d["has_split"]:
@@ -1000,13 +1060,14 @@ def yields(s=None, today=None):
                     "baseline_type": d["flag_baseline_type"], "ratio": d["flag_ratio"],
                     "special_per_unit": round(d["special_per_unit"], 6),
                     "regular_per_unit": round(d["regular_rate"], 6),
+                    "capital_return_component": d["capital_return_component"],
                 })
             if d["needs_identification"]:
                 awaiting_identification.append({
                     "ticker": tk, "name": sec["name"], "security_id": sid,
                     "ex_date": iso(d["ex_date"]), "pay_date": iso(d["pay_date"]),
                     "rate": d["rate"], "currency": d["currency"],
-                    "components": d["components"],
+                    "components": d["identification_components"],
                 })
 
         declared = [(a, apply_capital_return(a["amount_per_unit"], a["currency"],

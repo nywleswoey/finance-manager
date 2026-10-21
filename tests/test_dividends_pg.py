@@ -1130,6 +1130,82 @@ class TestYields(pgtest.Case):
         split = [e for e in out["marked_regular"] if e["ticker"] == "S61"]
         assert split[0]["special_per_unit"] == 0.1597
 
+    # ------------- capital return x components: the setting and the per-component label must ----
+    # ------------- agree on which component is special, deducted exactly once --------------------
+
+    def test_a_capital_return_matching_a_component_is_labelled_automatically(self):
+        # DBS's real shape (launch brief): SGX lists 0.66 regular + 0.15 capital return as two
+        # separate components, and 0.15 is also the active capital-return setting - the matching
+        # component is capital return automatically, not a special-vs-normal ambiguity the
+        # captain must resolve.
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._div(1, D(2025, 11, 24), 0.81, ex=D(2025, 11, 13))
+        self._component(1, D(2025, 11, 13), 0.66)
+        self._component(1, D(2025, 11, 13), 0.15)
+        self._adjust(1, 0.15, D(2025, 1, 1), note="DBS capital return")
+        self._price(1, TODAY, 74.0)
+        self.s.commit()
+
+        out = self._yields()
+        assert not [e for e in out["awaiting_identification"] if e["ticker"] == "D05"]
+        regular = [e for e in out["regular"] if e["ticker"] == "D05"]
+        assert len(regular) == 1
+        assert regular[0]["net_rate"] == 0.66
+        assert regular[0]["capital_return_component"] == {"amount_per_unit": 0.15, "currency": "SGD"}
+
+    def test_a_capital_return_component_already_labelled_special_is_not_deducted_twice(self):
+        # Marking the SAME 0.15 component Special via identify_components must not ALSO subtract
+        # the 0.15 capital-return setting on top of it - 0.81 - 0.15 (special) - 0.15 (capital
+        # return) == 0.51 would double-count one amount as both special and capital return.
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._div(1, D(2025, 11, 24), 0.81, ex=D(2025, 11, 13))
+        self._component(1, D(2025, 11, 13), 0.66)
+        self._component(1, D(2025, 11, 13), 0.15)
+        self._adjust(1, 0.15, D(2025, 1, 1), note="DBS capital return")
+        self._price(1, TODAY, 74.0)
+        self.s.commit()
+        dividends.identify_components(1, D(2025, 11, 13), D(2025, 11, 24), [0.15], s=self.s)
+
+        out = self._yields()
+        marked = [e for e in out["marked_regular"] if e["ticker"] == "D05"]
+        assert len(marked) == 1
+        assert marked[0]["special_per_unit"] == 0.15
+        assert marked[0]["regular_per_unit"] == 0.66
+        assert marked[0]["net_rate"] == 0.66
+
+    def test_a_capital_return_matching_no_component_still_subtracts_from_the_combined_rate(self):
+        # SGX sometimes lists the whole dividend as one combined line, or as components that
+        # don't correspond to the capital-return setting at all - neither cached component
+        # matches 0.15, so there's nothing to auto-label and today's behaviour (subtract from
+        # the combined/regular rate) still applies.
+        self._buy(1, D(2024, 1, 1), 1000)
+        self._div(1, D(2025, 11, 24), 0.81, ex=D(2025, 11, 13))
+        self._component(1, D(2025, 11, 13), 0.50)
+        self._component(1, D(2025, 11, 13), 0.31)
+        self._adjust(1, 0.15, D(2025, 1, 1), note="DBS capital return")
+        self._price(1, TODAY, 74.0)
+        self.s.commit()
+
+        out = self._yields()
+        assert len([e for e in out["awaiting_identification"] if e["ticker"] == "D05"]) == 1
+        regular = [e for e in out["regular"] if e["ticker"] == "D05"]
+        assert regular[0]["net_rate"] == 0.66                 # 0.81 - 0.15, same as before
+        assert regular[0]["capital_return_component"] is None
+
+    def test_sbs_components_are_unaffected_by_another_securitys_capital_return(self):
+        self._buy(14, D(2020, 1, 1), 1000)
+        self._div(14, D(2026, 8, 28), 0.2442, ex=D(2026, 8, 20))
+        self._component(14, D(2026, 8, 20), 0.0845)
+        self._component(14, D(2026, 8, 20), 0.1597)
+        self._adjust(1, 0.15, D(2025, 1, 1))              # DBS's own setting, a different security
+        self._price(14, TODAY, 2.90)
+        self.s.commit()
+
+        out = self._yields()
+        flagged = [e for e in out["awaiting_identification"] if e["ticker"] == "S61"]
+        assert len(flagged) == 1
+        assert sorted(c["amount_per_unit"] for c in flagged[0]["components"]) == [0.0845, 0.1597]
+
     def test_identify_components_rejects_a_single_component_payment(self):
         self._buy(1, D(2024, 1, 1), 1000)
         self._div(1, D(2026, 5, 1), 0.60, ex=D(2026, 4, 20))
