@@ -20,6 +20,16 @@ const expectedMonth = (d) => monthYear(Date.parse(d.expected_date || d.pay_date 
 // Last-year-pattern and overdue rows are per account (one ticker can be held at two brokers);
 // announced rows are per distribution and carry none.
 const ofAccount = (r) => (r.account ? ` (${r.account})` : "");
+// One of this payment's SGX components matched the active capital-return setting by amount and
+// currency (portfolio.dividends._net_distributions) - already deducted once, never also posed as
+// a Normal/Special choice. Shown wherever a payment carries `capital_return_component`.
+const capReturnPill = (e) => e.capital_return_component && (
+  <span className="pill" style={{ marginLeft: 4 }}
+        title="matches the active capital-return setting - deducted once, not offered for identification">
+    capital return (from setting) −{money(e.capital_return_component.amount_per_unit,
+                                          e.capital_return_component.currency, 4)}
+  </span>
+);
 
 // Click-to-sort table header: numeric columns default to descending (biggest first) on their
 // first click, text columns to ascending (A→Z) — `defaultDir` lets a caller flip that per
@@ -469,6 +479,7 @@ export default function Dividends() {
                     vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
                     &nbsp;({money(e.baseline, e.currency, 4)})
                   </span>
+                  {capReturnPill(e)}
                   <button className="link-btn" onClick={() => markRegular(e)}>Mark as regular</button>
                   <button className="link-btn" onClick={() => openEditor(e, 0)}>Split…</button>
                   {splitEditor(e)}
@@ -480,31 +491,38 @@ export default function Dividends() {
           {yld.marked_regular?.length > 0 && (
             <div style={{ marginTop: 16 }} data-testid="dividend-marked-regular">
               <h4 style={{ margin: "0 0 8px" }}>Marked as regular / split</h4>
-              {yld.marked_regular.map((e) => (
-                <div key={e.id}
-                    style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
-                             padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-                  <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
-                  <span className="mut">{e.pay_date}</span>
-                  {e.special_per_unit > 0 ? (
-                    <span>{money(e.regular_per_unit, e.currency, 4)} regular
-                      <span className="mut"> + {money(e.special_per_unit, e.currency, 4)} special</span>
-                    </span>
-                  ) : (
-                    <span>{money(e.rate, e.currency, 4)} regular</span>
-                  )}
-                  {e.baseline_type &&
-                    <span className="mut">
-                      ({fmt(e.ratio, 1)}x vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
-                      &nbsp;{money(e.baseline, e.currency, 4)})
-                    </span>}
-                  <button className="link-btn" onClick={() => openEditor(e, e.special_per_unit)}>Edit</button>
-                  <button className="link-btn" onClick={() => unmarkRegular(e.id)}>
-                    {e.special_per_unit > 0 ? "Clear" : "Unmark"}
-                  </button>
-                  {splitEditor(e)}
-                </div>
-              ))}
+              {yld.marked_regular.map((e) => {
+                // A capital-return component the split also counts as special is shown once,
+                // as the capital-return pill - not again inside the "+ special" figure.
+                const crInSpecial = e.capital_return_in_special ? e.capital_return_component.amount_per_unit : 0;
+                const special = e.special_per_unit - crInSpecial;
+                return (
+                  <div key={e.id}
+                      style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
+                               padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+                    <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
+                    <span className="mut">{e.pay_date}</span>
+                    {special > 1e-9 ? (
+                      <span>{money(e.regular_per_unit + crInSpecial, e.currency, 4)} regular
+                        <span className="mut"> + {money(special, e.currency, 4)} special</span>
+                      </span>
+                    ) : (
+                      <span>{money(e.rate, e.currency, 4)} regular</span>
+                    )}
+                    {e.baseline_type &&
+                      <span className="mut">
+                        ({fmt(e.ratio, 1)}x vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
+                        &nbsp;{money(e.baseline, e.currency, 4)})
+                      </span>}
+                    {capReturnPill(e)}
+                    <button className="link-btn" onClick={() => openEditor(e, e.special_per_unit)}>Edit</button>
+                    <button className="link-btn" onClick={() => unmarkRegular(e.id)}>
+                      {e.special_per_unit > 0 ? "Clear" : "Unmark"}
+                    </button>
+                    {splitEditor(e)}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -522,6 +540,7 @@ export default function Dividends() {
                   <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
                   <span className="mut">{e.pay_date}</span>
                   <span>{money(e.rate, e.currency, 4)}</span>
+                  {capReturnPill(e)}
                   <button className="link-btn" onClick={() => openEditor(e, 0)}>Split…</button>
                   {splitEditor(e)}
                 </div>

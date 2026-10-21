@@ -266,13 +266,20 @@ button per cached rate instead of a free-typed amount (`GET
 matching `dividend_announcement`'s own pay_date within `SAME_DISTRIBUTION_DAYS` when the payment
 itself has no ex_date, same as SBS's real 2026-08-28 payment).
 
-SGX never says which of those lines is regular and which is special, so any payment with more
-than one cached component, all in the payment's own currency, and no split yet is listed under
-"Awaiting identification" (`yields()`'s `awaiting_identification`, also flagged by a banner at
-the top of the Dividends tab) for the user to mark each component Normal or Special.
+A cached component matching the payment's active capital-return adjustment (same amount and
+currency) is capital return automatically: it is never offered for identification and is
+deducted exactly once - not again when a split already counts it as special
+(`_net_distributions` / `_special_includes` docstrings own the rule, including how a typed split
+is treated).
+
+SGX never says which of the remaining lines is regular and which is special, so any payment with
+more than one such cached component, all in the payment's own currency, and no split yet is
+listed under "Awaiting identification" (`yields()`'s `awaiting_identification`, also flagged by
+a banner at the top of the Dividends tab) for the user to mark each component Normal or Special.
 `POST /api/dividend-identify-components` (`portfolio.dividends.identify_components`) records
-the summed Special rates as an ordinary user split; the per-component labels themselves are not
-stored. Until identified, the payment is classified exactly as before. Automatic classification
+the summed Special rates as an ordinary user split, plus each component's label
+(`dividend_flag_override_component`, replaced whenever the split is re-entered; a typed split
+carries none). Until identified, the payment is classified exactly as before. Automatic classification
 is not built - `dividend_flag_override.source` ("user" today) exists so such a classifier can
 record itself distinctly from a user-entered split.
 

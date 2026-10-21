@@ -203,6 +203,27 @@ class DividendFlagOverride(Base):
                                       name="ck_dividend_flag_override_source"))
 
 
+class DividendFlagOverrideComponent(Base):
+    """The captain's Normal/Special label for one cached SGX component of a split payment
+    (portfolio.dividends.identify_components) - so `yields()` knows exactly WHICH components the
+    split's `special_per_unit` already removed, not only their sum. Keyed by the component's own
+    rate and currency rather than a foreign key to `dividend_announcement_component`, whose rows
+    are wholesale-replaced on every re-ingest. A split with no rows here is a typed split (the
+    Dividends tab's Split…/Edit, or one recorded before this table existed) - see
+    `_net_distributions`. Deleted with its split."""
+    __tablename__ = "dividend_flag_override_component"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    override_id: Mapped[int] = mapped_column(
+        ForeignKey("dividend_flag_override.id", ondelete="CASCADE"), index=True)
+    amount_per_unit: Mapped[Decimal] = mapped_column(RATE)
+    currency: Mapped[str] = mapped_column(String(3))
+    label: Mapped[str] = mapped_column(String(16))
+    __table_args__ = (UniqueConstraint("override_id", "amount_per_unit", "currency",
+                                       name="uq_dividend_flag_override_component"),
+                      CheckConstraint("label in ('normal', 'special')",
+                                      name="ck_dividend_flag_override_component_label"))
+
+
 class DividendAnnouncementComponent(Base):
     """One SGX-declared line-item rate for an announced distribution (ingestion.
     dividend_announcements) - e.g. SBS Transit's 2026-04-30 ex-date carries two rows here, SGD
