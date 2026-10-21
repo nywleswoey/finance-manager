@@ -18,6 +18,26 @@ import certifi
 
 RATE_RX = re.compile(r"\b(SGD|USD|EUR|HKD)\s*([0-9]+(?:\.[0-9]+)?)")
 
+# Exact SGX-registered legal names for the CPF/SRS-backfilled counters, hand-verified once by
+# build/fetch_cpf_srs_dividends.py (its own `SEC` dict sources from here): a broker statement's
+# dividend-line text — and so `security.name`/`security_alias`, both harvested from it — routinely
+# omits the exchange's own corporate suffix ("Ltd", "Limited", "Corporation Ltd"), which
+# sgx_schedule's exact-name match requires. ingestion.dividend_announcements tries this name
+# first for these tickers, ahead of the name/alias guesses `_candidate_names` derives — without
+# it, a security like S61 (`security.name` "SBS Transit", SGX's own "SBS TRANSIT LTD") never
+# resolves and its `dividend_announcement`/`dividend_announcement_component` rows never populate,
+# silently losing the Dividends tab's split-entry UI for that counter (the real SBS Transit/SRS
+# case the launch brief traced this to).
+CPF_SRS_SGX_NAMES = {
+    "F34":  "WILMAR INTERNATIONAL LIMITED",
+    "Z74":  "SINGTEL",
+    "D05":  "DBS GROUP HOLDINGS LTD",
+    "C52":  "COMFORTDELGRO CORPORATION LTD",
+    "UD1U": "IREIT GLOBAL",
+    "O5RU": "AIMS APAC REIT",
+    "S61":  "SBS TRANSIT LTD",
+}
+
 # SGX's cert chains to GlobalSign Root R46, which is missing from the OS CA bundle Python's
 # default SSLContext uses on some platforms (e.g. macOS's /etc/ssl/cert.pem); certifi's bundle
 # has it. Built once at import time rather than per request.

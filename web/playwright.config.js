@@ -126,6 +126,14 @@ export default defineConfig({
       testMatch: /dividend-yield-sort\.spec\.js/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
     },
+    // The Holdings -> ticker screen's own split/identify actions: whether a split round-trips
+    // through the same API the Dividends tab uses, not layout, so one viewport — same
+    // reasoning as `dividend-yield-sort`.
+    {
+      name: "dividend-split-ticker",
+      testMatch: /dividend-split-ticker\.spec\.js/,
+      use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } },
+    },
     ...VIEWPORTS.map((v) => ({
       name: v.name,
       testMatch: /(baseline|unconditional|foundations|shell|pinned|cards|drill|charts|editors|tablet|tap|split-width|phone-layout)\.spec\.js/,

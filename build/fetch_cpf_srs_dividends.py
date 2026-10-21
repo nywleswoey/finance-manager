@@ -28,22 +28,24 @@ from _csvout import write_csv
 from _dates import try_date
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from portfolio.sgx import _get, epoch_date, sgx_schedule
+from portfolio.sgx import CPF_SRS_SGX_NAMES, _get, epoch_date, sgx_schedule
 
 HERE = os.path.dirname(__file__)
 ROOT = os.path.join(HERE, "..")
 DATA = os.path.join(ROOT, "data")
 OUT = os.path.join(DATA, "cpf-srs-dividends.csv")
 
-# ticker -> (exact SGX name, yahoo symbol, tracker stock name)
+# ticker -> (exact SGX name, yahoo symbol, tracker stock name) - the name is
+# CPF_SRS_SGX_NAMES (portfolio.sgx), the one source of truth ingestion.dividend_announcements
+# also reads, so the two never drift apart.
 SEC = {
-    "F34":  ("WILMAR INTERNATIONAL LIMITED",   "F34",  "Wilmar"),
-    "Z74":  ("SINGTEL",                        "Z74",  "SingTel"),
-    "D05":  ("DBS GROUP HOLDINGS LTD",         "D05",  "DBS"),
-    "C52":  ("COMFORTDELGRO CORPORATION LTD",  "C52",  "Comfort Delgro"),
-    "UD1U": ("IREIT GLOBAL",                   "UD1U", "IREIT Global"),
-    "O5RU": ("AIMS APAC REIT",                 "O5RU", "AIMS APAC Reit"),
-    "S61":  ("SBS TRANSIT LTD",                "S61",  "SBS Transit"),
+    "F34":  (CPF_SRS_SGX_NAMES["F34"],  "F34",  "Wilmar"),
+    "Z74":  (CPF_SRS_SGX_NAMES["Z74"],  "Z74",  "SingTel"),
+    "D05":  (CPF_SRS_SGX_NAMES["D05"],  "D05",  "DBS"),
+    "C52":  (CPF_SRS_SGX_NAMES["C52"],  "C52",  "Comfort Delgro"),
+    "UD1U": (CPF_SRS_SGX_NAMES["UD1U"], "UD1U", "IREIT Global"),
+    "O5RU": (CPF_SRS_SGX_NAMES["O5RU"], "O5RU", "AIMS APAC Reit"),
+    "S61":  (CPF_SRS_SGX_NAMES["S61"],  "S61",  "SBS Transit"),
 }
 ACCOUNTS = {"CPF": "cpf-stocks/transactions.csv", "SRS": "srs-stocks/transactions.csv"}
 DIV_TICKERS = set(SEC)

@@ -10,14 +10,19 @@ SGX's corporate-actions API filters by a security's exact legal name (no ticker/
 param works — unrecognized ones are silently ignored and the WHOLE unfiltered history comes
 back). There is no name column seeded for this: `security.name` and its `security_alias` rows
 are harvested from brokers' own statement text, which routinely echoes the exchange's
-registered name on a dividend line (build/fetch_cpf_srs_dividends.py's curated SEC dict is the
-same names, by hand, for the 7 CPF/SRS counters it backfills). So each holding tries its own
-name plus every plausible-name alias (see `_candidate_names`) as a candidate and keeps the
-first that SGX actually recognizes (`sgx_schedule` returns a non-empty schedule only when the
-name matched — see its docstring). A holding with no matching candidate is left with nothing
-here, and `projected()` falls back to last year's pattern for it — the required graceful
-degradation, not a special case. If the SGX request itself fails, the run stops there, keeps
-what already resolved, and the remaining holdings fall back the same way.
+registered name on a dividend line - but just as routinely drops its corporate suffix
+("Ltd"/"Limited"/"Corporation Ltd"), which SGX's exact-name match still requires (S61's
+`security.name` "SBS Transit" vs SGX's own "SBS TRANSIT LTD" is the real case this was traced
+to - the Dividends tab's split-entry UI silently had nothing to offer for that counter). So
+each holding first tries `portfolio.sgx.CPF_SRS_SGX_NAMES`'s curated name when its ticker is
+one of the 7 CPF/SRS counters that dict already resolved by hand (the same dict
+build/fetch_cpf_srs_dividends.py's `SEC` sources from, backfilling those same counters' past
+dividends), then its own name plus every plausible-name alias (see `_candidate_names`), and
+keeps the first that SGX actually recognizes (`sgx_schedule` returns a non-empty schedule only
+when the name matched — see its docstring). A holding with no matching candidate is left with
+nothing here, and `projected()` falls back to last year's pattern for it — the required
+graceful degradation, not a special case. If the SGX request itself fails, the run stops there,
+keeps what already resolved, and the remaining holdings fall back the same way.
 
 Each ex-date's unsummed line-item rates also land in `dividend_announcement_component` (e.g.
 an ordinary + a special rate) - not read by `projected()`, only by the Dividends tab's
@@ -38,7 +43,7 @@ from sqlalchemy import text
 from ingestion.prices import sg_today
 from portfolio.db import SessionLocal
 from portfolio.models import DividendAnnouncement, DividendAnnouncementComponent
-from portfolio.sgx import sgx_schedule
+from portfolio.sgx import CPF_SRS_SGX_NAMES, sgx_schedule
 
 # how far back to keep: enough to cross-check against, not the security's whole SGX history
 LOOKBACK_YEARS = 1
@@ -64,19 +69,25 @@ def _looks_like_sgx_code(name):
     )
 
 
-def _candidate_names(s, security_id):
-    """The security's own name, then every alias that is a plausible SGX registered name,
-    upper-cased and deduped. The own name is never filtered or stripped - it is trusted
-    as-is and always tried first; aliases that are bare SGX codes are dropped, and broker
-    dividend-line suffixes are stripped before dedup, so they collapse onto a name already
-    in the list rather than firing a separate, doomed lookup."""
+def _candidate_names(s, security_id, ticker=None):
+    """`CPF_SRS_SGX_NAMES`'s curated name for `ticker` when it has one, then the security's own
+    name, then every alias that is a plausible SGX registered name - upper-cased and deduped.
+    The curated name is hand-verified, so it is trusted ahead of everything derived from
+    statement text (see the module docstring for why that text alone isn't enough for every
+    counter). The own name is never filtered or stripped - it is trusted as-is; aliases that are
+    bare SGX codes are dropped, and broker dividend-line suffixes are stripped before dedup, so
+    they collapse onto a name already in the list rather than firing a separate, doomed lookup."""
     own = s.execute(text("SELECT name FROM security WHERE id=:id"), {"id": security_id}).scalar()
     aliases = s.execute(text(
         "SELECT alias FROM security_alias WHERE security_id=:id"), {"id": security_id}).scalars().all()
 
     seen, out = set(), []
+    curated = CPF_SRS_SGX_NAMES.get(ticker)
+    if curated:
+        seen.add(curated)
+        out.append(curated)
     own_u = (own or "").strip().upper()
-    if own_u:
+    if own_u and own_u not in seen:
         seen.add(own_u)
         out.append(own_u)
     for a in aliases:
@@ -94,7 +105,7 @@ class SgxUnavailable(RuntimeError):
     """The SGX request itself failed (network, TLS, timeout, unparseable reply)."""
 
 
-def _resolve(s, security_id):
+def _resolve(s, security_id, ticker=None):
     """The first candidate name SGX recognizes, with its schedule - or (None, {}).
 
     A transport failure (the SGX request itself failing, as opposed to SGX answering with
@@ -102,7 +113,7 @@ def _resolve(s, security_id):
     whether SGX would have recognized that name, so retrying every remaining candidate just
     repeats the same failing request under a different name.
     """
-    for name in _candidate_names(s, security_id):
+    for name in _candidate_names(s, security_id, ticker):
         try:
             sched = sgx_schedule(name)
         except (OSError, ValueError, http.client.HTTPException) as e:
@@ -124,7 +135,7 @@ def main(today=None):
     matched, unmatched, rows_written, failure = [], [], 0, None
     for sid, tk in held:
         try:
-            name, sched = _resolve(s, sid)
+            name, sched = _resolve(s, sid, tk)
         except SgxUnavailable as e:
             failure = e
             break

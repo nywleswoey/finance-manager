@@ -326,9 +326,17 @@ function DataRow({ r, onClick, max }) {
   );
 }
 
-export default function Holdings() {
+export default function Holdings({ openTicker, onTickerOpened }) {
   const [rows, setRows] = useState(null);
-  const [sel, setSel] = useState(null);
+  // `openTicker` is a one-shot navigation request from the Dividends tab (App.jsx) - Holdings
+  // mounts fresh whenever the active tab switches to it (TABS[tab] swaps the whole component),
+  // so capturing it as the initial `sel` opens straight to that ticker's SecurityDetail; the
+  // effect below tells App.jsx it was consumed, so later visits to Holdings do not reopen it.
+  const [sel, setSel] = useState(openTicker ? { ticker: openTicker } : null);
+  useEffect(() => {
+    if (openTicker) onTickerOpened?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [by, setBy] = useState("ticker");
   const [showClosed, setShowClosed] = useState(false);
   const [collapsed, setCollapsed] = useState({});

@@ -47,6 +47,18 @@ plans.
 - **One "today": `ingestion.prices.sg_today()` (SGT)** — price rows, the fold and the option
   parser use it. Nullable-field helpers (`num`, `rounded`, `iso`, `nulls_last`) live in
   `portfolio/nullable.py` and SQL→dicts is `db.fetch_dicts`; don't re-spell them per module.
+- **`portfolio/sgx.py`'s `CPF_SRS_SGX_NAMES`** is the one curated ticker→exact-SGX-legal-name
+  table (`ingestion.dividend_announcements._candidate_names` and
+  `build/fetch_cpf_srs_dividends.py`'s `SEC` both read it): SGX's corporate-actions API matches
+  only the exchange's own registered name, which a broker statement's harvested
+  `security.name`/`security_alias` routinely lacks the corporate suffix of (SBS Transit →
+  `SBS TRANSIT LTD`) — add a ticker here, not a hand-added alias, when a held SG security's
+  `dividend_announcement`/`dividend_announcement_component` rows never populate.
+- **`web/src/modules/portfolio/dividendSplit.jsx`** is the one owner of the dividend split /
+  component-identification UI (editor, Normal/Special picker, the four payment lists) — both
+  the Dividends tab and the Holdings → ticker screen's "Dividend split / identification" card
+  import it rather than keeping a second copy; the ticker screen's lists are
+  `/api/dividend-yields`' own arrays filtered client-side by ticker, not a second endpoint.
 - **`docs/archive/`** holds historical/superseded docs (old plans). **`archive/`** at repo root
   holds retired AIDLC process trees (`aidlc-docs/`, `.aidlc-rule-details/`, `.wayfinder/`) kept
   for history, not live process — do not treat them as the active workflow or documentation

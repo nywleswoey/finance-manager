@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
 import { get, post, del, fmt, sgd, money, monthYear } from "../../api.js";
 import { Cards, RowCard, usePhone } from "../../cards.jsx";
+import { useDividendSplit, AwaitingIdentification, Excluded, MarkedRegular, Regular,
+         CapitalReturnList } from "./dividendSplit.jsx";
 
 const BUCKET_LABEL = { cash: "Cash", srs: "SRS", cpf: "CPF" };
 const BASIS_LABEL = { announced: "SGX announced", last_year_pattern: "last year's pattern", none: "—", "not held": "not held", unmapped: "unmapped" };
@@ -20,16 +22,6 @@ const expectedMonth = (d) => monthYear(Date.parse(d.expected_date || d.pay_date 
 // Last-year-pattern and overdue rows are per account (one ticker can be held at two brokers);
 // announced rows are per distribution and carry none.
 const ofAccount = (r) => (r.account ? ` (${r.account})` : "");
-// One of this payment's SGX components matched the active capital-return setting by amount and
-// currency (portfolio.dividends._net_distributions) - already deducted once, never also posed as
-// a Normal/Special choice. Shown wherever a payment carries `capital_return_component`.
-const capReturnPill = (e) => e.capital_return_component && (
-  <span className="pill" style={{ marginLeft: 4 }}
-        title="matches the active capital-return setting - deducted once, not offered for identification">
-    capital return (from setting) −{money(e.capital_return_component.amount_per_unit,
-                                          e.capital_return_component.currency, 4)}
-  </span>
-);
 
 // Click-to-sort table header: numeric columns default to descending (biggest first) on their
 // first click, text columns to ascending (A→Z) — `defaultDir` lets a caller flip that per
@@ -62,7 +54,7 @@ function SortTh({ sortKey, label, defaultDir, sort, onSort, className, title }) 
   );
 }
 
-export default function Dividends() {
+export default function Dividends({ onOpenTicker }) {
   const [ann, setAnn] = useState(null);
   const [det, setDet] = useState(null);
   const [proj, setProj] = useState(null);
@@ -73,14 +65,8 @@ export default function Dividends() {
   const [capBusy, setCapBusy] = useState(false);
   const [ver, setVer] = useState(0);
   const [yldSort, setYldSort] = useState({ key: null, dir: "desc" });
-  // The one open split editor across all three payment lists (excluded/marked_regular/
-  // regular) - keyed by the payment it edits, so opening another row's editor closes this one.
-  const [editor, setEditor] = useState(null);
-  // Per-payment Normal/Special labels for the "awaiting identification" list, keyed the same
-  // way as `editor` - but every row keeps its own (unlike the single split editor), since
-  // labelling one multi-component payment has nothing to do with another's.
-  const [identify, setIdentify] = useState({});
   const phone = usePhone();
+  const split = useDividendSplit(() => setVer((v) => v + 1));
   useEffect(() => {
     get("/api/dividends-annual").then(setAnn).catch(() => setAnn({ years: [], buckets: [], matrix: {}, totals: {}, yoy_pct: {} }));
     get("/api/dividend-details").then(setDet).catch(() => setDet({ rows: [], flagged: 0, total: 0, total_sgd: 0, flagged_sgd: 0 }));
@@ -100,135 +86,6 @@ export default function Dividends() {
   async function removeAdjustment(id) {
     await del("/api/dividend-capital-returns/" + id);
     setVer((v) => v + 1);
-  }
-
-  async function markRegular(e) {
-    await post("/api/dividend-flag-overrides",
-      { security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date, special_per_unit: 0 });
-    setVer((v) => v + 1);
-  }
-
-  async function unmarkRegular(id) {
-    await del("/api/dividend-flag-overrides/" + id);
-    setVer((v) => v + 1);
-  }
-
-  const editorKey = (e) => `${e.security_id}|${e.ex_date}|${e.pay_date}`;
-
-  // Opens the split editor on `e` (any of excluded/marked_regular/regular's rows share this
-  // shape), pre-filled with `initial` (0 for a fresh split, the existing special_per_unit for
-  // Edit) - and lazily fetches the cached SGX component rates for it so the user can pick one
-  // instead of typing (the launch brief's scope addition), rather than fetching proactively
-  // for every listed payment up front. `pay_date` goes along even when the payment has its own
-  // ex_date - the server falls back to it when ex_date is missing (SBS Transit's real
-  // 2026-08-28 payment carries none).
-  async function openEditor(e, initial) {
-    const key = editorKey(e);
-    setEditor({ key, security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date,
-               value: String(initial ?? 0), error: null, saving: false, components: null });
-    const params = new URLSearchParams({ security_id: e.security_id, pay_date: e.pay_date });
-    if (e.ex_date) params.set("ex_date", e.ex_date);
-    try {
-      const r = await get(`/api/dividend-announcement-components?${params}`);
-      setEditor((cur) => (cur?.key === key ? { ...cur, components: r.rows } : cur));
-    } catch {
-      setEditor((cur) => (cur?.key === key ? { ...cur, components: [] } : cur));
-    }
-  }
-
-  function closeEditor() { setEditor(null); }
-
-  async function saveEditor() {
-    if (!editor) return;
-    setEditor({ ...editor, saving: true, error: null });
-    try {
-      await post("/api/dividend-flag-overrides", {
-        security_id: editor.security_id, ex_date: editor.ex_date, pay_date: editor.pay_date,
-        special_per_unit: Number(editor.value || 0),
-      });
-      setEditor(null);
-      setVer((v) => v + 1);
-    } catch (err) {
-      setEditor((cur) => (cur ? { ...cur, saving: false, error: err.message } : cur));
-    }
-  }
-
-  // The split editor, inline below whichever row opened it - `flexBasis: "100%"` inside that
-  // row's flex-wrap container is what makes it drop to its own line under the row's other
-  // fields rather than widen the row sideways.
-  function splitEditor(e) {
-    if (editor?.key !== editorKey(e)) return null;
-    const value = Number(editor.value);
-    const noMatch = editor.components?.length > 0 && value > 0 &&
-      !editor.components.some((c) => Math.abs(c.amount_per_unit - value) < 1e-9);
-    return (
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 10px", alignItems: "center",
-                   flexBasis: "100%", marginTop: 4, paddingLeft: 16 }}>
-        <input type="number" step="0.0001" placeholder="Special /u" value={editor.value}
-              onChange={(ev) => setEditor({ ...editor, value: ev.target.value })}
-              style={{ width: 110 }} aria-label="Special portion per unit" />
-        {editor.components == null && <span className="mut" style={{ fontSize: ".8em" }}>loading SGX rates…</span>}
-        {editor.components?.length > 0 && (
-          <span className="mut" style={{ fontSize: ".8em" }}>SGX components:</span>
-        )}
-        {editor.components?.map((c, i) => (
-          <button key={i} type="button" className="link-btn"
-                 onClick={() => setEditor({ ...editor, value: String(c.amount_per_unit) })}>
-            {money(c.amount_per_unit, c.currency, 4)}
-          </button>
-        ))}
-        {noMatch &&
-          <span className="mut" style={{ color: "var(--warn)" }}>doesn't match a cached SGX component</span>}
-        {editor.error && <span className="neg">{editor.error}</span>}
-        <button type="button" disabled={editor.saving} onClick={saveEditor}>
-          {editor.saving ? "Saving…" : "Save"}
-        </button>
-        <button type="button" className="link-btn" onClick={closeEditor}>Cancel</button>
-      </div>
-    );
-  }
-
-  const idKey = (e) => `${e.security_id}|${e.ex_date}|${e.pay_date}`;
-
-  // This payment's current Normal/Special choices, one per cached component, in the server's
-  // own order - unset (null) until the captain picks for that component, so `allLabeled` below
-  // can tell "every component labelled" (ready to save) from "still picking" - plus its own
-  // saving/error state, like the split editor's.
-  function identifyFor(e) {
-    return identify[idKey(e)] || { labels: e.components.map(() => null), saving: false, error: null };
-  }
-
-  function setLabel(e, idx, value) {
-    const cur = identifyFor(e);
-    const labels = cur.labels.slice();
-    labels[idx] = value || null;
-    setIdentify({ ...identify, [idKey(e)]: { ...cur, labels, error: null } });
-  }
-
-  // Every component needs a label before this can save - `identify_components` takes one
-  // atomic submission (the Special amounts; everything else is implicitly Normal), never a
-  // partial one, since nothing here persists until it's called (see portfolio.dividends.
-  // identify_components's docstring for why).
-  async function submitIdentify(e) {
-    const key = idKey(e);
-    const entry = identifyFor(e);
-    const special_amounts = e.components
-      .filter((_, i) => entry.labels[i] === "special")
-      .map((c) => c.amount_per_unit);
-    setIdentify((cur) => ({ ...cur, [key]: { ...entry, saving: true, error: null } }));
-    try {
-      await post("/api/dividend-identify-components", {
-        security_id: e.security_id, ex_date: e.ex_date, pay_date: e.pay_date, special_amounts,
-      });
-      setIdentify((cur) => {
-        const next = { ...cur };
-        delete next[key];
-        return next;
-      });
-      setVer((v) => v + 1);
-    } catch (err) {
-      setIdentify((cur) => ({ ...cur, [key]: { ...entry, saving: false, error: err.message } }));
-    }
   }
 
   function selectCapSecurity(e) {
@@ -286,7 +143,8 @@ export default function Dividends() {
             {yld.awaiting_identification.length} payment{yld.awaiting_identification.length > 1 ? "s" : ""} awaiting identification
           </strong>
           <span className="mut"> - SGX declared these as more than one rate line without saying
-            which is regular and which is special; see "Awaiting identification" below.</span>
+            which is regular and which is special; see "Awaiting identification" below. Each
+            payment also links to its security's Holdings page.</span>
         </div>
       )}
       <div className="card">
@@ -421,132 +279,10 @@ export default function Dividends() {
             </table>
           </div>
 
-          {yld.awaiting_identification?.length > 0 && (
-            <div style={{ marginTop: 16 }} data-testid="dividend-awaiting-identification">
-              <h4 style={{ margin: "0 0 8px", color: "var(--warn)" }}>Awaiting identification&nbsp;
-                <span className="pill">{yld.awaiting_identification.length}</span>
-              </h4>
-              <p className="mut" style={{ fontSize: ".85em", margin: "0 0 8px" }}>
-                SGX declared these payments in more than one rate line without saying which is
-                regular and which is special - mark each component, then save.
-              </p>
-              {yld.awaiting_identification.map((e) => {
-                const key = idKey(e);
-                const { labels, saving, error } = identifyFor(e);
-                const allLabeled = labels.every((l) => l != null);
-                return (
-                  <div key={key}
-                      style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
-                               padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-                    <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
-                    <span className="mut">{e.pay_date}</span>
-                    {e.components.map((c, i) => (
-                      <label key={i} className="taplabel" style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        {money(c.amount_per_unit, c.currency, 4)}
-                        <select value={labels[i] ?? ""} onChange={(ev) => setLabel(e, i, ev.target.value)}
-                               aria-label={`${money(c.amount_per_unit, c.currency, 4)} type`}>
-                          <option value="">…</option>
-                          <option value="normal">Normal</option>
-                          <option value="special">Special</option>
-                        </select>
-                      </label>
-                    ))}
-                    {error && <span className="neg">{error}</span>}
-                    <button type="button" disabled={!allLabeled || saving} onClick={() => submitIdentify(e)}>
-                      {saving ? "Saving…" : "Save"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {yld.excluded.length > 0 && (
-            <div style={{ marginTop: 16 }} data-testid="dividend-excluded">
-              <h4 style={{ margin: "0 0 8px" }}>Excluded as possibly special</h4>
-              {/* A handful of rows at most (one per flagged payment in the trailing 12
-                  months) — a plain list, not Pattern A/B's machinery built for a dense
-                  ledger. */}
-              {yld.excluded.map((e) => (
-                <div key={e.security_id + "-" + e.pay_date}
-                    style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
-                             padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-                  <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
-                  <span className="mut">{e.pay_date}</span>
-                  <span className="neg">{money(e.rate, e.currency, 4)}</span>
-                  <span className="neg">{fmt(e.ratio, 1)}x</span>
-                  <span className="mut">
-                    vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
-                    &nbsp;({money(e.baseline, e.currency, 4)})
-                  </span>
-                  {capReturnPill(e)}
-                  <button className="link-btn" onClick={() => markRegular(e)}>Mark as regular</button>
-                  <button className="link-btn" onClick={() => openEditor(e, 0)}>Split…</button>
-                  {splitEditor(e)}
-                </div>
-              ))}
-            </div>
-          )}
-
-          {yld.marked_regular?.length > 0 && (
-            <div style={{ marginTop: 16 }} data-testid="dividend-marked-regular">
-              <h4 style={{ margin: "0 0 8px" }}>Marked as regular / split</h4>
-              {yld.marked_regular.map((e) => {
-                // A capital-return component the split also counts as special is shown once,
-                // as the capital-return pill - not again inside the "+ special" figure.
-                const crInSpecial = e.capital_return_in_special ? e.capital_return_component.amount_per_unit : 0;
-                const special = e.special_per_unit - crInSpecial;
-                return (
-                  <div key={e.id}
-                      style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
-                               padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-                    <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
-                    <span className="mut">{e.pay_date}</span>
-                    {special > 1e-9 ? (
-                      <span>{money(e.regular_per_unit + crInSpecial, e.currency, 4)} regular
-                        <span className="mut"> + {money(special, e.currency, 4)} special</span>
-                      </span>
-                    ) : (
-                      <span>{money(e.rate, e.currency, 4)} regular</span>
-                    )}
-                    {e.baseline_type &&
-                      <span className="mut">
-                        ({fmt(e.ratio, 1)}x vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
-                        &nbsp;{money(e.baseline, e.currency, 4)})
-                      </span>}
-                    {capReturnPill(e)}
-                    <button className="link-btn" onClick={() => openEditor(e, e.special_per_unit)}>Edit</button>
-                    <button className="link-btn" onClick={() => unmarkRegular(e.id)}>
-                      {e.special_per_unit > 0 ? "Clear" : "Unmark"}
-                    </button>
-                    {splitEditor(e)}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {yld.regular?.length > 0 && (
-            <div style={{ marginTop: 16 }} data-testid="dividend-regular">
-              <h4 style={{ margin: "0 0 8px" }}>Regular payments&nbsp;
-                <span className="mut" style={{ fontWeight: 400, fontSize: ".8em" }}>
-                  last 12 months, nothing flagged or split - split one if it was really part special
-                </span>
-              </h4>
-              {yld.regular.map((e) => (
-                <div key={e.security_id + "-" + e.pay_date}
-                    style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
-                             padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-                  <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
-                  <span className="mut">{e.pay_date}</span>
-                  <span>{money(e.rate, e.currency, 4)}</span>
-                  {capReturnPill(e)}
-                  <button className="link-btn" onClick={() => openEditor(e, 0)}>Split…</button>
-                  {splitEditor(e)}
-                </div>
-              ))}
-            </div>
-          )}
+          <AwaitingIdentification rows={yld.awaiting_identification} api={split} onOpenTicker={onOpenTicker} />
+          <Excluded rows={yld.excluded} api={split} onOpenTicker={onOpenTicker} />
+          <MarkedRegular rows={yld.marked_regular} api={split} onOpenTicker={onOpenTicker} />
+          <Regular rows={yld.regular} api={split} onOpenTicker={onOpenTicker} />
 
           <div style={{ marginTop: 16 }} data-testid="dividend-capital-returns">
             <h4 style={{ margin: "0 0 8px" }}>Capital-return adjustments&nbsp;
@@ -554,17 +290,7 @@ export default function Dividends() {
                 a recurring non-ordinary component (e.g. DBS's capital return) subtracted before the yield above
               </span>
             </h4>
-            {capReturns.map((c) => (
-              <div key={c.id}
-                  style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
-                           padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-                <span style={{ fontWeight: 600 }}>{c.name} <span className="pill">{c.ticker}</span></span>
-                <span>{money(c.amount_per_unit, c.currency, 4)}</span>
-                <span className="mut">{c.start_date} → {c.end_date || "ongoing"}</span>
-                {c.note && <span className="mut">{c.note}</span>}
-                <button className="link-btn" onClick={() => removeAdjustment(c.id)} title="Delete">✕</button>
-              </div>
-            ))}
+            <CapitalReturnList rows={capReturns} onRemove={removeAdjustment} />
             <form onSubmit={submitAdjustment}
                  style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <select value={capForm.security_id} onChange={selectCapSecurity}>
