@@ -99,6 +99,31 @@ class TestCandidateNames(unittest.TestCase):
 
         self.assertEqual(_candidate_names(self.s, 1), ["QAF"])
 
+    def test_curated_cpf_srs_name_tried_first_for_a_known_ticker(self):
+        """SBS Transit's real shape (launch brief): `security.name`/its aliases never carry
+        SGX's own "LTD" suffix (nothing in a broker's statement text puts it there), so without
+        CPF_SRS_SGX_NAMES's curated name this ticker never resolves at all - see
+        test_a_name_missing_its_sgx_suffix_never_resolves_without_the_curated_name below for the
+        end-to-end failure this fixes."""
+        self.s.add(Security(id=1, canonical_ticker="S61", name="SBS Transit", market="SG"))
+        self.s.add(SecurityAlias(security_id=1, alias="S61", source="symbols"))
+        self.s.commit()
+
+        self.assertEqual(_candidate_names(self.s, 1, ticker="S61"),
+                         ["SBS TRANSIT LTD", "SBS TRANSIT"])
+
+    def test_curated_name_equal_to_the_own_name_is_not_duplicated(self):
+        self.s.add(Security(id=1, canonical_ticker="D05", name="DBS Group Holdings Ltd", market="SG"))
+        self.s.commit()
+
+        self.assertEqual(_candidate_names(self.s, 1, ticker="D05"), ["DBS GROUP HOLDINGS LTD"])
+
+    def test_an_unlisted_ticker_gets_no_curated_candidate(self):
+        self.s.add(Security(id=1, canonical_ticker="O39", name="OCBC Bank", market="SG"))
+        self.s.commit()
+
+        self.assertEqual(_candidate_names(self.s, 1, ticker="O39"), ["OCBC BANK"])
+
 
 class TestResolve(unittest.TestCase):
     def setUp(self):
@@ -120,6 +145,35 @@ class TestResolve(unittest.TestCase):
         self.assertEqual(name, "DBS GROUP HOLDINGS LTD")
         self.assertEqual(got, sched)
         mock_sgx.assert_called_once_with("DBS GROUP HOLDINGS LTD")   # own name wins, no 2nd try
+
+    def test_a_name_missing_its_sgx_suffix_never_resolves_without_the_curated_name(self):
+        """The regression this was traced to: SBS Transit's `security.name` ("SBS Transit") and
+        its only alias ("S61", dropped as a bare code) never produce SGX's own registered name
+        ("SBS TRANSIT LTD") - calling `_resolve` without `ticker` (as every call site did before
+        this fix) tries only "SBS TRANSIT", SGX answers empty, and the holding is reported
+        unmatched: `dividend_announcement`/`dividend_announcement_component` never populate for
+        it, so the Dividends tab's split-entry UI has nothing to offer for this counter even
+        though the real payment (0.0845 + 0.1597, the launch brief's SBS Transit/SRS case) is
+        on SGX's schedule. Passing `ticker="S61"` is the fix - `main()` does this already."""
+        self.s.add(Security(id=1, canonical_ticker="S61", name="SBS Transit", market="SG"))
+        self.s.add(SecurityAlias(security_id=1, alias="S61", source="symbols"))
+        self.s.commit()
+        sched = {dt.date(2026, 8, 20): {"pay": dt.date(2026, 8, 28), "ccy": "SGD",
+                                        "inline": 0.2442, "has_opt": False,
+                                        "components": [{"currency": "SGD", "amount_per_unit": 0.0845},
+                                                       {"currency": "SGD", "amount_per_unit": 0.1597}]}}
+
+        def sgx(name):
+            return sched if name == "SBS TRANSIT LTD" else {}
+
+        with patch.object(da, "sgx_schedule", side_effect=sgx):
+            name, got = da._resolve(self.s, 1)             # no ticker - the old, broken call
+            self.assertIsNone(name)
+            self.assertEqual(got, {})
+
+            name, got = da._resolve(self.s, 1, ticker="S61")   # the fix
+            self.assertEqual(name, "SBS TRANSIT LTD")
+            self.assertEqual(got, sched)
 
     def test_transport_failure_is_raised_not_swallowed(self):
         self.s.add(Security(id=1, canonical_ticker="D05", name="DBS Group Holdings Ltd", market="SG"))

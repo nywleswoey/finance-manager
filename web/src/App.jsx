@@ -63,6 +63,16 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [ver, setVer] = useState(0);            // bump to remount active tab
+  // A one-shot "open this ticker on Holdings" request from the Dividends tab's payment links
+  // (launch brief: "I can't split the SBS Transit record for SRS" was partly a findability
+  // complaint - a payment there has no way to jump to its security). Holdings consumes it on
+  // mount (it owns which ticker's SecurityDetail is open) and clears it via `onTickerOpened`,
+  // so navigating back to Holdings later does not reopen the same ticker uninvited.
+  const [openTicker, setOpenTicker] = useState(null);
+  function goToTicker(ticker) {
+    setOpenTicker(ticker);
+    chooseTab("Holdings");
+  }
   // The whole state cost of the phone navigation shell. Below 640px the sidebar is an
   // off-canvas drawer behind the app bar's `☰`; at every other width this is dead weight,
   // because the rail is never hidden and nothing reads it.
@@ -193,7 +203,9 @@ export default function App() {
                 </button>
               </div>
             </div>
-            <View key={ver} />
+            <View key={ver}
+                  {...(tab === "Holdings" ? { openTicker, onTickerOpened: () => setOpenTicker(null) } : {})}
+                  {...(tab === "Dividends" ? { onOpenTicker: goToTicker } : {})} />
           </>
         )}
         {activeSection === "Net Worth" && <NetWorth />}

@@ -1,8 +1,10 @@
 import React, { Fragment, useEffect, useState } from "react";
-import { get, fmt, sgd, money, cls, signed, signedPct } from "../../api.js";
+import { get, del, fmt, sgd, money, cls, signed, signedPct } from "../../api.js";
 import { Cards, RowCard, Tile, usePhone } from "../../cards.jsx";
 import { ContractCell } from "./contract.jsx";
 import { boundOf, boundPhrase } from "./bound.js";
+import { useDividendSplit, AwaitingIdentification, Excluded, MarkedRegular, Regular,
+         CapitalReturnList } from "./dividendSplit.jsx";
 
 /**
  * The words an unmeasurable cell reads — words, never a glyph and never a tooltip (#143 §6).
@@ -350,13 +352,25 @@ function carrySentence(pv, b) {
 
 export default function SecurityDetail({ ticker, onBack }) {
   const [d, setD] = useState(null);
+  // The split / identify actions live on `/api/dividend-yields` (one owner, no second copy of
+  // the logic the Dividends tab uses - see dividendSplit.jsx), filtered client-side to this
+  // ticker: the endpoint already computes every held security's distributions in one shot, and
+  // a ticker-scoped route would just be this same filter, server-side, for one caller.
+  const [yld, setYld] = useState(null);
+  const [capReturns, setCapReturns] = useState([]);
+  const [ver, setVer] = useState(0);
   const phone = usePhone();
+  const divApi = useDividendSplit(() => setVer((v) => v + 1));
   useEffect(() => {
     setD(null);
     // The whole ticker across every funding bucket — there is no `bucket` parameter (#153).
     get(`/api/holding?ticker=${encodeURIComponent(ticker)}`)
       .then(setD).catch(() => setD({ error: true }));
   }, [ticker]);
+  useEffect(() => {
+    get("/api/dividend-yields").then(setYld).catch(() => setYld(null));
+    get("/api/dividend-capital-returns").then((r) => setCapReturns(r.rows)).catch(() => setCapReturns([]));
+  }, [ticker, ver]);
 
   if (!d) return <div className="loading">Loading {ticker}…</div>;
   if (d.error || !d.summary) return <div className="loading">No data for {ticker}. <a className="backlink" onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)" }}>← back</a></div>;
@@ -388,6 +402,20 @@ export default function SecurityDetail({ ticker, onBack }) {
   const rows = ledgerRows(d);
   const bks = d.buckets || [];
   const split = bks.length > 1;
+  // `/api/dividend-yields` covers every held security in one payload (see dividendSplit.jsx) -
+  // this page's own slice is a client-side filter by ticker, not a second endpoint or a second
+  // copy of the split/identify mechanics the Dividends tab uses.
+  const divLists = yld ? {
+    awaiting: (yld.awaiting_identification || []).filter((e) => e.ticker === ticker),
+    excluded: (yld.excluded || []).filter((e) => e.ticker === ticker),
+    markedRegular: (yld.marked_regular || []).filter((e) => e.ticker === ticker),
+    regular: (yld.regular || []).filter((e) => e.ticker === ticker),
+  } : null;
+  const divCapReturns = capReturns.filter((c) => c.ticker === ticker);
+  async function removeCapReturn(id) {
+    await del("/api/dividend-capital-returns/" + id);
+    setVer((v) => v + 1);
+  }
   // WHICH WAY A FIGURE RUNS IS DECIDED ONCE (`bound.js`); every clause below reads `dir`.
   const dir = boundOf(s);
   const refused = dir.refused;
@@ -752,6 +780,29 @@ export default function SecurityDetail({ ticker, onBack }) {
           </div>
         )}
       </div>
+
+      {/* The split / component-identification actions the Dividends tab offers, scoped to
+          this one security - "needs your identification" is `AwaitingIdentification`'s own
+          warn-coloured heading, same as the Dividends tab's. Nothing renders when this ticker
+          has no outstanding split/identify work and no capital-return adjustment - a security
+          with an ordinary, unflagged dividend history (most of them) adds no empty card here. */}
+      {yld && (divLists.awaiting.length > 0 || divLists.excluded.length > 0 ||
+               divLists.markedRegular.length > 0 || divLists.regular.length > 0 ||
+               divCapReturns.length > 0) && (
+        <div className="card" style={{ marginTop: 18 }} data-testid="dividend-split-section">
+          <h3>Dividend split / identification</h3>
+          <AwaitingIdentification rows={divLists.awaiting} api={divApi} />
+          <Excluded rows={divLists.excluded} api={divApi} />
+          <MarkedRegular rows={divLists.markedRegular} api={divApi} />
+          <Regular rows={divLists.regular} api={divApi} />
+          {divCapReturns.length > 0 && (
+            <div style={{ marginTop: 16 }} data-testid="dividend-capital-returns">
+              <h4 style={{ margin: "0 0 8px" }}>Capital-return adjustments</h4>
+              <CapitalReturnList rows={divCapReturns} onRemove={removeCapReturn} />
+            </div>
+          )}
+        </div>
+      )}
 
       {opts.length > 0 && (
         <div className="card" style={{ marginTop: 18 }}>
