@@ -68,7 +68,7 @@ def test_cdp_date_is_none_when_nothing_parses(s):
 
 # ---------- FSM / iFast: historical file + dated catch-up exports ----------
 FSM_COLS = ["Transaction Date", "Transaction Type", "Product Name", "Payment Method",
-            "Product Amount", "Product Currency", "Contract No"]
+            "Product Amount", "Product Currency", "Product Type", "Quantity", "Contract No"]
 
 
 def _fsm(tmp_path, monkeypatch, files):
@@ -78,7 +78,8 @@ def _fsm(tmp_path, monkeypatch, files):
             w = csv.DictWriter(fh, FSM_COLS)
             w.writeheader()
             for r in rows:
-                w.writerow({"Payment Method": "Cash", "Product Currency": "SGD", **r})
+                w.writerow({"Payment Method": "Cash", "Product Currency": "SGD",
+                            "Product Type": "Cash Account", "Quantity": "0", **r})
     monkeypatch.setattr(pd, "DATA", str(tmp_path))
     monkeypatch.setattr(pd, "DIV", [])
     pd.fsm()
@@ -123,6 +124,34 @@ def test_fsm_historical_file_only_is_unchanged(tmp_path, monkeypatch):
         ],
     })
     assert got == [("D05", "17 Apr 2026", 2032.8)]
+
+
+def test_a_scrip_option_paid_in_cash_is_booked_as_a_cash_dividend(tmp_path, monkeypatch):
+    """AIMS's June 2026 payout: "Scrip Dividend Option" in the name, but Quantity 0 and
+    Product Type "Cash Account" say the holder (or the fractional remainder) was credited
+    cash, not shares. The name alone must not drop it."""
+    got = _fsm(tmp_path, monkeypatch, {
+        "ifast_20260420_20260709.csv": [
+            {"Transaction Date": "29 Jun 2026", "Transaction Type": "Stock Dividend",
+             "Product Name": "AIMS APAC REIT Scrip Dividend Option (O5RU)",
+             "Product Amount": "901.15", "Quantity": "0", "Contract No": "TTN1"},
+        ],
+    })
+    assert got == [("O5RU", "29 Jun 2026", 901.15)]
+
+
+def test_a_scrip_dividend_that_delivers_units_stays_excluded(tmp_path, monkeypatch):
+    """A nonzero Quantity means the row paid in shares, not cash -> stays out of
+    dividends.csv (the share side is booked elsewhere, as a Corp Action row)."""
+    got = _fsm(tmp_path, monkeypatch, {
+        "ifast_historical.csv": [
+            {"Transaction Date": "29 Jun 2026", "Transaction Type": "Stock Dividend",
+             "Product Name": "AIMS APAC REIT Scrip Dividend Option (O5RU)",
+             "Product Amount": "4411.18", "Product Type": "Stock", "Quantity": "3710",
+             "Contract No": "TTN2"},
+        ],
+    })
+    assert got == []
 
 
 # ---------- CDP tracker: the ±7-day dedup and CDP_DIV_FIX ----------

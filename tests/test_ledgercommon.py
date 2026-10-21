@@ -15,13 +15,14 @@ import os
 
 from build._ledgercommon import (
     MARKET_CCY, TIGER_FEE_COLS, canon, cdp_dividend_ticker, fsm_statement_files,
-    fsm_statement_rows, is_transfer_in, is_transfer_out, market_of,
-    name_to_ticker, norm_ticker, num,
+    fsm_statement_rows, fsm_stock_dividend_is_cash, is_transfer_in, is_transfer_out,
+    market_of, name_to_ticker, norm_ticker, num,
 )
 
 FSM_COLS = ["Transaction Date", "Transaction Type", "Product Name", "Payment Method",
-            "Quantity", "Product Currency", "Transaction Price", "Product Amount",
-            "Investment Amount", "Redemption Amount", "Total Fee", "Contract No"]
+            "Quantity", "Product Type", "Product Currency", "Transaction Price",
+            "Product Amount", "Investment Amount", "Redemption Amount", "Total Fee",
+            "Contract No"]
 
 
 def _write_fsm(path, rows):
@@ -247,3 +248,27 @@ def test_fsm_statement_rows_keeps_rows_sharing_a_contract_no_within_one_file(tmp
     assert len(list(fsm_statement_rows(str(tmp_path)))) == 2
     _write_fsm(tmp_path / "fsm" / "ifast_20260101_20260301.csv", legs)
     assert len(list(fsm_statement_rows(str(tmp_path)))) == 2
+
+
+def test_fsm_stock_dividend_is_cash_ignores_the_scrip_option_name():
+    row = {"Product Name": "AIMS APAC REIT Scrip Dividend Option (O5RU)",
+           "Product Type": "Cash Account", "Quantity": "0"}
+    assert fsm_stock_dividend_is_cash(row) is True
+
+
+def test_fsm_stock_dividend_is_cash_matches_a_plain_cash_dividend_row():
+    row = {"Product Name": "DBS Group Holdings Ltd Cash Dividend (D05)",
+           "Product Type": "Cash Account", "Quantity": "0"}
+    assert fsm_stock_dividend_is_cash(row) is True
+
+
+def test_fsm_stock_dividend_is_cash_is_false_when_units_are_delivered():
+    row = {"Product Name": "AIMS APAC REIT Scrip Dividend Option (O5RU)",
+           "Product Type": "Stock", "Quantity": "3710"}
+    assert fsm_stock_dividend_is_cash(row) is False
+
+
+def test_fsm_stock_dividend_is_cash_is_false_without_a_cash_account_product_type():
+    row = {"Product Name": "AIMS APAC REIT Scrip Dividend Option (O5RU)",
+           "Product Type": "Stock", "Quantity": "0"}
+    assert fsm_stock_dividend_is_cash(row) is False

@@ -4,7 +4,9 @@
 Sources:
   Tiger flex  : 'Dividends' section, rows with status 'Paid' (currency from the
                 flex column; market inference only when that cell is blank)
-  FSM/iFast   : 'Stock Dividend' rows that are 'Cash Dividend' / 'Cash in Lieu' (SGD)
+  FSM/iFast   : 'Stock Dividend' rows that credit cash (Quantity 0, Product Type
+                'Cash Account') -- 'Cash Dividend' / 'Cash in Lieu' and a scrip option
+                taken in cash alike; a row with units delivered is excluded (SGD)
   CDP         : the Cash Transaction section of each CDP statement PDF (see
                 cdp_statements()); the data/cdp-stocks/dividends.csv tracker fills in
                 for any payout whose month has no statement, and the tracker's own
@@ -21,7 +23,7 @@ from _pdf import raw_text
 from _csvout import write_csv
 from _dates import try_date
 from _ledgercommon import (MARKET_CCY, canon, cdp_dividend_ticker, fsm_statement_rows,
-                           market_of, name_to_ticker, norm_ticker, num)
+                           fsm_stock_dividend_is_cash, market_of, name_to_ticker, norm_ticker, num)
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -68,15 +70,15 @@ def tiger():
 def fsm():
     for _rel, r in fsm_statement_rows(DATA):
         if r["Transaction Type"] != "Stock Dividend": continue
+        if not fsm_stock_dividend_is_cash(r): continue   # skip scrip actually paid in units
         pn = r["Product Name"]
-        if not ("Cash Dividend" in pn or "Cash in Lieu" in pn): continue   # skip scrip (=shares)
         amt = num(r.get("Product Amount"))
         if amt <= 0: continue
         m = re.search(r"\(([^)]+)\)\s*$", pn)
         code = canon(m.group(1).upper()) if m else ""
         method = (r.get("Payment Method") or "").strip()
         acct = {"SRS": "SRS", "CPFIS-OA": "CPF"}.get(method, "FSM")
-        name = re.sub(r"\s*(Cash Dividend|Cash in Lieu).*$", "", pn).strip()
+        name = re.sub(r"\s*(Cash Dividend|Cash in Lieu|Scrip Dividend Option).*$", "", pn).strip()
         ccy = (r.get("Product Currency") or "SGD").strip()
         mkt = "MY" if ccy.upper() == "MYR" else "SG"      # Bursa dividends land in MYR
         add(date=r["Transaction Date"], account=acct, market=mkt, ticker=code,
