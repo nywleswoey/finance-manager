@@ -26,6 +26,7 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_dividends.py -q
 import datetime as dt
 import statistics
 from collections import defaultdict
+from itertools import combinations
 
 from sqlalchemy import text
 
@@ -585,7 +586,7 @@ def _payment(security_id, ex_date, pay_date, s):
     return None
 
 
-def add_flag_override(security_id, ex_date, pay_date, special_per_unit=0, s=None):
+def add_flag_override(security_id, ex_date, pay_date, special_per_unit=0, s=None, labels=()):
     """Record a per-payment split: `special_per_unit` is the user-declared special portion of
     the payment's combined per-unit rate, in the payment's own currency - 0 (the default) is the
     original "mark as regular" case, where the whole payment is regular. Persisted so it survives
@@ -593,6 +594,11 @@ def add_flag_override(security_id, ex_date, pay_date, special_per_unit=0, s=None
     (rate minus special_per_unit) toward trailing/forward DPS - see DividendFlagOverride and
     `_net_distributions()`. Keyed like `_distributions()` groups a distribution: ex_date when
     present, else pay_date (matched by `_match_override()`).
+
+    `labels` is the per-component Normal/Special identification behind the split
+    (`identify_components`, `{amount_per_unit, currency, label}` each) - empty for a typed split.
+    Whatever labels the split carried before are replaced, so typing a new special portion over
+    an identified one turns it back into a typed split.
 
     Upsert, not insert-or-skip: calling this again on an already-split payment UPDATEs its
     special_per_unit (the Dividends tab's Edit) rather than adding a second row - the existing
@@ -620,13 +626,22 @@ def add_flag_override(security_id, ex_date, pay_date, special_per_unit=0, s=None
         params = {"sid": security_id, "ex": d["ex_date"], "pay": d["pay_date"],
                   "sp": special_per_unit}
         if existing:
+            override_id = existing["id"]
             s.execute(text("UPDATE dividend_flag_override SET ex_date = :ex, pay_date = :pay, "
                            "special_per_unit = :sp, source = 'user' WHERE id = :id"),
-                      {**params, "id": existing["id"]})
+                      {**params, "id": override_id})
         else:
-            s.execute(text(
+            override_id = s.execute(text(
                 "INSERT INTO dividend_flag_override (security_id, ex_date, pay_date, "
-                "special_per_unit) VALUES (:sid, :ex, :pay, :sp)"), params)
+                "special_per_unit) VALUES (:sid, :ex, :pay, :sp) RETURNING id"), params).scalar_one()
+        s.execute(text("DELETE FROM dividend_flag_override_component WHERE override_id = :id"),
+                  {"id": override_id})
+        for c in labels:
+            s.execute(text(
+                "INSERT INTO dividend_flag_override_component (override_id, amount_per_unit, "
+                "currency, label) VALUES (:id, :amt, :ccy, :label)"),
+                {"id": override_id, "amt": c["amount_per_unit"], "ccy": c["currency"],
+                 "label": c["label"]})
         s.commit()
 
 
@@ -642,41 +657,51 @@ def identify_components(security_id, ex_date, pay_date, special_amounts, s=None)
     """Resolve a multi-component payment's Normal/Special labelling (the Dividends tab's
     "awaiting identification" list, see `yields()`) into a `dividend_flag_override` split:
     `special_amounts` is the per-unit rate of every cached `dividend_announcement_component`
-    the captain marked Special - every OTHER cached component for that payment is implicitly
+    the captain marked Special - every OTHER listed component for that payment is implicitly
     Normal. Their summed total becomes the payment's recorded special portion via
-    `add_flag_override` (source='user') - the only state this persists. The Normal/Special
-    choice itself is never stored per component: `dividend_announcement_component` is
-    wholesale-replaced on every re-ingest (see ingestion.dividend_announcements), so a column
-    there couldn't survive one, and the Dividends tab instead asks for every component's label
-    again each time, in one atomic submission, rather than caching a partial answer that could
-    go stale under a corrected SGX announcement.
+    `add_flag_override` (source='user'), together with each listed component's own label
+    (DividendFlagOverrideComponent), so `_net_distributions` knows exactly which components
+    the special portion already removed. The component matching the payment's active
+    capital-return setting (`_capital_return_component`) is never listed or labelled - it is
+    capital return automatically. The Dividends tab asks for every listed component's label in
+    one atomic submission rather than caching a partial answer that could go stale under a
+    corrected SGX announcement.
 
-    Raises ValueError when the payment has fewer than two cached components (nothing to
-    identify - `yields()` never lists one here), any component is declared in a currency other
-    than the payment's own (a special portion must be in the payment's currency - `yields()`
-    never lists such a payment either), or `special_amounts` contains a rate that doesn't match
-    any cached component (stale UI state - the components list changed under the caller;
-    re-fetch and retry)."""
+    Raises ValueError when the payment has fewer than two cached components left to label once
+    any capital-return one is set aside (nothing to identify - `yields()` never lists one here),
+    any component is declared in a currency other than the payment's own (a special portion must
+    be in the payment's currency - `yields()` never lists such a payment either), or
+    `special_amounts` contains a rate that doesn't match any listed component (stale UI state -
+    the components list changed under the caller; re-fetch and retry)."""
     with session_scope(s) as s:
         comps = split_components(security_id, ex_date, pay_date, s)
-        if len(comps) < 2:
-            raise ValueError("payment has fewer than two declared components - nothing to identify")
         d = _payment(security_id, ex_date, pay_date, s)
         if d is None:
             raise ValueError("no matching dividend payment for that ex_date/pay_date")
         if any(c["currency"] != d["currency"] for c in comps):
             raise ValueError(
                 f"components are not all declared in the payment's currency {d['currency']}")
-        remaining = list(comps)
-        total_special = 0.0
+        adjustments = [{**a, "amount_per_unit": num(a["amount_per_unit"])} for a in fetch_dicts(s,
+            "SELECT amount_per_unit, currency, start_date, end_date FROM dividend_adjustment "
+            "WHERE security_id = :sid", {"sid": security_id})]
+        cr_comp = _capital_return_component(
+            comps, _active_adjustment(adjustments, d["ex_date"] or d["pay_date"]), d["currency"])
+        remaining = [c for c in comps if c is not cr_comp]
+        if len(remaining) < 2:
+            raise ValueError("payment has fewer than two declared components - nothing to identify")
+        specials = []
         for amt in special_amounts:
             amt = float(amt)
             match = next((c for c in remaining if abs(c["amount_per_unit"] - amt) < 1e-6), None)
             if match is None:
                 raise ValueError(f"{amt} does not match a cached component for this payment")
             remaining.remove(match)
-            total_special += match["amount_per_unit"]
-        add_flag_override(security_id, ex_date, pay_date, special_per_unit=round(total_special, 6), s=s)
+            specials.append(match)
+        labels = ([{**c, "label": "special"} for c in specials] +
+                  [{**c, "label": "normal"} for c in remaining])
+        add_flag_override(security_id, ex_date, pay_date,
+                          special_per_unit=round(sum(c["amount_per_unit"] for c in specials), 6),
+                          s=s, labels=labels)
 
 
 def split_components(security_id, ex_date, pay_date=None, s=None):
@@ -783,12 +808,42 @@ def _classify(distributions):
             d["flag_baseline"] = d["flag_baseline_type"] = d["flag_ratio"] = None
 
 
+def _special_includes(match, cr_comp, components):
+    """Whether the split `match` (a `_match_override` row carrying its `components` labels) already
+    counts the capital-return component `cr_comp` as special - so `_net_distributions` must not
+    deduct it a second time.
+
+    An identified split (`identify_components`, labels present) says so exactly: `cr_comp` is
+    included only when its own rate/currency carries a Special label (a split identified before
+    the capital-return setting existed, when that component was still offered).
+
+    A typed split (no labels - the Split…/Edit amount, or any split recorded before labels were
+    stored) only has its summed `special_per_unit`, so this rule decides: it includes the
+    capital-return component when that amount EQUALS the component's rate, or CONTAINS it - is
+    the component's rate plus the rates of some subset of the payment's other cached components
+    (0.60 + 0.15 capital return + 0.20, typed 0.35 = 0.15 + 0.20). Any other amount (one that
+    is a sum of other components only, or matches no component sum at all) is taken to leave the
+    capital-return component in the regular rate - today's combined-rate behaviour, deducted
+    once from what remains."""
+    if match is None:
+        return False
+    amt, ccy = cr_comp["amount_per_unit"], cr_comp["currency"]
+    if match["components"]:
+        return any(c["label"] == "special" and c["currency"] == ccy
+                   and abs(c["amount_per_unit"] - amt) < 1e-9 for c in match["components"])
+    rest = float(match["special_per_unit"]) - amt
+    others = [c["amount_per_unit"] for c in components if c is not cr_comp]
+    return any(abs(rest - sum(subset)) < 1e-6
+               for n in range(len(others) + 1) for subset in combinations(others, n))
+
+
 def _net_distributions(distributions, adjustments, overrides):
     """Attach `special_per_unit` / `override_id` / `has_split` / `regular_rate` / `net_rate` /
-    `capital_return` / `capital_return_clamped` / `capital_return_component` to each of
-    `distributions` in place. Each distribution must already carry `components` (its cached SGX
-    `dividend_announcement_component` rows, already `{amount_per_unit, currency}` - see
-    `yields()`, which attaches these before calling this).
+    `capital_return` / `capital_return_clamped` / `capital_return_component` /
+    `capital_return_in_special` to each of `distributions` in place. Each distribution must
+    already carry `components` (its cached SGX `dividend_announcement_component` rows, already
+    `{amount_per_unit, currency}`), and each of `overrides` its `components` labels (empty for a
+    typed split) - see `yields()`, which attaches both before calling this.
 
     `regular_rate` is the combined declared rate minus any recorded split's special portion
     (`_match_override`, 0/None when there is none).
@@ -799,14 +854,11 @@ def _net_distributions(distributions, adjustments, overrides):
     still-correct behaviour, `apply_capital_return` against the combined `regular_rate`) or there
     is no active adjustment at all.
 
-    When a component DOES match, that component is capital return, deducted exactly once: not
-    again on top of a user label that already removed it (`identify_components`/`add_flag_
-    override` marking that same amount Special, folded into `special_per_unit` above) - the
-    precedence is that user labels win for which components are special, capital return only
-    removes what is not already removed, so the deduction is the component's own amount unless
-    `special_per_unit` already equals it (1e-9 tolerance, same as the component match), in which
-    case it is already gone from `regular_rate` and nothing further is subtracted. Either way the
-    result is clamped at zero, same as `apply_capital_return`.
+    When a component DOES match, that component is capital return, deducted exactly once: from
+    `regular_rate` unless the split already counts that same component as special
+    (`capital_return_in_special`, see `_special_includes`), in which case it is already gone from
+    `regular_rate` and nothing further is subtracted. Either way the result is clamped at zero,
+    same as `apply_capital_return`.
 
     `net_rate` is `regular_rate` further net of that deduction - the figure trailing/forward DPS
     sum and `_classify()`'s flagging compares against. A distribution with no split and no
@@ -821,14 +873,15 @@ def _net_distributions(distributions, adjustments, overrides):
         d["regular_rate"] = round(d["rate"] - special, 6)
         date = d["ex_date"] or d["pay_date"]
         adj = _active_adjustment(adjustments, date)
-        cr_comp = _capital_return_component(d.get("components", []), adj, d["currency"])
+        cr_comp = _capital_return_component(d["components"], adj, d["currency"])
         d["capital_return_component"] = cr_comp
+        d["capital_return_in_special"] = (cr_comp is not None and
+                                          _special_includes(match, cr_comp, d["components"]))
         if cr_comp is None:
             net, capital_return, clamped = apply_capital_return(
                 d["regular_rate"], d["currency"], date, adjustments)
         else:
-            cr_amt = float(adj["amount_per_unit"])
-            deduct = 0.0 if abs(special - cr_amt) < 1e-9 else cr_amt
+            deduct = 0.0 if d["capital_return_in_special"] else cr_comp["amount_per_unit"]
             net = d["regular_rate"] - deduct
             clamped = net < 0
             net = 0.0 if clamped else net
@@ -974,10 +1027,16 @@ def yields(s=None, today=None):
             adjustments_by_sec[r["security_id"]].append(
                 {**r, "amount_per_unit": num(r["amount_per_unit"])})
         overrides_by_sec = defaultdict(list)
+        labels_by_override = defaultdict(list)
+        for r in fetch_dicts(s, "SELECT override_id, amount_per_unit, currency, label "
+                                "FROM dividend_flag_override_component"):
+            labels_by_override[r["override_id"]].append(
+                {**r, "amount_per_unit": num(r["amount_per_unit"])})
         for r in fetch_dicts(s, "SELECT id, security_id, ex_date, pay_date, special_per_unit "
                                 "FROM dividend_flag_override"):
             overrides_by_sec[r["security_id"]].append(
-                {**r, "special_per_unit": num(r["special_per_unit"])})
+                {**r, "special_per_unit": num(r["special_per_unit"]),
+                 "components": labels_by_override.get(r["id"], [])})
         announced_by_sec = defaultdict(list)
         for r in fetch_dicts(s,
                 "SELECT security_id, ex_date, pay_date, amount_per_unit, currency "
@@ -1061,6 +1120,7 @@ def yields(s=None, today=None):
                     "special_per_unit": round(d["special_per_unit"], 6),
                     "regular_per_unit": round(d["regular_rate"], 6),
                     "capital_return_component": d["capital_return_component"],
+                    "capital_return_in_special": d["capital_return_in_special"],
                 })
             if d["needs_identification"]:
                 awaiting_identification.append({

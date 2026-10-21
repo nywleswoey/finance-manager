@@ -491,32 +491,38 @@ export default function Dividends() {
           {yld.marked_regular?.length > 0 && (
             <div style={{ marginTop: 16 }} data-testid="dividend-marked-regular">
               <h4 style={{ margin: "0 0 8px" }}>Marked as regular / split</h4>
-              {yld.marked_regular.map((e) => (
-                <div key={e.id}
-                    style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
-                             padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
-                  <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
-                  <span className="mut">{e.pay_date}</span>
-                  {e.special_per_unit > 0 ? (
-                    <span>{money(e.regular_per_unit, e.currency, 4)} regular
-                      <span className="mut"> + {money(e.special_per_unit, e.currency, 4)} special</span>
-                    </span>
-                  ) : (
-                    <span>{money(e.rate, e.currency, 4)} regular</span>
-                  )}
-                  {e.baseline_type &&
-                    <span className="mut">
-                      ({fmt(e.ratio, 1)}x vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
-                      &nbsp;{money(e.baseline, e.currency, 4)})
-                    </span>}
-                  {capReturnPill(e)}
-                  <button className="link-btn" onClick={() => openEditor(e, e.special_per_unit)}>Edit</button>
-                  <button className="link-btn" onClick={() => unmarkRegular(e.id)}>
-                    {e.special_per_unit > 0 ? "Clear" : "Unmark"}
-                  </button>
-                  {splitEditor(e)}
-                </div>
-              ))}
+              {yld.marked_regular.map((e) => {
+                // A capital-return component the split also counts as special is shown once,
+                // as the capital-return pill - not again inside the "+ special" figure.
+                const crInSpecial = e.capital_return_in_special ? e.capital_return_component.amount_per_unit : 0;
+                const special = e.special_per_unit - crInSpecial;
+                return (
+                  <div key={e.id}
+                      style={{ display: "flex", flexWrap: "wrap", gap: "4px 12px", alignItems: "baseline",
+                               padding: "8px 0", borderBottom: "1px solid var(--line)" }}>
+                    <span style={{ fontWeight: 600 }}>{e.name} <span className="pill">{e.ticker}</span></span>
+                    <span className="mut">{e.pay_date}</span>
+                    {special > 1e-9 ? (
+                      <span>{money(e.regular_per_unit + crInSpecial, e.currency, 4)} regular
+                        <span className="mut"> + {money(special, e.currency, 4)} special</span>
+                      </span>
+                    ) : (
+                      <span>{money(e.rate, e.currency, 4)} regular</span>
+                    )}
+                    {e.baseline_type &&
+                      <span className="mut">
+                        ({fmt(e.ratio, 1)}x vs. {e.baseline_type === "seasonal" ? "same slot, a year earlier" : "ticker's median"}
+                        &nbsp;{money(e.baseline, e.currency, 4)})
+                      </span>}
+                    {capReturnPill(e)}
+                    <button className="link-btn" onClick={() => openEditor(e, e.special_per_unit)}>Edit</button>
+                    <button className="link-btn" onClick={() => unmarkRegular(e.id)}>
+                      {e.special_per_unit > 0 ? "Clear" : "Unmark"}
+                    </button>
+                    {splitEditor(e)}
+                  </div>
+                );
+              })}
             </div>
           )}
 
