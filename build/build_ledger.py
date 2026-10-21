@@ -14,8 +14,8 @@ from collections import defaultdict
 from _csvout import write_csv
 from _dates import try_date
 from _ledgercommon import (MARKET_CCY, TIGER_FEE_COLS, canon, fsm_amount_is_into_product,
-                           fsm_cash_flow, is_transfer_in, is_transfer_out, market_of,
-                           norm_ticker, num, trade_cash_flow)
+                           fsm_cash_flow, fsm_statement_rows, is_transfer_in, is_transfer_out,
+                           market_of, norm_ticker, num, trade_cash_flow)
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -143,8 +143,7 @@ def load_tiger():
 # ---------- FSM / iFast ----------
 FSM_POS = {"Buy": +1, "Sell": -1, "Transfer In": +1, "Transfer Out": -1}
 def load_fsm():
-    path = os.path.join(DATA, "fsm/ifast_historical.csv")
-    for r in csv.DictReader(open(path, encoding="utf-8-sig")):
+    for rel, r in fsm_statement_rows(DATA):
         t = (r.get("Transaction Type") or "").strip()
         pn = (r.get("Product Name") or "").strip()
         # iFast export co-mingles accounts; route by Payment Method.
@@ -194,7 +193,7 @@ def load_fsm():
             price=r.get("Transaction Price", ""), amount=amt,
             fees=num(r.get("Total Fee")),
             currency=(r.get("Product Currency") or "").strip(),
-            source="fsm/ifast_historical.csv", raw=pn)
+            source=rel, raw=pn)
 
 # ---------- Moomoo (from parse_moomoo.py snapshot-diff) ----------
 def load_moomoo():

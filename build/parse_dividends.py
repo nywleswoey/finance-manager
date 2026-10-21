@@ -20,8 +20,8 @@ from collections import defaultdict
 from _pdf import raw_text
 from _csvout import write_csv
 from _dates import try_date
-from _ledgercommon import (MARKET_CCY, canon, cdp_dividend_ticker, market_of, name_to_ticker,
-                           norm_ticker, num)
+from _ledgercommon import (MARKET_CCY, canon, cdp_dividend_ticker, fsm_statement_rows,
+                           market_of, name_to_ticker, norm_ticker, num)
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -66,8 +66,7 @@ def tiger():
 
 # ---------- FSM / iFast ----------
 def fsm():
-    path = os.path.join(DATA, "fsm/ifast_historical.csv")
-    for r in csv.DictReader(open(path, encoding="utf-8-sig")):
+    for _rel, r in fsm_statement_rows(DATA):
         if r["Transaction Type"] != "Stock Dividend": continue
         pn = r["Product Name"]
         if not ("Cash Dividend" in pn or "Cash in Lieu" in pn): continue   # skip scrip (=shares)

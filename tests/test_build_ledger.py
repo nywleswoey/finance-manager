@@ -28,7 +28,7 @@ finally:
 
 FSM_COLS = ["Transaction Date", "Transaction Type", "Product Name", "Payment Method",
             "Quantity", "Product Currency", "Transaction Price", "Product Amount",
-            "Investment Amount", "Redemption Amount", "Total Fee"]
+            "Investment Amount", "Redemption Amount", "Total Fee", "Contract No"]
 
 
 @pytest.fixture(autouse=True)
@@ -126,6 +126,55 @@ def test_fx_cash_transfers_keep_their_own_amounts():
            action="transfer_in", qty_signed=0, amount=740.0, source="tiger")
     BL.reconcile_transfer_amounts()
     assert BL.LEDGER[1]["amount"] == 740.0
+
+
+def test_fsm_reads_a_dated_export_alongside_the_historical_file(tmp_path, monkeypatch):
+    """iFast's dated catch-up export (`ifast_<from>_<to>.csv`) sits beside
+    ifast_historical.csv and must be read too, not silently skipped."""
+    (tmp_path / "fsm").mkdir()
+    with open(tmp_path / "fsm" / "ifast_historical.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, FSM_COLS)
+        w.writeheader()
+        w.writerow({"Transaction Date": "01 Jun 2023", "Transaction Type": "Corp Action",
+                    "Product Name": "IREIT Global (UD1U)", "Payment Method": "Cash",
+                    "Quantity": "500", "Product Currency": "SGD", "Transaction Price": "1",
+                    "Product Amount": "100", "Investment Amount": "100", "Total Fee": "0",
+                    "Contract No": "TTN1"})
+    with open(tmp_path / "fsm" / "ifast_20260420_20260709.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, FSM_COLS)
+        w.writeheader()
+        w.writerow({"Transaction Date": "09 Jul 2026", "Transaction Type": "Corp Action",
+                    "Product Name": "DBS Group Holdings Ltd (D05)", "Payment Method": "Cash",
+                    "Quantity": "10", "Product Currency": "SGD", "Transaction Price": "1",
+                    "Product Amount": "100", "Investment Amount": "100", "Total Fee": "0",
+                    "Contract No": "TTN2"})
+    monkeypatch.setattr(BL, "DATA", str(tmp_path))
+    BL.load_fsm()
+    assert [(r["ticker"], r["action"], r["qty_signed"]) for r in BL.LEDGER] == \
+        [("D05", "corp action", 10.0), ("UD1U", "corp action", 500.0)]
+
+
+def test_fsm_does_not_double_count_a_row_both_files_share(tmp_path, monkeypatch):
+    """Dated export ranges overlap the historical file -> the shared row (same Contract
+    No) must land once, not twice."""
+    shared = {"Transaction Date": "08 Jun 2026", "Transaction Type": "Corp Action",
+              "Product Name": "DBS Group Holdings Ltd (D05)", "Payment Method": "Cash",
+              "Quantity": "10", "Product Currency": "SGD", "Transaction Price": "1",
+              "Product Amount": "100", "Investment Amount": "100", "Total Fee": "0",
+              "Contract No": "TTN-SHARED"}
+    (tmp_path / "fsm").mkdir()
+    with open(tmp_path / "fsm" / "ifast_historical.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, FSM_COLS)
+        w.writeheader()
+        w.writerow(shared)
+    with open(tmp_path / "fsm" / "ifast_20260420_20260709.csv", "w", newline="") as fh:
+        w = csv.DictWriter(fh, FSM_COLS)
+        w.writeheader()
+        w.writerow(shared)
+    monkeypatch.setattr(BL, "DATA", str(tmp_path))
+    BL.load_fsm()
+    assert [(r["ticker"], r["action"], r["qty_signed"]) for r in BL.LEDGER] == \
+        [("D05", "corp action", 10.0)]
 
 
 def test_endowus_funding_maps_to_its_account_and_an_unknown_one_stops_the_build():

@@ -10,12 +10,25 @@ Now there is one home, so the contract each caller relied on is pinned here:
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_ledgercommon.py -q
 """
+import csv
 import os
 
 from build._ledgercommon import (
-    MARKET_CCY, TIGER_FEE_COLS, canon, cdp_dividend_ticker, is_transfer_in, is_transfer_out, market_of,
+    MARKET_CCY, TIGER_FEE_COLS, canon, cdp_dividend_ticker, fsm_statement_files,
+    fsm_statement_rows, is_transfer_in, is_transfer_out, market_of,
     name_to_ticker, norm_ticker, num,
 )
+
+FSM_COLS = ["Transaction Date", "Transaction Type", "Product Name", "Payment Method",
+            "Quantity", "Product Currency", "Transaction Price", "Product Amount",
+            "Investment Amount", "Redemption Amount", "Total Fee", "Contract No"]
+
+
+def _write_fsm(path, rows):
+    with open(path, "w", newline="") as fh:
+        w = csv.DictWriter(fh, FSM_COLS)
+        w.writeheader()
+        w.writerows(rows)
 
 
 def test_num_strips_separators_and_symbols():
@@ -170,3 +183,67 @@ def test_cdp_statement_names_use_symbols_csv():
     assert parse_cdp.code_of("STONEWEG EUTRUST") == "SET"
     assert parse_cdp.code_of("QAF") == "Q01"
     assert parse_cdp.code_of("NOT A REAL NAME") != "SET"
+
+
+# ---------- fsm_statement_files / fsm_statement_rows ----------
+# iFast exports historical.csv plus dated "ifast_<from>_<to>.csv" catch-up exports whose
+# ranges can overlap the historical file (and each other). These pin the shared file
+# discovery + row dedup both build_ledger.py and parse_dividends.py now read through.
+
+def test_fsm_statement_files_finds_historical_and_dated_exports_sorted(tmp_path):
+    (tmp_path / "fsm").mkdir()
+    for name in ("ifast_historical.csv", "ifast_20260420_20260709.csv"):
+        _write_fsm(tmp_path / "fsm" / name, [])
+    files = [os.path.basename(p) for p in fsm_statement_files(str(tmp_path))]
+    assert files == sorted(files)
+    assert set(files) == {"ifast_historical.csv", "ifast_20260420_20260709.csv"}
+
+
+def test_fsm_statement_rows_dedups_an_overlapping_row_by_contract_no(tmp_path):
+    (tmp_path / "fsm").mkdir()
+    _write_fsm(tmp_path / "fsm" / "ifast_historical.csv", [
+        {"Transaction Date": "08 Jun 2026", "Transaction Type": "Stock Dividend",
+         "Product Name": "CapitaLand Integrated Commercial Trust Cash Dividend (C38U)",
+         "Product Amount": "226.3", "Contract No": "TTN260608110526"},
+    ])
+    _write_fsm(tmp_path / "fsm" / "ifast_20260420_20260709.csv", [
+        {"Transaction Date": "08 Jun 2026", "Transaction Type": "Stock Dividend",
+         "Product Name": "CapitaLand Integrated Commercial Trust Cash Dividend (C38U)",
+         "Product Amount": "226.3", "Contract No": "TTN260608110526"},         # same txn, overlap
+        {"Transaction Date": "29 Jun 2026", "Transaction Type": "Stock Dividend",
+         "Product Name": "AIMS APAC REIT Scrip Dividend Option (O5RU)",
+         "Product Amount": "41.2", "Contract No": "TTN260629316186"},          # genuinely new
+    ])
+    rows = list(fsm_statement_rows(str(tmp_path)))
+    contract_nos = [r["Contract No"] for _rel, r in rows]
+    assert contract_nos == ["TTN260608110526", "TTN260629316186"]
+
+
+def test_fsm_statement_rows_keeps_a_historical_only_setup_unchanged(tmp_path):
+    (tmp_path / "fsm").mkdir()
+    _write_fsm(tmp_path / "fsm" / "ifast_historical.csv", [
+        {"Transaction Date": "01 Jan 2026", "Transaction Type": "Deposit",
+         "Product Name": "SGD Cash Account", "Product Amount": "100",
+         "Contract No": "TTN1"},
+    ])
+    rows = list(fsm_statement_rows(str(tmp_path)))
+    assert [(rel, r["Contract No"]) for rel, r in rows] == \
+        [(os.path.join("fsm", "ifast_historical.csv"), "TTN1")]
+
+
+def test_fsm_statement_rows_keeps_rows_sharing_a_contract_no_within_one_file(tmp_path):
+    # one trade's stock leg and its SGD Cash Account leg can share a Contract No; only a
+    # repeat from a *different* (overlapping) export is a duplicate
+    (tmp_path / "fsm").mkdir()
+    legs = [
+        {"Transaction Date": "02 Feb 2026", "Transaction Type": "Buy",
+         "Product Name": "DBS Group Holdings (D05)", "Product Amount": "1000",
+         "Contract No": "TTN2"},
+        {"Transaction Date": "02 Feb 2026", "Transaction Type": "Buy",
+         "Product Name": "SGD Cash Account", "Product Amount": "1000",
+         "Contract No": "TTN2"},
+    ]
+    _write_fsm(tmp_path / "fsm" / "ifast_historical.csv", legs)
+    assert len(list(fsm_statement_rows(str(tmp_path)))) == 2
+    _write_fsm(tmp_path / "fsm" / "ifast_20260101_20260301.csv", legs)
+    assert len(list(fsm_statement_rows(str(tmp_path)))) == 2
