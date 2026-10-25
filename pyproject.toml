@@ -4,19 +4,19 @@ version = "0.1.0"
 description = "Personal finance-manager platform — DB-backed ledger, performance, ingestion"
 requires-python = ">=3.11"
 dependencies = [
-    "sqlalchemy>=2.0.52",
-    "alembic>=1.19.1",
-    "psycopg[binary]>=3.2",
-    "pydantic-settings>=2.15.0",
-    "python-dotenv>=1.0",
-    "fastapi>=0.141.1",
-    "uvicorn>=0.52.3",
-    "google-auth>=2.56.3",
+    "sqlalchemy>=2.1.6",
+    "alembic>=1.20.1",
+    "psycopg[binary]>=3.3.6",
+    "pydantic-settings>=2.16.1",
+    "python-dotenv>=1.2.4",
+    "fastapi>=0.161.1",
+    "uvicorn>=0.54.0",
+    "google-auth>=2.62.0",
     "requests>=2.31",
-    "pyjwt>=2.8",
+    "pyjwt>=2.15.1",
     "pyyaml>=6.0.3",
     "anthropic>=0.122.0",
-    "certifi>=2024.2.2",
+    "certifi>=2026.10.19",
 ]
 
 [tool.uv]
@@ -31,7 +31,7 @@ package = false
 build = "npm --prefix web ci && npm --prefix web run build"
 
 [project.optional-dependencies]
-dev = ["ruff>=0.16.3", "pytest>=8"]
+dev = ["ruff>=0.17.2", "pytest>=8"]
 
 [tool.pytest.ini_options]
 # `pg` marks the tests that need a real Postgres. Two kinds, both skipping themselves when no
