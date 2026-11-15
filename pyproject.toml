@@ -63,7 +63,9 @@ extend-exclude = ["migrations"]
 # `select`: newer ruff versions resolve a much wider default (SIM/I/C4/PLR/FURB/DTZ/BLE…), which
 # floods the compact style this codebase deliberately uses. Explicit select freezes the ruleset
 # across ruff upgrades.
-select = ["E4", "E7", "E9", "F"]
+# I (isort) is the one style rule kept on: a sorted, grouped import block is the first thing a
+# reader (or an agent) uses to see what a module depends on, and `ruff check --fix` keeps it so.
+select = ["E4", "E7", "E9", "F", "I"]
 # Minus the compound-statement / import-layout style rules this codebase intentionally violates
 # for its compact aesthetic:
 #   E401 — multiple imports on one line   (build/ parser scripts)
@@ -72,3 +74,8 @@ select = ["E4", "E7", "E9", "F"]
 #   E702 — multiple statements on a line (semicolon): `a; b` one-liners are a deliberate style.
 #   E731 — lambda assignment: used for small local callables.
 ignore = ["E401", "E402", "E701", "E702", "E731"]
+
+[tool.ruff.lint.isort]
+# The repo is not a package (PYTHONPATH=.), so ruff cannot infer these; name them so project
+# imports always sort as one block after third-party ones, in every entrypoint.
+known-first-party = ["portfolio", "ingestion", "server", "build", "scripts", "tests", "migrations"]

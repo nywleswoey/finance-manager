@@ -25,9 +25,9 @@ import csv
 import os
 
 import yaml
-
 from _csvout import write_csv
 from _dates import try_date
+
 from portfolio.spending import CARD_SOURCES, ITEMISED_CARD
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

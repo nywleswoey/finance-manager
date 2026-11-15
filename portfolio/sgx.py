@@ -7,12 +7,12 @@ matches it server-side (an unrecognized name returns the WHOLE unfiltered datase
 an empty one, so callers must not treat a non-empty result as proof of a match on its own —
 compare `r["name"]` against what was asked for, which this function already does).
 """
+import datetime as dt
 import json
 import re
 import ssl
 import urllib.parse
 import urllib.request
-import datetime as dt
 
 import certifi
 

@@ -16,14 +16,26 @@ Endowus Amundi fund is accumulating -> no distributions.
 
 Schema: date, account, market, ticker, name, kind, gross, currency, source
 """
-import csv, glob, os, re
+import csv
+import glob
+import os
+import re
 from collections import defaultdict
 
-from _pdf import raw_text
 from _csvout import write_csv
 from _dates import try_date
-from _ledgercommon import (MARKET_CCY, canon, cdp_dividend_ticker, fsm_statement_rows,
-                           fsm_stock_dividend_is_cash, market_of, name_to_ticker, norm_ticker, num)
+from _ledgercommon import (
+    MARKET_CCY,
+    canon,
+    cdp_dividend_ticker,
+    fsm_statement_rows,
+    fsm_stock_dividend_is_cash,
+    market_of,
+    name_to_ticker,
+    norm_ticker,
+    num,
+)
+from _pdf import raw_text
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -165,6 +177,7 @@ def cdp_statements():
 # CDP custody position (see LEDGER_CSV) when one is held, else skipped as declared-but-unfilled.
 # Native amount + currency are stored; SGD conversion happens downstream.
 import datetime as _dt
+
 _XL_EPOCH = _dt.date(1899, 12, 30)
 # foreign-currency CDP holdings (others are SGD); used when native != SGD column
 CDP_FCCY = {"LIW": "USD", "SET": "EUR", "BTOU": "USD", "CMOU": "USD", "H78": "USD", "UD1U": "EUR"}

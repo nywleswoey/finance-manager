@@ -9,13 +9,28 @@ Normalized row schema:
   date, account, market, ticker, asset_type, action, qty_signed,
   price, amount, currency, fees, source, raw
 """
-import csv, glob, os, re
+import csv
+import glob
+import os
+import re
 from collections import defaultdict
+
 from _csvout import write_csv
 from _dates import try_date
-from _ledgercommon import (MARKET_CCY, TIGER_FEE_COLS, canon, fsm_amount_is_into_product,
-                           fsm_cash_flow, fsm_statement_rows, is_transfer_in, is_transfer_out,
-                           market_of, norm_ticker, num, trade_cash_flow)
+from _ledgercommon import (
+    MARKET_CCY,
+    TIGER_FEE_COLS,
+    canon,
+    fsm_amount_is_into_product,
+    fsm_cash_flow,
+    fsm_statement_rows,
+    is_transfer_in,
+    is_transfer_out,
+    market_of,
+    norm_ticker,
+    num,
+    trade_cash_flow,
+)
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 ROOT = os.path.join(os.path.dirname(__file__), "..")

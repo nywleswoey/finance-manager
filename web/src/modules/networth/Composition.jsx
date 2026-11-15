@@ -214,6 +214,9 @@ export default function Composition({ comp }) {
    */
   // Floored: whole days elapsed, which is what "9d" claims. Rounding would call a snapshot
   // captured this afternoon "1d" old before the day was out.
+  // Read at render on purpose: the pill says how old the snapshot is *now*, and the early
+  // returns above rule out a hook here.
+  // eslint-disable-next-line react-hooks/purity
   const ageDays = Math.max(0, Math.floor((Date.now() - last.t) / 86_400_000));
 
   return (

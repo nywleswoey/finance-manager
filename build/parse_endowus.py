@@ -20,12 +20,14 @@ price/amount: it is internal, not new capital. Its cost carries from the predece
 the `switch` corporate_action (see performance.py / seed.py), so booking it here would
 double-count. Infinity itself stays in cpf-stocks/transactions.csv (authoritative cost).
 """
-import glob, os, re
+import glob
+import os
+import re
 from datetime import datetime
 
-from _pdf import raw_text
 from _csvout import write_rows
 from _ledgercommon import num
+from _pdf import raw_text
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "endowus statement")
 FUND = "Amundi"                     # the fund Endowus is authoritative for (others come from cpf-stocks)

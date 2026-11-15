@@ -72,6 +72,7 @@ def test_main_seeds_amzn_with_the_curated_name_not_the_gift_action(tmp_path, mon
 
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import sessionmaker
+
     from portfolio.models import Base, Security
 
     engine = create_engine("sqlite:///:memory:")

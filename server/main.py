@@ -23,15 +23,16 @@ from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
 from portfolio.config import settings
-
 from server import auth
+
 # NwValueIn, ticker_ledger and performance are re-exported: tests and scripts/audit_ledger.py
 # import them from server.main (they moved with their routes). _cache likewise:
 # server.main._cache must stay the object /api/refresh-prices and the cron handler clear
 # and the one the portfolio routes memoize into — not a private main.py global.
-from server.routes.networth import NwValueIn, router as networth_router  # noqa: F401
-from server.routes.portfolio import (_cache, performance, router as portfolio_router,  # noqa: F401
-                                     ticker_ledger)
+from server.routes.networth import NwValueIn  # noqa: F401
+from server.routes.networth import router as networth_router
+from server.routes.portfolio import _cache, performance, ticker_ledger  # noqa: F401
+from server.routes.portfolio import router as portfolio_router
 from server.routes.spending import router as spending_router
 
 logging.basicConfig(level=logging.INFO,

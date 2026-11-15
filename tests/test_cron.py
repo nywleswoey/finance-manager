@@ -13,9 +13,8 @@ import datetime as dt
 import pytest
 from fastapi.testclient import TestClient
 
-from portfolio.config import settings
-
 from ingestion import prices
+from portfolio.config import settings
 from server import main
 
 SECRET = "cron-secret-value"

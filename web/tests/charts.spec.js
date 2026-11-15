@@ -38,15 +38,11 @@
 import { expect, test } from "@playwright/test";
 import { PHONE_TIER_BELOW, VIEWPORTS } from "./viewports.js";
 import { openView } from "./support/app.js";
-import { readFixture, sharedAxisSpanPx } from "./fixtures/index.js";
+import { readFixture } from "./fixtures/index.js";
 // The declared map itself, not a copy of it — see the `one palette` describe below for why
 // a table of hexes in this file would be the defect rather than the gate. `palette.js` is
 // plain data with no React or recharts import, which is what makes it importable here.
 import { BAND_COLOURS, BAND_FILL_OPACITY, CATEGORY_DASH, categoryColour } from "../src/palette.js";
-// The app's own formatters, for the same reason the map is imported rather than restated:
-// a caption asserted against a second `toLocaleString` call is asserting the spec file's
-// formatting, and `api.js` is plain functions with no React import.
-import { catName, fmt, monthName, monthTick, sgd } from "../src/api.js";
 
 const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName);
 
@@ -143,7 +139,7 @@ for (const { view, donuts, lists } of DONUT_VIEWS) {
 }
 
 test.describe("every chart", () => {
-  test("has a height at every viewport", async ({ page, baseURL }, testInfo) => {
+  test("has a height at every viewport", async ({ page, baseURL }) => {
     // The 0×0 collapse, which is the failure mode a chart has no way to report: recharts
     // renders a container of nothing and throws nothing. Two of these were latent — a
     // percentage height inside a wrapper that happened to carry pixels — and one *would*
@@ -165,7 +161,7 @@ test.describe("every chart", () => {
     }
   });
 
-  test("names its series in the DOM rather than in a tooltip", async ({ page, baseURL }, testInfo) => {
+  test("names its series in the DOM rather than in a tooltip", async ({ page, baseURL }) => {
     // Net Worth is the case that makes this a defect rather than a preference: it imported no
     // `Legend` at all, so `name="Net Worth"` / `name="Excl. Housing"` reached the tooltip and
     // nowhere else, and touch has no hover. Two anonymous coloured lines.

@@ -31,10 +31,10 @@ from itertools import combinations
 from sqlalchemy import text
 
 from ingestion.prices import sg_today
+
 from .db import fetch_dicts, fx_map, latest_price, session_scope
 from .money import rate_to_sgd, to_sgd
 from .nullable import iso, nulls_last, num
-
 
 # ---------------- the shared entitlement attribution primitives ----------------
 

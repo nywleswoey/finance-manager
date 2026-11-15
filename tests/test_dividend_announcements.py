@@ -21,8 +21,14 @@ from sqlalchemy import text
 
 import ingestion.dividend_announcements as da
 from ingestion.dividend_announcements import _candidate_names
-from portfolio.models import (Account, DividendAnnouncement, DividendAnnouncementComponent,
-                              Security, SecurityAlias, Txn)
+from portfolio.models import (
+    Account,
+    DividendAnnouncement,
+    DividendAnnouncementComponent,
+    Security,
+    SecurityAlias,
+    Txn,
+)
 from tests.sqlitetest import current_position_sql, make_session, make_sessionmaker
 
 

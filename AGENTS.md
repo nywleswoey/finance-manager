@@ -29,6 +29,10 @@ plans.
   must be patched on the `server.routes.*` module that defines it, not on `server.main`. Lazy
   in-handler imports
   (ruff E402, ignored repo-wide) break real import cycles, not accidental ones.
+- **`make test` is the definition of done** (= `make lint` + `make test-py` + `make test-web`,
+  what CI runs). Lint is correctness-only on both sides: ruff's pinned rule set plus isort
+  (`ruff check --fix .` sorts imports), eslint in `web/eslint.config.js` (no formatter, on
+  purpose: the Playwright inventory spec reads source text).
 - **Tests share scaffolding; don't re-copy it.** [tests/conftest.py](tests/conftest.py) restores
   `settings` after every test and provides `client` (gate bypassed), `owner_client` (real
   cookie gate), `auth_settings`, `no_db`; SQLite sessions and the alembic-only

@@ -18,8 +18,13 @@ from ingestion.prices import sg_today
 
 from .cost_annotations import annotation_map, condition_for, unmatched
 from .db import fx_map, latest_close, session_scope
-from .flows import (COST_IN_KIND, EXTERNAL, GIFT_IN_ACTIONS, RETURN_IN_KIND_ACTIONS,
-                    flow_kind)
+from .flows import (
+    COST_IN_KIND,
+    EXTERNAL,
+    GIFT_IN_ACTIONS,
+    RETURN_IN_KIND_ACTIONS,
+    flow_kind,
+)
 from .money import rate_to_sgd
 from .nullable import num, rounded
 from .xirr import xirr as solve_xirr
