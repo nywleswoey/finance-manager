@@ -1,10 +1,10 @@
 """Portfolio product routes: positions, performance, holdings, dividends, transactions, options.
 
 Split out of server/main.py (Slice 3 of the codebase reorg) to match web/src/modules/portfolio.
-server.main stays the composition root: app, middleware, auth_gate, health/refresh/cron,
-PostHog proxy, StaticFiles. This module owns the portfolio-specific memoization cache (`_cache`)
-that /api/refresh-prices and the cron handler in server.main clear — server.main re-exports it so
-`server.main._cache` (imported by tests and scripts/audit_ledger.py) stays the same object.
+server.main stays the composition root: app, middleware, auth_gate, health, StaticFiles. This
+module owns the portfolio-specific memoization cache (`_cache`) that server.refresh (the UI's
+/api/refresh-prices and the cron) clears — server.main re-exports it so `server.main._cache`
+(imported by tests and scripts/audit_ledger.py) stays the same object.
 """
 import datetime as dt
 import logging
@@ -31,7 +31,7 @@ from portfolio.performance import (
     rollup,
 )
 
-router = APIRouter()
+router = APIRouter(prefix="/api")   # like /api/networth and /api/spending: one prefix, bare paths
 log = logging.getLogger("api")
 
 _cache: dict = {}
@@ -91,7 +91,7 @@ def perf():
     return _cached("rows", lambda: [r for r in perf_all() if r["units"] > 1e-6])
 
 
-@router.get("/api/overview")
+@router.get("/overview")
 def overview():
     """Open-book market value and dividends, plus the book's Net.
 
@@ -122,7 +122,7 @@ def overview():
     }
 
 
-@router.get("/api/positions")
+@router.get("/positions")
 def positions(closed: bool = False):
     """`{as_of, positions}`. Open positions (units > 0); with closed=true, also closed ones
     (units ≈ 0 that had real activity), each row tagged status=open|closed.
@@ -150,7 +150,7 @@ def positions(closed: bool = False):
     return {"as_of": _cached("as_of", _as_of), "positions": out}
 
 
-@router.get("/api/performance")
+@router.get("/performance")
 def performance(by: str = Query("market", enum=["market", "bucket", "account", "asset_type"])):
     """Group totals per `by`, closed positions included. The one owner of a group subtotal:
     Holdings' grouped modes read their subtotal rows from here rather than re-summing the rows
@@ -210,7 +210,7 @@ def _fx_as_of():
     return _read_date(fx_as_of)
 
 
-@router.get("/api/holding")
+@router.get("/holding")
 def holding(ticker: str):
     """The whole ticker across every funding bucket: `{as_of, fx_as_of, summary, buckets,
     transactions, dividends, options}` (#143 §2). There is no `bucket` parameter — one caller
@@ -260,22 +260,22 @@ def holding(ticker: str):
             "options": trades_for(ticker)}
 
 
-@router.get("/api/dividend-details")
+@router.get("/dividend-details")
 def dividend_details():
     return dividends.details()
 
 
-@router.get("/api/dividends-annual")
+@router.get("/dividends-annual")
 def dividends_annual():
     return dividends.annual()
 
 
-@router.get("/api/dividends-projected")
+@router.get("/dividends-projected")
 def dividends_projected():
     return dividends.projected()
 
 
-@router.get("/api/dividend-yields")
+@router.get("/dividend-yields")
 def dividend_yields():
     return dividends.yields()
 
@@ -289,12 +289,12 @@ class CapitalReturnIn(BaseModel):
     note: str | None = Field(default=None, max_length=256)
 
 
-@router.get("/api/dividend-capital-returns")
+@router.get("/dividend-capital-returns")
 def dividend_capital_returns():
     return {"rows": dividends.capital_return_adjustments()}
 
 
-@router.post("/api/dividend-capital-returns")
+@router.post("/dividend-capital-returns")
 def dividend_capital_return_add(body: CapitalReturnIn):
     dividends.add_capital_return_adjustment(
         body.security_id, body.amount_per_unit, body.currency.upper(),
@@ -302,7 +302,7 @@ def dividend_capital_return_add(body: CapitalReturnIn):
     return {"rows": dividends.capital_return_adjustments()}
 
 
-@router.delete("/api/dividend-capital-returns/{adjustment_id}")
+@router.delete("/dividend-capital-returns/{adjustment_id}")
 def dividend_capital_return_remove(adjustment_id: int):
     dividends.remove_capital_return_adjustment(adjustment_id)
     return {"rows": dividends.capital_return_adjustments()}
@@ -315,7 +315,7 @@ class FlagOverrideIn(BaseModel):
     special_per_unit: float = Field(default=0, ge=0, le=1_000_000)        # SECURITY-05
 
 
-@router.post("/api/dividend-flag-overrides")
+@router.post("/dividend-flag-overrides")
 def dividend_flag_override_add(body: FlagOverrideIn):
     try:
         dividends.add_flag_override(body.security_id, body.ex_date, body.pay_date,
@@ -325,13 +325,13 @@ def dividend_flag_override_add(body: FlagOverrideIn):
     return dividends.yields()
 
 
-@router.delete("/api/dividend-flag-overrides/{override_id}")
+@router.delete("/dividend-flag-overrides/{override_id}")
 def dividend_flag_override_remove(override_id: int):
     dividends.remove_flag_override(override_id)
     return dividends.yields()
 
 
-@router.get("/api/dividend-announcement-components")
+@router.get("/dividend-announcement-components")
 def dividend_announcement_components(security_id: int = Query(gt=0),
                                      ex_date: dt.date | None = None,
                                      pay_date: dt.date | None = None):
@@ -348,7 +348,7 @@ class IdentifyComponentsIn(BaseModel):
                                Field(max_length=20)] = Field(default_factory=list)
 
 
-@router.post("/api/dividend-identify-components")
+@router.post("/dividend-identify-components")
 def dividend_identify_components(body: IdentifyComponentsIn):
     try:
         dividends.identify_components(body.security_id, body.ex_date, body.pay_date,
@@ -358,7 +358,7 @@ def dividend_identify_components(body: IdentifyComponentsIn):
     return dividends.yields()
 
 
-@router.get("/api/transactions")
+@router.get("/transactions")
 def transactions(account: str | None = None, ticker: str | None = None,
                  limit: int = Query(500, ge=1, le=2000)):
     """The oldest `limit` trades, ascending, statement rows and CDP's priced trades merged.
@@ -388,7 +388,7 @@ def transactions(account: str | None = None, ticker: str | None = None,
     return rows[:limit]
 
 
-@router.get("/api/return")
+@router.get("/return")
 def portfolio_return():
     """XIRR + TWR off live Yahoo prices (portfolio.twr). A failed fetch is a 503 and is not
     cached, so the next load retries; the exception goes to the log, never onto the wire."""
@@ -402,19 +402,19 @@ def portfolio_return():
     return _cache["ret"]
 
 
-@router.get("/api/options")
+@router.get("/options")
 def options_summary():
     from portfolio.options import compute
     return _cached("opt", compute)
 
 
-@router.get("/api/options-trades")
+@router.get("/options-trades")
 def options_trades(limit: int = 500):
     from portfolio.options import recent
     return recent(limit)
 
 
-@router.get("/api/accounts")
+@router.get("/accounts")
 def accounts():
     with session_scope() as s:
         return fetch_dicts(s, "SELECT name, broker, funding_bucket FROM account "

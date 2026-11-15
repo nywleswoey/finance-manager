@@ -1,4 +1,4 @@
-"""Same-origin PostHog proxy tests — /ingest/{path} in server/main.py.
+"""Same-origin PostHog proxy tests — /ingest/{path} in server/posthog_proxy.py.
 
 The proxy exists so posthog-js can post analytics + error events first-party and stay inside
 the strict CSP (`connect-src 'self'`), so these pin both halves: the CSP carries no PostHog
@@ -8,7 +8,7 @@ third party must not control on our origin. Upstream is stubbed — no network, 
 import requests
 from fastapi.testclient import TestClient
 
-from server import main
+from server import main, posthog_proxy
 
 
 class _Resp:
@@ -27,7 +27,7 @@ def _stub(monkeypatch, resp=None, boom=None):
             raise boom
         return resp or _Resp()
 
-    monkeypatch.setattr(main._ph_session, "request", fake_request)
+    monkeypatch.setattr(posthog_proxy._ph_session, "request", fake_request)
     return seen
 
 
@@ -43,7 +43,7 @@ def test_ingestion_path_goes_to_posthog_host(monkeypatch):
         r = c.post("/ingest/e/?ver=1.407.2", content=b"payload",
                    headers={"Content-Type": "application/json"})
     assert r.status_code == 200
-    assert seen["url"] == f"{main._PH_INGEST}/e/"
+    assert seen["url"] == f"{posthog_proxy._PH_INGEST}/e/"
     assert seen["params"] == "ver=1.407.2"
     assert seen["data"] == b"payload"
     assert seen["headers"]["Content-Type"] == "application/json"
@@ -110,4 +110,4 @@ def test_proxy_is_public_and_never_sends_cookies_upstream(monkeypatch):
         r = c.post("/ingest/e/")
     assert r.status_code == 200                       # not 401 from the auth gate
     assert "Cookie" not in seen["headers"]
-    assert main._ph_session.cookies.get_policy().set_ok(None, None) is False
+    assert posthog_proxy._ph_session.cookies.get_policy().set_ok(None, None) is False
