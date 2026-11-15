@@ -108,7 +108,7 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
 | `migrations/` | Alembic schema |
 | `scripts/seed.py` | reference-data seed |
 | `scripts/snapshot_from_statements.py` | net-worth snapshot from statements (`--all-new` delta) |
-| `server/` | FastAPI app: `main.py` — composition root (middleware, auth gate, health/refresh/cron, PostHog proxy, built SPA); `routes/{portfolio,networth,spending}.py` — `/api/*` handlers per product module; `auth.py` — Google OAuth router |
+| `server/` | FastAPI app: `main.py` — composition root (middleware, auth gate, health, built SPA); `routes/{portfolio,networth,spending}.py` — `/api/*` handlers per product module; `refresh.py` — price refresh (UI + cron); `posthog_proxy.py` — same-origin `/ingest`; `auth.py` — Google OAuth router |
 | `api/index.py` | Vercel entrypoint — re-exports `server.main:app` |
 | `web/` | React (Vite) app; `web/src/modules/{portfolio,networth,spending}/` — the three product modules |
 
