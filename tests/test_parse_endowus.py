@@ -9,9 +9,7 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_parse_endowus.py -q
 """
 import pytest
 
-from tests.buildscript import load_build_script
-
-pe = load_build_script("parse_endowus")
+import build.parse_endowus as pe
 
 
 def test_iso_helpers_read_each_layouts_date():

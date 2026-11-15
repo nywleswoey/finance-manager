@@ -25,9 +25,9 @@ import os
 import re
 from datetime import datetime
 
-from _csvout import write_rows
-from _ledgercommon import num
-from _pdf import raw_text
+from build._csvout import write_rows
+from build._ledgercommon import num
+from build._pdf import raw_text
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "endowus statement")
 FUND = "Amundi"                     # the fund Endowus is authoritative for (others come from cpf-stocks)

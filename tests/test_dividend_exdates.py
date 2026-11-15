@@ -14,8 +14,8 @@ from decimal import Decimal
 
 from sqlalchemy import select
 
-import build.export_dividends_master as export
 import ingestion.load as load
+import scripts.export_dividends_master as export
 import scripts.snapshot_from_statements as snap
 from portfolio.models import Account, Dividend, NwSnapshot, Security
 from tests.sqlitetest import make_session

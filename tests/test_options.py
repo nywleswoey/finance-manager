@@ -5,8 +5,9 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_options.py -q
 import datetime as dt
 import unittest
 
+from build.parse_options import _SYM, _expiry, _und
 from ingestion.load import num as money
-from ingestion.parse_options import _SYM, _expiry, _reconcile, _und
+from ingestion.load_options import _reconcile
 
 
 class _Acct:

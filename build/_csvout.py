@@ -1,7 +1,7 @@
 """Shared CSV output helper for the build/ data-prep scripts.
 
 Sibling scripts run with their own directory as sys.path[0] (see build/_pdf.py),
-so `from _csv import write_csv` resolves in all Makefile invocation modes.
+so `from build._csvout import write_csv` resolves in all Makefile invocation modes.
 """
 import csv
 

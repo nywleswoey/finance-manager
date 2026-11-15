@@ -80,7 +80,7 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
   total in SGD: market value, dividend income, P/L (where cost is known), per-position XIRR,
   and a portfolio **money-weighted return** (historical-FX XIRR).
 - **Options** — realized return from the sold-option (wheel) book: `option_trade` table loaded
-  by `ingestion/parse_options.py` from Tiger flex Activity Statements (`data/tiger-prime/*.csv`,
+  by `build/parse_options.py` + `ingestion/load_options.py` from Tiger flex Activity Statements (`data/tiger-prime/*.csv`,
   `data/tiger-cash-boost/*.csv`) and the reconciled IBKR export (`data/ibkr-options/options.csv`);
   analytics in `portfolio/options.py` (realized P/L, premium collected, win-rate, by
   year/ticker/type, SGD at latest FX). API `/api/options`, `/api/options-trades`.
@@ -102,8 +102,8 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
 | Path | What |
 |---|---|
 | `data/` | raw statements (immutable) |
-| `build/` | statement parsers → `ledger.csv`, `dividends.csv`, `symbols.csv` |
-| `ingestion/` | DB loaders (`load.py`) + market data (`prices.py`) + options (`parse_options.py`) |
+| `build/` | statement parsers → `build/*.csv` (`ledger.csv`, `dividends.csv`, `cash_ledger.csv`…), a real package (`python -m build.x`); the root `symbols.csv` is its hand-maintained input, not an output |
+| `ingestion/` | DB loaders (`load.py`, `load_options.py`, `load_cash.py`) + market data (`prices.py`) |
 | `portfolio/` | models, db, config, money, nullable (shared kernel); `performance/` (package; its `__init__` is the map), `twr.py`, `xirr.py` (shared by both), `dividends/` (package, same), `options.py` (portfolio); `networth.py` (net worth); `spending.py`, `classify.py`, `recurring.py`, `spend_categories.py` (spending) |
 | `migrations/` | Alembic schema |
 | `scripts/seed.py` | reference-data seed |

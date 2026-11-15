@@ -25,14 +25,11 @@ import csv
 import datetime as dt
 import os
 import re
-import sys
 import time
 from collections import defaultdict
 
-from _csvout import write_csv
-from _dates import try_date
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+from build._csvout import write_csv
+from build._dates import try_date
 from portfolio.sgx import CPF_SRS_SGX_NAMES, _get, epoch_date, sgx_schedule
 
 HERE = os.path.dirname(__file__)

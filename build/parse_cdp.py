@@ -11,9 +11,9 @@ import glob
 import os
 import re
 
-from _csvout import write_rows
-from _ledgercommon import name_to_ticker, num
-from _pdf import raw_text
+from build._csvout import write_rows
+from build._ledgercommon import name_to_ticker, num
+from build._pdf import raw_text
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "cdp-statements")
 ROW = re.compile(r"^\s*([A-Z0-9][A-Z0-9 &.\-/()']+?)\s+([\d,]+)\s+(NIL|[\d,]+)\s+([\d,]+)\s+[\d,]+\.\d+\s+[\d,]+\.\d+\s*$")

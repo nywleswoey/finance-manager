@@ -8,13 +8,10 @@ never made.
 Run: make db-up && PYTHONPATH=. .venv/bin/python -m pytest tests/test_audit_ledger_pg.py -q
 """
 import datetime as dt
-import os
-import sys
 from decimal import Decimal
 
 import pytest
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from portfolio.models import Account, Dividend, Security
 from scripts import audit_ledger as al
 from tests import pgtest

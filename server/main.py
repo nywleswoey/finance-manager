@@ -11,9 +11,7 @@ The SECURITY-NN codes cited here are defined in DEPLOY.md § Security register.
 """
 import logging
 import os
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse

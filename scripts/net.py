@@ -24,11 +24,8 @@ Usage:
   make net ARGS=--held           # only currently-held (units != 0)
   PYTHONPATH=. .venv/bin/python scripts/net.py D05 --held   # same, without make
 """
-import os
 import sys
 from collections import defaultdict
-
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from portfolio.performance import compute
 

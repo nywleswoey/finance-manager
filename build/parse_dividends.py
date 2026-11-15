@@ -22,9 +22,10 @@ import os
 import re
 from collections import defaultdict
 
-from _csvout import write_csv
-from _dates import try_date
-from _ledgercommon import (
+from build import tiger_flex
+from build._csvout import write_csv
+from build._dates import try_date
+from build._ledgercommon import (
     MARKET_CCY,
     canon,
     cdp_dividend_ticker,
@@ -35,7 +36,7 @@ from _ledgercommon import (
     norm_ticker,
     num,
 )
-from _pdf import raw_text
+from build._pdf import raw_text
 
 HERE = os.path.dirname(__file__)
 DATA = os.path.join(HERE, "..", "data")
@@ -63,20 +64,18 @@ def tiger_currency(sym, explicit):
 
 # ---------- Tiger ----------
 def tiger():
-    for pat, acct in [("tiger-prime/*.csv", "Tiger Prime"),
-                      ("tiger-cash-boost/*.csv", "Tiger Cash Boost")]:
-        for f in glob.glob(os.path.join(DATA, pat)):
-            for row in csv.reader(open(f, encoding="utf-8-sig")):
-                if not (row and row[0] == "Dividends" and len(row) > 10 and row[3] == "DATA"):
-                    continue
-                if row[9].strip() != "Paid":            # only cash received; ignore accruals
-                    continue
-                sym = row[6].strip(); mkt = market_of(sym)
-                explicit = row[14] if len(row) > 14 else ""
-                add(date=row[4], account=acct, market=mkt, ticker=norm(sym, mkt),
-                    name=re.sub(r"\s*\(.*\)$", "", sym), kind="cash",
-                    gross=num(row[10]), currency=tiger_currency(sym, explicit),
-                    source="tiger (dividends)")
+    for f, acct in tiger_flex.statements(DATA):
+        for row, _ in tiger_flex.records(tiger_flex.read(f), "Dividends"):
+            if len(row) <= 10:
+                continue
+            if row[9].strip() != "Paid":            # only cash received; ignore accruals
+                continue
+            sym = row[6].strip(); mkt = market_of(sym)
+            explicit = row[14] if len(row) > 14 else ""
+            add(date=row[4], account=acct, market=mkt, ticker=norm(sym, mkt),
+                name=re.sub(r"\s*\(.*\)$", "", sym), kind="cash",
+                gross=num(row[10]), currency=tiger_currency(sym, explicit),
+                source="tiger (dividends)")
 
 # ---------- FSM / iFast ----------
 def fsm():

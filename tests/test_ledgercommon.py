@@ -188,9 +188,7 @@ def test_stoneweg_display_names_resolve_to_one_ticker():
 
 
 def test_cdp_statement_names_use_symbols_csv():
-    import sys
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "build"))
-    import parse_cdp
+    from build import parse_cdp
     assert parse_cdp.code_of("STONEWEG EUTRUST") == "SET"
     assert parse_cdp.code_of("QAF") == "Q01"
     assert parse_cdp.code_of("NOT A REAL NAME") != "SET"

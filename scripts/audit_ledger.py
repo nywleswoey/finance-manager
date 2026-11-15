@@ -59,15 +59,12 @@ from __future__ import annotations
 import dataclasses
 import datetime as dt
 import logging
-import os
 import sys
 from collections import defaultdict
 from typing import Callable, NamedTuple
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from portfolio.money import rate_to_sgd  # noqa: E402
-from portfolio.performance import CDP_ACCOUNT, fold_ticker  # noqa: E402
+from portfolio.money import rate_to_sgd
+from portfolio.performance import CDP_ACCOUNT, fold_ticker
 
 EPS = 1e-6
 

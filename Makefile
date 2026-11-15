@@ -20,15 +20,15 @@ seed:         ## seed accounts / securities / aliases / corporate actions / net-
 	$(PY) scripts/seed_networth.py
 
 flat:         ## (re)build the normalized flat files from statements
-	$(PY) build/parse_moomoo.py >/dev/null
-	$(PY) build/parse_cdp.py >/dev/null
-	$(PY) build/parse_endowus.py >/dev/null
-	$(PY) build/build_ledger.py >/dev/null
-	$(PY) build/parse_dividends.py >/dev/null
+	$(PY) -m build.parse_moomoo >/dev/null
+	$(PY) -m build.parse_cdp >/dev/null
+	$(PY) -m build.parse_endowus >/dev/null
+	$(PY) -m build.build_ledger >/dev/null
+	$(PY) -m build.parse_dividends >/dev/null
 
 load:         ## load ledger + dividends into DB (idempotent)
 	$(PY) -m ingestion.load
-	$(PY) build/export_dividends_master.py
+	$(PY) scripts/export_dividends_master.py   # DB -> data/dividends-master.csv (the ex_date round-trip)
 prices:       ## fetch latest prices + FX (needs network)
 	$(PY) -m ingestion.prices
 dividend-announcements:   ## fetch SGX-declared dividends for current SG holdings (needs network)
@@ -40,8 +40,8 @@ ingest: flat seed load   ## full ingest: statements -> flat -> seed -> DB
 	@# statement introducing a new ticker (e.g. FSM's first Bursa buy) needs both, in order.
 
 flat-cash:    ## parse bank/card statements -> spending ledger with the is_spend decision (build/cash_ledger.csv)
-	$(PY) build/parse_cash.py
-	$(PY) build/classify_cash.py
+	$(PY) -m build.parse_cash
+	$(PY) -m build.classify_cash
 load-cash:    ## load the spending ledger into DB (idempotent)
 	$(PY) -m ingestion.load_cash
 spending: flat-cash load-cash   ## full spending ingest: statements -> is_spend -> DB (rules categorise)

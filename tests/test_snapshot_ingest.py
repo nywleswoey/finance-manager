@@ -219,8 +219,9 @@ class ParseDbsTest(unittest.TestCase):
                "  SRS Account                0000-000000-0-0         1,000.00\n")
 
     def parse(self, txt):
-        self.addCleanup(setattr, ingest.subprocess, "run", ingest.subprocess.run)
-        ingest.subprocess.run = lambda *a, **k: type("R", (), {"stdout": txt})()
+        # stub the one PDF reader (build._pdf.raw_text, as imported by the script)
+        self.addCleanup(setattr, ingest, "raw_text", ingest.raw_text)
+        ingest.raw_text = lambda path: txt
         return ingest.parse_dbs("dbs_202606.pdf")
 
     def test_balances_are_read_by_product_name(self):

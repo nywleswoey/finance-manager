@@ -3,8 +3,6 @@
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_recurring.py -q
 """
 import datetime as dt
-import os
-import sys
 import unittest
 from decimal import Decimal
 
@@ -36,9 +34,7 @@ def test_card_sources_have_one_owner():
     """Recurring detection, the cash classifier, and the model comment were three
     lists. `dbs-cc` was missing from the comment; hsbc and trust were a second
     tuple in the classifier."""
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "build"))
-    import classify_cash
-
+    from build import classify_cash
     from portfolio.spending import CARD_SOURCES
 
     assert CARD_SOURCES == ("dbs-cc", "hsbc", "trust")

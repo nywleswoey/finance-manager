@@ -10,21 +10,10 @@ Load it the same way; importing it runs nothing.
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_build_ledger.py -q
 """
 import csv
-import importlib.util
-import os
-import sys
 
 import pytest
 
-_BUILD = os.path.join(os.path.dirname(os.path.dirname(__file__)), "build")
-sys.path.insert(0, _BUILD)
-try:
-    _spec = importlib.util.spec_from_file_location(
-        "build_ledger_under_test", os.path.join(_BUILD, "build_ledger.py"))
-    BL = importlib.util.module_from_spec(_spec)
-    _spec.loader.exec_module(BL)
-finally:
-    sys.path.remove(_BUILD)
+import build.build_ledger as BL
 
 FSM_COLS = ["Transaction Date", "Transaction Type", "Product Name", "Payment Method",
             "Quantity", "Product Currency", "Transaction Price", "Product Amount",

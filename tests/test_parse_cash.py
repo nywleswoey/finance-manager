@@ -17,9 +17,7 @@ import datetime as dt
 
 import pytest
 
-from tests.buildscript import load_build_script
-
-pc = load_build_script("parse_cash")
+import build.parse_cash as pc
 
 D = dt.date
 

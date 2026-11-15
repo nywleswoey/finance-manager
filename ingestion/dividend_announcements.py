@@ -31,13 +31,10 @@ component instead of typing one.
 """
 import datetime as dt
 import http.client
-import os
 import re
-import sys
 import time
 from decimal import Decimal
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import text
 
 from ingestion.prices import sg_today

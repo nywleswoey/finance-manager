@@ -9,14 +9,15 @@ import csv
 import datetime as dt
 import hashlib
 import os
-import sys
 from collections import Counter
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from build._dates import try_date
+from build._dates import (  # noqa: F401  (pdate: re-exported for the other loaders)
+    pdate,
+    try_date,
+)
 from portfolio.db import SessionLocal
 from portfolio.models import (
     Account,
@@ -58,10 +59,6 @@ def occ_hash(occ, key):
     distinctly (genuine repeats stay distinct) yet stably on re-ingest."""
     occ[key] += 1
     return h(*key, occ[key])
-
-
-def pdate(s):
-    return try_date(s, ("%Y-%m-%d", "%d-%b-%y", "%d %b %Y", "%d/%m/%Y", "%Y-%m"))
 
 
 def num(s):
@@ -283,7 +280,7 @@ def main():
     nt = load_ledger(s, acct, alias)
     nd = load_dividends(s, acct, alias)
     nx = backfill_ex_dates(s)
-    from ingestion.parse_options import load_options
+    from ingestion.load_options import load_options
     no = load_options(s, acct, alias)
     # CDP statements omit unit price, so the hand-maintained cost CSV is the only cost record
     # for every CDP-origin holding. Left unloaded, those positions report no cost basis at all.

@@ -2,10 +2,7 @@
 
 Run: PYTHONPATH=. .venv/bin/python scripts/seed_networth.py
 """
-import os
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import select
 
 from portfolio.db import SessionLocal

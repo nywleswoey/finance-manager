@@ -10,14 +10,14 @@ Normalized row schema:
   price, amount, currency, fees, source, raw
 """
 import csv
-import glob
 import os
 import re
 from collections import defaultdict
 
-from _csvout import write_csv
-from _dates import try_date
-from _ledgercommon import (
+from build import tiger_flex
+from build._csvout import write_csv
+from build._dates import try_date
+from build._ledgercommon import (
     MARKET_CCY,
     TIGER_FEE_COLS,
     canon,
@@ -86,74 +86,66 @@ def load_simple():
                 currency=(r.get("Currency") or "").strip(), source=rel, raw=r.get("Stock Name", ""))
 
 # ---------- Tiger flex statements (prime + cash boost) ----------
-TIGER = [("tiger-prime/*.csv", "Tiger Prime"),
-         ("tiger-cash-boost/*.csv", "Tiger Cash Boost")]
 def load_tiger():
-    for pat, acct in TIGER:
-        for f in sorted(glob.glob(os.path.join(DATA, pat))):
-            rel = os.path.relpath(f, DATA)
-            hdr = None
-            rows = list(csv.reader(open(f, encoding="utf-8-sig")))
-            # code -> display name; Transfer rows may carry only the bare code ("AMZN")
-            names = {r[4]: r[6] for r in rows if len(r) > 6 and r[0] == "Financial Instrument Information"
-                     and r[1] == "Stock" and r[3] == "DATA" and r[6]}
-            for row in rows:
-                if not row: continue
-                sec = row[0]
-                if sec == "Trades":
-                    if len(row) > 4 and row[4] == "Symbol":            # flex header row
-                        hdr = {name: i for i, name in enumerate(row)}   # name -> col index
-                        continue
-                    if len(row) > 8 and row[3] == "DATA":
-                        atype = row[1]              # Stock / Option / Fund / Forex
-                        sym = row[4]
-                        if not sym: continue        # continuation row
-                        mkt = row[5]
-                        qty = num(row[8])
-                        if atype in ("Forex",):     # currency conversion, not a position
-                            add(date=parse_date(row[-3] if len(row) > 3 else ""), account=acct,
-                                market=mkt, ticker="", asset_type="forex", action="forex",
-                                qty_signed=0, amount=num(row[10]), currency=row[-1],
-                                source=rel, raw=sym); continue
-                        tt = row[-3] if len(row) >= 3 else ""   # Trade Time near end
-                        note = row[-4].strip().lower() if len(row) >= 4 else ""
-                        # Trades flagged "Settled via SRS/CPF account" belong to the SRS/CPF
-                        # account (and are also in the authoritative srs-/cpf-stocks files) ->
-                        # tag as dup so they neither pollute the Tiger cash account nor double-count.
-                        racct = acct
-                        if "srs account" in note: racct = "SRS(via-Tiger-dup)"
-                        elif "cpf account" in note: racct = "CPF(via-Tiger-dup)"
-                        # Tiger "Fund" trades are USD money-market cash sweeps -> treat as
-                        # cash (not a tracked position); only real stocks/options reconcile.
-                        atype_l = "cash" if atype == "Fund" else atype.lower()
-                        # sum the named fee columns for this trade (header map; offsets vary per file)
-                        fee = abs(sum(num(row[hdr[n]]) or 0 for n in TIGER_FEE_COLS
-                                      if hdr and n in hdr and hdr[n] < len(row)))
-                        add(date=parse_date(tt), account=racct, market=mkt,
-                            ticker=canon(norm_ticker(sym, mkt)), asset_type=atype_l,
-                            action=("buy" if qty > 0 else "sell"), qty_signed=qty,
-                            price=row[9], amount=trade_cash_flow(num(row[10]), qty), fees=fee,
-                            currency=row[-1], source=rel, raw=sym)
-                elif sec == "Transfer" and len(row) > 14 and row[3] == "DATA" and row[4] == "Stock":
-                    # gifted / transferred-in shares (e.g. BABA, AMZN gifts)
-                    method = row[7].strip()
-                    # symbol may be bare ("BABA") or display form ("SpaceX (SPCX)") -> classify on the code
-                    sym = row[5]; code = norm_ticker(sym, "")
-                    mkt = market_of(code)
-                    q = num(row[10]) * (-1 if "OUT" in method.upper() else 1)
-                    add(date=parse_date(row[6]), account=acct, market=mkt,
-                        ticker=canon(norm_ticker(sym, mkt)), asset_type="stock",
-                        action=method.lower(), qty_signed=q,
-                        price=row[12], amount=num(row[13]), currency=row[14],
-                        source=rel, raw=f"{names[code]} ({code})" if code in names else sym)
-                elif sec == "Deposits & Withdrawals" and len(row) > 7 and row[3] == "DATA":
-                    add(date=parse_date(row[4]), account=acct, asset_type="cash",
-                        action=row[5].lower(), qty_signed=0, amount=num(row[6]),
-                        currency=row[7], ticker="", source=rel, raw="D&W")
-                elif sec == "Segment Transfer" and len(row) > 7 and row[3] == "DATA":
-                    add(date=parse_date(row[4].split("~")[-1]), account=acct, asset_type="cash",
-                        action="segment_transfer", qty_signed=0, amount=num(row[5]),
-                        currency=row[7], ticker="", source=rel, raw="seg")
+    for f, acct in tiger_flex.statements(DATA):
+        rel = os.path.relpath(f, DATA)
+        rows = tiger_flex.read(f)
+        # code -> display name; Transfer rows may carry only the bare code ("AMZN")
+        names = {r[4]: r[6] for r, _ in tiger_flex.records(rows, "Financial Instrument Information")
+                 if len(r) > 6 and r[1] == "Stock" and r[6]}
+        for row, get in tiger_flex.records(rows, "Trades"):
+            if len(row) <= 8: continue
+            atype = row[1]              # Stock / Option / Fund / Forex
+            sym = row[4]
+            if not sym: continue        # continuation row
+            mkt = row[5]
+            qty = num(row[8])
+            if atype in ("Forex",):     # currency conversion, not a position
+                add(date=parse_date(row[-3] if len(row) > 3 else ""), account=acct,
+                    market=mkt, ticker="", asset_type="forex", action="forex",
+                    qty_signed=0, amount=num(row[10]), currency=row[-1],
+                    source=rel, raw=sym); continue
+            tt = row[-3] if len(row) >= 3 else ""   # Trade Time near end
+            note = row[-4].strip().lower() if len(row) >= 4 else ""
+            # Trades flagged "Settled via SRS/CPF account" belong to the SRS/CPF
+            # account (and are also in the authoritative srs-/cpf-stocks files) ->
+            # tag as dup so they neither pollute the Tiger cash account nor double-count.
+            racct = acct
+            if "srs account" in note: racct = "SRS(via-Tiger-dup)"
+            elif "cpf account" in note: racct = "CPF(via-Tiger-dup)"
+            # Tiger "Fund" trades are USD money-market cash sweeps -> treat as
+            # cash (not a tracked position); only real stocks/options reconcile.
+            atype_l = "cash" if atype == "Fund" else atype.lower()
+            # sum the named fee columns for this trade (by header name; offsets vary per file)
+            fee = abs(sum(num(get(n)) or 0 for n in TIGER_FEE_COLS))   # `or 0`: an all-blank file writes 0, not 0.0
+            add(date=parse_date(tt), account=racct, market=mkt,
+                ticker=canon(norm_ticker(sym, mkt)), asset_type=atype_l,
+                action=("buy" if qty > 0 else "sell"), qty_signed=qty,
+                price=row[9], amount=trade_cash_flow(num(row[10]), qty), fees=fee,
+                currency=row[-1], source=rel, raw=sym)
+        for row in rows:
+            if not row: continue
+            sec = row[0]
+            if sec == "Transfer" and len(row) > 14 and row[3] == "DATA" and row[4] == "Stock":
+                # gifted / transferred-in shares (e.g. BABA, AMZN gifts)
+                method = row[7].strip()
+                # symbol may be bare ("BABA") or display form ("SpaceX (SPCX)") -> classify on the code
+                sym = row[5]; code = norm_ticker(sym, "")
+                mkt = market_of(code)
+                q = num(row[10]) * (-1 if "OUT" in method.upper() else 1)
+                add(date=parse_date(row[6]), account=acct, market=mkt,
+                    ticker=canon(norm_ticker(sym, mkt)), asset_type="stock",
+                    action=method.lower(), qty_signed=q,
+                    price=row[12], amount=num(row[13]), currency=row[14],
+                    source=rel, raw=f"{names[code]} ({code})" if code in names else sym)
+            elif sec == "Deposits & Withdrawals" and len(row) > 7 and row[3] == "DATA":
+                add(date=parse_date(row[4]), account=acct, asset_type="cash",
+                    action=row[5].lower(), qty_signed=0, amount=num(row[6]),
+                    currency=row[7], ticker="", source=rel, raw="D&W")
+            elif sec == "Segment Transfer" and len(row) > 7 and row[3] == "DATA":
+                add(date=parse_date(row[4].split("~")[-1]), account=acct, asset_type="cash",
+                    action="segment_transfer", qty_signed=0, amount=num(row[5]),
+                    currency=row[7], ticker="", source=rel, raw="seg")
 
 # ---------- FSM / iFast ----------
 FSM_POS = {"Buy": +1, "Sell": -1, "Transfer In": +1, "Transfer Out": -1}

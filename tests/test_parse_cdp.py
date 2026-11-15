@@ -11,9 +11,7 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_parse_cdp.py -q
 """
 import pytest
 
-from tests.buildscript import load_build_script
-
-pcdp = load_build_script("parse_cdp")
+import build.parse_cdp as pcdp
 
 PATH = "/nowhere/cdp_202404.pdf"
 

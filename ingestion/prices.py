@@ -13,13 +13,11 @@ import glob
 import json
 import os
 import re
-import subprocess
-import sys
 import urllib.request
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import text
 
+from build._pdf import raw_text
 from portfolio.db import SessionLocal
 from portfolio.models import FxRate, Price
 
@@ -63,7 +61,7 @@ def endowus_nav():
     files = sorted(glob.glob(os.path.join(ROOT, "data", "endowus statement", "endowus_*.pdf")))
     if not files:
         return None
-    txt = subprocess.run(["pdftotext", "-layout", files[-1], "-"], capture_output=True, text=True).stdout
+    txt = raw_text(files[-1])
     m = re.search(r"Amundi Prime USA Fund\s+Equity(?:\s+Fund)?\s+\w[\w ]*?\s+[\d,]+\.\d+\s+S\$([\d,]+\.\d+)", txt)
     return float(m.group(1).replace(",", "")) if m else None
 

@@ -11,10 +11,8 @@ build/cash_ledger.csv) is not run.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_classify_cash.py -q
 """
+import build.classify_cash as cc
 from portfolio.spending import ITEMISED_CARD
-from tests.buildscript import load_build_script
-
-cc = load_build_script("classify_cash")
 
 EXCL = {"cc_payment": ["card bill"], "investment": ["broker"]}
 OEXCL = ["Loan To"]

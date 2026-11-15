@@ -10,9 +10,7 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_parse_moomoo.py -q
 """
 import pytest
 
-from tests.buildscript import load_build_script
-
-pm = load_build_script("parse_moomoo")
+import build.parse_moomoo as pm
 
 PATH = "/nowhere/moomoo_202403.pdf"
 

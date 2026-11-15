@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Export the dividend-rate master -> data/dividends-master.csv.
+"""Export the dividend-rate master (from the DB) -> data/dividends-master.csv. Run by `make load`.
 
 A per-unit dividend-rate reference: one row per distinct dividend event
 (date, ex_date, ticker, rate_per_unit, currency) for every security ever held.
@@ -24,11 +24,7 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
-try:
-    from _csvout import write_csv  # script mode: build/ is sys.path[0]
-except ModuleNotFoundError:
-    from build._csvout import write_csv  # package mode: imported as build.export_...
-
+from build._csvout import write_csv
 from portfolio.db import SessionLocal
 
 OUT = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "dividends-master.csv")

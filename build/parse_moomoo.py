@@ -12,9 +12,9 @@ import glob
 import os
 import re
 
-from _csvout import write_csv
-from _ledgercommon import num
-from _pdf import raw_text
+from build._csvout import write_csv
+from build._ledgercommon import num
+from build._pdf import raw_text
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data")
 NUM = r"[+\-]?[\d,]+(?:\.\d+)?"

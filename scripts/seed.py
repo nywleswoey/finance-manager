@@ -14,9 +14,7 @@ Each security field takes the first source that has it (see main()):
 """
 import csv
 import os
-import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from sqlalchemy import func, select
 
 from build._ledgercommon import MARKET_CCY, market_of
@@ -81,9 +79,9 @@ def markets_from_options():
     Option underlyings that were never traded as stock (e.g. MSCI, GOOG, TLT, LNK) otherwise
     get no Security row, so their option_trade rows carry NULL security_id and drop out of any
     security-joined view. Seed them here so load_options can resolve security_id."""
-    from ingestion.parse_options import IBKR_SRC, _flex_option_legs, _und
+    from build.parse_options import IBKR_SRC, _und, flex_option_legs
     m = {}
-    for lg in _flex_option_legs():
+    for lg in flex_option_legs():
         u = lg["underlying"]
         if u and is_security(u):
             m.setdefault(u, lg["market"] or "US")

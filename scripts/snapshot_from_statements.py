@@ -45,19 +45,17 @@ from __future__ import annotations
 
 import argparse
 import calendar
-import csv
 import datetime as dt
 import glob
 import os
 import re
-import subprocess
 import sys
 from decimal import Decimal
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-
 from sqlalchemy import select, text
 
+from build import tiger_flex
+from build._pdf import raw_text
 from portfolio import networth
 from portfolio.db import SessionLocal
 from portfolio.models import FxRate, NwItem, NwSnapshot
@@ -80,7 +78,7 @@ def parse_tiger(path: str) -> dict[str, dict]:
     ccy_to_code = {"USD": "tiger_usd", "SGD": "tiger_sgd", "HKD": "tiger_hkd"}
     fund_base: dict | None = None       # the "Total(In Base)" row, if the statement has one
     fund_totals: list[dict] = []        # one per fund, in the fund's own currency
-    rows = list(csv.reader(open(path, encoding="utf-8-sig")))
+    rows = tiger_flex.read(path)
     for r in rows:
         if (r[:1] == ["Cash Report"] and len(r) > 5 and r[4] == "Ending Cash"
                 and r[2].startswith("Currency: ") and r[2] != "Currency: Base Currency Summary"):
@@ -133,8 +131,7 @@ def _one_account(rx: re.Pattern, txt: str, what: str, path: str) -> Decimal | No
 
 def parse_dbs(path: str) -> tuple[dict[str, dict], str]:
     """Return ({code: {native_value, currency}}, as_at_str) from a DBS consolidated PDF."""
-    txt = subprocess.run(["pdftotext", "-layout", path, "-"],
-                         capture_output=True, text=True).stdout
+    txt = raw_text(path)
     mult = _one_account(DBS_MULTIPLIER_RE, txt, "DBS Multiplier", path)
     srs = _one_account(DBS_SRS_RE, txt, "SRS", path)
     m_date = re.search(r"Account Summary as at\s+(\d{1,2} \w+ \d{4})", txt)

@@ -10,9 +10,7 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_fetch_cpf_srs_dividends.
 """
 import datetime as dt
 
-from tests.buildscript import load_build_script
-
-fc = load_build_script("fetch_cpf_srs_dividends")
+import build.fetch_cpf_srs_dividends as fc
 
 D = dt.date
 

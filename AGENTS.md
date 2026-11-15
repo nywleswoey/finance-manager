@@ -39,7 +39,7 @@ plans.
   `settings` after every test and provides `client` (gate bypassed), `owner_client` (real
   cookie gate), `auth_settings`, `no_db`; SQLite sessions and the alembic-only
   `current_position` view SQL are in `tests/sqlitetest.py`, Postgres-only SQL goes in
-  `tests/*_pg.py` via `tests/pgtest.py`, build/ scripts load via `tests/buildscript.py`.
+  `tests/*_pg.py` via `tests/pgtest.py`; build/ modules import as `build.<name>` (a real package).
   `tests/pgtest.py`'s throwaway `portfolio_test` database is schema'd from `Base.metadata.
   create_all`, not alembic - it only adds missing tables, never a column added to an
   existing one by a later model change, so a `*_pg.py` run against a `portfolio_test` left

@@ -1,12 +1,10 @@
-"""Load sold-option trades (wheel strategy) into option_trade.
+"""Load sold-option trades (wheel strategy) into option_trade (the loader half).
 
 Two sources, reconciled to one row per contract (underlying, expiry, strike, type):
 
-  1. Tiger — raw flex Activity Statements (data/tiger-prime/*.csv, data/tiger-cash-boost/*.csv),
-     `Trades` section, asset type `Option`. Per-file header maps columns by NAME (offsets shift
-     across years: 2020=54 cols, else 53). Legs are classified open/close by `Activity Type`
-     (`OpenShort`/`Close`); older files leave it blank -> inferred from qty sign (<0 open, >0 close).
-     Fees are summed from the named fee columns; Tiger's own `Realized P/L` is used for closed legs.
+  1. Tiger — the legs build/parse_options.py reads out of the flex Activity Statements
+     (data/tiger-prime/*.csv, data/tiger-cash-boost/*.csv): open/close classified, fees summed
+     by column name, Tiger's own `Realized P/L` carried for closed legs.
 
   2. IBKR — data/ibkr-options/options.csv (the pre-reconciled 12-col export carved from the old
      Tiger archive; IBKR flex files carry no trades, so this is the only record). Loaded under the
@@ -18,96 +16,19 @@ Realized P&L (native ccy) per contract:
              stock leg lives in txn and is lumped with expired, as the old archive loader did)
     open:    None (unrealised)
 
-Idempotent via dedup_hash. Run:  PYTHONPATH=. .venv/bin/python -m ingestion.parse_options
+Idempotent via dedup_hash. Run:  PYTHONPATH=. .venv/bin/python -m ingestion.load_options
 """
 import csv
-import datetime as dt
-import glob
 import os
-import re
-import sys
 from collections import Counter, defaultdict
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from build._ledgercommon import MARKET_CCY, TIGER_FEE_COLS
-from ingestion.load import (
-    ROOT,
-    batch,
-    count,
-    maps,
-    num,
-    occ_hash,
-    pdate,
-    prune_stale,
-    upsert,
-)
+from build._ledgercommon import MARKET_CCY
+from build.parse_options import IBKR_SRC, MULT, flex_option_legs
+from ingestion.load import batch, count, maps, num, occ_hash, pdate, prune_stale, upsert
 from ingestion.prices import sg_today
 from portfolio.db import SessionLocal
 from portfolio.models import OptionTrade
 from portfolio.options import option_currency
-
-TIGER_GLOBS = ["data/tiger-prime/*.csv", "data/tiger-cash-boost/*.csv"]
-IBKR_SRC = os.path.join(ROOT, "data", "ibkr-options", "options.csv")
-MULT = {"US": 100, "HK": 1}                  # HK contract sizes vary; default 1 (rare here)
-
-# option symbol: bare "AMD 20210917 PUT 77.5" OR wrapped "Advanced Micro Devices (AMD ... )".
-_SYM = re.compile(r"([A-Z0-9.]+)\s+(\d{8})\s+(PUT|CALL)\s+([\d.]+)")
-
-# Fee columns summed by name so shifting offsets don't matter. TIGER_FEE_COLS is
-# that list; 'Accrued Interest in Trade' is not one of them.
-
-
-def _und(ticker):
-    """Normalise underlying to the archive's convention (HK counters carry a '.HK' suffix)."""
-    t = (ticker or "").upper()
-    return t[:-3] if t.endswith(".HK") else t
-
-
-def _expiry(s):
-    """Option expiry is 8-digit YYYYMMDD in the symbol (e.g. '20260710')."""
-    try:
-        return dt.datetime.strptime(s, "%Y%m%d").date()
-    except (ValueError, TypeError):
-        return None
-
-
-def _flex_option_legs():
-    """Yield normalised option legs from all Tiger flex statements."""
-    for pat in TIGER_GLOBS:
-        for f in sorted(glob.glob(os.path.join(ROOT, pat))):
-            hdr = None
-            for row in csv.reader(open(f, encoding="utf-8-sig")):
-                if not row or row[0] != "Trades":
-                    continue
-                if len(row) > 4 and row[4] == "Symbol":          # per-file header
-                    hdr = {name: i for i, name in enumerate(row)}
-                    continue
-                if not hdr or len(row) <= 4 or row[3] != "DATA" or row[1] != "Option":
-                    continue
-                g = lambda name: row[hdr[name]] if name in hdr and hdr[name] < len(row) else ""
-                sym = g("Symbol")
-                if not sym.strip():                              # continuation row
-                    continue
-                m = _SYM.search(sym)
-                if not m:
-                    continue
-                und, exp, typ, strike = m.groups()
-                qty = num(g("Quantity")) or 0.0
-                act = g("Activity Type").strip()
-                is_open = act == "OpenShort" or (act == "" and qty < 0)
-                is_close = act == "Close" or (act == "" and qty > 0)
-                if not (is_open or is_close):
-                    continue
-                mkt = g("Market") or "US"
-                yield dict(
-                    underlying=_und(und), expiry=_expiry(exp), option_type=typ.lower(),
-                    strike=float(strike), market=mkt, mult=MULT.get(mkt, 100),
-                    qty=abs(qty), price=num(g("Trade Price")) or 0.0,
-                    fees=abs(sum(num(g(n)) or 0.0 for n in TIGER_FEE_COLS if n in hdr)),
-                    realized=num(g("Realized P/L")) or 0.0,
-                    trade_date=pdate((g("Trade Time") or "")[:10]),
-                    is_open=is_open,
-                )
 
 
 def _reconcile(legs, a, alias):
@@ -217,7 +138,7 @@ def load_options(session, acct, alias):
         raise RuntimeError("account 'Tiger Prime' not seeded")
     n = 0
     # Tiger — reconciled from flex statements (replaces the retired archive rows on this account)
-    flex = _reconcile(_flex_option_legs(), tiger, alias)
+    flex = _reconcile(flex_option_legs(), tiger, alias)
     b = batch(session, "options", "tiger-flex/options", len(flex))
     for p in flex:
         p["batch_id"] = b.id

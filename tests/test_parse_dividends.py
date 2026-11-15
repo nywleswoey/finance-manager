@@ -6,7 +6,7 @@ code, then the canonical rename), `_cdp_date` (Excel serials counted from 1899-1
 sheet's string formats, None when nothing parses), `cdp_statements()` (the Cash Transaction
 line regex and issuer-name stripping) and `moomoo()` (the SG "@"/"AT" dividend line and the
 US SHARES-anchor + signed-amount pairing).
-The script is loaded the way it runs (tests/buildscript.py), and `main()` is not executed: that
+The module is imported as `build.parse_dividends`, and `main()` is not executed: that
 reads statement files and writes build/dividends.csv.
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_parse_dividends.py -q
@@ -15,9 +15,8 @@ import csv
 
 import pytest
 
-from tests.buildscript import load_build_script
+import build.parse_dividends as pd
 
-pd = load_build_script("parse_dividends")
 tiger_currency = pd.tiger_currency
 
 
