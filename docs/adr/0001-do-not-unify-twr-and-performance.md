@@ -44,7 +44,7 @@ Each design revealed the *same* failure mode from its own angle:
 
 Keep `performance` and `twr` as two separate modules. They share exactly what they already
 share — `_xirr` — plus the *concept* of external-flow-vs-return-in-kind classification, which
-was spelled twice when this was written (`performance.classify` + `CASH_TRADE`/`ZERO_CASH` vs
+was spelled twice when this was written (`performance.classify_action` + `CASH_TRADE`/`ZERO_CASH` vs
 twr's `RETURN_IN_KIND`/`COST_IN_KIND`/`NON_EXTERNAL`). We do **not** put snapshot P&L and
 daily-series TWR behind one interface.
 
@@ -61,7 +61,7 @@ sequenced so nothing touches the return engine unverified:
    engines consume, ending the twice-named concept. Both taxonomies already have test
    coverage (`test_performance.py::classify*`, `test_twr.py` contribution tests), so the merge
    is checkable on both sides. **Done:** `portfolio/flows.py` `flow_kind(action)`;
-   `twr.contributions` counts only its `external` rows and `performance.classify` reads its
+   `twr.contributions` counts only its `external` rows and `performance.classify_action` reads its
    return-in-kind and cost-in-kind answers (`tests/test_flows.py`). The rules it settles:
    - **A gift is external.** Gifted-in shares are cash put in at their market value on the day,
      in both XIRR and TWR. The headline profit and cost basis still take a gift at zero cost
@@ -71,7 +71,7 @@ sequenced so nothing touches the return engine unverified:
      `stock dividend` and `bonus issuance`, so the other spellings counted as money put in.
    - **A generic `corp action` is external, priced or zero-priced**, as before: FSM's catch-all
      covers a rights subscription, a bonus, a consolidation and an in-specie distribution under
-     one string, so the price cannot say the holding paid itself. `performance.classify` keeps
+     one string, so the price cannot say the holding paid itself. `performance.classify_action` keeps
      its own price rule for cost (priced `cash`, zero-priced `zero`). Known case: D05's 280
      zero-priced FSM `corp action` shares are a bonus but still count as a contribution at
      market value; classifying from `portfolio.cost_annotations`' condition instead of the

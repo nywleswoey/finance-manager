@@ -1,7 +1,7 @@
 """One flow classifier: does a txn row's unit change cross the portfolio's boundary?
 
 ADR 0001 step 2. Both return engines read it — `twr.contributions` (the portfolio XIRR and TWR
-behind /api/return) and `performance.classify` (the per-position cost fold) — so the
+behind /api/return) and `performance.classify_action` (the per-position cost fold) — so the
 return-in-kind and cost-in-kind spellings live here once instead of drifting in two lists.
 
   external       — units arrived from outside, or left to the outside. The return rates value

@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .db import session_scope
 from .models import FxRate, NwItem, NwSnapshot, NwValue
+from .performance import compute
 
 # Catalogue codes auto-pulled from broker/bank statements (see scripts/snapshot_from_statements.py).
 # Everything else is manual: entered in-app or carried forward. Single source of truth so the UI
@@ -129,7 +130,6 @@ def live_portfolio_by_bucket(s: Session) -> dict[str, Decimal]:
     computed side by side: `compute()` is a fold over the whole securities ledger, so this walks
     it once, and a snapshot's three frozen buckets can never fail to add up to the total frozen
     beside them."""
-    from .performance import compute
     out = {b: 0.0 for b in FUNDING_BUCKETS}
     for r in compute(s):
         if r["units"] <= 1e-6:

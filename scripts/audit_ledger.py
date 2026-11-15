@@ -150,7 +150,7 @@ def _one_multi_successor(book):
 
 
 def _transfer_out_only_in_cost_lots(book):
-    """`transfer out` with a space belongs on `cdp_cost_lot`. `classify()` treats that
+    """`transfer out` with a space belongs on `cdp_cost_lot`. `classify_action()` treats that
     spelling as zero cash; a `txn` row carrying it is still the wrong table."""
     out = []
     for table, actions in sorted(book.actions.items()):

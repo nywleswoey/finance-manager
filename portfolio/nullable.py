@@ -17,6 +17,12 @@ def rounded(x, n, mult=1.0):
     return round(x * mult, n) if x is not None else None
 
 
+def cents(x):
+    """round(x, 2), passing None through unchanged — the one spelling of "to cents, for the wire"
+    on a nullable money field. (networth._cents is the exact-decimal, never-null variant.)"""
+    return rounded(x, 2)
+
+
 def iso(x):
     """x.isoformat() for a truthy date/datetime, else None (nullable date -> nullable ISO string)."""
     return x.isoformat() if x else None

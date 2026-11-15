@@ -330,7 +330,7 @@ def ticker_car(legs, contracts, fx, today):
     #143 §2's discipline is absent, not null. It is returned here because the ledger audit
     reads it, and for nothing else.
     """
-    series = [[(d, v * rate_to_sgd(m["currency"] or "SGD", fx)) for d, v in _leg_car_series(p)]
+    series = [[(d, v * rate_to_sgd(m["currency"], fx)) for d, v in _leg_car_series(p)]
               for p, m in legs]
     steps = _put_collateral_steps(contracts, fx, today)
     dates = sorted({d for s in series for d, _ in s} | {d for d, _ in steps})

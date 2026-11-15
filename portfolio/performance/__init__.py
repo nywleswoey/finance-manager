@@ -36,7 +36,7 @@ from .actions import (
     MOVED_NOT_TRADED,
     STOCK_MOVING_LEG,
     ZERO_CASH,
-    classify,
+    classify_action,
 )
 from .book import (
     _fx_and_price,
@@ -100,7 +100,7 @@ __all__ = [
     "FREE_ACTION",
     "STOCK_MOVING_LEG",
     "MIN_XIRR_DAYS",
-    "classify",
+    "classify_action",
     "cdp_transactions",
     "cdp_cost",
     "_carry_leg",

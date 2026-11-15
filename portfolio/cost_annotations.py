@@ -17,7 +17,7 @@ the same shape on a name with a real position would be indistinguishable.
 
 **Scope**: `open/transfer_in` and *zero-priced* `corp action`. A priced `corp action` is a
 rights subscription the holder paid cash for and classifies as `cash` long before it reaches
-here (see `performance.classify`), so the scope check below only has to name the action.
+here (see `performance.classify_action`), so the scope check below only has to name the action.
 
 Not every free lot needs a row. `gifted stock in` (AMZN ×3, BABA ×1) and `bonus issuance`
 (D05 cpf ×1) are mechanical — the broker's own word for a gift or a bonus issue is not

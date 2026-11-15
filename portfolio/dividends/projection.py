@@ -8,7 +8,7 @@ from sqlalchemy import text
 from ingestion.prices import sg_today
 
 from ..db import fetch_dicts, fx_map, session_scope
-from ..nullable import num
+from ..nullable import cents, num
 from .attribution import _sgd_or_none, annual, details, entitled_units
 from .distributions import DRIFT_DAYS, _anniversary, _payments
 
@@ -167,7 +167,7 @@ def projected(s=None, today=None):
                     amt_sgd, flag = _sgd_or_none(r["rate"] * held, r["currency"], fx)
                     overdue_detail.append({"expected_date": r["expected_date"], "account": acct,
                                             "rate": r["rate"], "currency": r["currency"],
-                                            "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
+                                            "amount_sgd": cents(amt_sgd),
                                             **({"flag": flag} if flag else {})})
             overdue_detail.sort(key=lambda d: d["expected_date"])
             still.sort(key=lambda x: x[0]["expected_date"])
@@ -179,7 +179,7 @@ def projected(s=None, today=None):
                     remaining_sgd += amt_sgd or 0.0
                     detail.append({"ex_date": r["ex_date"], "pay_date": r["pay_date"],
                                    "rate": num(r["rate"]), "currency": r["currency"],
-                                   "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
+                                   "amount_sgd": cents(amt_sgd),
                                    **({"flag": flag} if flag else {})})
             elif still:
                 basis = "last_year_pattern"
@@ -188,7 +188,7 @@ def projected(s=None, today=None):
                     remaining_sgd += amt_sgd or 0.0
                     detail.append({"pay_date": r["pay_date"], "expected_date": r["expected_date"],
                                    "account": acct, "rate": r["rate"], "currency": r["currency"],
-                                   "amount_sgd": round(amt_sgd, 2) if amt_sgd is not None else None,
+                                   "amount_sgd": cents(amt_sgd),
                                    **({"flag": flag} if flag else {})})
         full_remaining[ticker] = remaining_sgd
         remaining_total += remaining_sgd

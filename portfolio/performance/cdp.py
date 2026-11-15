@@ -10,7 +10,7 @@ from sqlalchemy import text
 from ingestion.prices import sg_today
 
 from ..db import session_scope
-from ..nullable import num
+from ..nullable import iso, num
 from .actions import CDP_ACCOUNT, CDP_TRANSFER
 from .events import _book_buy
 
@@ -26,7 +26,7 @@ def cdp_transactions(session=None):
             "SELECT trade_date, ticker, stock_name, action, qty, unit_price, amount, currency "
             "FROM cdp_cost_lot ORDER BY trade_date")).mappings().all()
     return [{
-        "trade_date": r["trade_date"].isoformat() if r["trade_date"] else None, "account": CDP_ACCOUNT,
+        "trade_date": iso(r["trade_date"]), "account": CDP_ACCOUNT,
         "ticker": r["ticker"], "name": r["stock_name"] or "", "action": r["action"] or "",
         "qty_signed": float(r["qty"] or 0),
         "price": num(r["unit_price"]),
