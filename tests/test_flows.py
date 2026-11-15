@@ -39,7 +39,7 @@ def test_everything_else_is_external(action):
 
 def test_performance_zero_cost_gift_is_still_a_contribution_to_the_rates():
     """The split the captain chose: the profit keeps a gift at zero cost, the rates don't."""
-    assert perf.classify("gifted stock in", 0.0) == "zero"
+    assert perf.classify_action("gifted stock in", 0.0) == "zero"
     assert "gifted stock in" in perf.FREE_ACTION
     assert flow_kind("gifted stock in") == EXTERNAL
 
@@ -48,14 +48,14 @@ def test_every_return_in_kind_row_is_zero_cash_in_performance():
     """The two engines agree on which unit changes are the holding paying itself."""
     for action in ("stock dividend", "bonus", "bonus issuance", "scrip", "scrip dividend",
                    "script dividend"):
-        assert perf.classify(action, None) == "zero", action
-    assert perf.classify("fee", 10.0) == "cost_in_kind"
+        assert perf.classify_action(action, None) == "zero", action
+    assert perf.classify_action("fee", 10.0) == "cost_in_kind"
 
 
 @pytest.mark.parametrize("action", ["corp action", "corp_action"])
 def test_performance_keeps_the_corp_action_price_rule_for_cost(action):
     """Cost basis still reads the price: priced is a paid rights subscription, zero-priced costs
     nothing — while the rates count both as external."""
-    assert perf.classify(action, 0.49) == "cash"
-    assert perf.classify(action, 0.0) == "zero"
-    assert perf.classify(action, None) == "zero"
+    assert perf.classify_action(action, 0.49) == "cash"
+    assert perf.classify_action(action, 0.0) == "zero"
+    assert perf.classify_action(action, None) == "zero"
