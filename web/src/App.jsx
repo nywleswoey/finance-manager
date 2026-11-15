@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import posthog from "posthog-js";
-import { post } from "./api.js";
+import { post } from "@/lib/api.js";
 import { useAuth } from "./auth.jsx";
 import Overview from "./modules/portfolio/Overview.jsx";
 import Holdings from "./modules/portfolio/Holdings.jsx";

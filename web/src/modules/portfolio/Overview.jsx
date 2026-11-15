@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { get, sgd, pct, cls } from "../../api.js";
-import { Tile } from "../../cards.jsx";
-import { Donut } from "../../charts.jsx";
+import { get } from "@/lib/api.js";
+import { sgd, pct, cls } from "@/lib/format.js";
+import { Tile } from "@/cards.jsx";
+import { Donut } from "@/charts.jsx";
+import { Loading, Unreachable } from "@/status.jsx";
 
 export default function Overview() {
   const [d, setD] = useState(null);
@@ -10,8 +12,8 @@ export default function Overview() {
   useEffect(() => { get("/api/overview").then(setD).catch(() => setD({ error: true })); }, []);
   useEffect(() => { get("/api/return").then(setRet).catch(() => setRet({})); }, []);
   useEffect(() => { get("/api/options").then(setOpt).catch(() => setOpt({})); }, []);
-  if (!d) return <div className="loading">Loading…</div>;
-  if (d.error) return <div className="loading">API not reachable.</div>;
+  if (!d) return <Loading />;
+  if (d.error) return <Unreachable />;
 
   const pie = (obj) => Object.entries(obj).map(([k, v]) => ({ name: k, value: v.mv_sgd }));
   const mkt = pie(d.by_market), acct = pie(d.by_account).filter((x) => x.value > 0);

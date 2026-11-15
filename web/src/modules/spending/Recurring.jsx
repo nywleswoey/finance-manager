@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { get, post, del, sgd } from "../../api.js";
-import { Tile } from "../../cards.jsx";
+import { get, post, del } from "@/lib/api.js";
+import { sgd } from "@/lib/format.js";
+import { Tile } from "@/cards.jsx";
+import { Loading } from "@/status.jsx";
 
 const CADENCES = ["weekly", "monthly", "quarterly", "annual"];
 const STATUS = {
@@ -60,7 +62,7 @@ export default function Recurring() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  if (!items) return <div className="loading">Loading…</div>;
+  if (!items) return <Loading />;
 
   const active = items.filter((r) => r.active);
   const overdue = active.filter((r) => r.status === "overdue").length;

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { get, sgd } from "../../api.js";
-import { Cards, RowCard, usePhone } from "../../cards.jsx";
+import { get } from "@/lib/api.js";
+import { sgd } from "@/lib/format.js";
+import { Cards, RowCard, usePhone } from "@/cards.jsx";
+import { Loading } from "@/status.jsx";
 
 export default function SpendTransactions() {
   const [cats, setCats] = useState([]);
@@ -50,7 +52,7 @@ export default function SpendTransactions() {
           <input type="checkbox" checked={excluded} onChange={(e) => setExcluded(e.target.checked)} /> show excluded
         </label>
       </h3>
-      {!rows ? <div className="loading">Loading…</div> : phone ? (
+      {!rows ? <Loading /> : phone ? (
         /* Pattern B, and the shape it was measured on: six fields, one amount, two lines.
            Merchant is the identity and the SGD amount is the hero; date, source, category
            and the exclusion flag flow underneath as muted text. No key/value block — this

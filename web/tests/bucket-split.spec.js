@@ -61,7 +61,7 @@ test.beforeAll(() => {
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // The symbols the captured tickers' currencies take — the gate's own oracle, restated rather
-// than read off `api.js`'s table, which would make the check agree with itself by construction.
+// than read off `lib/format.js`'s table, which would make the check agree with itself by construction.
 const SYMBOL = { SGD: "S$", USD: "US$" };
 const symbolOf = (s) => {
   expect(SYMBOL[s.currency], `no symbol for ${s.ticker}'s ${s.currency}`).toBeTruthy();

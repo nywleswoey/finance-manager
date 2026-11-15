@@ -1,10 +1,12 @@
 import React, { Fragment, useEffect, useState } from "react";
-import { get, del, fmt, sgd, money, cls, signed, signedPct } from "../../api.js";
-import { Cards, RowCard, Tile, usePhone } from "../../cards.jsx";
+import { get, del } from "@/lib/api.js";
+import { fmt, sgd, money, cls, signed, signedPct } from "@/lib/format.js";
+import { Cards, RowCard, Tile, usePhone } from "@/cards.jsx";
 import { ContractCell } from "./contract.jsx";
 import { boundOf, boundPhrase } from "./bound.js";
 import { useDividendSplit, AwaitingIdentification, Excluded, MarkedRegular, Regular,
          CapitalReturnList } from "./dividendSplit.jsx";
+import { Loading } from "@/status.jsx";
 
 /**
  * The words an unmeasurable cell reads — words, never a glyph and never a tooltip (#143 §6).
@@ -372,7 +374,7 @@ export default function SecurityDetail({ ticker, onBack }) {
     get("/api/dividend-capital-returns").then((r) => setCapReturns(r.rows)).catch(() => setCapReturns([]));
   }, [ticker, ver]);
 
-  if (!d) return <div className="loading">Loading {ticker}…</div>;
+  if (!d) return <Loading what={ticker} />;
   if (d.error || !d.summary) return <div className="loading">No data for {ticker}. <a className="backlink" onClick={onBack} style={{ cursor: "pointer", color: "var(--acc)" }}>← back</a></div>;
   const s = d.summary;
   // THE FRONTEND RENDERS AND NEVER DERIVES (#143 §1). Both of this page's client-side folds are

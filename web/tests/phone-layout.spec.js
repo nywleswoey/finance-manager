@@ -34,7 +34,7 @@ const dec = (n, d) =>
 // cost to 4 or the ledger's `not known`, and a bucket's status last. Stated exactly, so a
 // change to either precision fails here rather than passing on a substring.
 // The symbols the captured tickers' currencies take — this gate's own oracle, restated rather
-// than read off `api.js`'s table, which would agree with itself by construction. The currency is
+// than read off `lib/format.js`'s table, which would agree with itself by construction. The currency is
 // the TICKER's, off the summary, whichever block is being checked: a bucket ships none.
 const SYMBOL = { SGD: "S$", USD: "US$" };
 const symbolOf = (s) => {

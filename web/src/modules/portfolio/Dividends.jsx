@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, LabelList } from "recharts";
-import { get, post, del, fmt, sgd, money, monthYear } from "../../api.js";
-import { Cards, RowCard, usePhone } from "../../cards.jsx";
+import { get, post, del } from "@/lib/api.js";
+import { fmt, sgd, money, monthYear } from "@/lib/format.js";
+import { Cards, RowCard, usePhone } from "@/cards.jsx";
 import { useDividendSplit, AwaitingIdentification, Excluded, MarkedRegular, Regular,
          CapitalReturnList } from "./dividendSplit.jsx";
+import { Loading } from "@/status.jsx";
 
 const BUCKET_LABEL = { cash: "Cash", srs: "SRS", cpf: "CPF" };
 const BASIS_LABEL = { announced: "SGX announced", last_year_pattern: "last year's pattern", none: "—", "not held": "not held", unmapped: "unmapped" };
@@ -115,7 +117,7 @@ export default function Dividends({ onOpenTicker }) {
     } finally { setCapBusy(false); }
   }
 
-  if (!ann) return <div className="loading">Loading…</div>;
+  if (!ann) return <Loading />;
   // Only holdings with a real number to show — the many zero-dividend growth names (AAPL,
   // NVDA, …) would otherwise pad the breakdown with rows that say nothing.
   const projRows = proj

@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { get, sgd, pct, cls } from "../../api.js";
+import { get } from "@/lib/api.js";
+import { sgd, pct, cls } from "@/lib/format.js";
+import { Loading } from "@/status.jsx";
 
 // The `~` Holdings already uses for a Net it could only part-answer, on the two columns that
 // split stock P/L. `unsplit_pl_sgd` is the amount they cannot reach; a group without one renders
@@ -32,7 +34,7 @@ export default function Performance() {
           bounded by the grouping dimension (four markets, three buckets, eight accounts and
           never more), so the tier's `60svh` cap is a permanent no-op here rather than a
           conditional one, and the whole table is on screen at once. */}
-      {!d ? <div className="loading">Loading…</div> : (
+      {!d ? <Loading /> : (
         <div className="pinned">
           <table>
             <thead><tr>

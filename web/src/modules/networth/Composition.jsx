@@ -2,9 +2,9 @@ import React from "react";
 import {
   Area, AreaChart, CartesianGrid, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
-import { fmt, monthDay, monthShort, monthYear, sgd, signed, signedPct } from "../../api.js";
-import { ChartKey, TOOLTIP } from "../../charts.jsx";
-import { BAND_COLOURS, BAND_FILL_OPACITY } from "../../palette.js";
+import { fmt, monthDay, monthShort, monthYear, sgd, signed, signedPct } from "@/lib/format.js";
+import { ChartKey, TOOLTIP } from "@/charts.jsx";
+import { BAND_COLOURS, BAND_FILL_OPACITY } from "@/palette.js";
 
 /**
  * What net worth is MADE OF, over time — and the only surface in this app that carries

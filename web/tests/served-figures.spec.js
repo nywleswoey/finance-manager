@@ -15,7 +15,7 @@ import { expect, test } from "@playwright/test";
 import { loadApp, openView, VIEWS } from "./support/app.js";
 import { readFixture } from "./fixtures/index.js";
 
-/** `api.js`'s `sgd()`, restated as `ticker.spec.js` restates it. */
+/** `lib/format.js`'s `sgd()`, restated as `ticker.spec.js` restates it. */
 const asSgd = (n) =>
   "S$" + Number(n).toLocaleString("en-US", { maximumFractionDigits: 0, minimumFractionDigits: 0 });
 

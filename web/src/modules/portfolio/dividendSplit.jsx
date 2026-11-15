@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { get, post, del, money, fmt } from "../../api.js";
+import { get, post, del } from "@/lib/api.js";
+import { money, fmt } from "@/lib/format.js";
 
 /**
  * The per-payment split / identify actions `portfolio.dividends.yields()` offers

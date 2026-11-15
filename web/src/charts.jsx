@@ -1,6 +1,6 @@
 import React from "react";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts";
-import { sgd, fmt } from "./api.js";
+import { sgd, fmt } from "@/lib/format.js";
 import { usePhone } from "./cards.jsx";
 import { POSITIONAL_COLOURS } from "./palette.js";
 
@@ -25,7 +25,7 @@ export const TOOLTIP = {
 /**
  * The one donut in the app.
  *
- * It lives beside `api.js` rather than under a module because both sections draw it:
+ * It lives beside `lib/format.js` rather than under a module because both sections draw it:
  * `portfolio/Overview` carried a hand-copied duplicate with its own 7-colour palette, so
  * every chart change had to land twice across four call sites.
  *

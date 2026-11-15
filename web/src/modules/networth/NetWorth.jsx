@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import posthog from "posthog-js";
-import { get, post, patch, del, sgd, money, fmt, cls } from "../../api.js";
+import { get, post, patch, del } from "@/lib/api.js";
+import { sgd, money, fmt, cls } from "@/lib/format.js";
 import Composition from "./Composition.jsx";
+import { Loading, Unreachable } from "@/status.jsx";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -91,8 +93,8 @@ export default function NetWorth() {
   }
   useEffect(() => { reload().catch((e) => setErr(e.message)); }, []);
 
-  if (err && !items) return <div className="loading">API not reachable: {err}</div>;
-  if (!items) return <div className="loading">Loading…</div>;
+  if (err && !items) return <Unreachable detail={err} />;
+  if (!items) return <Loading />;
 
   // Both surfaces a saved edit moves: the history table's six metrics and the chart's bands.
   // They read two endpoints off one store, so refetching one and not the other is how the

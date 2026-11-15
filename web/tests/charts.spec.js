@@ -49,7 +49,7 @@ const viewportOf = (projectName) => VIEWPORTS.find((v) => v.name === projectName
 /** A declared hex as the `rgb(r, g, b)` string `getComputedStyle` hands back. */
 const rgb = (hex) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
 
-/** A rendered figure, the way `api.js`'s `fmt` writes one — grouped, no decimals. */
+/** A rendered figure, the way `lib/format.js`'s `fmt` writes one — grouped, no decimals. */
 const grouped = (n) => Math.round(Math.abs(n)).toLocaleString("en-US");
 
 /** Every view that draws a donut, and how many it draws. */

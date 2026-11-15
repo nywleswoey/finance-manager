@@ -53,7 +53,7 @@ const OPEN = ALL.filter((r) => r.status !== "closed");
 const plBase = (r) => (r.status === "closed" ? r.pl_sgd : r.unrealised_pl_sgd) || 0;
 
 /**
- * `api.js`'s `sgd()`, restated. Deliberately the same call and not `Math.round` around a
+ * `lib/format.js`'s `sgd()`, restated. Deliberately the same call and not `Math.round` around a
  * separate format: the two disagree on a negative half, and a gate that formats its expectation
  * differently from the app is measuring its own arithmetic.
  */

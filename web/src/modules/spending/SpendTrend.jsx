@@ -1,9 +1,9 @@
 import React from "react";
 import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { dayMonthYear, monthYear, sgd, signed, signedPct } from "../../api.js";
-import { TOOLTIP } from "../../charts.jsx";
-import { usePhone } from "../../cards.jsx";
-import { CATEGORY_DASH, categoryColour } from "../../palette.js";
+import { dayMonthYear, monthYear, sgd, signed, signedPct } from "@/lib/format.js";
+import { TOOLTIP } from "@/charts.jsx";
+import { usePhone } from "@/cards.jsx";
+import { CATEGORY_DASH, categoryColour } from "@/palette.js";
 
 /**
  * Is Transport rising? — the question the stacked bar below this card cannot answer.

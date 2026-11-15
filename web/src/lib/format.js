@@ -1,38 +1,8 @@
-const base = "";
-// Session lives in an HttpOnly cookie; include it on every request. A 401 means the
-// session expired or was revoked -> tell the AuthGate to drop back to the login screen.
-const CREDS = { credentials: "include" };
-function on401(r) {
-  if (r.status === 401) window.dispatchEvent(new Event("auth-expired"));
-  return r;
-}
-export async function get(path) {
-  const r = on401(await fetch(base + path, CREDS));
-  if (!r.ok) throw new Error(path + " " + r.status);
-  return r.json();
-}
-async function send(method, path, body) {
-  const opts = { method, ...CREDS };
-  if (body !== undefined) {
-    opts.headers = { "Content-Type": "application/json" };
-    opts.body = JSON.stringify(body);
-  }
-  const r = on401(await fetch(base + path, opts));
-  if (!r.ok) {
-    let detail = "";
-    try { detail = (await r.json()).detail || ""; } catch {}
-    throw new Error(detail || path + " " + r.status);
-  }
-  return r.json();
-}
-export const post = (path, body) => send("POST", path, body);
-export const put = (path, body) => send("PUT", path, body);
-export const patch = (path, body) => send("PATCH", path, body);
-export async function del(path) {
-  const r = on401(await fetch(base + path, { method: "DELETE", ...CREDS }));
-  if (!r.ok) throw new Error(path + " " + r.status);
-  return r.json();
-}
+/**
+ * How a number, a currency amount, a date or a month READS — every formatter the app has, in
+ * one file with no React import, so the Playwright specs can assert a rendered label against
+ * the app's own formatter rather than restating it.
+ */
 export const fmt = (n, d = 0) =>
   n == null ? "—" : Number(n).toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
 export const pct = (n) => (n == null ? "—" : (n * 100).toFixed(1) + "%");

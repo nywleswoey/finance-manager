@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { get, fmt, money, cls } from "../../api.js";
-import { Cards, RowCard, usePhone } from "../../cards.jsx";
+import { get } from "@/lib/api.js";
+import { fmt, money, cls } from "@/lib/format.js";
+import { Cards, RowCard, usePhone } from "@/cards.jsx";
+import { Loading } from "@/status.jsx";
 
 export default function Transactions() {
   const [accts, setAccts] = useState([]);
@@ -28,7 +30,7 @@ export default function Transactions() {
         </select>
         <input placeholder="ticker…" value={ticker} onChange={(e) => setTicker(e.target.value)} style={{ marginLeft: 8, width: 100 }} />
       </h3>
-      {!rows ? <div className="loading">Loading…</div> : phone ? (
+      {!rows ? <Loading /> : phone ? (
         /* Eight fields, but still one amount: the trade is the row and the cash it moved is
            the hero. Qty and Price are the second and third numbers, so this one earns the
            key/value block a six-field ledger does not. The source filename goes in the muted

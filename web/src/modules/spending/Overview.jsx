@@ -3,11 +3,13 @@ import {
   ResponsiveContainer, Tooltip,
   BarChart, Bar, XAxis, YAxis, CartesianGrid,
 } from "recharts";
-import { get, sgd, fmt, catName } from "../../api.js";
-import { ChartKey, Donut, TOOLTIP } from "../../charts.jsx";
-import { categoryColour } from "../../palette.js";
-import { Cards, RowCard, Tile, usePhone } from "../../cards.jsx";
+import { get } from "@/lib/api.js";
+import { sgd, fmt, catName } from "@/lib/format.js";
+import { ChartKey, Donut, TOOLTIP } from "@/charts.jsx";
+import { categoryColour } from "@/palette.js";
+import { Cards, RowCard, Tile, usePhone } from "@/cards.jsx";
 import SpendTrend from "./SpendTrend.jsx";
+import { Loading, Unreachable } from "@/status.jsx";
 
 export default function SpendOverview() {
   const [sum, setSum] = useState(null);
@@ -28,8 +30,8 @@ export default function SpendOverview() {
   useEffect(() => { get("/api/spending/trends").then(setTrend).catch(() => setTrend({ error: true })); }, []);
   useEffect(() => { get("/api/spending/window").then(setSpendWindow).catch(() => setSpendWindow({ error: true })); }, []);
   useEffect(() => { get("/api/spending/undated").then(setUndated).catch(() => setUndated(null)); }, []);
-  if (!sum) return <div className="loading">Loading…</div>;
-  if (sum.error) return <div className="loading">API not reachable.</div>;
+  if (!sum) return <Loading />;
+  if (sum.error) return <Unreachable />;
 
   // `catName` because a null category is unclassified spend, not a nameless one. It was an
   // empty `.nm` span here — a nameless slice in the donut and a nameless row in the list

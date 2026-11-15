@@ -28,7 +28,7 @@
 import { expect, test } from "@playwright/test";
 import { capturedProvenance, withProvenance } from "./fixtures/index.js";
 import { capturedHolding as captured, escapeRe, exactCarry, openTicker as open } from "./support/app.js";
-import { fmt, sgd, money } from "../src/api.js";
+import { fmt, sgd, money } from "../src/lib/format.js";
 
 const NOT_KNOWN = "not known";
 

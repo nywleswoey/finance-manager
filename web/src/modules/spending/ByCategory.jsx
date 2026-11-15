@@ -1,8 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
-import { get, sgd, fmt, catName } from "../../api.js";
-import { Donut } from "../../charts.jsx";
-import { categoryColour } from "../../palette.js";
-import { CardGroup, Cards, RowCard, Tile, usePhone } from "../../cards.jsx";
+import { get } from "@/lib/api.js";
+import { sgd, fmt, catName } from "@/lib/format.js";
+import { Donut } from "@/charts.jsx";
+import { categoryColour } from "@/palette.js";
+import { CardGroup, Cards, RowCard, Tile, usePhone } from "@/cards.jsx";
+import { Loading, Unreachable, Empty } from "@/status.jsx";
 
 // Expenses for a single calendar year, broken down by category. The year selector loads that
 // year's window (from=YYYY-01-01, to=YYYY-12-31) through the existing spending endpoints;
@@ -98,9 +100,9 @@ export default function SpendByCategory() {
       .catch(() => { if (gen.current === mine) setRows([]); });
   }
 
-  if (years == null) return <div className="loading">Loading…</div>;
-  if (yearsErr) return <div className="loading">API not reachable.</div>;
-  if (!years.length) return <div className="loading">No spending data yet.</div>;
+  if (years == null) return <Loading />;
+  if (yearsErr) return <Unreachable />;
+  if (!years.length) return <Empty>No spending data yet.</Empty>;
 
   // null category (unclassified spend) -> named by `catName`; it isn't drillable because the
   // transactions endpoint filters on an exact category string (no IS NULL match), which is why
@@ -143,9 +145,9 @@ export default function SpendByCategory() {
         </select>
       </div>
 
-      {!sum ? <div className="loading">Loading…</div> :
-        sum.error ? <div className="loading">API not reachable.</div> :
-        !groups.length ? <div className="loading">No expenses recorded for {year}.</div> : (
+      {!sum ? <Loading /> :
+        sum.error ? <Unreachable /> :
+        !groups.length ? <Empty>No expenses recorded for {year}.</Empty> : (
         <>
           <div className="tiles">
             <Tile lbl="Total Spend" val={sgd(total)} />
@@ -246,7 +248,7 @@ export default function SpendByCategory() {
  * counted spend. The dimming is `spending/Transactions`' business, where the filter exists.
  */
 function DrilledCards({ sub, rows }) {
-  if (!rows) return <div className="loading" style={{ padding: "12px 0" }}>Loading…</div>;
+  if (!rows) return <Loading style={{ padding: "12px 0" }} />;
   return (
     <div style={{ marginTop: 14 }}>
       <Cards>
@@ -264,7 +266,7 @@ function DrilledCards({ sub, rows }) {
 }
 
 function TxnList({ rows }) {
-  if (!rows) return <div className="loading" style={{ padding: 12 }}>Loading…</div>;
+  if (!rows) return <Loading style={{ padding: 12 }} />;
   if (!rows.length) return <div className="mut" style={{ padding: 12, fontSize: 12 }}>No transactions.</div>;
   return (
     <table style={{ margin: "4px 0 10px", background: "var(--panel2)" }}>

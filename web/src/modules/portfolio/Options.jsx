@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from "recharts";
-import { get, sgd, money, pct, fmt, cls } from "../../api.js";
-import { Tile, usePhone } from "../../cards.jsx";
+import { get } from "@/lib/api.js";
+import { sgd, money, pct, fmt, cls } from "@/lib/format.js";
+import { Tile, usePhone } from "@/cards.jsx";
 import { ContractCell } from "./contract.jsx";
+import { Loading, Unreachable } from "@/status.jsx";
 
 /**
  * The reserved band under the bars, in pixels — `<YAxis padding>` shrinks the scale's *range*
@@ -38,8 +40,8 @@ export default function Options() {
     get("/api/options").then(setD).catch(() => setD({ error: true }));
     get("/api/options-trades?limit=500").then(setTrades).catch(() => setTrades([]));
   }, []);
-  if (!d) return <div className="loading">Loading…</div>;
-  if (d.error) return <div className="loading">API not reachable.</div>;
+  if (!d) return <Loading />;
+  if (d.error) return <Unreachable />;
 
   const yrChart = [...d.by_year].sort((a, b) => b.key - a.key)
     .map((r) => ({ year: String(r.key), pl: Math.round(r.pl_sgd) }));
@@ -116,7 +118,7 @@ export default function Options() {
             measurement that a nine-field card is four rows per screen against twelve here.
             `.selfscroll` is the 480px cap and both-axis scroll this wrapper already shipped,
             moved off the inline styles so the pattern's own cap can win over it. */}
-        {!trades ? <div className="loading">Loading…</div> : (
+        {!trades ? <Loading /> : (
           <div className="pinned selfscroll">
             <table>
               <thead><tr>

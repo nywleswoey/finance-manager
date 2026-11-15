@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
 import posthog from "posthog-js";
-import { get, fmt, sgd, money, pct, cls } from "../../api.js";
+import { get } from "@/lib/api.js";
+import { fmt, sgd, money, pct, cls } from "@/lib/format.js";
 import SecurityDetail, { NOT_KNOWN } from "./SecurityDetail.jsx";
 import { netDirection } from "./bound.js";
 import { NET_MARKS, markTitle } from "./netMarks.js";
+import { Loading } from "@/status.jsx";
 
 // group key -> label. Every grouping but the two flat ones is also a `by` `/api/performance`
 // accepts, which is where the group's subtotal row comes from.
@@ -419,7 +421,7 @@ export default function Holdings({ openTicker, onTickerOpened }) {
     [display]);
 
   if (sel) return <SecurityDetail ticker={sel.ticker} onBack={() => setSel(null)} />;
-  if (!rows) return <div className="loading">Loading…</div>;
+  if (!rows) return <Loading />;
 
   const toggle = (k) => setCollapsed((c) => ({ ...c, [k]: !c[k] }));
   const open = (r) => {

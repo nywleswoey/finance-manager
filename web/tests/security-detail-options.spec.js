@@ -41,7 +41,7 @@
  * gate keeps meaning what it says if `holding-pltr.json` is ever recaptured.
  */
 import { expect, test } from "@playwright/test";
-import { fmt, sgd, signed } from "../src/api.js";
+import { fmt, sgd, signed } from "../src/lib/format.js";
 import { openView } from "./support/app.js";
 import fixture from "./fixtures/api/holding-pltr.json" with { type: "json" };
 

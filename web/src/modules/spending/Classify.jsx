@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { get, post, put, del, sgd } from "../../api.js";
-import { Tile } from "../../cards.jsx";
+import { get, post, put, del } from "@/lib/api.js";
+import { sgd } from "@/lib/format.js";
+import { Tile } from "@/cards.jsx";
+import { Loading } from "@/status.jsx";
 
 // A spend's amount_sgd is signed negative; show the positive spend magnitude.
 const mag = (n) => (n == null ? "—" : sgd(-n));
@@ -97,7 +99,7 @@ export default function Classify() {
     refetch();
   }
 
-  if (!q || !rules) return <div className="loading">Loading…</div>;
+  if (!q || !rules) return <Loading />;
 
   const classified = q.total_spend - q.unclassified;
   const progress = q.total_spend ? Math.round((classified / q.total_spend) * 100) : 0;

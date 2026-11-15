@@ -6,7 +6,7 @@
  * files. This is the same substitution shape the backend suite already uses one layer
  * down, where Postgres is swapped for in-memory SQLite at the persistence boundary.
  *
- * The frontend's `api.js` is the app's only chokepoint to the server: all thirteen views
+ * The frontend's `lib/api.js` is the app's only chokepoint to the server: all thirteen views
  * call through it, and the auth gate turns on a single session endpoint. Mocking that one
  * endpoint renders the whole app without Google, because the identity script only loads
  * on the login screen.

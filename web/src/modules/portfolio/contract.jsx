@@ -1,5 +1,5 @@
 import React from "react";
-import { fmt } from "../../api.js";
+import { fmt } from "@/lib/format.js";
 
 /**
  * One options row, identified: `Opened` over `Type Strike ×Qty`, in a single cell.
