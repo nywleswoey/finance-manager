@@ -394,7 +394,7 @@ class SourceTest(unittest.TestCase):
         figure came from, so `source` is not on its wire shape at all. A client that sends one
         has it dropped rather than honoured, which is what makes "the API writes null" a property
         of the boundary rather than of the handler remembering to."""
-        from server.main import NwValueIn          # local: this file is otherwise DB-only
+        from server.main import NwValueIn  # local: this file is otherwise DB-only
         v = NwValueIn(**{"code": "posb", "native_value": 1, "source": "statement"})
         self.assertNotIn("source", v.model_dump())
 

@@ -12,14 +12,11 @@ from decimal import Decimal
 import pytest
 
 from portfolio import networth as nw
-from portfolio import recurring
-from portfolio import spending
+from portfolio import recurring, spending
 from portfolio.models import Account, Security, Txn
-
 from server import main
 from server.routes import portfolio as portfolio_routes
 from tests.sqlitetest import make_sessionmaker
-
 
 # ---------------- /api/networth/snapshots: 409 is the duplicate date, by type ----------------
 

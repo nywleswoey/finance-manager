@@ -21,7 +21,12 @@ goal: prefer info already in the files) and only reach online for genuine gaps:
 Units held at each ex-date are replayed from the CPF/SRS ledger; gross = units * rate.
 SGX supplies the authoritative currency per distribution (e.g. IREIT switched SGD->EUR).
 """
-import csv, os, re, sys, time, datetime as dt
+import csv
+import datetime as dt
+import os
+import re
+import sys
+import time
 from collections import defaultdict
 
 from _csvout import write_csv

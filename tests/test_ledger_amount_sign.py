@@ -13,8 +13,11 @@ CDP buy showing S$-10,033.71:
 
 Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_ledger_amount_sign.py -q
 """
-from build._ledgercommon import fsm_amount_is_into_product, fsm_cash_flow, trade_cash_flow
-
+from build._ledgercommon import (
+    fsm_amount_is_into_product,
+    fsm_cash_flow,
+    trade_cash_flow,
+)
 
 # ---------- Tiger flex ----------
 

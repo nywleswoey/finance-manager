@@ -10,9 +10,17 @@ from decimal import Decimal
 
 from portfolio import recurring
 from portfolio.models import CashTxn
+from portfolio.recurring import (
+    _add_months,
+    _add_period,
+    _infer_cadence,
+    _infer_shift,
+    _is_weekend,
+    _per_month,
+    _shift_business,
+    _status,
+)
 from tests.sqlitetest import make_session
-from portfolio.recurring import (_add_months, _add_period, _status, _infer_cadence,
-                                 _is_weekend, _shift_business, _infer_shift, _per_month)
 
 
 def test_per_month_puts_every_cadence_in_one_period():

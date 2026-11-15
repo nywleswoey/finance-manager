@@ -39,7 +39,6 @@ Run: PYTHONPATH=. .venv/bin/python -m pytest tests/test_performance_identity.py 
 import pytest
 
 from portfolio import options
-
 from server.routes import portfolio as portfolio_routes
 
 BY = ("market", "bucket", "account", "asset_type")

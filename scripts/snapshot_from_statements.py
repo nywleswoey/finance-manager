@@ -58,9 +58,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from sqlalchemy import select, text
 
+from portfolio import networth
 from portfolio.db import SessionLocal
 from portfolio.models import FxRate, NwItem, NwSnapshot
-from portfolio import networth
 
 DBS_DIR = "data/dbs-consolidated-statements"
 TIGER_GLOB = "data/tiger-prime/tiger_prime_*.csv"

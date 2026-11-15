@@ -502,8 +502,14 @@ def fetch():
     from portfolio.cost_annotations import annotation_map
     from portfolio.db import fx_as_of, session_scope, valuation_as_of
     from portfolio.options import contracts_by_ticker, realized_by_ticker
-    from portfolio.performance import (_accumulate_positions, _fx_and_price, cdp_cost, compute,
-                                       legs_by_ticker, ticker_car)
+    from portfolio.performance import (
+        _accumulate_positions,
+        _fx_and_price,
+        cdp_cost,
+        compute,
+        legs_by_ticker,
+        ticker_car,
+    )
     from server import main as server_main
 
     collect = _WarningCollector()
