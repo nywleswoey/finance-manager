@@ -13,7 +13,7 @@
  * bucket column cannot ask the question — the RESULT is passed down to it instead.
  *
  * THE SERVER GUARDS THE ONE STATE THIS FILE COULD NOT REPAIR: `net_verdict`
- * (`portfolio/performance.py`) never ships `bounded` beside a `lower` carry that meets unknown
+ * (`portfolio/performance/verdict.py`) never ships `bounded` beside a `lower` carry that meets unknown
  * units. That leaves exactly one pairing where two doubts push opposite ways — (`caveat`, carry
  * `lower`) — and it is read here as `conflict`: a Net doubted both ways, which no glyph and no
  * `upper bound` sentence may claim.

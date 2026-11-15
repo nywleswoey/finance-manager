@@ -6,7 +6,7 @@ accepted
 
 ## Context
 
-`portfolio/performance.py` (`compute` → pure `fold_positions`) and `portfolio/twr.py`
+`portfolio/performance/` (`book.compute` → pure `fold.fold_positions`) and `portfolio/twr.py`
 (`compute_twr` → pure `_twr`) both build the same conceptual pipeline —
 transactions → positions → dated cashflows → a return number — and `twr.py` imports
 `_xirr` from `performance.py` lazily, inside `compute_twr`, rather than at module

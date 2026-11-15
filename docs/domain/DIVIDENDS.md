@@ -56,14 +56,14 @@ flags the row `no FX rate for <CCY>`; the other endpoints raise (BR4, no silent 
 `GET /api/dividend-details` returns one row per payment with:
 - **gross** (native, as paid) and **gross_sgd** (latest FX; null + flagged when the currency has
   no rate). `total_sgd` / `flagged_sgd` are the SGD totals of all rows / the flagged rows,
-  summed at full precision and rounded once (docstring: `details()` in `portfolio/dividends.py`).
+  summed at full precision and rounded once (docstring: `details()` in `portfolio/dividends/attribution.py`).
 - **declared rate** (`amount_per_unit`) — the per-share rate stated in the statement.
   Captured where the PDF prints it: CDP (`… <qty> units @ SGD <rate>`) and Moomoo
   (`… CASH DIVIDEND @ <CCY> <rate>` / US `<qty> SHARES DIVIDENDS`). Tiger / FSM / the
   2017-18 CDP layout don't print a rate → left null.
 - **qty held** — units of the ticker in the paying account entitled to the dividend,
   replayed from the ledger (`txn` summed where `trade_date < ex_date`, else `≤ pay_date` when
-  the row has no ex_date; `entitled_units()` in `portfolio/dividends.py`). The
+  the row has no ex_date; `entitled_units()` in `portfolio/dividends/attribution.py`). The
   statement-stated units win when present.
 - **implied rate** = `gross / qty_held`. Cross-checks the declared rate (they match where
   both exist — e.g. 42R 0.005 declared = 0.005 implied).

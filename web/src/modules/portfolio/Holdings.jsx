@@ -62,7 +62,7 @@ const plOf = (r) => (r.pl_folded !== undefined ? r.pl_folded : plBase(r));
  * (#143 §15).
  *
  * `net_pl_sgd` is `realised + unrealised + dividends + premiums`, computed once in
- * `performance.py` and read here rather than rebuilt: this page and the detail page agree about
+ * `portfolio/performance/` and read here rather than rebuilt: this page and the detail page agree about
  * what a name earned **by construction**, not by two implementations happening to match. What
  * this replaced was a second definition of Net living in the browser, and the drift it allowed
  * was definitional rather than arithmetic — the worst kind, because both numbers were right
@@ -126,7 +126,7 @@ const netMark = ({ verdict, bound }) => {
  * Sum or pass through — every column is one of the two:
  *
  *   - Sum: units, cost, MV, P/L, dividends, options, and the flows Net is built from. Options need
- *     no double-count guard, because `performance.py` attaches the per-underlying options stream to
+ *     no double-count guard, because `portfolio/performance/` attaches the per-underlying options stream to
  *     the `cash` row alone — a guard here would be dead code reading as if a hazard existed.
  *   - Pass through: price, currency, market, name. Both rows resolve the same `security_id`, so
  *     these are the same lookup; recomputing them would invent a disagreement that cannot exist.
@@ -202,7 +202,7 @@ function mergeTicker(rows) {
     // differently if that ever stops being true. `sumOf` coalesces a null to 0, so reading the
     // verdict off one leg would print a whole-ticker number that is silently short by a bucket;
     // testing the legs themselves reports `not known`, which is what a fold that cannot add up should
-    // say. `performance.py`'s equivalent raises instead, for the same reason and with a server's
+    // say. `portfolio/performance/`'s equivalent raises instead, for the same reason and with a server's
     // freedom to crash.
     net_pl_sgd: rs.some((r) => r.net_pl_sgd == null) ? null
       : round2(sumOf(rs, (r) => r.net_pl_sgd)),
