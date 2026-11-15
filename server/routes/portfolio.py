@@ -240,7 +240,7 @@ def holding(ticker: str):
         t["balance"] = round(bal, 4)
     # enrich each dividend with qty entitled to it + declared rate per unit.
     # prefer statement-stated values; fall back to ledger replay / implied (gross/qty).
-    # entitled_units / implied_rate are the shared entitlement attribution primitives (see dividends.py).
+    # entitled_units / implied_rate are the shared entitlement attribution primitives (see dividends/attribution.py).
     # gross_sgd mirrors the rest of the detail view (cost/MV/P/L are all SGD); the native
     # gross + rate stay alongside it because they are what the statement actually said.
     for x in divs:

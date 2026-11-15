@@ -96,7 +96,7 @@ async function claims(page) {
 /**
  * THE ONE PAIRING THIS SIDE AND THE WIRE SHARE, stated here so the two cannot drift apart.
  *
- * `net_verdict` (`portfolio/performance.py`) never ships `bounded` beside a `lower` carry that
+ * `net_verdict` (`portfolio/performance/verdict.py`) never ships `bounded` beside a `lower` carry that
  * meets unknown units; it ships `caveat`, and this side reads exactly that pair as a Net doubted
  * both ways. The wire's end is pinned by
  * `tests/test_bounded_carry.py::test_bounded_never_ships_beside_unknown_units_unless_the_carry_is_upper`.

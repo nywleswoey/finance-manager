@@ -1,7 +1,7 @@
 """Load data/cdp-stocks/transactions.csv -> Postgres cdp_cost_lot (CDP price/cost log).
 
 CDP monthly statements omit unit price, so this hand-maintained CSV is the cost record.
-Loading it into the DB removes performance.py's runtime file dependency (the file isn't
+Loading it into the DB removes performance/cdp.py's runtime file dependency (the file isn't
 deployed to serverless — see DEPLOY.md), so transferred-in CDP holdings keep their buy price.
 
 Idempotent: each row gets a dedup_hash; re-runs INSERT ... ON CONFLICT DO UPDATE.

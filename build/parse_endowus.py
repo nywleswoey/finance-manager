@@ -17,7 +17,7 @@ gets a real cost basis. Action mapping:
 A switch-IN (Amundi Investment whose amount equals a same-period redemption of ANOTHER
 fund — the 2023 LionGlobal Infinity -> Amundi switch) is emitted as `switch_in` with NO
 price/amount: it is internal, not new capital. Its cost carries from the predecessor via
-the `switch` corporate_action (see performance.py / seed.py), so booking it here would
+the `switch` corporate_action (see performance/carry.py / seed.py), so booking it here would
 double-count. Infinity itself stays in cpf-stocks/transactions.csv (authoritative cost).
 """
 import glob

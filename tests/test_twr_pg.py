@@ -1,6 +1,6 @@
 """portfolio.twr.compute_twr — the fetch adapter over `_returns` — against a real Postgres.
 
-ADR 0001 keeps `twr.py` apart from `performance.py`, and `compute_twr` is the part of it that
+ADR 0001 keeps `twr.py` apart from `performance/`, and `compute_twr` is the part of it that
 reads the database: the held set off the `current_position` view, the txns and dividends of
 those securities (`= ANY(:ids)`), and the stored close. tests/test_twr.py covers `_returns`
 exhaustively with the rows handed in; nothing ran the SQL that picks those rows, so a query
