@@ -362,8 +362,8 @@ no-op or, worse, merges without waiting:
    status checks. Auto-merge waits for *required* checks; with none required it merges
    immediately.
 
-**CI runs more than the local default.** `make test-web` and `pytest -m "not pg"` are the
-fast local loop; CI runs the whole thing — the `pg`-marked tests against a real Postgres
-service container (same image, credentials and port 5544 as `docker-compose.yml`, so no env
-var is needed), plus the Playwright suite. The Postgres-only SQL and the production
-vite build are exactly what a psycopg or vite bump breaks.
+**CI always runs the `pg` tests.** `make test` (README § Run it) is CI's lint and test
+steps, but locally the `pg`-marked tests skip themselves when no Postgres answers; CI runs them
+against a real Postgres service container (same image, credentials and port 5544 as
+`docker-compose.yml`, so no env var is needed), plus the Playwright suite. The Postgres-only SQL
+and the production vite build are exactly what a psycopg or vite bump breaks.
