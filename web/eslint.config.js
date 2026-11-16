@@ -34,9 +34,9 @@ export default [
       // effect that refetches. That is a deliberate pattern here, not a bug; the React Compiler
       // rule that flags it is off until the data hooks are extracted.
       "react-hooks/set-state-in-effect": "off",
-      // JSX uses the imported component names; without this the React import of each
-      // component looks unused to core eslint.
-      "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_|^[A-Z]",
+      // The automatic JSX runtime makes `import React from "react"` unused in any component
+      // that never spells `React.` itself; the import stays, so core eslint must not flag it.
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_|^React$",
                                     caughtErrors: "none" }],
     },
   },

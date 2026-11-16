@@ -1,4 +1,4 @@
-.PHONY: db-up db-down migrate seed flat load prices dividend-announcements ingest api build-web app psql reset net \
+.PHONY: db-up db-down migrate seed flat load prices dividend-announcements ingest api web-deps build-web app psql reset net \
         flat-cash load-cash spending snapshot snapshot-commit ingest-all test test-py test-web lint lint-py lint-web \
         capture-web-fixtures api-local sync-from-prod setup \
         schedule-install schedule-status schedule-uninstall schedule-test sync-requirements
@@ -126,18 +126,20 @@ api:          ## run the API against Neon (serves built web/ at /)
 api-local:    ## run the API against the local docker DB (what a hand-run ingest wrote)
 	@$(LOCAL_GUARD)
 	$(PY) -m uvicorn server.main:app --reload --port 8001
-build-web:    ## build the React frontend
-	cd web && npm install && npm run build
+web-deps:     ## install the frontend's npm dependencies (eslint, vite, playwright)
+	cd web && npm install
+build-web: web-deps   ## build the React frontend
+	cd web && npm run build
 app: build-web   ## build frontend then run API+web on :8000, against Neon
 	@$(NEON_ENV); DATABASE_URL="$$u" $(PY) -m uvicorn server.main:app --port 8000
 
-test: test-py test-web   ## everything CI runs, in CI's order (lint first: it is the cheapest failure)
+test: lint test-py test-web   ## everything CI runs, in CI's order (lint first: it is the cheapest failure)
 test-py: lint-py   ## Python suite; `pg` tests skip themselves when no Postgres answers (make db-up)
 	$(PY) -m pytest -q -rs
 lint: lint-py lint-web   ## ruff + eslint
 lint-py:      ## ruff (the rule set is pinned in pyproject.toml; `ruff check --fix .` sorts imports)
 	.venv/bin/ruff check .
-lint-web:     ## eslint over web/src and web/tests
+lint-web: web-deps   ## eslint over web/src and web/tests
 	cd web && npm run lint
 
 test-web: build-web   ## Playwright viewport suite: 10 named viewports x 13 views (see web/TESTING.md)
