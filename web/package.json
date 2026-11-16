@@ -10,9 +10,9 @@
     "lint": "eslint ."
   },
   "dependencies": {
-    "posthog-js": "^1.430.3",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
+    "posthog-js": "^1.448.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "recharts": "^3.10.1"
   },
   "devDependencies": {
