@@ -104,7 +104,7 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
 | Path | What |
 |---|---|
 | `data/` | raw statements (immutable) |
-| `build/` | statement parsers → `ledger.csv`, `dividends.csv`, `symbols.csv` |
+| `build/` | statement parsers → `ledger.csv`, `dividends.csv`, `symbols.csv`; `build/__init__.py` is the module map |
 | `ingestion/` | DB loaders + market data; `ingestion/__init__.py` is the module map |
 | `portfolio/` | the domain package: shared kernel + the three products; `portfolio/__init__.py` is the module map (`performance/` and `dividends/` carry their own) |
 | `migrations/` | Alembic schema |
