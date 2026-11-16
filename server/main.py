@@ -1,6 +1,7 @@
-"""FastAPI — composition root. App object, middleware, auth gate, health/refresh/cron,
-PostHog proxy, static SPA mount. Product routes live in server/routes/{portfolio,networth,
-spending}.py, matching web/src/modules/{portfolio,networth,spending}/.
+"""FastAPI — composition root. App object, middleware, auth gate, health, static SPA mount.
+Product routes live in server/routes/{portfolio,networth,spending}.py, matching
+web/src/modules/{portfolio,networth,spending}/; the price refresh (UI + cron) is
+server/refresh.py and the PostHog proxy is server/posthog_proxy.py.
 
 Run: PYTHONPATH=. .venv/bin/uvicorn server.main:app --reload --port 8000
 
@@ -8,27 +9,23 @@ Locked behind Google OAuth: every /api/* route except the auth + health endpoint
 requires a valid session cookie (deny-by-default gate below). See server/auth.py.
 The SECURITY-NN codes cited here are defined in DEPLOY.md § Security register.
 """
-import hmac
 import logging
 import os
 import sys
-from http import cookiejar
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-import requests
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from starlette.concurrency import run_in_threadpool
 
 from portfolio.config import settings
-from server import auth
+from server import auth, posthog_proxy, refresh
 
 # NwValueIn, ticker_ledger and performance are re-exported: tests and scripts/audit_ledger.py
 # import them from server.main (they moved with their routes). _cache likewise:
-# server.main._cache must stay the object /api/refresh-prices and the cron handler clear
-# and the one the portfolio routes memoize into — not a private main.py global.
+# server.main._cache must stay the object server.refresh clears and the one the portfolio
+# routes memoize into — not a private main.py global.
 from server.routes.networth import NwValueIn  # noqa: F401
 from server.routes.networth import router as networth_router
 from server.routes.portfolio import _cache, performance, ticker_ledger  # noqa: F401
@@ -47,9 +44,9 @@ if settings.auth_bypass_active:
 
 # Endpoints reachable WITHOUT a session (login entry + liveness). Everything else
 # under /api/ is denied by default by the gate middleware (SECURITY-08).
-# /api/cron/refresh-prices is "public" only in the sense that the cookie gate must not answer
-# it — a Vercel Cron request carries no session. It authenticates itself against CRON_SECRET
-# inside the handler and fails closed when that env var is unset.
+# refresh.CRON_PATH is "public" only in the sense that the cookie gate must not answer it — a
+# Vercel Cron request carries no session. Its handler authenticates against CRON_SECRET and
+# fails closed when that env var is unset.
 def _router_paths(router):
     """Full URL paths of a router's HTTP routes. The gate reads these so a prefix
     change cannot leave a copied literal behind."""
@@ -65,9 +62,9 @@ def _router_paths(router):
     return out
 
 
-# Auth routes are the login entry, so every route on that router is public.
-# Health and cron are declared on this app, not on a prefixed router.
-_PUBLIC_PATHS = _router_paths(auth.router) | {"/api/health", "/api/cron/refresh-prices"}
+# Auth routes are the login entry, so every route on that router is public. Health is declared
+# on this app; the cron path is the one route of refresh's router the gate must let through.
+_PUBLIC_PATHS = _router_paths(auth.router) | {"/api/health", refresh.CRON_PATH}
 
 # HTML security headers for both the API and the static SPA — this middleware is the only
 # place they are set (vercel.json exists, but carries the cron schedule and nothing else).
@@ -136,6 +133,8 @@ app.include_router(auth.router)
 app.include_router(portfolio_router)
 app.include_router(networth_router)
 app.include_router(spending_router)
+app.include_router(refresh.router)
+app.include_router(posthog_proxy.router)
 
 
 @app.get("/api/health")
@@ -149,108 +148,6 @@ async def _unhandled(request: Request, exc: Exception):
     traces or internals to the client (SECURITY-09, SECURITY-15)."""
     log.exception("unhandled error path=%s", request.url.path)
     return JSONResponse({"detail": "internal error"}, status_code=500)
-
-
-def _refresh_prices():
-    """Fetch latest prices + FX for held tickers, then invalidate the cache."""
-    from ingestion.prices import main as fetch_prices
-    result = fetch_prices()   # blocking; upserts price/fx_rate for current_position
-    _cache.clear()            # next overview/positions recompute with fresh prices
-    return result             # {ok, fail, date, failed, fx_failed}
-
-
-@app.post("/api/refresh-prices")
-def refresh_prices():
-    """Manual refresh from the signed-in UI."""
-    return _refresh_prices()
-
-
-@app.get("/api/cron/refresh-prices")
-def cron_refresh_prices(request: Request):
-    """The same refresh, on a schedule (Vercel Cron — see DEPLOY.md §6).
-
-    GET, because Vercel invokes a cron path with GET and nothing else; this is the one route
-    where a mutating GET is not a choice. It bypasses the cookie gate (a cron request has no
-    session) and instead compares the `Authorization: Bearer <CRON_SECRET>` header Vercel
-    sends against the env var — constant-time, and denying when CRON_SECRET is unset, so a
-    project that never set it has a dead route rather than an open one (SECURITY-15).
-
-    A cloud run prices stocks + FX only: the Endowus NAV is scraped from a statement PDF in
-    data/, which is gitignored and therefore absent from the deployment. That one fund's NAV
-    moves only on the local scheduled run.
-    """
-    expected, got = settings.cron_secret, request.headers.get("authorization", "")
-    if not expected or not hmac.compare_digest(got, f"Bearer {expected}"):
-        log.warning("cron refresh-prices denied ua=%s", request.headers.get("user-agent", ""))
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
-    result = _refresh_prices()
-    log.info("cron refresh-prices: %s", result)
-    return result
-
-
-# ---------------- PostHog same-origin reverse proxy ----------------
-# posthog-js posts analytics + error-tracking traffic to same-origin "/ingest" instead of the
-# PostHog cloud host, so it is covered by the strict CSP's `connect-src 'self'` /
-# `script-src 'self'` with no third-party origin to allow-list. Ingestion calls go to
-# POSTHOG_HOST; the lazily-loaded JS bundles under /static/ (exception-autocapture, surveys,
-# recorder) go to the matching *-assets host, mirroring PostHog's own proxy guidance.
-# Public by design: /ingest isn't under /api/, so the deny-by-default auth gate lets it through
-# (analytics/error events fire before and without a session).
-_PH_INGEST = settings.posthog_host.rstrip("/")
-_PH_ASSETS = _PH_INGEST.replace(".i.posthog.com", "-assets.i.posthog.com")
-if _PH_ASSETS == _PH_INGEST:
-    # the replace was a no-op (custom or self-hosted POSTHOG_HOST), so /ingest/static/* goes to
-    # the ingestion host and the lazily-loaded bundles 404 — error tracking silently disabled
-    log.warning("POSTHOG_HOST=%s has no matching *-assets host; /ingest/static/* bundles "
-                "(exception-autocapture, surveys, recorder) will likely 404", _PH_INGEST)
-# Allow-list, not a deny-list: these are the only upstream response headers safe to re-emit
-# from our own origin. Notably excluded are Set-Cookie (a third party must not set cookies on
-# the session domain), Access-Control-* (would let any cross-origin page read /ingest/*),
-# Location (never redirect our origin to a PostHog-chosen URL) and the framing/length headers
-# that requests+Starlette recompute for the decoded body.
-_PH_KEEP_HEADERS = {"content-type", "cache-control", "etag", "vary"}
-# reused across invocations for connection pooling — posthog-js fires several calls per page
-_ph_session = requests.Session()
-
-
-class _BlockAllCookies(cookiejar.DefaultCookiePolicy):
-    """Refuse to store or send any cookie. The pooled session is shared by every visitor, so a
-    live jar would replay one caller's PostHog cookies on behalf of all the others."""
-    def set_ok(self, cookie, request): return False
-    def return_ok(self, cookie, request): return False
-    def domain_return_ok(self, domain, request): return False
-    def path_return_ok(self, path, request): return False
-
-
-_ph_session.cookies.set_policy(_BlockAllCookies())
-
-
-@app.api_route("/ingest/{path:path}", methods=["GET", "POST"])
-async def posthog_proxy(path: str, request: Request):
-    upstream = _PH_ASSETS if path.startswith("static/") else _PH_INGEST
-    body = await request.body()
-    headers = {}
-    if ct := request.headers.get("content-type"):
-        headers["Content-Type"] = ct
-    # without this PostHog sees python-requests/... and may filter the event as bot traffic
-    if ua := request.headers.get("user-agent"):
-        headers["User-Agent"] = ua
-    # preserve the caller's IP so PostHog geoip still resolves through the proxy
-    xff = request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")
-    if xff:
-        headers["X-Forwarded-For"] = xff
-    try:
-        # allow_redirects=False: an upstream 3xx must not make the server fetch a PostHog-chosen URL
-        r = await run_in_threadpool(
-            lambda: _ph_session.request(request.method, f"{upstream}/{path}",
-                                        params=request.url.query, data=body or None,
-                                        headers=headers, timeout=10, allow_redirects=False))
-    except requests.RequestException as e:
-        # best-effort analytics: a PostHog blip must not become an app 500 / error-level log
-        log.warning("posthog proxy upstream failed path=%s: %s", path, e)
-        return Response(status_code=502)
-    out = {k: v for k, v in r.headers.items() if k.lower() in _PH_KEEP_HEADERS}
-    return Response(content=r.content, status_code=r.status_code, headers=out)
 
 
 # serve the built frontend (web/dist) if present

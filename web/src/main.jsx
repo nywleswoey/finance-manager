@@ -26,7 +26,7 @@ if (!POSTHOG_HOST && import.meta.env.DEV) {
 
 if (POSTHOG_KEY && POSTHOG_HOST) {
   posthog.init(POSTHOG_KEY, {
-    // Post to the same-origin reverse proxy (server/main.py /ingest/*) so analytics + error
+    // Post to the same-origin reverse proxy (server/posthog_proxy.py /ingest/*) so analytics + error
     // events are first-party — covered by the strict CSP with no PostHog host to allow-list.
     // ui_host keeps toolbar/links pointing at the real PostHog app.
     api_host: window.location.origin + "/ingest",

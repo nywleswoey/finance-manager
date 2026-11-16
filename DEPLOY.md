@@ -306,7 +306,7 @@ this list is the live one — add a line here before citing a new code.
   (which ships no SRI hash — origin pin instead) and inline styles for React/GIS;
   `script-src` stays strict.
 - **PostHog is proxied same-origin (no CSP host needed)**: posthog-js posts to `/ingest`
-  (same origin), which the FastAPI reverse proxy in `server/main.py` forwards to `POSTHOG_HOST`
+  (same origin), which the FastAPI reverse proxy in `server/posthog_proxy.py` forwards to `POSTHOG_HOST`
   (ingestion) and its `*-assets` host (the lazily-loaded exception-autocapture/recorder
   bundles). Because the traffic is first-party, the strict `connect-src 'self'` /
   `script-src 'self'` already cover it — no PostHog origin is added to the CSP. If you ever
