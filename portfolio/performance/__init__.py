@@ -8,7 +8,8 @@ native currency (exact); MV / income / P&L converted to SGD at the latest FX for
 One package, read in this order (each module imports only from the ones above it):
 
   events    the dated event types the fold accumulates (UnitEvent, CostEvent, EntryLot …)
-  actions   what a ledger `action` string means: traded / moved / corporate / free, `classify`
+  actions   what a ledger `action` string means: traded / moved / corporate / free,
+            `classify_action`
   cdp       the CDP custodian's own cost source (data/cdp-stocks), `cdp_cost`
   carry     corporate-action carry: a predecessor's cost following its units to the successor
   entries   the cost partition: which entering units have a known cost (`cost_partition`)

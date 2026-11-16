@@ -105,12 +105,12 @@ PYTHONPATH=. .venv/bin/python scripts/snapshot_from_statements.py --dbs 202606 -
 |---|---|
 | `data/` | raw statements (immutable) |
 | `build/` | statement parsers → `ledger.csv`, `dividends.csv`, `symbols.csv` |
-| `ingestion/` | DB loaders (`load.py`) + market data (`prices.py`) + options (`parse_options.py`) |
-| `portfolio/` | models, db, config, money, nullable (shared kernel); `performance/` (package; its `__init__` is the map), `twr.py`, `xirr.py` (shared by both), `dividends/` (package, same), `options.py` (portfolio); `networth.py` (net worth); `spending.py`, `classify.py`, `recurring.py`, `spend_categories.py` (spending) |
+| `ingestion/` | DB loaders + market data; `ingestion/__init__.py` is the module map |
+| `portfolio/` | the domain package: shared kernel + the three products; `portfolio/__init__.py` is the module map (`performance/` and `dividends/` carry their own) |
 | `migrations/` | Alembic schema |
 | `scripts/seed.py` | reference-data seed |
 | `scripts/snapshot_from_statements.py` | net-worth snapshot from statements (`--all-new` delta) |
-| `server/` | FastAPI app: `main.py` — composition root (middleware, auth gate, health/refresh/cron, PostHog proxy, built SPA); `routes/{portfolio,networth,spending}.py` — `/api/*` handlers per product module; `auth.py` — Google OAuth router |
+| `server/` | FastAPI app (`server.main:app`); `server/__init__.py` and `server/routes/__init__.py` are the module maps |
 | `api/index.py` | Vercel entrypoint — re-exports `server.main:app` |
 | `web/` | React (Vite) app; `web/src/modules/{portfolio,networth,spending}/` — the three product modules |
 
