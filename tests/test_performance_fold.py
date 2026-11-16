@@ -1021,7 +1021,9 @@ def _warnings(caplog, fn):
     import logging
     with caplog.at_level(logging.WARNING, logger="portfolio.performance"):
         out = fn()
-    return out, [r.getMessage() for r in caplog.records if r.name == "portfolio.performance"]
+    # the package's modules log as `portfolio.performance.<module>`; any of them counts
+    return out, [r.getMessage() for r in caplog.records
+                 if r.name.startswith("portfolio.performance")]
 
 
 def test_a_held_security_with_no_price_row_warns(caplog):

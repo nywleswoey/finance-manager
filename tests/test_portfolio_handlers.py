@@ -385,7 +385,8 @@ PRICES = {1: 30.0, 2: 200.0, 4: 1.0, 5: 1.0}           # NOPX (3) has no close
 
 
 def test_alloc_by_account_sums_market_value_per_account_in_sgd(position_session, monkeypatch):
-    monkeypatch.setattr(performance, "_fx_and_price", lambda s: ({"USD": 1.35}, PRICES))
+    # patched where it is looked up: `alloc_by_account` reads its own module's name
+    monkeypatch.setattr(performance.book, "_fx_and_price", lambda s: ({"USD": 1.35}, PRICES))
 
     assert performance.alloc_by_account(position_session) == {
         # 150 D05 @ 30; the unpriced NOPX contributes nothing rather than failing
@@ -397,7 +398,7 @@ def test_alloc_by_account_sums_market_value_per_account_in_sgd(position_session,
 
 
 def test_alloc_by_account_raises_on_a_missing_fx_rate(position_session, monkeypatch):
-    monkeypatch.setattr(performance, "_fx_and_price", lambda s: ({}, PRICES))
+    monkeypatch.setattr(performance.book, "_fx_and_price", lambda s: ({}, PRICES))
 
     with pytest.raises(ValueError, match="USD"):
         performance.alloc_by_account(position_session)

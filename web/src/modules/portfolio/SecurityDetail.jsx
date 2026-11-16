@@ -388,7 +388,7 @@ export default function SecurityDetail({ ticker, onBack }) {
   //
   // WHAT THIS COSTS, WRITTEN DOWN BECAUSE THE REDUCE IT REPLACED WAS RIGHT ABOUT ONE THING.
   // `income_sgd` sums dividend `gross` in NATIVE amounts and converts the sum once at the
-  // SECURITY's rate (`performance.py:1120`, `:1038`), while each row's `gross_sgd` converts at
+  // SECURITY's rate (`performance/fold.py`, `_accumulate_positions`), while each row's `gross_sgd` converts at
   // its OWN payment currency's rate (`server/routes/portfolio.py:243`). On a name paid in two currencies
   // those disagree by more than rounding: live, SET (EUR + SGD) is short by 307.08 and UD1U by
   // 5,134.49. Neither is a captured holding, so no gate here sees it. The dividends sum dies
@@ -510,7 +510,7 @@ export default function SecurityDetail({ ticker, onBack }) {
             span would leave a sentence half in the vocabulary of a return. The verdict gates it,
             not the null: `peak_car_sgd` ships as a measured `0` there and is not missing at all. */}
         {/* A REFUSAL TAKES THE PERCENTAGE WITH IT, IN EITHER SHAPE (§11, and
-            `performance.py:_return_figures` says so from the other side). A name that refuses
+            `performance/verdict.py:_return_figures` says so from the other side). A name that refuses
             but still wrote puts keeps a peak, so it arrives here `caveat` with a null
             percentage — a ratio of a Net the hero above has just said is not known. One gate
             over both branches: the two are one slot, and a refusal empties it. */}

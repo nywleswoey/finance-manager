@@ -9,8 +9,8 @@
  * expired worthless) that dropped ~S$54,818 and flipped the figure from a S$52,989 gain to a
  * S$1,828 loss. The fix reads the server's own `summary.options_pl_sgd` instead of re-deriving
  * it. That number's chain is `performance.compute()` → `options.realized_by_ticker()` →
- * `_closed_trades()` → `_is_open()`, attached per leg at `performance.py:1190` and folded by
- * `_sum_stream` at `performance.py:1301`. The TOTAL is still that summary figure and nothing
+ * `_closed_trades()` → `_is_open()`, attached per leg by `_build_row` (`performance/rows.py`) and folded by
+ * `_sum_stream` (`performance/ticker.py`). The TOTAL is still that summary figure and nothing
  * else. The PER-ROW marker is a different field: `_trade_dict`'s `realised` key, which rides
  * the per-trade wire rows and which the options table renders as `Realised`/`Open` since #159.
  * Both sides of the page answer to the same `_is_open()` call, which is why the realised rows'

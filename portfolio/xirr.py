@@ -1,8 +1,8 @@
 """Money-weighted return: the one XIRR solver both return engines use.
 
-`performance.py` (per position, native currency) and `twr.py` (portfolio-wide, SGD) are
+`performance/` (per position, native currency) and `twr.py` (portfolio-wide, SGD) are
 deliberately separate engines (ADR 0001); this is the piece they share. It used to be a private
-of `performance.py` that `twr.py` imported anyway — ADR 0001's Consequences, step 1.
+of `performance/` that `twr.py` imported anyway — ADR 0001's Consequences, step 1.
 """
 
 

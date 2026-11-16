@@ -7,7 +7,7 @@
  * tab's own split UI uses, filtered client-side to one ticker, so this file is the proof that
  * reuse actually wired up end to end — not a parallel implementation that merely looks the same.
  *
- * SBS Transit (S61) is the real motivating case (see portfolio/dividends.py's module docstring
+ * SBS Transit (S61) is the real motivating case (see portfolio/dividends/'s package docstring
  * and ingestion/dividend_announcements.py): its 2026-08-28 SRS payment carries no ex_date and
  * its SGX components are cached by pay_date fallback. No `/api/holding?ticker=S61` fixture is
  * committed, so this file writes its own small payload (cloned from F34's, a real SG dividend
@@ -72,7 +72,7 @@ const SGX_COMPONENTS = [
 
 /** Registers every override this file needs and returns `{ postedBody }`, a box the
  * `/api/dividend-flag-overrides` handler fills in so a test can assert on the exact request
- * the ticker screen sent — the same payload shape `add_flag_override` (portfolio/dividends.py)
+ * the ticker screen sent — the same payload shape `add_flag_override` (portfolio/dividends/overrides.py)
  * expects: `security_id`, `ex_date`, `pay_date`, `special_per_unit`. */
 async function mockDividendSplit(page) {
   const postedBody = {};

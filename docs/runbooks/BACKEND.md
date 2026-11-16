@@ -191,7 +191,7 @@ Six rules, each with its own gate in `tests/test_peak_car.py`:
 `return_verdict` is a second axis, independent of the Net's: `no_capital` where peak CAR is
 zero (the return does not *exist* — undefined, not unmeasured), `caveat` where some entering
 units are unknown **or where there is no Net to divide at all** (direction: `net_verdict` in
-`portfolio/performance.py`, read for both sides of the ratio in
+`portfolio/performance/verdict.py`, read for both sides of the ratio in
 `web/src/modules/portfolio/bound.js`), else `ok`. Never `ok` beside a
 null percentage — that is the one pairing a renderer branching on the verdict cannot survive. **`peak_car_sgd` is always a number**, a measured zero where
 nothing was at risk; the verdict, not a null, is what a renderer branches on.
@@ -256,7 +256,7 @@ net_pl_sgd  ≡  realised_pl_sgd + unrealised_pl_sgd + income_sgd + options_pl_s
 - **`refuse` ships `null`** on every leg — including a leg of a refusing ticker whose own components
   are known. There is no partial Net on the wire under any name.
 - **A caveat nets every leg.** A leg whose every unit is unknown, inside a ticker that does not
-  refuse, keeps `stock_pl_sgd`. Direction: `net_verdict` in `portfolio/performance.py`.
+  refuse, keeps `stock_pl_sgd`. Direction: `net_verdict` in `portfolio/performance/verdict.py`.
   `stock_pl_sgd` is therefore null only where the leg is all-unknown *and* the name refuses.
 - **`/api/performance`'s group Net includes that leg.** `rollup()` sums every figure where the
   row ships it and skips it where the row ships null — nothing there reads `cost_known` — so a
@@ -280,7 +280,7 @@ components it has to undo.
   already whole at any price, including zero — and is never clamped. The RENDERER is what turns
   it into words: `Breakeven` prints `free of cost` for a value `<= 0` and no figure (#201) —
   unless the Net is `bounded` `upper`, where `<= 0` reads `not known` instead. Which way that
-  price runs: `net_verdict` in `portfolio/performance.py`, read on the page by `boundOf` in
+  price runs: `net_verdict` in `portfolio/performance/verdict.py`, read on the page by `boundOf` in
   `web/src/modules/portfolio/bound.js`.
 - **Tolerance is the quote's, not a cent's.** The field's own share of the drift when the fold is
   revalued at it is `5e-5 × units × rate` SGD (0.36 on F34's 7,200 units, 0.14 on 9CI's 2,700);
@@ -289,7 +289,7 @@ components it has to undo.
   the components' own cent-rounding (`0.02`), that quote, and the error in the FX rate the gate
   must recover from the market-value pair since no endpoint ships one (`|be − price| × units × ε`).
 - **Whether a `bounded` Net bounds this price, and which way:** `net_verdict` in
-  `portfolio/performance.py`, read on the page in `web/src/modules/portfolio/bound.js`.
+  `portfolio/performance/verdict.py`, read on the page in `web/src/modules/portfolio/bound.js`.
   `price × rate × units ≡ mv_sgd − Net` with mv, rate and units exact — only the Net's side of
   that identity carries the doubt. The mark is the glyph peak capital already takes.
   `provenance` is whole-ticker and names no bucket, so every column of a bounded ticker takes the
@@ -414,7 +414,7 @@ pending after the leg stays `unknown`. No tolerance window, so no unargued N.
 refuse   ⟺  costed == 0 ∧ unknown > 0
 bounded  ⟸  a split carry reached the name — never `refuse`. When it overrides
              `hero` or `caveat`, and the direction: `net_verdict` in
-             `portfolio/performance.py`.
+             `portfolio/performance/verdict.py`.
 caveat   ⟺  costed > 0  ∧ unknown > 0
 hero     ⟺  unknown == 0
 ```
@@ -424,7 +424,7 @@ hero     ⟺  unknown == 0
 | `caveat` | some units have **no** cost | **null** |
 | `bounded` | the **total is mis-attributed** | **kept** |
 
-Which way either row runs: `net_verdict` in `portfolio/performance.py`; the page reads it in
+Which way either row runs: `net_verdict` in `portfolio/performance/verdict.py`; the page reads it in
 `web/src/modules/portfolio/bound.js`.
 
 - **Tiles follow the partition, not the verdict**, so 9CI keeps `avg_cost: 3.73` while C38U — the
@@ -440,7 +440,7 @@ Which way either row runs: `net_verdict` in `portfolio/performance.py`; the page
   ceiling-bounded name whose units are all costed. Recorded beside #158's other open calls in
   `web/TESTING.md`.
 - **Guarded (was #158's open call): a `lower` carry meeting unknown-cost units.** What ships,
-  and which way that Net runs: `net_verdict` in `portfolio/performance.py`; the page reads it
+  and which way that Net runs: `net_verdict` in `portfolio/performance/verdict.py`; the page reads it
   in `web/src/modules/portfolio/bound.js`. Zero-instance on the live book (9CI has no unknown
   units); pinned by `tests/test_bounded_carry.py` and `web/tests/bound-direction.spec.js`.
   **Per-column caveat:** in that state no breakeven price is marked either, even a column whose

@@ -257,7 +257,7 @@ the matching `holding-*.json`'s `summary.net_pl_sgd` — the **cross-page** clai
 ticker, since a single-bucket one makes it a sum over one element; and every meaning the mark table
 carries renders with its own explanation — `~` twice over, and `≥`/`≤` for a split carry —
 with the words `not known`, never `n/a`, where the book records no cost at all. Which way each
-mark runs: `net_verdict` in `portfolio/performance.py`, read in `src/modules/portfolio/bound.js`. The legend gate walks that
+mark runs: `net_verdict` in `portfolio/performance/verdict.py`, read in `src/modules/portfolio/bound.js`. The legend gate walks that
 table rather than a list of symbols, so a mark added with no sentence of its own fails it. One of
 the Net column's gates is a file check rather than a render one, and says so: the retired
 client-side rule differs from the server's field by a **cent**, which no whole-dollar column can
@@ -288,7 +288,7 @@ rest: every open column quotes one and a closed column quotes none (the drop is 
 the units, so the Total column and the single-bucket page decide it the same way); a column that
 cannot price its units reads the ledger's `not known`; a price at or below zero reads `free of
 cost` with no figure (#201); and a **bounded** Net marks the price with the glyph
-`src/modules/portfolio/bound.js` takes from `net_verdict` (`portfolio/performance.py`).
+`src/modules/portfolio/bound.js` takes from `net_verdict` (`portfolio/performance/verdict.py`).
 NONE OF THOSE IS DRIVEN ON A WRITTEN PAYLOAD: the captures
 reach every one of those states themselves — the recovered negative on the two foreign names, `not
 known` on the two that cannot price their units, the drop on the closed ones and on the
@@ -297,7 +297,7 @@ multi-bucket name's closed bucket — so there is no second place for the same r
 The `free of cost` edges no capture reaches ARE written payloads, each on the captured recovered
 name: exactly zero, a `lower`-bounded value `<= 0` — both still `free of cost` —
 and an `upper`-bounded value `<= 0`, which proves nothing and reads `not known`.
-Which way those bounds run: `net_verdict` in `portfolio/performance.py`, read by `boundOf` in
+Which way those bounds run: `net_verdict` in `portfolio/performance/verdict.py`, read by `boundOf` in
 `src/modules/portfolio/bound.js`.
 
 The avg cost and the breakeven both carry the **ticker's currency symbol** (#208), in every
@@ -318,7 +318,7 @@ needs them. Its tolerance is the SUM of the three roundings really in that resid
 components' own cent-rounding (`0.02`), the 4dp the price is quoted at spread over the units it
 multiplies (`5e-5 × units × rate`), and the error in an FX rate the gate must RECOVER from the
 market-value pair because no endpoint ships one (`|be − price| × units × ε`). The same three
-are stated in `performance.py`'s `_breakeven_price` and in BACKEND.md; a name that ships no
+are stated in `performance/verdict.py`'s `_breakeven_price` and in BACKEND.md; a name that ships no
 priced column is skipped rather than asserted. The glyph is gated ONCE, on a REAL bounded name
 rather than a written payload: the bounded captures carry their own `summary.provenance`, so the
 direction comes off the capture and nothing is borrowed or hand-edited.
@@ -397,7 +397,7 @@ basis) and not provable on the ceiling, because the only `upper`-bounded name (C
 doubted units and #148's partition rule correctly nulls a cost basis pooled averaging would have
 invented; trigger is the first ceiling-bounded name whose units are all costed. A `lower` carry
 meeting unknown-cost units is no longer an open call: what the server ships, and how the page
-reads that pair, is `net_verdict` in `portfolio/performance.py` and
+reads that pair, is `net_verdict` in `portfolio/performance/verdict.py` and
 `src/modules/portfolio/bound.js`, gated by `bound-direction.spec.js` on a written payload (no live
 name is both), so it is not one of the two above. The one of the two that bears on the wire is the
 bound's, stated in `docs/runbooks/BACKEND.md` as well; the refusal's is copy, so it lives here and

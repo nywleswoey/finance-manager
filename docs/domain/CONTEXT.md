@@ -136,7 +136,7 @@ pre-computed. The three:
   not only a count: their cost basis is `0.0`, never null.
 - **Unknown** — the book does not know. The polarity is to refuse rather than invent a free lot:
   the partition never counts one as free. What a Net may claim from that doubt is **Net verdict**
-  (`net_verdict` in `portfolio/performance.py`).
+  (`net_verdict` in `portfolio/performance/verdict.py`).
 
 `cost_known` is this partition read as a boolean: false only when *every* entering unit is
 unknown. Not "no unknown units" — a name with some cost still answers "did I make money on
@@ -185,7 +185,7 @@ which is what lets a name the partition doubts still show a Net that is arithmet
 Ships on every row (`stock_pl_sgd`), not only the doubtful ones — a field that appears only
 where the split fails is a field nobody can add up. Null only on a leg whose every unit is
 unknown *and* whose name refuses; under a caveat that leg still ships `stock_pl_sgd`.
-Direction: `net_verdict` in `portfolio/performance.py`.
+Direction: `net_verdict` in `portfolio/performance/verdict.py`.
 _Avoid_: total P/L (that is stock P/L *plus* dividends and premiums — the Net)
 
 **Net**:
@@ -202,7 +202,7 @@ costed, something unknown), `caveat` (some costed, some unknown) or `hero` (noth
 Summed, not per-leg: a costed-only leg beside an unknown-only leg is a caveat, not a refusal.
 One input is not a count: a **split carry** can make it `bounded`, never overriding `refuse`,
 and `bounded` keeps the cost-basis tiles a caveat nulls. Which carry overrides, and which way
-the Net runs, is `net_verdict` in `portfolio/performance.py`; the page reads that in
+the Net runs, is `net_verdict` in `portfolio/performance/verdict.py`; the page reads that in
 `web/src/modules/portfolio/bound.js`. **Not `cost_known`** — that flag is false on
 a caveat's all-unknown leg and on a refusal alike.
 _Avoid_: return verdict (a different axis — AAPL is hero-on-Net and no-capital-on-return at once)
@@ -251,7 +251,7 @@ not by the month-end statement that reported them. "Always today" overcharges cl
 **Return verdict**:
 What the percentage can claim, on its own axis rather than the Net's: `ok`, `caveat` (some
 entering units are unknown, or no Net exists for the division; direction: `net_verdict` in
-`portfolio/performance.py`, read for both sides of the ratio in
+`portfolio/performance/verdict.py`, read for both sides of the ratio in
 `web/src/modules/portfolio/bound.js`), or `no_capital` (peak CAR is zero, so the return does not exist —
 undefined, not unmeasured). The **verdict**, not a null, is what decides how the figure renders.
 _Avoid_: net verdict (a different axis — one name can be hero-on-Net and no-capital-on-return
