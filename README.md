@@ -32,8 +32,10 @@ out of one logs out the other. `make capture-web-fixtures` reads `api-local` (:8
 
 Individual steps: `make db-up migrate seed ingest prices` · `make psql` · `make api-local`.
 
-`make test` runs everything CI runs: `make lint` (ruff + eslint), the Python suite, then the
-Playwright suite. `make test-py` and `make test-web` run one half.
+`make test` runs CI's lint and test steps: `make lint` (ruff + eslint), the Python suite, then the
+Playwright suite. `make test-py` and `make test-web` run one half. Two checks run only in CI
+(`.github/workflows/ci.yml`): `scripts/sync_requirements.py --check` (requirements.txt pins match
+uv.lock) and `alembic check` against a freshly migrated database (models match migrations).
 
 ## Ingesting new data files
 

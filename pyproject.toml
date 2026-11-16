@@ -68,12 +68,11 @@ extend-exclude = ["migrations"]
 select = ["E4", "E7", "E9", "F", "I"]
 # Minus the compound-statement / import-layout style rules this codebase intentionally violates
 # for its compact aesthetic:
-#   E401 — multiple imports on one line   (build/ parser scripts)
 #   E402 — module import not at top: handlers use lazy `from ...` imports to break import cycles.
 #   E701 — multiple statements on a line (colon): columnar-aligned branches in build/ parsers.
 #   E702 — multiple statements on a line (semicolon): `a; b` one-liners are a deliberate style.
 #   E731 — lambda assignment: used for small local callables.
-ignore = ["E401", "E402", "E701", "E702", "E731"]
+ignore = ["E402", "E701", "E702", "E731"]
 
 [tool.ruff.lint.isort]
 # The repo is not a package (PYTHONPATH=.), so ruff cannot infer these; name them so project

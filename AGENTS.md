@@ -30,7 +30,8 @@ plans.
   in-handler imports
   (ruff E402, ignored repo-wide) break real import cycles, not accidental ones.
 - **`make test` is the definition of done** (= `make lint` + `make test-py` + `make test-web`,
-  what CI runs). Lint is correctness-only on both sides: ruff's pinned rule set plus isort
+  CI's lint and test steps; CI alone also runs `scripts/sync_requirements.py --check` and the
+  models-vs-migrations `alembic check`). Lint is correctness-only on both sides: ruff's pinned rule set plus isort
   (`ruff check --fix .` sorts imports), eslint in `web/eslint.config.js` (no formatter, on
   purpose: the Playwright inventory spec reads source text).
 - **Tests share scaffolding; don't re-copy it.** [tests/conftest.py](tests/conftest.py) restores

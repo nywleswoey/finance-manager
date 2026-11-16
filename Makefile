@@ -133,7 +133,7 @@ build-web: web-deps   ## build the React frontend
 app: build-web   ## build frontend then run API+web on :8000, against Neon
 	@$(NEON_ENV); DATABASE_URL="$$u" $(PY) -m uvicorn server.main:app --port 8000
 
-test: lint test-py test-web   ## everything CI runs, in CI's order (lint first: it is the cheapest failure)
+test: lint test-py test-web   ## CI's lint + test steps, in CI's order (lint first: cheapest failure); the pins and alembic checks are CI-only
 test-py: lint-py   ## Python suite; `pg` tests skip themselves when no Postgres answers (make db-up)
 	$(PY) -m pytest -q -rs
 lint: lint-py lint-web   ## ruff + eslint
