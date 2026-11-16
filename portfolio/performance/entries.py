@@ -34,8 +34,8 @@ def _condition(r, kind, annotations):
         return ann
     if kind == "zero":
         return "free" if r["action"] in FREE_ACTION else "pending"
-    # `classify`'s "unknown" and this one are different words that happen to coincide: there it
-    # means "nobody has classified this action string", here it means "the book does not know
+    # `classify_action`'s "unknown" and this one are different words that happen to coincide: there
+    # it means "nobody has classified this action string", here it means "the book does not know
     # what these units cost". An unclassified action lands in the second BECAUSE of the first.
     return "unknown"                       # uncosted / cost_in_kind / unclassified
 

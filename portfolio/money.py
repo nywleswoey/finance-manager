@@ -31,6 +31,13 @@ def rate_to_sgd(ccy, fx):
         raise ValueError(f"no FX rate for {ccy!r}") from None
 
 
+def convert(value, frm, to, fx):
+    """`value` in currency `frm` restated in `to` through their SGD rates (a USD dividend on a
+    HKD-listed security, into HKD). Miss-policy per rate_to_sgd: either currency missing from
+    `fx` raises."""
+    return value * rate_to_sgd(frm, fx) / rate_to_sgd(to, fx)
+
+
 def to_sgd(value, ccy, fx):
     """`value` (native `ccy`) converted to SGD, or None when `value` is None.
 

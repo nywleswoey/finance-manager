@@ -8,9 +8,9 @@ from collections import defaultdict
 from ingestion.prices import sg_today
 
 from ..cost_annotations import annotation_map
-from ..money import rate_to_sgd
+from ..money import convert, rate_to_sgd
 from ..nullable import num, rounded
-from .actions import CDP_ACCOUNT, STOCK_MOVING_LEG, classify
+from .actions import CDP_ACCOUNT, STOCK_MOVING_LEG, classify_action
 from .carry import _carry_corporate_actions, _provenance, carry_bound
 from .entries import _apply_txn, _apply_units, cost_partition
 from .events import UnitEvent
@@ -73,7 +73,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=
         p["unit_events"].append(UnitEvent(r["trade_date"] or today, qty, r["action"],
                                           r["action"] in STOCK_MOVING_LEG, r["account"]))
         p["accounts"].add(r["account"])
-        kind = classify(r["action"], num(r["price"]))   # classified once; both folds read it
+        kind = classify_action(r["action"], num(r["price"]))   # classified once; both folds read it
         _apply_units(p, r, kind, today, annotations)
         if r["account"] == CDP_ACCOUNT:
             continue                                   # CDP cost comes from cdp-stocks below
@@ -126,7 +126,7 @@ def _accumulate_positions(txns, divs, cdp, corp_actions, today, annotations, fx=
         if div_ccy != sec_ccy:
             # income and XIRR flows are in the security's currency, same as -qty*price.
             # Leaving the gross unconverted counts a euro as a dollar.
-            amt = amt * rate_to_sgd(div_ccy, fx) / rate_to_sgd(sec_ccy, fx)
+            amt = convert(amt, div_ccy, sec_ccy, fx)
         pos[k]["income"] += amt
         pos[k]["flows"].append((d["pay_date"] or today, amt))
     if dropped:

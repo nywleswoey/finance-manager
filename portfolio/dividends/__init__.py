@@ -82,7 +82,6 @@ from .special import (
 from .yields import (
     PRICE_STALE_DAYS,
     _forward,
-    _in_currency,
     _nearest_pairs,
     _slot_date,
     yields,
@@ -123,7 +122,6 @@ __all__ = [
     "_special_includes",
     "_net_distributions",
     "PRICE_STALE_DAYS",
-    "_in_currency",
     "_slot_date",
     "_nearest_pairs",
     "_forward",

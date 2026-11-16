@@ -50,8 +50,10 @@ plans.
   `portfolio/xirr.py` and the flow classifier `portfolio/flows.py` (a gift is an external
   contribution to the return rates but zero cost to the profit).
 - **One "today": `ingestion.prices.sg_today()` (SGT)** — price rows, the fold and the option
-  parser use it. Nullable-field helpers (`num`, `rounded`, `iso`, `nulls_last`) live in
-  `portfolio/nullable.py` and SQL→dicts is `db.fetch_dicts`; don't re-spell them per module.
+  parser use it. Nullable-field helpers (`num`, `rounded`, `cents`, `iso`, `nulls_last`) live
+  in `portfolio/nullable.py`, FX is `portfolio/money.py` (`rate_to_sgd`, `to_sgd`, `convert`)
+  and SQL→dicts is `db.fetch_dicts`; don't re-spell them per module. Each package's
+  `__init__.py` docstring is its module map; keep it current when adding a module.
 - **`portfolio/sgx.py`'s `CPF_SRS_SGX_NAMES`** is the one curated ticker→exact-SGX-legal-name
   table (`ingestion.dividend_announcements._candidate_names` and
   `build/fetch_cpf_srs_dividends.py`'s `SEC` both read it): SGX's corporate-actions API matches

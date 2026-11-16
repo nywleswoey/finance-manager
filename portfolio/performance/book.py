@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from ingestion.prices import sg_today
 
+from .. import options
 from ..cost_annotations import annotation_map, unmatched
 from ..db import fx_map, latest_close, session_scope
 from ..money import rate_to_sgd
@@ -68,10 +69,9 @@ def compute_with_fx(session=None):
         log.warning("cost annotation %s matched %d txn rows, expected 1 — a stale annotation "
                     "silently un-frees a lot; a duplicate annotates one nobody looked at", k, n)
     # options open their own session (see realized_by_ticker); fetched outside the DB block above.
-    from ..options import contracts_by_ticker, realized_by_ticker
-    options = realized_by_ticker()
-    return fold_positions(txns, divs, cdp, corp_actions, options, fx, price, today,
-                          contracts=contracts_by_ticker()), fx
+    # Called through the module, not a bound name, so a test's patch of `options.*` is seen.
+    return fold_positions(txns, divs, cdp, corp_actions, options.realized_by_ticker(), fx, price,
+                          today, contracts=options.contracts_by_ticker()), fx
 
 
 def alloc_by_account(session=None):

@@ -1,5 +1,5 @@
 """What a ledger `action` string means — traded for cash, moved between custodians, a corporate
-action, or free — and `classify`, which reads it. Pure constants and one function; everything
+action, or free — and `classify_action`, which reads it. Pure constants and one function; everything
 downstream keys off these sets."""
 from __future__ import annotations
 
@@ -71,7 +71,7 @@ STOCK_MOVING_LEG = CDP_TRANSFER | GIFT_IN_ACTIONS | {"open/transfer_in", "sell/t
 MIN_XIRR_DAYS = 30
 
 
-def classify(act, px):
+def classify_action(act, px):
     """How a txn row affects cost basis.
 
     cash         — real money moved; qty*price is the flow

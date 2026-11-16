@@ -19,39 +19,39 @@ D = dt.date
 class TestClassify(unittest.TestCase):
     def test_priced_trade_is_cash(self):
         for act in ("buy", "sell", "open market", "ipo", "rights issue"):
-            self.assertEqual(perf.classify(act, 10.0), "cash", act)
+            self.assertEqual(perf.classify_action(act, 10.0), "cash", act)
 
     def test_price_less_trade_is_uncosted_not_free(self):
         """Regression: a buy with price IS NULL used to book a zero-cost lot, so the units landed
         in market value for free and inflated XIRR."""
-        self.assertEqual(perf.classify("buy", None), "uncosted")
-        self.assertEqual(perf.classify("buy", 0.0), "uncosted")
+        self.assertEqual(perf.classify_action("buy", None), "uncosted")
+        self.assertEqual(perf.classify_action("buy", 0.0), "uncosted")
 
     def test_priced_corp_action_is_a_rights_subscription(self):
         """UD1U's ESR-LOGOS rights at 0.49 / 0.595 / 0.408 are cash the holder paid."""
-        self.assertEqual(perf.classify("corp action", 0.49), "cash")
-        self.assertEqual(perf.classify("corp_action", 2.007), "cash")
+        self.assertEqual(perf.classify_action("corp action", 0.49), "cash")
+        self.assertEqual(perf.classify_action("corp_action", 2.007), "cash")
 
     def test_zero_priced_corp_action_is_free(self):
         """D05's 280 bonus shares cost nothing."""
-        self.assertEqual(perf.classify("corp action", 0.0), "zero")
-        self.assertEqual(perf.classify("corp action", None), "zero")
+        self.assertEqual(perf.classify_action("corp action", 0.0), "zero")
+        self.assertEqual(perf.classify_action("corp action", None), "zero")
 
     def test_fee_is_cost_in_kind(self):
         """Endowus redeems units to pay its fee. The unit drop already carries the cost; booking
         a cash outflow too would charge it twice."""
-        self.assertEqual(perf.classify("fee", 145.62), "cost_in_kind")
+        self.assertEqual(perf.classify_action("fee", 145.62), "cost_in_kind")
 
     def test_transfers_and_bonuses_are_zero_cash(self):
         for act in ("transfer in", "transfer_in", "transfer out", "sell/transfer_out",
                     "sell/transfer", "open", "open/transfer_in", "switch_in",
                     "stock dividend", "bonus issuance"):
-            self.assertEqual(perf.classify(act, 26.17), "zero", act)
+            self.assertEqual(perf.classify_action(act, 26.17), "zero", act)
 
     def test_unrecognised_action_is_unknown_not_free(self):
         """A new action string must shout, not silently mint free units."""
-        self.assertEqual(perf.classify("spin-off", 1.0), "unknown")
-        self.assertEqual(perf.classify("", None), "unknown")
+        self.assertEqual(perf.classify_action("spin-off", 1.0), "unknown")
+        self.assertEqual(perf.classify_action("", None), "unknown")
 
 
 class TestCostAnnotations(unittest.TestCase):

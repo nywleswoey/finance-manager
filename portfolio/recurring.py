@@ -14,9 +14,9 @@ import statistics
 
 from sqlalchemy import Date, text
 
-from portfolio.db import session_scope
-from portfolio.nullable import iso
-from portfolio.spending import CARD_SOURCES
+from .db import session_scope
+from .nullable import iso
+from .spending import CARD_SOURCES
 
 # The card half of detect_candidates' payment-channel filter. GIRO stays a
 # separate `source = 'dbs'` clause; it is a bank instruction, not a card.

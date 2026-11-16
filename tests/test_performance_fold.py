@@ -77,7 +77,7 @@ def test_transfer_legs_do_not_book_proceeds_or_pl():
 
 
 def test_spaced_transfer_out_is_not_an_unclassified_warning(caplog):
-    """CPF/SRS CSVs emit `transfer out`. classify() used to return unknown, and
+    """CPF/SRS CSVs emit `transfer out`. classify_action() used to return unknown, and
     every compute then logged `unclassified txn action(s)`. The units already
     moved through STOCK_MOVING_LEG; the cash leg is zero either way."""
     import logging

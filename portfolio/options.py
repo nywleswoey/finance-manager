@@ -30,9 +30,7 @@ def _ccy(t):
 
 
 def _fx(s):
-    fx = fx_map(s)
-    fx.setdefault("SGD", 1.0)
-    return fx
+    return fx_map(s)      # SGD is 1:1 inside rate_to_sgd; nothing to add here
 
 
 def _sgd(v, ccy, fx):

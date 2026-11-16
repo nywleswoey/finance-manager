@@ -16,8 +16,10 @@ from typing import Literal, Union
 from pydantic import BaseModel
 from sqlalchemy import func, select
 
-from portfolio.db import session_scope
-from portfolio.models import CashTxn, ClassificationRule, SpendCategory
+from .config import settings
+from .db import session_scope
+from .models import CashTxn, ClassificationRule, SpendCategory
+from .nullable import iso
 
 
 class RuleInUse(Exception):
@@ -202,8 +204,8 @@ def list_rules(session=None):
             "subcategory": cats.get(r.category_id, (None, None))[1],
             "priority": r.priority,
             "active": r.active,
-            "created_at": r.created_at.isoformat() if r.created_at else None,
-            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+            "created_at": iso(r.created_at),
+            "updated_at": iso(r.updated_at),
         } for r in rules]
 
 
@@ -212,7 +214,7 @@ def _spend_row(r):
     """The shape the /classify screen renders for one spend (funnel row / preview row)."""
     return {
         "id": r.id,
-        "txn_date": r.txn_date.isoformat() if r.txn_date else None,
+        "txn_date": iso(r.txn_date),
         "merchant": r.merchant,
         "description": r.description,
         "amount_sgd": float(r.amount_sgd) if r.amount_sgd is not None else None,
@@ -469,7 +471,6 @@ def _parse_nl(nl_text) -> CompileResult:
     outputs) or a local Ollama server (free/offline) per settings.classify_provider_active.
     Isolated so tests stub it without hitting any model. Runs server-side; no key or NL text
     reaches the browser."""
-    from portfolio.config import settings
     return {
         "ollama": _parse_nl_ollama,
         "openai": _parse_nl_openai,
@@ -479,7 +480,6 @@ def _parse_nl(nl_text) -> CompileResult:
 def _parse_nl_anthropic(nl_text) -> CompileResult:
     import anthropic
 
-    from portfolio.config import settings
     client = anthropic.Anthropic(api_key=settings.anthropic_api_key or None)
     resp = client.messages.parse(
         model=settings.classify_model,
@@ -498,7 +498,6 @@ def _parse_nl_ollama(nl_text) -> CompileResult:
     surfaced, never silently stored."""
     import requests
 
-    from portfolio.config import settings
     r = requests.post(f"{settings.ollama_host}/api/chat", timeout=120, json={
         "model": settings.ollama_model,
         "messages": [{"role": "system", "content": _COMPILE_SYSTEM},
@@ -519,7 +518,6 @@ def _parse_nl_openai(nl_text) -> CompileResult:
     Free-tier accounts run large, reliable models, so json_object is enough."""
     import requests
 
-    from portfolio.config import settings
     r = requests.post(f"{settings.openai_base_url.rstrip('/')}/chat/completions", timeout=120,
                       headers={"Authorization": f"Bearer {settings.openai_api_key}"}, json={
         "model": settings.openai_model,

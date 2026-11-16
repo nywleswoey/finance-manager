@@ -7,8 +7,8 @@ from collections import defaultdict
 from ingestion.prices import sg_today
 
 from ..db import fetch_dicts, fx_map, latest_price, session_scope
-from ..money import rate_to_sgd
-from ..nullable import iso, num
+from ..money import convert, rate_to_sgd
+from ..nullable import cents, iso, num
 from .adjustments import _active_adjustment, apply_capital_return
 from .attribution import details
 from .distributions import DRIFT_DAYS, _anniversary, _distributions
@@ -16,12 +16,6 @@ from .overrides import _components_for
 from .special import _classify, _net_distributions
 
 PRICE_STALE_DAYS = 7    # a price older than this many days is flagged stale on the yield columns
-
-
-def _in_currency(value, frm, to, fx):
-    """`value` in currency `frm` restated in `to` through their SGD rates; ValueError when
-    either currency has no FX rate (portfolio.money's miss-policy)."""
-    return value * rate_to_sgd(frm, fx) / rate_to_sgd(to, fx)
 
 
 def _slot_date(d):
@@ -273,9 +267,9 @@ def yields(s=None, today=None):
         ccy = (px and px["currency"]) or sec["currency"]
 
         try:
-            trailing_dps = round(sum(_in_currency(d["net_rate"], d["currency"], ccy, fx)
+            trailing_dps = round(sum(convert(d["net_rate"], d["currency"], ccy, fx)
                                      for d in trailing_regular), 6)
-            fwd_dps = round(sum(_in_currency(v, c, ccy, fx) for v, c, _ in forward), 6)
+            fwd_dps = round(sum(convert(v, c, ccy, fx) for v, c, _ in forward), 6)
         except ValueError:
             trailing_dps = fwd_dps = None
         try:
@@ -296,7 +290,7 @@ def yields(s=None, today=None):
             "price_is_stale": bool(stale_days and stale_days > PRICE_STALE_DAYS),
             "trailing_dps": trailing_dps, "forward_dps": fwd_dps, "forward_basis": basis,
             "trailing_yield_pct": trail_yield, "forward_yield_pct": fwd_yield,
-            "mv_sgd": round(mv_sgd, 2) if mv_sgd is not None else None,
+            "mv_sgd": cents(mv_sgd),
             "capital_return": ({"amount_per_unit": num(active["amount_per_unit"]),
                                 "currency": active["currency"], "note": active["note"]}
                                if active else None),
