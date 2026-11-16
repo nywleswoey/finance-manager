@@ -354,6 +354,7 @@ class TestCompilePreview(unittest.TestCase):
 
     def test_openai_compatible_parse(self):
         import requests
+
         from portfolio.config import settings
         orig, cap = requests.post, {}
         settings.openai_base_url = "https://api.groq.com/openai/v1"

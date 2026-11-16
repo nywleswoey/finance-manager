@@ -16,8 +16,6 @@ const GROUPS = {
   none: "None (flat)",
 };
 
-const NCOLS = 12;
-
 /**
  * The phone tier, as JavaScript says it — one of the four places `640` is written as a literal.
  *

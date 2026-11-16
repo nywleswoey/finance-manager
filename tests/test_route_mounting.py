@@ -14,8 +14,8 @@ hide a real 401.
 """
 from portfolio import networth as nw
 from portfolio import spending as sp
-
 from server.routes import portfolio as portfolio_routes
+
 
 def test_portfolio_router_is_mounted(owner_client, monkeypatch):
     monkeypatch.setattr(portfolio_routes, "perf", lambda: [])

@@ -18,7 +18,14 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from build._dates import try_date
 from portfolio.db import SessionLocal
-from portfolio.models import Account, Dividend, ImportBatch, Security, SecurityAlias, Txn
+from portfolio.models import (
+    Account,
+    Dividend,
+    ImportBatch,
+    Security,
+    SecurityAlias,
+    Txn,
+)
 
 ROOT = os.path.dirname(os.path.dirname(__file__))
 
@@ -286,7 +293,7 @@ def main():
     print(f"txn: +{nt} new (total {count(s, Txn)})")
     print(f"dividend: +{nd} new (total {count(s, Dividend)}), "
           f"ex_date backfilled on {nx}")
-    from portfolio.models import OptionTrade, CdpCostLot
+    from portfolio.models import CdpCostLot, OptionTrade
     print(f"option_trade: +{no} new (total {count(s, OptionTrade)})")
     print(f"cdp_cost_lot: +{nc} new (total {count(s, CdpCostLot)})")
     s.close()

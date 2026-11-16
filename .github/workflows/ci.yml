@@ -107,6 +107,11 @@ jobs:
 
       - run: npm ci
 
+      # Correctness-only (undefined names, unused bindings, rules of hooks); the config says
+      # why there is no formatter. Cheapest failure in the job, so it runs first.
+      - name: eslint
+        run: npm run lint
+
       # Not a separate check from the suite — it IS the suite's input. playwright.config.js
       # serves the production build through vite preview, so this build failing and the
       # suite failing are the same signal arriving earlier.

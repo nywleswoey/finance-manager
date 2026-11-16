@@ -1,6 +1,6 @@
-.PHONY: db-up db-down migrate seed flat load prices dividend-announcements ingest api web build-web app psql reset net \
-        flat-cash load-cash spending snapshot snapshot-commit ingest-all test-web capture-web-fixtures \
-        api-local sync-from-prod \
+.PHONY: db-up db-down migrate seed flat load prices dividend-announcements ingest api web-deps build-web app psql reset net \
+        flat-cash load-cash spending snapshot snapshot-commit ingest-all test test-py test-web lint lint-py lint-web \
+        capture-web-fixtures api-local sync-from-prod setup \
         schedule-install schedule-status schedule-uninstall schedule-test sync-requirements
 
 PY = PYTHONPATH=. .venv/bin/python
@@ -126,10 +126,21 @@ api:          ## run the API against Neon (serves built web/ at /)
 api-local:    ## run the API against the local docker DB (what a hand-run ingest wrote)
 	@$(LOCAL_GUARD)
 	$(PY) -m uvicorn server.main:app --reload --port 8001
-build-web:    ## build the React frontend
-	cd web && npm install && npm run build
+web-deps:     ## install the frontend's npm dependencies (eslint, vite, playwright)
+	cd web && npm install
+build-web: web-deps   ## build the React frontend
+	cd web && npm run build
 app: build-web   ## build frontend then run API+web on :8000, against Neon
 	@$(NEON_ENV); DATABASE_URL="$$u" $(PY) -m uvicorn server.main:app --port 8000
+
+test: lint test-py test-web   ## CI's lint + test steps, in CI's order (lint first: cheapest failure); the pins and alembic checks are CI-only
+test-py: lint-py   ## Python suite; `pg` tests skip themselves when no Postgres answers (make db-up)
+	$(PY) -m pytest -q -rs
+lint: lint-py lint-web   ## ruff + eslint
+lint-py:      ## ruff (the rule set is pinned in pyproject.toml; `ruff check --fix .` sorts imports)
+	.venv/bin/ruff check .
+lint-web: web-deps   ## eslint over web/src and web/tests
+	cd web && npm run lint
 
 test-web: build-web   ## Playwright viewport suite: 10 named viewports x 13 views (see web/TESTING.md)
 	@# Runs against the production build through vite's preview server, not the dev server,
@@ -152,8 +163,8 @@ sync-requirements:   ## re-pin requirements.txt from uv.lock (only when CI repor
 	@# no entry for anthropic while requirements.txt pinned it.
 	$(PY) scripts/sync_requirements.py
 
-net:          ## per-ticker net verdict (+/-) incl dividends + option premiums
-	$(PY) scripts/net.py $(filter-out $@,$(MAKECMDGOALS))
+net:          ## per-ticker net verdict (+/-) incl dividends + option premiums; `make net ARGS="D05 --held"` narrows it
+	$(PY) scripts/net.py $(ARGS)
 psql:         ## open a psql shell
 	docker exec -it portfolio_db psql -U portfolio
 reset:        ## drop + recreate schema (destructive)

@@ -79,7 +79,7 @@ for (const view of VIEWS) {
           `${view.name} never finished rendering, and these API paths had no committed ` +
           `fixture:\n  ${seam.unmatched.join("\n  ")}\n` +
           `Capture them with \`make capture-web-fixtures\`, or fix the route table.\n\n` +
-          `Original failure: ${e.message}`
+          `Original failure: ${e.message}`, { cause: e }
         );
       }
       throw e;

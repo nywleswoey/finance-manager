@@ -18,17 +18,16 @@ ex_date is read from the dividend.ex_date column in the DB, which nothing upstre
 ingestion.load.backfill_ex_dates seeds it back from THIS file, so the two round-trip. Hence the
 write guard below: a DB missing ex-dates must never be allowed to overwrite them here.
 """
-from collections import defaultdict
-
 import csv
 import os
+from collections import defaultdict
 
 from sqlalchemy import text
 
 try:
-    from _csvout import write_csv          # script mode: build/ is sys.path[0]
+    from _csvout import write_csv  # script mode: build/ is sys.path[0]
 except ModuleNotFoundError:
-    from build._csvout import write_csv     # package mode: imported as build.export_...
+    from build._csvout import write_csv  # package mode: imported as build.export_...
 
 from portfolio.db import SessionLocal
 

@@ -19,11 +19,11 @@ from decimal import Decimal
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 sys.path.insert(0, os.path.dirname(__file__))
+import promote_networth_snapshots as promote
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from portfolio.models import Base, FxRate, NwItem, NwSnapshot, NwValue
-import promote_networth_snapshots as promote
 
 # code, kind, ccy, liquid, housing, cpf — the shape of the real catalogue, four items deep.
 CATALOGUE = [

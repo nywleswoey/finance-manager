@@ -21,8 +21,17 @@ import pytest
 from sqlalchemy import text
 
 from portfolio import dividends
-from portfolio.models import (Account, Dividend, DividendAdjustment, DividendAnnouncement,
-                              DividendAnnouncementComponent, FxRate, Price, Security, Txn)
+from portfolio.models import (
+    Account,
+    Dividend,
+    DividendAdjustment,
+    DividendAnnouncement,
+    DividendAnnouncementComponent,
+    FxRate,
+    Price,
+    Security,
+    Txn,
+)
 from tests import pgtest
 from tests.sqlitetest import current_position_sql
 

@@ -22,8 +22,8 @@ import json
 import os
 import unittest
 
-from tests.fold_invariants import FoldInvariants
 from portfolio import performance as perf
+from tests.fold_invariants import FoldInvariants
 
 D = dt.date
 TODAY = D(2026, 1, 1)

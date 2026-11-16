@@ -7,11 +7,13 @@ CDP statements are the authoritative custody record (no fees). Two layouts:
 Both have a NAME then Free, (NIL|qty), Balance, price, mktval. Snapshot-diff the
 Balance per security across months to recover every buy/sell/transfer.
 """
-import glob, os, re
+import glob
+import os
+import re
 
-from _pdf import raw_text
 from _csvout import write_rows
 from _ledgercommon import name_to_ticker, num
+from _pdf import raw_text
 
 DATA = os.path.join(os.path.dirname(__file__), "..", "data", "cdp-statements")
 ROW = re.compile(r"^\s*([A-Z0-9][A-Z0-9 &.\-/()']+?)\s+([\d,]+)\s+(NIL|[\d,]+)\s+([\d,]+)\s+[\d,]+\.\d+\s+[\d,]+\.\d+\s*$")

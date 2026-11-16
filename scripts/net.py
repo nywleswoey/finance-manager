@@ -19,10 +19,10 @@ Option underlyings never held as stock have no row and are not listed (they are
 /api/performance's named residual).
 
 Usage:
-  make net                 # all tickers, sorted by net
-  .venv/bin/python scripts/net.py            # same
-  .venv/bin/python scripts/net.py D05 O5RU   # only these tickers
-  .venv/bin/python scripts/net.py --held     # only currently-held (units != 0)
+  make net                       # all tickers, sorted by net
+  make net ARGS="D05 O5RU"       # only these tickers
+  make net ARGS=--held           # only currently-held (units != 0)
+  PYTHONPATH=. .venv/bin/python scripts/net.py D05 --held   # same, without make
 """
 import os
 import sys

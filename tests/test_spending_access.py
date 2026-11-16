@@ -10,7 +10,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from portfolio.config import Settings, settings
-
 from server import auth
 from server.main import _is_spending
 

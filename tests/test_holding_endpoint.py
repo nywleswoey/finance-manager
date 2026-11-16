@@ -15,7 +15,6 @@ import pytest
 
 from portfolio import options
 from portfolio.performance import LEG_FIELDS, _breakeven_price
-
 from server.routes import portfolio as portfolio_routes
 
 D = dt.date

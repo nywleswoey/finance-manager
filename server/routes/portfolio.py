@@ -13,15 +13,23 @@ from typing import Annotated
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 
 from portfolio import dividends
 from portfolio.db import fetch_dicts, fx_as_of, fx_map, session_scope, valuation_as_of
 from portfolio.money import rate_to_sgd, to_sgd
 from portfolio.nullable import nulls_last, num
 from portfolio.options import trades_for
-from portfolio.performance import (CDP_ACCOUNT, alloc_by_account, cdp_transactions,
-                                   compute_with_fx, empty_group, fold_ticker, is_leg, rollup)
-from sqlalchemy import text
+from portfolio.performance import (
+    CDP_ACCOUNT,
+    alloc_by_account,
+    cdp_transactions,
+    compute_with_fx,
+    empty_group,
+    fold_ticker,
+    is_leg,
+    rollup,
+)
 
 router = APIRouter()
 log = logging.getLogger("api")

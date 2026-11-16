@@ -29,8 +29,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from portfolio.cost_annotations import annotation_map
 from portfolio.db import session_scope
 from portfolio.options import contracts_by_ticker, realized_by_ticker
-from portfolio.performance import (_accumulate_positions, _fx_and_price, cdp_cost, compute,
-                                   legs_by_ticker, rollup, ticker_car)
+from portfolio.performance import (
+    _accumulate_positions,
+    _fx_and_price,
+    cdp_cost,
+    compute,
+    legs_by_ticker,
+    rollup,
+    ticker_car,
+)
 from tests.fold_invariants import FoldInvariants
 
 # The ledger #148 was measured against: 548 txn rows / 73 positions. The totals below are
